@@ -1,0 +1,10 @@
+variables:
+  GIT_CHECKOUT: none
+deploy:
+  stage: deploy
+  only:
+    - master
+  script:
+    - cd /srv/nginx/research/ && git pull https://project_78_bot:$ACCESS_TOKEN@gitlab.ragnargrootkoerkamp.nl/ragnar/research.git
+    - cd /srv/nginx/research/ && make build
+  environment:
