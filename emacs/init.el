@@ -60,7 +60,7 @@
   "Export all org-files (including nested) under base-org-files."
   (let ((search-path (file-name-as-directory base-dir)))
     (message (format "[build] Looking for files at %s" search-path))
-    (dolist (org-file (directory-files-recursively search-path "(?<!emacs).*\.org$"))
+    (dolist (org-file (directory-files-recursively search-path "\.org$" nil (lambda (x) (not (string-match-p "emacs" x)))))
       (with-current-buffer (find-file org-file)
    (message (format "[build] Exporting %s" org-file))
    (org-hugo-export-wim-to-md :all-subtrees nil nil nil)))
