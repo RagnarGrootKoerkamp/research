@@ -1,0 +1,465 @@
+#+TITLE: Spaced K-mer Seeded Distance
+#+HUGO_BASE_DIR: ..
+#+date: <2021-10-20 Wed>
+
+
+\[
+\newcommand{\vp}{\varphi}
+\newcommand{\A}{\mathcal A}
+\newcommand{\O}{\mathcal O}
+\newcommand{\N}{\mathbb N}
+\newcommand{\ed}{\mathrm{ed}}
+\newcommand{\mh}{\mathrm{mh}}
+\newcommand{\hash}{\mathrm{hash}}
+\]
+
+* Background
+Quickly finding similar pieces of DNA within large datasets is at the
+core of computational biology. This has many applications:
+
+- Alignment: Given two pieces of related DNA, align them to find where
+  mutations (i.e. substitutions, insertions, or deletions) occur.
+
+- Homology search: finding related genes between different species.
+
+- Assembly: DNA sequencers don't sequence an entire genome in one piece,
+  but produce reads for many short sequences. These reads need to be
+  stitched together to form the full genome. There are two types of
+  assembly:
+
+  - Short read assembly: the older of the two methods, producing
+    sequences of hundreds of basepairs/nucleotides in length, with
+    relatively high precision.
+  - Long read assembly: newer, and produces reads of length 100k - 1M,
+    but has a /much/ higher error rate, in particular it can have
+    insertions or deletions (indels) up to every 6 positions.
+
+- Phylogeny reconstruction: Given a set of genes or genomes, reconstruct
+  the evolutionary tree of how these genes/genomes evolved. This usually
+  involves computing estimated 'evolutionary distances' between pairs
+  sequences and reconstructing the tree from these pairwise distances.
+
+The classic pairwise alignment algorithm takes \(\O(nm)\) time to find
+the edit distance between two sequences of length $n$ and $m$. That
+is, the minimum number of insert, delete, and substitute operations to
+transform one into the other. This is fine for shorter sequences, but as
+the size of datasets has grown over time, this is now too slow for most
+practical applications. Furthermore, alignment methods need to consider
+each pair of sequences in the dataset and try to align them, which also
+doesn't scale as the number of input sequences increases.
+
+** $k$-mers
+One common technique is to only look at all $k$-mers of a sequence:
+For each input sequence we can store all the consecutive subsequences of
+length $k$ occuring in the sequence, and when such a $k$-mer occurs
+in two sequences, we can then check the corresponding positions in these
+sequences to see whether they are indeed related.
+
+A typical choice is to set $k$ somewhere from $20$ to $31$. We can
+do some handwavy maths to see that in ideal circumstances $k=31$
+prevents most false positives:
+
+The probability that two uniform random $k$-mers of length $k$ are
+the same is $4^{-31} =2^{-62} < 10^{-18}$ since for each of the $k$
+positions the probability of a match is $1/|\A| = 1/4$.
+
+If our dataset has size 1GB, or $10^9$ basepairs, (roughly the order
+of the size of a human genome) that means there are also $10^9$ kmers,
+and thus $10^{18}$ pairs of $k$-mers. Each such pair has a collision
+of less than $10^{-18}$, so the expected number of collisions is less
+than $1$.
+
+For $k=20$, the number of false positives will be larger, but since
+$4^{20}$ is still a factor $1000$ larger than $10^9$, the fraction
+of $k$-mers with false positives should still be small.
+
+In practice, this analysis doesn't exactly work out, since nucleotide
+frequencies usually are not exacly $1/4$ and there are many /low
+entropy/ regions in DNA, where characters are frequently repeated and
+$k$-mers are not at all uniform random. Nevertheless, this indicates
+that most of the matching $k$-mers will be meaningful.
+
+A drawback of this method is that it requires storing a lot of data: for
+each input sequence we need to store as many $k$-mers as the sequence
+has nucleotides. One solution for this is De Bruijn graphs
+([[https://en.wikipedia.org/wiki/De_Bruijn_graph][Wikipedia]]).
+
+** Sketching
+/sketching/ methods are used to avoid the need for such large
+datastructures. These are ways of compressing a sequence to a small hash
+in (semi)linear time, so that similar sequences have similar hashes. A
+datastructure can then be used to store all the hashes and quickly
+retrieve similar pairs of hashes.
+
+As for notation, we use $\A$ to indicate the alphabet. Since we're
+dealing with DNA, this will always be
+$\{\texttt A, \texttt C, \texttt G, \texttt T\}$ in our case. Given
+two input sequences $A\in \A^l$ and $B\in\A^l$ of length $l$, we
+denote their sketches as $\vp (A)$ and $\vp (B)$. The edit distance
+is $\textrm{ed}(A, B)$, and ideally we would like the distance between
+the two sketches, $d(\vp (A), \vp(B))$ to be a good predictor of the
+edit distance. The type of $\vp (A)$ and exactly how the distance is
+computed depends on the sketch method being used.
+
+$[l]$ indicates the set $\\{1, \dots, n\\}$. We write $X^{(l)}$
+for the set of subsets of $X$ of size $l$. Given $L \subseteq [l]$
+and $A\in \A^l$ we denote by $A_L$ the subsequence of characters of
+$A$ at positions in $L$: $A_L := (A_{L_i})_{i\in [|L|]}$.
+
+The classic sketching algorithm is MinHash, explained below. Another
+approach is Tensor Sketch, which is explained briefly
+[[/phd/2021/03/24/numba-cuda-speedup/#optimizing-tensor-sketch][here]].
+
+** MinHash
+As an example, MinHash
+([[https://en.wikipedia.org/wiki/MinHash][Wikipedia]]) is a well known
+sketch method that sketches a sequence into a list of integers of some
+length $h$. Formally, we take $h$ independent hash functions
+$H_i : \A^k \to \N$ ($1\leq i\leq h$) that hash $k$-mers to
+integers. The $i$th component of the MinHash sketch will be the
+minimal value of $H_i$ over all $k$-mers in the input sequence
+$A$:
+
+\begin{align}
+\vp_\mh &: \A^l \to \N^h\\
+(\vp_\mh(A))_i &:= \min_{j\in [l-k+1]} H_i(A[j: j+k])
+\end{align}
+
+The distance between two sequences can then be estimated as the fraction
+of the $h$ positions where the two sequences differ.:
+
+\begin{align}
+d_\mh &: \N^h \times \N^h \to \mathbb R \\
+(\vp_1, \vp_2) &\mapsto \frac 1h \big|\{i \in [h] : \vp_{1, i} \neq \vp_{2, i}\}\big|.
+\end{align}
+
+> TODO: some small example of MinHash.
+
+* Introduction
+While playing around with some datasets to test homology search methods,
+we realised that indels between related sequences are quite rare in
+practice (less than once every $100$ positions). Thus, a sketching
+method for Hamming distance (which only allows substitutions, not
+indels) should be able to find most homologous sequences, while being a
+much simpler problem to solve.
+
+The remainder of this post presents an efficient sketch algorithm for
+Hamming distance.
+
+Note that this is joint work between Amir Joudaki and myself.
+
+#+begin_quote
+TODO: Write (a separate post) on literature search. In particular,
+spaced $k$-mers is a very similar technique, but we need to search a
+bit more to see whether it has been used in a way similar to this
+algorithm.
+#+end_quote
+
+* Spaced $k$-mer Seeded Distance[fn:1]
+*Problem:* Given one or more DNA sequences, find all homologous regions.
+
+Instead of looking at entire sequences, we will only consider
+subsequences of length exactly $w$. We'll call these subsequences
+/windows/. Typically these windows will have length $64$ or $128$.
+
+So, take for example these two windows
+
+#+begin_example
+  GGCGGGGATTTACGCGGATTGCATGTGGTATCCACCGGGTAGCGGTGCTAGGGAACATCGGTGC
+  GGCAGGGATTTATGGGGATTGCATGTGGTTACCACCGGGTAGCGGAGCTAGGGATCGTCGGTGC
+     *        * *              **              *        * *
+#+end_example
+
+Because of the mutations, these sequences wouldn't be matched when only
+looking at matching $k$-mers or their MinHash, since they don't share
+a $k$-mer of length $20$.
+
+To work around this, our sketch method looks at a subsample of
+$l\approx 20$ of the $w$ positions, and matches two sequences when
+they match in all these $l$ positions. Thus, we pick a random set
+$L \in [w]^{(l)}$ and hash the window $W$ to
+$W_{L} := (W_{L_i})_{i\in [l]}$. For the particular pair of sequences
+above, the algorithm could have been looking at the positions in
+$L = \\{10, 25, 27, 39, 52, 55, 56\\}$, marked =|= (with $l=7$).
+
+#+begin_example
+  GCTTCAACCCGCACTGTCTCACGATTGTACAGCAAAGTACGTGTATTTGGGCCTATTTCCAGCT
+  CTTTTAACCCGCAATATATCACGATTGTACCGCATAGGACGTGTATTTCGGCTTATTGCAAGGT
+  **  *    |   * * *      | |   *   *  *|         *  |* || * *  *
+#+end_example
+
+The subsampled $k$-mer is =CTGACAT= for both sequences, thus hashing
+them into the same /bucket/ and making them candidates for being a
+matching pair.
+
+Since we may be unlucky and pick one of the positions with a mutation in
+$L$, we repeat the entire algorithm $r$ times, which will be chosen
+such that we discover most matching sequences (below some Hamming
+distance away from each other) with high probability.
+
+Thus, a naive python implementation of the algorithm using typical
+parameter values proceeds as follows:
+
+#+begin_src python
+r = 20    # The number of repeats.
+w = 128   # The size of the windows.
+l = 20    # The size of the subsample.
+
+# Input: a list of strings, e.g.
+# ['ACGACTTAG', 'ACTGAC', ...]
+# Output: a set of matching window pairs.
+def hamming_distance_sketching(sequences):
+    # The candidate matches, a set of pairs of windows.
+candidate_matches = set()
+
+for _ in range(r): # Repeat r times.
+    # Hash table mapping the subsampled kmers back to the windows.
+    hashtable = defaultdict(list)
+
+    # Pick l distinct random integers in {0, ..., w-1}.
+    # Note that the code uses 0-based indices while the analysis is 1-based.
+    L = random.sample(range(w), k=l)
+
+    # Loop over all sequences.
+    for i, s in enumerate(sequences):
+        # Loop over the start positions of all windows.
+    for j in range(len(s) - w + 1):
+        window = s[j : j+w]
+        subsample = [window[Li] for Li in L]
+        # The window is identified by the sequence index
+        # and its start position in the sequence.
+        hashtable[subsample].append((i, j))
+
+    # All pairs of windows that hash to the same bucket are candidate matches.
+    for kmer in hashtable:
+        # Loop over all unordered pairs of kmers with this hash.
+    for w1, w2 in itertools.combinations(hashtable[kmer], 2):
+        # Add the unordered pair into the set of candidate matches
+        candidate_matches.insert({w1, w2})
+
+return candidate_matches
+#+end_src
+
+*** Improving performance
+*Memory usage*
+
+The major bottleneck of the algoritm is memory usage: for each window it
+needs to store its hash and the identifier of the window. In practice,
+this mean that the algorithm will use at least eight times as much
+memory as the total size of the input dataset. While this is feasible
+for small datasets, it becomes a problem when running on more than a few
+gigabytes of data (on my 64GB RAM laptop, anyway).
+
+One way of reducing the memory usage is to simply not consider all
+windows, but only a subset of them.
+
+Given similar sequences, we don't need to know this for every pair of
+corresponding positions -- it is sufficient to know the similarity once
+every, say, $d\approx 64$ positions, since each match typicalle has
+length at least $64$ anyway.
+
+We do this as follows. First fix the filter size $f=3$ and $f$
+random characters $F \in \A^f$. Now only consider windows for which
+the first $f$ characters of their hash are exactly equal to $F$. For
+uniform random input sequences, this keeps $4^{-f} = 1/64$ of the
+sequences.
+
+Thus, our example window hash from earlier with has =CTGACAT= would only
+be processed when =F = CTG=.
+
+We considered some other ways in which sampling windows could be done,
+but these don't get the same coverage when considering a fixed fraction
+of windows.
+
+1. Take one window every $d$ positions.
+2. Find a subset of positions $S\subseteq \N$, such that taking all
+   windows starting at positions in $S$ in both sequence $A$ and
+   $B$ guarantees a matching starting position once every $d$
+   positions.
+3. Take each window independently with probability $1/d$.
+
+*Speed*
+
+To further improve the speed of the algorithm, we can parallelize the
+loop over all windows. One issue is that hashtables typically do not
+support multithreaded write operations. We can work around this by
+splitting the hashtable into disjoint parts. Consider the next $s=2$
+characters of the hash (after the initial $f$ which are already
+fixed), and create a total of $4^s$ hashtables. The $s$ characters
+determine in which of the hashtables the current window should be
+stored.
+
+Continuing the example with hash =CTGACAT=, the fourth and fifth
+basepairs, =AC=, will be used to select which of the $16$ hashtables
+will be used, and the remainder of the hash, =AT=, will be used as a key
+in this hashtable.
+
+*** Analysis
+This analysis assumes that the input sequences are uniform random
+sequences over
+$\A = \\{\texttt A, \texttt C, \texttt G, \texttt T\\}$.
+
+We will compute two numbers:
+
+1. False positives: Given two unrelated sequences, what is the
+   probability that we consider them as candidate matches.
+2. Recall: Given two related windows where a fraction $p$ of the
+   nucleotides is substituted, what is the probability that we return
+   this pair of windows as a candidate match.
+
+*False positives*
+
+This is similar to the analysis we did for $k$-mers. The probability
+that two random windows match in all $l=20$ positions is
+$4^{-20} \approx 10^{-12}$. When the total size of the data is 1GB
+($10^9$ windows), we have a total of $10^{18}$ pairs of sequences,
+and we can expect $10^-9\cdot 10^{18} = 10^6$ of these to be false
+positives. This is sufficiently low to iterate over them and discard
+them during further analysis.
+
+*Recall*
+
+Suppose that between two matching windows $A$ and $B$ each character
+is substituted with probability $p$, where typically $p$ is less
+than $0.1$, i.e. at most $10\%$ of the characters has changed. The
+probability that the $l=20$ character hashes of these windows are
+equal is
+
+\[
+\mathbb P(\hash(A)=\hash(B)) = (1-p)^l \geq (1-0.1)^20 \approx 0.12
+\]
+
+If we repeat the algorithm $r=20$ times with different random hash
+functions, the probability of a match is boosted to
+
+\[
+\mathbb P(\exists i\in [r] : \hash_i(A)=\hash_i(B)) = 1-(1-(1-p)^l)^r \geq
+1-0.88^r \approx 0.92.
+\]
+
+Thus, we are able to recover $92\%$ of all matching windows with an
+edit distance of $10\%$. By running the algorithm with more repeats,
+even more of these high distance pairs can be found.
+
+For windows with a distance of only $5\%$, doing $20$ repeats
+already covers more than $99.8\%$ of the pairs.
+
+*** Pruning false positive candidate matches
+When $l$ is chosen too low and the dataset is sufficiently large, the
+algorithm will produce false positives: windows that match in the
+sampled $l$ positions, but are otherwise unrelated. This may seem like
+a probem, but in practice these pairs are easily identified and
+discarded because there is a dichotomy (large gap) between the expected
+Hamming distance between related sequences and the expected Hamming
+distance between unrelated sequences.
+
+#+begin_quote
+TODO: A plot here would be nice.
+#+end_quote
+
+In particular the expected relative hamming distance between two random
+sequences matching in $l$ positions will be $\frac34(w-l)/w$, which
+for $w=64$ and $l=20$ comes out as $0.51$. For truely related
+sequences on the other hand, a relative distance of $0.1$ is already
+somewhat large, and distances of $0.2$ are quite rare[fn:2].
+
+To discard false positive pairs of matching windows, we can simply
+compute the Hamming distance between the two windows, and if it is
+larger than $0.3 \cdot w$, we discard this candidate match.
+
+* Phylogeny reconstruction
+Given this algorithm, we can attempt to solve the problem of phylogeny
+reconstruction.
+
+*Problem*: Reconstruct the phylogeny (evolutionary tree) of a given set
+of genes/genomes.
+
+*Input*: A set of (possibly unassembled) genes or genomes.
+
+*Output*: Pairwise distances between all sequences, from which the
+phylogeny can be constructed.
+
+We are only computing pairwise distances instead of the actual tree
+since there are well established algorithms to compute a phylogeny from
+these distances: [[https://en.wikipedia.org/wiki/UPGMA][UPGMA]] and
+[[https://en.wikipedia.org/wiki/Neighbor_joining][neighbor-joining]].
+
+The returned distances are typically some measure of evolutionary
+distance. In our approach, we estimate the distance between sequence
+$A$ and $B$ as the average hamming distance between matching windows
+between sequence $A$ and $B$.
+
+Python pseudocode for this would be
+
+#+begin_src python
+  def distance(candidate_matches, seq_a, seq_b):
+      total_distance = 0
+      num_pairs = 0
+    for w1, w2 in candidate_matches:
+      if ((w1.seq == seq_a and w2.seq == seq_b) or
+          (w1.seq == seq_a and w2.seq == seq_b)):
+          num_pairs += 1
+          total_distance += HammingDistance(w1, w2)
+
+    return total_distance / num_pairs
+#+end_src
+
+In practice, we implemented this in a slightly different way: We
+observed that for many buckets in the hash table, there are many windows
+from a single sequence. This is to be expected because many genes and
+other parts of DNA can be repeated. For example the E.coli dataset gives
+the following bucket:
+
+#+begin_example
+  Seq        Pos
+  ...
+  B4Sb227    3707750 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCGGAGACTCTGCGTGTCTGGGTACGCCAGCATGAGCGGGATACCGGAGGC
+  B4Sb227    3748505 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCGGAGACTCTGCGTGTCTGGGTACGCCAGCATGAGCGGGATACCGGAGGC
+  B4Sb227    3866449 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCGGAGACTCTGCGTGTCTGGGTACGCCAGCATGAGCGGGATACCGGAGGC
+  B4Sb227    4203113 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCGGAGACTCTGCGTGTCTGGGTACGCCAGCATGAGCGGGATACCGGAGGC
+  B4Sb227    4444086 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCGGAGACTCTGCGTGTCTGGGTACGCCAGCATGAGCGGGATACCGGAGGC
+   EDL933    2137122 TGGTTCTGGAAAGTCAGGATGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACGCCGGAGACTCTGCGTGTCTGGGTTCGCCAGCATGAGCGGGATACCGGGGGC
+   EDL933    2171829 TGGTTCTGGAAAGTCAGGATGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACGCCGGAGACTCTGCGTGTCTGGGTTCGCCAGCATGAGCGGGATACCGGGGGC
+   EDL933    2524436 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAATGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCAGAGACTCTGCGTGTGTGGGTTCGTCAGCATGAGCGGGATACCGGGGGC
+   EDL933    2756369 TGGTTCTGGAAAGTCAGGATGAATATGACTCACAGTGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACGCCGGAGACTCTGCGTGTCTGGGTTCGCCAGCATGAGCGGGATACCGGGGGC
+   EDL933    2813013 TGGTTCTGGAAAGTCAGGGCGAATATGACTCACAATGGGCGGCAATTTGTTCCATTGCCCCAAAGATTGGCTGTACACCAGAGACTCTGCGTGTGTGGGTTCGTCAGCATGAGCGGGATACCGGGAGT
+  ...
+#+end_example
+
+To prevent the average distance to be too much skewed to one particular
+repeated window, we only pick one random representative in these cases
+and ignore all repeats of the window within a sequence.
+
+*** Running the algorithm
+We tested this phylogeny reconstruction algorithm on a few datasets from
+the Alignment Free project ([[https://afproject.org][afproject.org]]).
+
+The algorithm performs very well on the genome-based phylogeny tasks. In
+particular, on the unassembled E.coli task with a coverage of $5$, our
+algorithm returns a phylogeny with an Robinson-Foulds distance of $2$
+to the ground truth, while the
+[[http://afproject.org/app/benchmark/genome/std/unassembled/ecoli/results/][current
+best]] (select coverage 5 in the dropdown) has a distance of $6$ .
+
+For assembled genomes, the algorithm consistently ranks in the top
+$10$ of currently tested methods.
+
+On the other hand, the algorithm completely fails on some other tasks
+and may need more tuning, or may just not work well at all in specific
+circumstances.
+
+In general, my feeling is that it works very well to find matches
+between long sequences, but currently isn't suitable for estimating
+distances between sequences only a few hundreds basepairs in length.
+
+#+begin_quote
+TODO: Plot RF distance as function of $l$ for one/a few datasets.
+#+end_quote
+
+* Assembly
+We'll also test the algorithm for both long and short read assembly.
+This is currently on the TODO list.
+
+[fn:1] Better name needed.
+
+[fn:2] Citation needed.
