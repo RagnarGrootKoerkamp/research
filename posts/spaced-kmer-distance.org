@@ -176,8 +176,8 @@ a $k$-mer of length $20$.
 
 To work around this, our sketch method looks at a subsample of
 $l\approx 20$ of the $w$ positions, and matches two sequences when
-they match in all these $l$ positions. Thus, we pick a random set
-$L \in [w]^{(l)}$ and hash the window $W$ to
+they match in all these $l$ positions. Thus, we pick a random subset
+$L \in [w]^{(l)}$ of $\{1, \dots w\}$ of size $l$ and hash the window $W$ to
 $W_{L} := (W_{L_i})_{i\in [l]}$. For the particular pair of sequences
 above, the algorithm could have been looking at the positions in
 $L = \\{10, 25, 27, 39, 52, 55, 56\\}$, marked =|= (with $l=7$).
@@ -194,8 +194,10 @@ matching pair.
 
 Since we may be unlucky and pick one of the positions with a mutation in
 $L$, we repeat the entire algorithm $r$ times, which will be chosen
-such that we discover most matching sequences (below some Hamming
+such that we discover most matching windows (below some Hamming
 distance away from each other) with high probability.
+Windows that match but have indels will likely be missed by this method, as
+their Hamming distance is typically large.
 
 Thus, a naive python implementation of the algorithm using typical
 parameter values proceeds as follows:
@@ -432,7 +434,7 @@ and ignore all repeats of the window within a sequence.
 
 *** Running the algorithm
 We tested this phylogeny reconstruction algorithm on a few datasets from
-the Alignment Free project ([[https://afproject.org][afproject.org]]).
+the Alignment Free project ([[http://afproject.org][afproject.org]]).
 
 The algorithm performs very well on the genome-based phylogeny tasks. In
 particular, on the unassembled E.coli task with a coverage of $5$, our
