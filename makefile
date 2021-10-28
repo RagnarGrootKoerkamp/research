@@ -4,7 +4,7 @@ BASE_DIR := $(shell pwd)
 EMACS_BUILD_SRC := $(BASE_DIR)/emacs
 BASE_URL := https://research.curiouscoding.nl
 
-all: clean build-content serve
+all: clean build-content open serve
 
 .PHONY: clean
 clean:
@@ -14,6 +14,10 @@ clean:
 .PHONY: serve
 serve:
 	hugo server --minify --disableFastRender --navigateToChanged --baseURL localhost:1313
+
+.PHONY: open
+open:
+	open http://localhost:1313
 
 .PHONY: build-content
 build-content:
