@@ -1,0 +1,50 @@
+#+author: Ragnar Groot Koerkamp
+#+HUGO_BASE_DIR: ..
+#+HUGO_SECTION: posts
+#+HUGO_AUTO_SET_LASTMOD: t
+#+FILETAGS: @methods
+
+* DONE UPGMA :phylogeny_reconstruction:
+CLOSED: [2021-10-28 Thu 11:56]
+:PROPERTIES:
+:EXPORT_FILE_NAME: upgma
+:END:
+
+[[https://en.wikipedia.org/wiki/UPGMA][Unweighted pair group method with arithmetic mean]] (UPGMA) is a phylogeny reconstruction method.
+
+- Input :: Matrix of pairwise distances
+- Output :: Phylogeny
+- Algorithm :: Repeatedly merge the nearest two clusters. The distance between
+  clusters is the average of all pairwise distances between them. When merging
+  two clusters, the distances of the new cluster are the weighted averages of
+  distances from the two clusters being merged.
+- Complexity :: $O(n^3)$ naive, $O(n^2 \ln n)$ using heap.
+
+* DONE Neighbor joining :@literature:phylogeny_reconstruction:
+CLOSED: [2021-11-12 Fri 11:57]
+:PROPERTIES:
+:EXPORT_FILE_NAME: neighbor-joining
+:END:
+[[https://en.wikipedia.org/wiki/Neighbor_joining][Neighbor joining]] (NJ, [[https://academic.oup.com/mbe/article/4/4/406/1029664][paper]]) is a phylogeny reconstruction method.
+It differs from [[UPGMA]] in the way it computes the distances between clusters.
+
+This algorithm first assumes that the phylogeny is a star graph.
+Then it finds the pair of vertices that when merged and split out gives the
+minimal total edge length $S_{ij}$ of the new almost-star graph. (See eq. (4)
+and figure 2a and 2b in the paper.)
+$$ S_{i,j} = \frac1{2(n-2)} \sum_{k\not\in \{i,j\}}(d(i, k)+d(j,k)) + \frac 12
+d(i,,j)+\frac 1{n-2} \sum_{k<l,\, k, l\not\in\{i,j\}}d(k,l).$$
+After subtracting the sum of all pairwise distances (which is a constant) and multiplying by $2(n-2)$, we obtain
+the familiar
+$$ Q(i, j) = (n-2) d(i, j) - \sum_{k=1}^n d(i, k) - \sum_{k=1}^n d(j, k).$$
+Thus, we merge the two vertices that minimize $Q$.
+The distance from the merging of vertices $i$ and $j$ to each other vertex
+$k$ is $d_{(i-j)k} = (d_{i,k} + d_{j,k})/2$.
+
+NJ also estimates branch lengths. See the paper for details.
+
+- Input :: Matrix of pairwise distances
+- Output :: Phylogeny
+- Algorithm :: Repeatedly merge the nearest two clusters using metric $Q$
+  defined above.
+- Complexity :: $O(n^3)$. Faster is possible using heuristics.
