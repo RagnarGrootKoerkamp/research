@@ -32,11 +32,15 @@ This algorithm first assumes that the phylogeny is a star graph.
 Then it finds the pair of vertices that when merged and split out gives the
 minimal total edge length $S_{ij}$ of the new almost-star graph. (See eq. (4)
 and figure 2a and 2b in the paper.)
-$$ S_{i,j} = \frac1{2(n-2)} \sum_{k\not\in \{i,j\}}(d(i, k)+d(j,k)) + \frac 12
-d(i,,j)+\frac 1{n-2} \sum_{k<l,\, k, l\not\in\{i,j\}}d(k,l).$$
+$$
+S_{i,j} = \frac1{2(n-2)} \sum_{k\not\in \{i,j\}}(d(i, k)+d(j,k)) + \frac 12
+d(i,j)+\frac 1{n-2} \sum_{k<l,\, k, l\not\in\{i,j\}}d(k,l).
+$$
 After subtracting the sum of all pairwise distances (which is a constant) and multiplying by $2(n-2)$, we obtain
 the familiar
-$$ Q(i, j) = (n-2) d(i, j) - \sum_{k=1}^n d(i, k) - \sum_{k=1}^n d(j, k).$$
+$$
+Q(i, j) = (n-2) d(i, j) - \sum_{k=1}^n d(i, k) - \sum_{k=1}^n d(j, k).
+$$
 Thus, we merge the two vertices that minimize $Q$.
 The distance from the merging of vertices $i$ and $j$ to each other vertex
 $k$ is $d_{(i-j)k} = (d_{i,k} + d_{j,k})/2$.
@@ -48,3 +52,45 @@ NJ also estimates branch lengths. See the paper for details.
 - Algorithm :: Repeatedly merge the nearest two clusters using metric $Q$
   defined above.
 - Complexity :: $O(n^3)$. Faster is possible using heuristics.
+
+
+* DONE AStarix :astarix:alignment:@literature:
+CLOSED: [2021-11-12 Fri 13:05]
+:PROPERTIES:
+:EXPORT_FILE_NAME: astarix
+:END:
+
+*Papers*
+- [[https://www.biorxiv.org/content/10.1101/2020.01.22.915496v2.full][AStarix: Fast and Optimal Sequence-to-Graph Alignment]]
+- [[https://www.biorxiv.org/content/10.1101/2021.11.05.467453v1][Fast and Optimal Sequence-to-Graph Alignment Guided by Seeds]]
+
+AStarix is a method for aligning sequences (reads) to graphs:
+
+- Input ::
+  - A reference sequence or graph
+  - Alignment costs $(\Delta_{match}, \Delta_{subst}, \Delta_{del}, \Delta_{ins})$ for a match, substitution, insertion and deletion
+  - Sequence(s) to align
+- Output :: An optimal alignment of each input sequence
+
+The input is a reference graph (automaton really) $G_r = (V_r, E_r)$ with edges $E_r \subseteq
+V_r\times V_r\times \Sigma$ that indicate the transitions between states.
+
+At the core of AStarix, there is an implicit /alignment graph/ $G_a^q$, whose
+states (nodes) $\langle v, i\rangle$ are a pair of a position in $G_r$ and the
+number of characters of the sequence $q$ that has already been matched.
+Transitions (weighted edges) in $G_a^q$ correspond to
+matching/substituting/deleting/inserting one character of the sequence $q$ with
+their respective cost.
+Note that this is a generalization of the transition costs in the DP table for
+conventional quadratic time alignment algorithms.
+
+The /optimal alignment/ is a path from $\langle u, 0\rangle$ to $\langle
+v, |q|\rangle$ for some $u,v\in V_r$ with minimal cost.
+
+As the name suggests, the [[https://en.wikipedia.org/wiki/A*_search_algorithm][A* algorithm]] is used with a heuristic to find such a path.
+To make this work, two optimizations are done:
+
+*Seed heuristic:* A* needs a heuristic function $h$ that lower bounds the
+ distance between vertices: $d(u, v) \geq h(u, v)$.
+
+[WIP]
