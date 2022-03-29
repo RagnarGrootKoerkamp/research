@@ -1,0 +1,175 @@
+#+TITLE: A history of exact pairwise alignment
+#+HUGO_BASE_DIR: ..
+#+HUGO_CATEGORIES: posts methods
+#+HUGO_TAGS: pairwise-alignment
+#+HUGO_LEVEL_OFFSET: 2
+#+BIBLIOGRAPHY: ~/git/eth/references/references.bib
+#+date: <2022-03-24 Thu>
+
+This post lists some of the more relevant papers and implementations related to
+pairwise alignment.
+Unless mentioned otherwise, all these methods are *exact* and do *global
+alignment*.
+
+First, lets quickly go over the existing variants of the pairwise alignment problem.
+
+* Variants of pairwise alignment
+
+Pairwise alignment is the problem of finding the lowest cost way to transform a
+string $A$ of length $n$ into a string $B$ of length $m$ using some set of
+operations, each with their own cost.
+
+** Cost models
+See the [[https://github.com/smarco/WFA2-lib][WFA2 readme]] for more detail.
+Note that some models minimize the cost, while others include a score for
+matching characters and maximize.
+- Indel / LCS :: No substitutions allowed. Count minimum number of indels.
+- Edit / Levenshtein distance :: Minimum number of indels and/or substitutions needed. All
+  cost $1$.
+- Gap-linear :: Arbitrary costs $X$ for mismatch and $I$ per indel character, so
+  cost $l\cdot I$ for a gap of length $l$.
+  More generally, there can be a function $\delta(a,b) > 0$ ($a\neq b$) for the cost
+  of a mismatch between characters $a$ and $b$, and a function $w(l)$ for the
+  cost of a gap of length $l$.
+- Gap-affine :: Gap costs are linear with an offset. Instead of cost $I$ per
+  indel character, there are costs $O$ (/open/) and $E$ (/extend/), and the cost
+  for a gap of length $l$ is $O + l\cdot E$.
+- Dual-cost gap-affine :: Introduce two gap scores based on $(O_1, E_1)$ and
+  $(O_2, E_2)$. The cost of a gap of length $l$ is $\min(O_1 + l\cdot E_1, O_2 +
+  l\cdot E_2)$.
+
+** Alignment types
+- Global :: Align both sequences fully, end-to-end
+- Ends-free :: Like global alignment, but indels/gaps at the end are free. This needs a
+  way to ensure the aligned sequences overlap, because making them disjoint has
+  cost $0$. Either introduce a score for matching characters (which not all
+  aligners can handle), or set a maximum length of the free prefix (as WFA2 does).
+  - Glocal, semi-global, mapping :: Map a read to a substring of a reference.
+  - Extension :: Anchor both at their starts, but one is longer.
+  - Overlap :: Mapping two partially overlapping reads against each other.
+- Local :: Aligns a substring of $A$ to a substring of $B$.
+
+** Parameters for the runtime
+These are used later to time and memory usage.
+- $n$, $m$: sequence lengths. Nowadays $n \geq m$, but historically $m\geq n$.
+- $d$: edit distance.
+- $s$: alignment cost (or occasionally edit distance), given some cost model.
+- $r$: the number of pairs of matching characters between the two sequences.
+
+* Semi-chronological overview
+
+Once upon a time, there were cubic algorithms for various cost models.
+These cost models were soon simplified to allow quadratic runtimes instead.
+
+- [cite/text/cf:@nw] (NW) [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][[wikipedia]]] :: Introduces the original cubic $O(m^2n)$
+  ($m\geq n$) DP algorithm for
+  global alignment.
+- [cite/text/cf:@sankoff] :: Improves NW to have $O(mn)$ runtime. This is
+  what is nowadays usually referred to by the term /Needleman-Wunsch algorithm/.
+
+  These first two papers use match and mismatch costs, but not gap costs. Nevertheless,
+  both methods are easily extended to work with gap costs.
+- [cite/text/cv:@wagner74] :: Also presents a quadratic algorithm.
+- [cite/text/cf:@sellers] :: Introduces the now common scheme of mismatch and
+  indel penalties: $\delta(a_i, b_j)$, $\delta(a_i, -)$, and $\delta(-, b_j)$,
+  and re-states the $O(nm)$ algorithm for this case.
+- [cite/text/cf:@waterman] :: Extends the cost model to allow an arbitrary cost
+  function for longer insertions and deletions, giving a cubic algorithm.
+- [cite/text/cf:@sw] [[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm#cite_note-Smith1981-1][[wikipedia]]] :: Extends the NW DP to local alignment, allowing
+  for arbitrary gap penalties, and runs in cubic time $O(m^2n)$ for $m\geq n$.
+- [cite/text/cf:@smith81] :: Mentions /gap-affine/ penalties, where the cost of a gap of length $k$ is $w_k = uk+v$.
+- [cite/text/cf:@gotoh] ::
+  Shows that the cubic algorithms of [cite/text:@waterman] and [cite/text:@sw] simplify to
+  quadratic $O(mn)$ algorithms for gap-affine costs. It uses three matrices $D$,
+  $P$, and $Q$, where $P$ and $Q$ correspond to the minimal alignment cost when
+  ending with a deletion or insertion respectively.
+  While it generalizes [cite/text:@sw], it does not state the recurrence for
+  local alignment.
+
+  This seems to be the first paper to remark that linear memory is sufficient when
+  only the distance is required.
+- [cite/text/cf:@altschul] :: Fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
+- Smith-Waterman-Gotoh (SWG) ::
+  This term is now occasionally used (e.g. in [cite/text:@wfa]) to refer to the gap-affine global alignment
+  algorithm introduces by [cite/text:@gotoh]. This is somewhat confusing since [cite/text:@sw] is only about /local/ alignment.
+
+  Introduces new names $C$, $D$ (end with a deletion), and $I$
+  (end with an insertion) for the recursion by [cite/text:@gotoh].
+
+At this point, the search for an $O(nd)$ was the next logical step.
+Developments started on LCS, and ended with three independent algorithms being
+published in parallel, using what we now call the *diagonal transition* method.
+
+- Hunt Szymanski 77 :: [TODO]
+- Hirschberg 77 :: [TODO: This or HS77 introduces the concept of 'furthest
+  reaching' for LCS]
+- [cite/text/cf:@nakatsu82] :: Presents the first $O(nd)$ algorithm for LCS.
+- Ukkonen [cite/text/cf:@ukkonen83 conference;@ukkonen85 paper] ::
+  Introduces the diagonal transition method, using $O(s\cdot \min(m,n))$ time
+  and $O(s^2)$ space, and if only the score is needed, $O(s)$ space.
+
+  Concepts introduced:
+  * $d_{ij}$ is non-decreasing on diagonals, and has bounded increments.
+  * *Furthest reaching point*: Instead of storing $d$, we can store increments
+    only: $f_{kp}$ is the largest $i$ s.t. $d_{ij}=p$ on diagonal $k$ ($j-i=k$).
+    [TODO: they only generalize it from LCS elsewhere]
+
+  * Recursion on $f_{kp}$ for unit costs, computing $f_{\bullet,p}$ from
+    $f_{\bullet, p-1}$:
+    \begin{align}
+    t &= \max(f_{k, p-1}+1,\, f_{k-1,p-1},\, f_{k+1, p-1}+1)\\
+    f_{kp} &= t+\max\{i \, :\,a_{t+j} = b_{t+k+j}\ \ \forall j\leq i\}
+    \end{align}
+    This first computes the optimal transition to the current run of equal
+    values, and then extends $f_{kp}$ as far as possible using equal characters.
+    Only $O(s^2)$ values of $f$ are computed, and if the alignment is not
+    needed, only the last /front/ $f_{\bullet, p}$ is needed at each step.
+  * *Gap heuristic*: The distance from $d_{ij}$ to the end $d_{nm}$ is at least
+    $|(i-n)-(j-m)|\cdot \Delta$ when $\Delta$ is the cost of an indel.
+    This allows pruning of some diagonals.
+- [cite/text/cf:@myers86], submitted '85 :: [TODO]
+- [cite/text/cf:@lv89], submitted '86 :: [TODO]
+
+At the same time, there were developments for using only linear memory to
+reconstruct the alignment. The result for LCS was quite old already before it
+was realized it can also be applied for pairwise alignment.
+
+- [cite/text/cf:@hirschberg75] :: Divide-and-conquer approach to
+  find the LCS (/longest common subsequence/) in quadratic time and linear space.
+- [cite/text/cf:@myers88] :: Applies the divide-and-conquer approach of
+  [cite/text/cf:@hirschberg75] to the quadratic gap-affine algorithm of
+  [cite/text/cf:@gotoh], for $O(nm)$ time and $O(\min(n,m))$ space.
+
+Independently, an algorithm was found that uses subquadratic time,
+even in the worst case:
+
+- [cite/text/cf:@four-russians-ed] :: Solves pairwise alignment in $O(nm / \lg
+  \max(n,m))$ time for discrete scores and a finite alphabet, using the [[https://en.wikipedia.org/wiki/Method_of_Four_Russiansa][*Four Russians*]]
+  technique.
+
+* Modern implementations and results
+Note: From 1990 to 2010 there is a gap without much theoretical progress on
+exact alignment.
+During this time, speedups were achieved by [TODO: citations]:
+- more efficient implementations on available hardware;
+- heuristic approaches such as banded alignment and $x$-drop.
+
+[TODO: This is very incomplete for now]
+
+- Block aligner :: approximate
+- WFA :: exact, diagonal transition method
+- WFALM :: *L*ow *M*emory variant of WFA.
+
+  Uses a square-root decomposition to do backtracking in $O(s^{3/2})$
+
+  *Additional speedup:*
+  The extension/greedy matching can be done using a precomputed suffixtree and LCA queries.
+  This results in $O(n+m+s^2)$ complexity but is not faster in practice.
+  [TODO: original place that does this]
+
+- Exponent less than 2 is not possible :: [cite/text/cv:@no-subquadratic-ed]
+  show that if edit distance can be solve in time $O(n^{2-\delta})$, that would
+  violate the /Strong Exponential Time Hypothesis/, which is believed to be true.
+
+* References
+#+print_bibliography:
