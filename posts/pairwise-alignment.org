@@ -61,6 +61,8 @@ These variables are used for asymptotic complexity and memory usage.
 
 * Semi-chronological overview
 
+** Classic theoretical results
+
 Once upon a time, there were cubic algorithms for various cost models.
 These cost models were soon simplified to allow quadratic runtimes instead.
 
@@ -86,7 +88,7 @@ These cost models were soon simplified to allow quadratic runtimes instead.
   quadratic $O(mn)$ algorithms for gap-affine costs. It uses three matrices $D$,
   $P$, and $Q$, where $P$ and $Q$ correspond to the minimal alignment cost when
   ending with a deletion or insertion respectively.
-  While it generalizes [cite/text:@sw], it does not state the recurrence for
+  While it generalizes , it does not state the recurrence for
   local alignment.
 
   This seems to be the first paper to remark that linear memory is sufficient when
@@ -150,17 +152,36 @@ even in the worst case:
   \max(n,m))$ time for discrete scores and a finite alphabet, using the [[https://en.wikipedia.org/wiki/Method_of_Four_Russiansa][*Four Russians*]]
   technique.
 
-* Modern implementations and results
+It is now know that this has nearly optimal performance:
+
+- [cite/text/cf:@no-subquadratic-ed] :: 
+  Shows that edit distance can not be solved in time $O(n^{2-\delta})$
+  for any $\delta > 0$, on the consition that the /Strong Exponential Time
+  Hypothesis/ is true.
+
+** Modern efficient implementations
 Note: From 1990 to 2010 there is a gap without much theoretical progress on
 exact alignment.
 During this time, speedups were achieved by [TODO: citations]:
 - more efficient implementations on available hardware;
 - heuristic approaches such as banded alignment and $x$-drop.
 
+There are many implementations of exact and inaxact aligners. Here I will only
+list current competitive aligners.
+
 [TODO: This is very incomplete for now]
 
+- Myers bit-parallel algorithm :: [TODO]
+- Edlib :: A fast implementation (using Myers bit-parallel algorithm I believe)
 - Block aligner :: approximate
 - WFA :: exact, diagonal transition method
+
+  States the recurrence for gap-affine costs for the diagonal transition
+  algorithm, and provides a fast implementation. It is unclear to me why it took
+  30+ years to merge the existing gap-affine recursion and more efficient
+  diagonal-transition method.
+- WFA2 :: Extends WFA to more cost models, more alignment modes, and introduces
+  low-memory variants
 - WFALM :: *L*ow *M*emory variant of WFA.
 
   Uses a square-root decomposition to do backtracking in $O(s^{3/2})$
@@ -169,10 +190,11 @@ During this time, speedups were achieved by [TODO: citations]:
   The extension/greedy matching can be done using a precomputed suffixtree and LCA queries.
   This results in $O(n+m+s^2)$ complexity but is not faster in practice.
   [TODO: original place that does this]
-
-- Exponent less than 2 is not possible :: [cite/text/cv:@no-subquadratic-ed]
-  show that if edit distance can be solve in time $O(n^{2-\delta})$, that would
-  violate the /Strong Exponential Time Hypothesis/, which is believed to be true.
+- biWFA [WIP, unpublished] :: Meet-in-the-middle/divide-and-conquer variant of WFA, applying the ideas in
+  [cite/text:@hirschberg75] to WFA to reconstruct the alignment in linear space.
+- lh3/lv89 :: Similar to biWFA (but non-recursive) and WFALM (but with a fixed
+  edit-distance between checkpoints, instead of dynamically storing every
+  $2^{i}$ /th/ wavefront).
 
 * References
 #+print_bibliography:
