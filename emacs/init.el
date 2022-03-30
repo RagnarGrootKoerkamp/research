@@ -50,6 +50,9 @@
 (use-package ox-hugo
   :straight (:type git :host github :repo "kaushalmodi/ox-hugo" :nonrecursive t))
 
+(use-package citeproc
+  :straight (:type git :host github :repo "andras-simonyi/citeproc-el" :nonrecursive t))
+
 (setf org-hugo-base-dir base-dir)
 
 ;;;
