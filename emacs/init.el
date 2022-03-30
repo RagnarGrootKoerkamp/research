@@ -55,6 +55,11 @@
 
 (setf org-hugo-base-dir base-dir)
 
+; Disable auto-inserting References section heading.
+; https://ox-hugo.scripter.co/doc/org-cite-citations/#org-radio--CSL-formatted-exports
+(with-eval-after-load 'ox-hugo
+  (plist-put org-hugo-citations-plist :bibliography-section-heading ""))
+
 ;;;
 ;;; Public functions
 ;;;
