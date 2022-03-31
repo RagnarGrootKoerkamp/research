@@ -26,8 +26,8 @@ operations, each with their own cost.
 See the [[https://github.com/smarco/WFA2-lib][WFA2 readme]] for more detail.
 Note that some models minimize the cost, while others include a score for
 matching characters and maximize.
-- Indel / LCS :: No substitutions allowed. Count minimum number of indels.
-- Edit / Levenshtein distance :: Minimum number of indels and/or substitutions needed. All
+- Indel / LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] :: No substitutions allowed. Count minimum number of indels.
+- Edit / Levenshtein distance [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
   cost $1$.
 - Gap-linear :: Arbitrary costs $X$ for mismatch and $I$ per indel character, so
   cost $l\cdot I$ for a gap of length $l$.
@@ -66,7 +66,7 @@ These variables are used for asymptotic complexity and memory usage.
 Once upon a time, there were cubic algorithms for various cost models.
 These cost models were soon simplified to allow quadratic runtimes instead.
 
-- [cite/text/cf:@nw] (NW) [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][[wikipedia]]] :: Introduces the original cubic $O(m^2n)$
+- [cite/text/cf:@nw] (NW) [[[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][wikipedia]]] :: Introduces the original cubic $O(m^2n)$
   ($m\geq n$) DP algorithm for
   global alignment.
 - [cite/text/cf:@sankoff] :: Improves NW to have $O(mn)$ runtime. This is
@@ -74,13 +74,14 @@ These cost models were soon simplified to allow quadratic runtimes instead.
 
   These first two papers use match and mismatch costs, but not gap costs. Nevertheless,
   both methods are easily extended to work with gap costs.
-- [cite/text/cv:@wagner74] :: Also presents a quadratic algorithm.
+- [cite/text/cv:@wagner74] [[[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm#cite_note-navarro-1][wikipedia]]] :: Also presents a quadratic algorithm. This
+  algorithm has been discovered multiple times in parallel, see [cite/text:@navarro01].
 - [cite/text/cf:@sellers] :: Introduces the now common scheme of mismatch and
   indel penalties: $\delta(a_i, b_j)$, $\delta(a_i, -)$, and $\delta(-, b_j)$,
   and re-states the $O(nm)$ algorithm for this case.
 - [cite/text/cf:@waterman] :: Extends the cost model to allow an arbitrary cost
   function for longer insertions and deletions, giving a cubic algorithm.
-- [cite/text/cf:@sw] [[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm#cite_note-Smith1981-1][[wikipedia]]] :: Extends the NW DP to local alignment, allowing
+- [cite/text/cf:@sw] [[[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm#cite_note-Smith1981-1][wikipedia]]] :: Extends the NW DP to local alignment, allowing
   for arbitrary gap penalties, and runs in cubic time $O(m^2n)$ for $m\geq n$.
 - [cite/text/cf:@smith81] :: Mentions /gap-affine/ penalties, where the cost of a gap of length $k$ is $w_k = uk+v$.
 - [cite/text/cf:@gotoh] ::
@@ -101,39 +102,69 @@ These cost models were soon simplified to allow quadratic runtimes instead.
   Introduces new names $C$, $D$ (end with a deletion), and $I$
   (end with an insertion) for the recursion by [cite/text:@gotoh].
 
-At this point, the search for an $O(nd)$ was the next logical step.
-Developments started on LCS, and ended with three independent algorithms being
-published in parallel, using what we now call the *diagonal transition* method.
+At this point, the search for algorithms faster than $n^2$ started.
+First there were improvements to LCS, leading to an $O(n(m-p))$ algorithm when
+the LCS has length $p$.
 
-- Hunt Szymanski 77 :: [TODO]
-- Hirschberg 77 :: [TODO: This or HS77 introduces the concept of 'furthest
-  reaching' for LCS]
-- [cite/text/cf:@nakatsu82] :: Presents the first $O(nd)$ algorithm for LCS.
+- [cite:@hunt77] [[[https://en.wikipedia.org/wiki/Hunt%E2%80%93Szymanski_algorithm][wikipedia]]] :: An $O((r+n) \lg n)$ algorithm for LCS, for $r$ ordered pairs
+  of positions where the two sequences match, using an array of /threshold
+  values/ $T_{i,k}$: the smallest $j$ such that the prefixes of length $i$ and
+  $j$ have an LCS of length $k$. Faster than quadratic for large alphabets (e.g.
+  lines of code).
+- [cite:@hirschberg77] :: Defines /$k$-candidates/ (already introduced in Hirschberg's
+  thesis two years before) as matches where a LCS of length $k$ ends. /Minimal/
+  (also called /essential/ elsewhere) $k$-candidates are those for which there
+  are no other /smaller/ $k$-candidates.  This leads to /contours/: the border
+  between regions of equal $L$-value. Their algorithm is $O(p (m-p) \lg n)$.
+- [cite/text/cf:@nakatsu82] :: Presents the first $O(n(m-p))$ algorithm for
+  LCS, by introducing a recursion on threshold values.
+
+At this point, the search for an $O(nd)$ algorithm for pairwise alignment was
+the next logical step.  This resulted in three similar but slightly different
+algorithms being published almost in parallel, using what we now call the
+*diagonal transition* method.
+
 - Ukkonen [cite/text/cf:@ukkonen83 conference;@ukkonen85 paper] ::
-  Introduces the diagonal transition method, using $O(s\cdot \min(m,n))$ time
-  and $O(s^2)$ space, and if only the score is needed, $O(s)$ space.
+  Introduces the diagonal transition method for edit costs, using $O(s\cdot
+  \min(m,n))$ time and $O(s^2)$ space, and if only the score is needed, $O(s)$
+  space.
 
   Concepts introduced:
   * $d_{ij}$ is non-decreasing on diagonals, and has bounded increments.
   * *Furthest reaching point*: Instead of storing $d$, we can store increments
     only: $f_{kp}$ is the largest $i$ s.t. $d_{ij}=p$ on diagonal $k$ ($j-i=k$).
     [TODO: they only generalize it from LCS elsewhere]
+  * A recursion on $f_{kp}$ for unit costs, computing /wavefront/ $f_{\bullet,p}$ from
+    the previous front $f_{\bullet, p-1}$, by first taking a maximum over
+    insert/deletion/substitution options, and then increasing $f$ as long as
+    characters on the diagonal are matching.
 
-  * Recursion on $f_{kp}$ for unit costs, computing $f_{\bullet,p}$ from
-    $f_{\bullet, p-1}$:
-    \begin{align}
-    t &= \max(f_{k, p-1}+1,\, f_{k-1,p-1},\, f_{k+1, p-1}+1)\\
-    f_{kp} &= t+\max\{i \, :\,a_{t+j} = b_{t+k+j}\ \ \forall j\leq i\}
-    \end{align}
-    This first computes the optimal transition to the current run of equal
-    values, and then extends $f_{kp}$ as far as possible using equal characters.
     Only $O(s^2)$ values of $f$ are computed, and if the alignment is not
     needed, only the last /front/ $f_{\bullet, p}$ is needed at each step.
   * *Gap heuristic*: The distance from $d_{ij}$ to the end $d_{nm}$ is at least
     $|(i-n)-(j-m)|\cdot \Delta$ when $\Delta$ is the cost of an indel.
     This allows pruning of some diagonals.
-- [cite/text/cf:@myers86], submitted '85 :: [TODO]
-- [cite/text/cf:@lv89], submitted '86 :: [TODO]
+
+  Additionally, this paper introduces an algorithm that does exponential search
+  on the band with, leading to an $O(ns)$ algorithm for general costs but using
+  $O(ns)$ space.
+- [cite/text/cf:@myers86], submitted '85 ::
+  Independent of [cite/text:@ukkonen85], this
+  introduces the concept of furthest reaching point and the
+  recursion, but for LCS. Dijkstra's algorithm is used to evaluate DP states in
+  order of increasing distance. For random strings, they show it runs in
+  $O(n+d^2)$ expected time.
+
+  Uses divide-and-conquer to achieve $O(n)$ space; see below.
+- [cite/text/cf:@lv89], submitted '86 :: Extends [cite/text:@ukkonen85]
+  to finding /all/ matches of a pattern in a text with at most $k$ errors, in
+  $O(nm)$ time. They improve this to $O(nk)$ by using a suffix tree with LCA
+  queries to extend matching diagonals in $O(1)$ instead of checking one
+  character at a time.
+
+Note that applying the suffix tree optimization from [cite/text:@lv89] to
+[cite/text:@ukkonen85] gives a worst case $O(n+s^2)$ algorithm. [TODO: Look for
+the first paper writing this down.]
 
 At the same time, there were developments for using only linear memory to
 reconstruct the alignment. The result for LCS was quite old already before it
@@ -166,7 +197,7 @@ During this time, speedups were achieved by [TODO: citations]:
 - more efficient implementations on available hardware;
 - heuristic approaches such as banded alignment and $x$-drop.
 
-There are many implementations of exact and inaxact aligners. Here I will only
+There are many implementations of exact and inexact aligners. Here I will only
 list current competitive aligners.
 
 [TODO: This is very incomplete for now]
