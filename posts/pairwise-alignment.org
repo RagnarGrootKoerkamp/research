@@ -2,7 +2,7 @@
 #+HUGO_BASE_DIR: ..
 #+HUGO_CATEGORIES: posts methods
 #+HUGO_TAGS: pairwise-alignment
-#+HUGO_LEVEL_OFFSET: 2
+#+HUGO_LEVEL_OFFSET: 1
 # NOTE: Run citar-export-local-bib-file to generate local-bib.bib.
 # +BIBLIOGRAPHY: /home/philae/git/eth/references/references.bib
 #+BIBLIOGRAPHY: local-bib.bib
@@ -72,27 +72,27 @@ Here is a chronological summary, assuming finite alphabets where
 needed. Multiple algorithms in a paper get separate rows. $n\geq m$.
 Time/space improvements are marked ${}^\star$ and new ideas are bold.
 
-| Paper                                           | Time                                 | Space                | Cost model               | Algorithm                               | Remarks                                                |
-|-------------------------------------------------+--------------------------------------+----------------------+--------------------------+-----------------------------------------+--------------------------------------------------------|
-| [cite/text/c:@nw]                               | $O(n^2m)$                            | $O(nm)$              | *match/mismatch*         | *DP*                                    |                                                        |
-| [cite/text/c:@sankoff], [cite/text/c:@wagner74] | $O(nm)^\star$                        | $O(nm)$              | match/mismatch           | *NW DP*                                 |                                                        |
-| [cite/text/c:@sellers]                          | $O(nm)$                              | $O(nm)$              | *gap-linear*             | NW DP                                   |                                                        |
-| [cite/text/c:@hirschberg75]                     | $O(nm)$                              | $O(\min(n,m))^\star$ | LCS                      | *divide-and-conquer*                    | introduces linear memory backtracking                  |
-| [cite/text/c:@waterman]                         | $O(n^2m)$                            | $O(nm)$              | arbitrary gap cost       | DP                                      |                                                        |
-| [cite/text/c:@hunt77]                           | $O((r+n)\lg n)^\star$                | $O(r+n)$             | LCS                      | *thresholds*                            | distance only                                          |
-| [cite/text/c:@hirschberg77]                     | $O(pn +n \lg\vert\Sigma\vert)^\star$ | ?                    | LCS                      | *contours*                              | introduces $k$-candidates                              |
-| [cite/text/c:@hirschberg77]                     | $O(p(m-p)\lg n)^\star$               | $O(n+(m-p)^2)^\star$ | LCS                      | ... + band                              |                                                        |
-| [cite/text/c:@four-russians-ed]                 | $O(nm/\lg n)^\star$                  | $O(n^2/\lg n)$       | integer gap-linear costs | *four Russians*                         |                                                        |
-| [cite/text/c:@sw]                               | $O(n^2m)$                            | $O(nm)$              | arbitrary gap cost       | DP                                      | local alignment                                        |
-| [cite/text/c:@gotoh]                            | $O(nm)$                              | $O(nm)$              | *gap-affine*             | *SWG DP*                                | linear memory for score only                           |
-| [cite/text/c:@nakatsu82]                        | $O(n(m-p))^\star$                    | $O(n(m-p))$          | LCS                      | *thresholds DP*                         |                                                        |
-| [cite/text/c:@ukkonen85]                        | $O(ns)^\star$                        | $O(ns)$              | gap-linear               | *banded*                                | exponential search on band                             |
-| [cite/text/c:@ukkonen85]                        | $O(s\cdot \min(m,n))$                | $O(n+m+s^2)^\star$   | edit cost                | *diagonal transition*                   | furthest reaching points, linear memory for score only |
-| [cite/text/c:@myers86]                          | $O(nd)$                              | $O(n)$               | LCS                      | diagonal transition, divide-and-conquer | $O(n+d^2)$ expected time                               |
-| [cite/text/c:@myers86]                          | $O(n\lg n +d^2 )^\star$              | $O(n)$               | LCS                      | ... + *suffix tree*                     |                                                        |
-| My observation [find paper?]                    | $O(n+s^2)^\star$                     | $O(n+m+s^2)$         | edit cost                | suffix tree                             | apply suffix tree to [cite/text:@ukkonen85]            |
-| [cite/text/c:@myers88]                          | $O(nm)$                              | $O(\min(n,m))$       | gap-affine               | divide-and-conquer                      | improves [cite/text:@gotoh] to linear memory           |
-| [cite/text/c:@lv89]                             | $O(nk)$                              | $O(n)^\star$         | edit cost                | suffix tree                             | finds all matches of pattern with distance $\leq k$    |
+| Paper                                           | Time                                 | Space                | Cost model               | Algorithm                                 | Remarks                                                |
+|-------------------------------------------------+--------------------------------------+----------------------+--------------------------+-------------------------------------------+--------------------------------------------------------|
+| [cite/text/c:@nw]                               | $O(n^2m)$                            | $O(nm)$              | *match/mismatch*         | *DP*                                      |                                                        |
+| [cite/text/c:@sankoff], [cite/text/c:@wagner74] | $O(nm)^\star$                        | $O(nm)$              | match/mismatch           | *NW DP*                                   |                                                        |
+| [cite/text/c:@sellers]                          | $O(nm)$                              | $O(nm)$              | *gap-linear*             | NW DP                                     |                                                        |
+| [cite/text/c:@hirschberg75]                     | $O(nm)$                              | $O(\min(n,m))^\star$ | LCS                      | *divide-and-conquer*                      | introduces linear memory backtracking                  |
+| [cite/text/c:@waterman]                         | $O(n^2m)$                            | $O(nm)$              | arbitrary gap cost       | DP                                        |                                                        |
+| [cite/text/c:@hunt77]                           | $O((r+n)\lg n)^\star$                | $O(r+n)$             | LCS                      | *thresholds*                              | distance only                                          |
+| [cite/text/c:@hirschberg77]                     | $O(pn +n \lg\vert\Sigma\vert)^\star$ | ?                    | LCS                      | *contours*                                | introduces $k$-candidates                              |
+| [cite/text/c:@hirschberg77]                     | $O(p(m-p)\lg n)^\star$               | $O(n+(m-p)^2)^\star$ | LCS                      | ... + band                                |                                                        |
+| [cite/text/c:@four-russians-ed]                 | $O(nm/\lg n)^\star$                  | $O(n^2/\lg n)$       | integer gap-linear costs | *four Russians*                           |                                                        |
+| [cite/text/c:@sw]                               | $O(n^2m)$                            | $O(nm)$              | arbitrary gap cost       | DP                                        | local alignment                                        |
+| [cite/text/c:@gotoh]                            | $O(nm)$                              | $O(nm)$              | *gap-affine*             | *SWG DP*                                  | linear memory for score only                           |
+| [cite/text/c:@nakatsu82]                        | $O(n(m-p))^\star$                    | $O(n(m-p))$          | LCS                      | *thresholds DP*                           |                                                        |
+| [cite/text/c:@ukkonen85]                        | $O(ns)^\star$                        | $O(ns)$              | gap-linear               | *banded*                                  | exponential search on band                             |
+| [cite/text/c:@ukkonen85]                        | $O(s\cdot \min(m,n))$                | $O(n+m+s^2)^\star$   | edit cost                | *diagonal transition*                     | furthest reaching points, linear memory for score only |
+| [cite/text/c:@myers86]                          | $O(nd)$                              | $O(n)$               | LCS                      | *diagonal transition*, divide-and-conquer | $O(n+d^2)$ expected time                               |
+| [cite/text/c:@myers86]                          | $O(n\lg n +d^2 )^\star$              | $O(n)$               | LCS                      | ... + *suffix tree*                       |                                                        |
+| My observation [find paper?]                    | $O(n+s^2)^\star$                     | $O(n+m+s^2)$         | edit cost                | suffix tree                               | apply suffix tree to [cite/text:@ukkonen85]            |
+| [cite/text/c:@myers88]                          | $O(nm)$                              | $O(\min(n,m))$       | gap-affine               | divide-and-conquer                        | improves [cite/text:@gotoh] to linear memory           |
+| [cite/text/c:@lv89]                             | $O(nk)$                              | $O(n)^\star$         | edit cost                | suffix tree                               | finds all matches of pattern with distance $\leq k$    |
 
 
 ** Classic theoretical results
@@ -117,7 +117,7 @@ These cost models were soon simplified to allow quadratic run times instead.
   and re-states the $O(nm)$ algorithm for this case.
 - [cite/text/cf:@waterman] :: Extends the cost model to allow an arbitrary cost
   function for longer insertions and deletions, giving a cubic algorithm.
-- [cite/text/cf:@sw] [[[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm#cite_note-Smith1981-1][wikipedia]]] :: Extends the NW DP to local alignment, allowing
+- [cite/text/cf:@sw] :: Extends the NW DP to local alignment, allowing
   for arbitrary gap penalties, and runs in cubic time $O(m^2n)$ for $m\geq n$.
 - [cite/text/cf:@smith81] :: Mentions /gap-affine/ penalties, where the cost of a gap of length $k$ is $w_k = uk+v$.
 - [cite/text/cf:@gotoh] ::
@@ -131,9 +131,9 @@ These cost models were soon simplified to allow quadratic run times instead.
   This seems to be the first paper to remark that linear memory is sufficient when
   only the distance is required.
 - [cite/text/cf:@altschul] :: Fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
-- Smith-Waterman-Gotoh (SWG) ::
+- Smith-Waterman-Gotoh (SWG) [[[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm#cite_note-Smith1981-1][wikipedia]]] ::
   This term is now occasionally used (e.g. in [cite/text:@wfa]) to refer to the gap-affine global alignment
-  algorithm introduces by [cite/text:@gotoh]. This is somewhat confusing since [cite/text:@sw] is only about /local/ alignment.
+  algorithm introduced by [cite/text:@gotoh]. This is somewhat confusing since [cite/text:@sw] is only about /local/ alignment.
 
   Introduces new names $C$, $D$ (end with a deletion), and $I$
   (end with an insertion) for the recursion by [cite/text:@gotoh].
@@ -228,10 +228,7 @@ It is now known that this has nearly optimal performance:
   for any $\delta > 0$, on the consition that the /Strong Exponential Time
   Hypothesis/ is true.
 
-
-
-
-** Modern efficient implementations
+** Modern implementations
 Note: From 1990 to 2010 there is a gap without much theoretical progress on
 exact alignment.
 During this time, speedups were achieved by [TODO: citations]:
@@ -244,6 +241,8 @@ list current competitive aligners.
 [TODO: This is very incomplete for now]
 
 - Myers bit-parallel algorithm :: [TODO]
+- SeqAN :: todo
+- Parasail :: todo
 - Edlib :: A fast implementation (using Myers bit-parallel algorithm I believe)
 - Block aligner :: approximate
 - WFA :: exact, diagonal transition method
