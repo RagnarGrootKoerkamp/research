@@ -75,7 +75,7 @@ These variables are used for asymptotic complexity and memory usage.
 
 ---
 
-* A historical overview
+* A chronological overview
 
 Here is a chronological summary, assuming finite alphabets where needed.
 Multiple algorithms in a paper get separate rows. $n\geq m$.  Time/space
@@ -97,8 +97,8 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
 | [cite/text/cf:@nakatsu82]                              | $\boldsymbol{O(n(m-p))}$                    | $O(n(m-p))$                          | LCS                          | *thresholds DP*                                                 |                                                             |
 | *[cite/text/cf:@ukkonen85]*                            | $\boldsymbol{O(ns)}$                        | $O(ns)$^{[[score-only]]}                 | gap-linear                   | *exponential search on band*                                    |                                                             |
 | *[cite/text/cf:@ukkonen85]*                            | $O(s\cdot \min(m,n))$                       | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | edit cost                    | *diagonal transition^{[[diagonal-transition]]}*                     | furthest reaching points                                    |
-| [cite/text/cf:@myers86]                                | $O(nd)$                                     | $O(n)$                               | LCS                          | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | $O(n+d^2)$ expected time                                    |
-| [cite/text/cf:@myers86]                                | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                          | ... + *suffix tree*                                             |                                                             |
+| *[cite/text/cf:@myers86]*                              | $O(nd)$                                     | $O(n)$                               | LCS                          | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | $O(n+d^2)$ expected time                                    |
+| *[cite/text/cf:@myers86]*                              | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                          | ... + *suffix tree*                                             |                                                             |
 | My observation [find paper?]                           | $\boldsymbol{O(n +s^2)}$                    | $O(n+s^2)$^{[[score-only]]}              | edit cost                    | suffix tree                                                     | apply suffix tree to [cite/text:@ukkonen85]                 |
 | [cite/text/cf:@myers88]                                | $O(nm)$                                     | $O(\min(n,m))$                       | gap-affine                   | divide-and-conquer                                              | improves [cite/text:@gotoh] using [cite/text:@hirschberg75] |
 | [cite/text/cf:@lv89]                                   | $O(nk)$                                     | $\boldsymbol{O(n)}$                  | edit cost                    | suffix tree                                                     | $k$-approximate string matching                             |
@@ -127,22 +127,21 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
    independently introduced the diagonal transition method in parallel.
 
 
-** Some theory
+** Important results
 
-Let's go over these papers in a bit more detail, and grouped by topic.
+[TODO: Explain some of the more important results, including figures from the papers]
+- Cubic NW
+- quadratic NW
+- linear memory traceback of Hirschberg'75
+- thresholds, k-matches, contours (LCS)
+- furthest reaching points, diagonal transition, wavefront (gap linear, gap affine)
+- Theoretical lower bound
 
-At first, there were cubic algorithms for various cost models.
-These cost models were soon simplified to allow quadratic run times instead.
 
 - [cite/text/cf:@gotoh] ::
   It uses three matrices $D$,
   $P$, and $Q$, where $P$ and $Q$ correspond to the minimal alignment cost when
   ending with a deletion or insertion respectively.
-
-At this point, the search for algorithms faster than $n^2$ started.  First there
-were improvements for LCS (/longest common subsequence/), a problem considered
-simpler than edit distance, leading to an $O(n(m-p))$ algorithm when the LCS has
-length $p$.
 
 - [cite/text/cf:@hunt77] [[[https://en.wikipedia.org/wiki/Hunt%E2%80%93Szymanski_algorithm][wikipedia]]] :: An $O((r+n) \lg n)$ algorithm for LCS, for $r$ ordered pairs
   of positions where the two sequences match, using an array of /threshold
@@ -157,9 +156,6 @@ length $p$.
   (m-p) \lg n)$ algorithm is based on using a band of width $m-p$ when the LCS
   has length at least $p$.
 
-Achieving similar results for pairwise alignment was next.  This resulted in
-three similar but slightly different algorithms being published almost in
-parallel, using what we now call the *diagonal transition* method.
 
 - Ukkonen [cite/text/cf:@ukkonen83 conference;@ukkonen85 paper] ::
   Introduces the diagonal transition method for edit costs, using $O(s\cdot
@@ -200,14 +196,12 @@ parallel, using what we now call the *diagonal transition* method.
   character at a time.
 
 
-It is now known that this has nearly optimal performance:
-
-- [cite/text/cf:@no-subquadratic-ed] :: 
+- [cite/text/cf:@no-subquadratic-ed] ::
   Shows that edit distance can not be solved in time $O(n^{2-\delta})$
   for any $\delta > 0$, on the consition that the /Strong Exponential Time
   Hypothesis/ is true.
 
-** Modern implementations
+** Tools
 Note: From 1990 to 2010 there is a gap without much theoretical progress on
 exact alignment.
 During this time, speedups were achieved by [TODO: citations]:
@@ -219,7 +213,8 @@ list current competitive aligners.
 
 [TODO: This is very incomplete for now]
 
-- Myers bit-parallel algorithm :: [TODO]
+- Greedy matching :: todo
+- Myers bit-parallel algorithm :: todo
 - SeqAN :: todo
 - Parasail :: todo
 - Edlib :: A fast implementation (using Myers bit-parallel algorithm I believe)
