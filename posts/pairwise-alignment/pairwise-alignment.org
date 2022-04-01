@@ -130,8 +130,32 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
    independently introduced the diagonal transition method in parallel.
 
 
-** Important results
+* Important results
+We will go over some of the more important results here. Papers differ in the
+notation they use, which will be homogenized here.
+The input is a pair of sequences $(A, B)$ of lengths $n$ and $m \leq n$.
+All DPs are done from the top left $(i,j) = (0,0)$ to the bottom right $(n,m)$.
+Sequence $A$ is at the top of the grid, and sequence $B$ at the left, so that
+$0\leq i\leq n$ indicates a column and $0\leq j\leq m$ indicates a row.
 
+** Cubic algorithm of [cite/text:@nw]
+#+caption: The cubic algorithm of [cite/text:@nw].
+[[file:nw.png]]
+
+This algorithm defines $D(i,j)$ as the length of the longest LCS ending in $(i,j)$.
+The recursion is
+\begin{align}
+    D(0,0) &= D(i,0) = D(0,j) = 0\\
+    D(i,j) &= \delta_{a_ib_j} + \max\left( \max_{0\leq i' < i} D(i', j),\, \max_{0\leq j'<j} D(i, j')\right)
+\end{align}
+where $\delta_{xy}$ is the Kronecker delta function that is $1$ when $x=y$ and
+$0$ otherwise. [TODO: Use `[a_i = b_j]` notation instead? $\delta_{xy}$ is
+confusing with $\delta(a_i, b_j)$ (although they do indeed play the same role.]
+
+Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of forwards.
+
+
+** TODO
 [TODO: Explain some of the more important results, including figures from the papers]
 - Cubic NW
 - quadratic NW
@@ -141,8 +165,6 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
 - Theoretical lower bound $O(n)$
 
 
-#+caption: The cubic algorithms of [cite/text:@nw].
-[[file:nw.png]]
 
 
 
