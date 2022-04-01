@@ -8,8 +8,8 @@
 #+BIBLIOGRAPHY: local-bib.bib
 #+cite_export: csl
 #+OPTIONS: ^:{}
-#+footnote-define-inline: t
-#+date: <2022-03-24 Thu>
+#+hugo_auto_set_lastmod: nil
+#+date: <2022-04-01 Thu>
 
 This post lists some of the more relevant papers and implementations related to
 pairwise alignment.
@@ -26,29 +26,30 @@ operations, each with their own cost.
 
 ** Cost models
 See the [[https://github.com/smarco/WFA2-lib][WFA2 readme]] for more detail.
-Note that some models minimize the cost, while others include a score for
-matching characters and maximize.
+Note that as presented each model minimizes the cost. Some papers change the
+sign and maximize the score instead.
 - LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] :: No substitutions allowed. Count minimum number of
   indels, that is, insertions or deletions.
 - Levenshtein distance / unit costs [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
   of cost $1$.
-- Edit distance :: Matches/mismatches between characters $a$ and $b$ have cost $\delta(a, b)$.
+- Edit distance [[[https://en.wikipedia.org/wiki/Edit_distance][wikipedia]]] :: Matches/mismatches between characters $a$ and $b$ have cost $\delta(a, b)$.
   Inserting/removing a character has cost $\delta(-, b)>0$ and $\delta(a, -)>0$ respectively.
   Usually $\delta(a,a) \leq 0$ and $\delta(a,b)>0$ for $a\neq b$.
 - Affine cost :: Variant of edit distance, where
   gap costs are affine, i.e. linear with an offset.
   There are costs $O$ (/open/) and $E$ (/extend/), and the cost
   of a gap of length $l$ is $w(l) = O + l\cdot E$.
-- Dual-cost affine :: Introduce two gap scores based on $(O_1, E_1)$ and
+- Dual-cost affine /(rare)/ :: Introduce two gap scores based on $(O_1, E_1)$ and
   $(O_2, E_2)$. The cost of a gap of length $l$ is $w(l) = \min(O_1 + l\cdot E_1, O_2 +
   l\cdot E_2)$.
-- Convex, concave :: Newer variants of arbitrary cost where $w(l)$ is a
+- Convex, concave /(rare)/ :: Gaps of length $l$ have a cost $w(l)$, where $w(l)$ is a
   convex/convex function of $l$, where longer gaps are relatively
-  more/less expensive.
-- Arbitrary :: Generalization of edit distance where a gap of length $l$ has an
+  more/less expensive. Affine costs are also concave.
+- Arbitrary /(deprecated)/ :: Generalization of edit distance where a gap of length $l$ has an
   arbitrary cost $w(l)$.Arbitrary substitution cost $\delta(a, b)$ for matches/mismatches
   between characters $a$ and $b$, and arbitrary cost $w(l)$ for a gap of length
-  $l$.
+  $l$. Not used anymore since it requires cubic algorithms.
+
 In practice, most methods use a match cost $\delta(a,a) = 0$, fixed mismatch
 cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
 $\delta(a,-) = \delta(-,b) = I$. Algorithms that do not explore the entire
@@ -61,7 +62,7 @@ $n\cdot m$ edit graph only work for non-negative costs and /require/ $\delta(a,a
   - Extension :: Anchor both at their starts, but one is longer.
   - Overlap :: Align two partially overlapping reads against each other.
 - Local :: Aligns a substring of $A$ to a substring of $B$. Like ends-free, but
-  now we may skip the and and start of both sequences.
+  now we may skip the and start of both sequences.
 
 Some alignment modes, in particular local and overlap, typically use a different
 cost model where matching characters get a bonus.
@@ -71,7 +72,7 @@ These variables are used for asymptotic complexity and memory usage.
 - $n$, $m$: sequence lengths. I consistently assume $n\geq m$, but some papers differ.
 - $d$: edit distance;
 - $s$: alignment cost (or occasionally edit distance), given some cost model;
-- $p$: length of LCS;
+- $p$: length of LCS (longest common subsequence);
 - $r$: the number of pairs of matching characters between the two sequences;
 - $|\Sigma|$: alphabet size.
 
@@ -84,26 +85,26 @@ Multiple algorithms in a paper get separate rows. $n\geq m$.  Time/space
 improvements and new ideas are bold.  Unless mentioned otherwise, all these
 methods are *exact* (i.e. provable correct) and do *global alignment*.
 
-| Paper                                                  | Time                                        | Space                                | Cost model                   | Methods                                                         | Remarks                                                     |
-|--------------------------------------------------------+---------------------------------------------+--------------------------------------+------------------------------+-----------------------------------------------------------------+-------------------------------------------------------------|
-| [cite/text/cf:@nw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                    | *DP^{[[NW]]}*                                                       |                                                             |
-| [cite/text/cf:@sankoff]                                | $\boldsymbol{O(nm)}$                        | $O(nm)$                              | LCS                          | *DP*                                                            |                                                             |
-| *[cite/text/cf:@sellers] and [cite/text/cf:@wagner74]* | $O(nm)$                                     | $O(nm)$                              | *gap-linear*                 | *NW DP^{[[NW]]}*                                                    |                                                             |
-| *[cite/text/cf:@hirschberg75]*                         | $O(nm)$                                     | $\boldsymbol{O(\min(n,m))}$          | LCS                          | *divide-and-conquer*                                            | introduces linear memory backtracking                       |
-| [cite/text/cf:@hunt77]                                 | $\boldsymbol{O((r+n)\lg n)}$                | $O(r+n)$                             | LCS                          | *thresholds*                                                    | distance only                                               |
-| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(pn +n \lg\vert\Sigma\vert)}$ | ?                                    | LCS                          | *contours*                                                      | introduces $k$-candidates                                   |
-| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(p(m-p)\lg n)}$               | $\boldsymbol{O(n+(m-p)^2)}$          | LCS                          | ... + band                                                      |                                                             |
-| [cite/text/cf:@four-russians-ed]                       | $\boldsymbol{O(nm/\lg n)}$                  | $O(n^2/\lg n)$^{[[score-only]]}          | gap-linear^{[[discrete-scores]]} | *four Russians*                                                 | best worst case complexity                                  |
-| [cite/text/cf:@sw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                    | DP^{[[SWG]]}                                                        | local alignment                                             |
-| *[cite/text/cf:@gotoh]^{[[bugfix]]}*                       | $O(nm)$                                     | $O(nm)$^{[[score-only]]}                 | *gap-affine^{[[gap-affine]]}*    | *SWG DP^{[[SWG]]}*                                                  |                                                             |
-| [cite/text/cf:@nakatsu82]                              | $\boldsymbol{O(n(m-p))}$                    | $O(n(m-p))$                          | LCS                          | *thresholds DP*                                                 |                                                             |
-| *[cite/text/cf:@ukkonen85]*                            | $\boldsymbol{O(ns)}$                        | $O(ns)$^{[[score-only]]}                 | gap-linear                   | *exponential search on band*                                    |                                                             |
-| *[cite/text/cf:@ukkonen85]*                            | $O(s\cdot \min(m,n))$                       | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | edit cost                    | *diagonal transition^{[[diagonal-transition]]}*                     | furthest reaching points                                    |
-| *[cite/text/cf:@myers86]*                              | $O(nd)$                                     | $O(n)$                               | LCS                          | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | $O(n+d^2)$ expected time                                    |
-| *[cite/text/cf:@myers86]*                              | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                          | ... + *suffix tree*                                             |                                                             |
-| My observation [find paper?]                           | $\boldsymbol{O(n +s^2)}$                    | $O(n+s^2)$^{[[score-only]]}              | edit cost                    | suffix tree                                                     | apply suffix tree to [cite/text:@ukkonen85]                 |
-| [cite/text/cf:@myers88]                                | $O(nm)$                                     | $O(\min(n,m))$                       | gap-affine                   | divide-and-conquer                                              | improves [cite/text:@gotoh] using [cite/text:@hirschberg75] |
-| [cite/text/cf:@lv89]                                   | $O(nk)$                                     | $\boldsymbol{O(n)}$                  | edit cost                    | suffix tree                                                     | $k$-approximate string matching                             |
+| Paper                                                  | Time                                        | Space                                | Cost model                      | Methods                                                         | Remarks                                                     |
+|--------------------------------------------------------+---------------------------------------------+--------------------------------------+---------------------------------+-----------------------------------------------------------------+-------------------------------------------------------------|
+| [cite/text/cf:@nw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                       | *DP^{[[NW]]}*                                                       |                                                             |
+| [cite/text/cf:@sankoff]                                | $\boldsymbol{O(nm)}$                        | $O(nm)$                              | LCS                             | *DP*                                                            |                                                             |
+| *[cite/text/cf:@sellers] and [cite/text/cf:@wagner74]* | $O(nm)$                                     | $O(nm)$                              | *edit distance*                 | *NW DP^{[[NW]]}*                                                    |                                                             |
+| *[cite/text/cf:@hirschberg75]*                         | $O(nm)$                                     | $\boldsymbol{O(\min(n,m))}$          | LCS                             | *divide-and-conquer*                                            | introduces linear memory backtracking                       |
+| [cite/text/cf:@hunt77]                                 | $\boldsymbol{O((r+n)\lg n)}$                | $O(r+n)$                             | LCS                             | *thresholds*                                                    | distance only                                               |
+| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(pn +n \lg\vert\Sigma\vert)}$ | ?                                    | LCS                             | *contours*                                                      | introduces $k$-candidates                                   |
+| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(p(m-p)\lg n)}$               | $\boldsymbol{O(n+(m-p)^2)}$          | LCS                             | ... + band                                                      |                                                             |
+| [cite/text/cf:@four-russians-ed]                       | $\boldsymbol{O(nm/\lg n)}$                  | $O(n^2/\lg n)$^{[[score-only]]}          | edit distance^{[[discrete-scores]]} | *four Russians*                                                 | best worst case complexity                                  |
+| [cite/text/cf:@sw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                       | DP^{[[SWG]]}                                                        | local alignment                                             |
+| *[cite/text/cf:@gotoh]^{[[bugfix]]}*                       | $O(nm)$                                     | $O(nm)$^{[[score-only]]}                 | *affine^{[[gap-affine]]}*           | *SWG DP^{[[SWG]]}*                                                  |                                                             |
+| [cite/text/cf:@nakatsu82]                              | $\boldsymbol{O(n(m-p))}$                    | $O(n(m-p))$                          | LCS                             | *thresholds DP*                                                 |                                                             |
+| *[cite/text/cf:@ukkonen85]*                            | $\boldsymbol{O(ns)}$                        | $O(ns)$^{[[score-only]]}                 | edit distance                   | *exponential search on band*                                    |                                                             |
+| *[cite/text/cf:@ukkonen85]*                            | $O(s\cdot \min(m,n))$                       | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | unit cost                       | *diagonal transition^{[[diagonal-transition]]}*                     | furthest reaching points                                    |
+| *[cite/text/cf:@myers86]*                              | $O(nd)$                                     | $O(n)$                               | LCS                             | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | $O(n+d^2)$ expected time                                    |
+| *[cite/text/cf:@myers86]*                              | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                             | ... + *suffix tree*                                             |                                                             |
+| My observation [find paper?]                           | $\boldsymbol{O(n +s^2)}$                    | $O(n+s^2)$^{[[score-only]]}              | unit cost                       | suffix tree                                                     | apply suffix tree to [cite/text:@ukkonen85]                 |
+| [cite/text/cf:@myers88]                                | $O(nm)$                                     | $O(\min(n,m))$                       | affine                          | divide-and-conquer                                              | improves [cite/text:@gotoh] using [cite/text:@hirschberg75] |
+| [cite/text/cf:@lv89]                                   | $O(nk)$                                     | $\boldsymbol{O(n)}$                  | unit cost                       | suffix tree                                                     | $k$-approximate string matching                             |
 
 1. <<NW>> Confusingly, nowadays [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][Needleman-Wunsch (NW)]] is used to refer to the quadratic
    global alignment algorithm introduced by [cite:@sellers;@wagner74]. [cite/text/c:@gotoh] refers to it as
