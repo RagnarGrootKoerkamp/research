@@ -28,16 +28,16 @@ operations, each with their own cost.
 See the [[https://github.com/smarco/WFA2-lib][WFA2 readme]] for more detail.
 Note that some models minimize the cost, while others include a score for
 matching characters and maximize.
-- Indel / LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] :: No substitutions allowed. Count minimum number of
+- LCS / indel [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] :: No substitutions allowed. Count minimum number of
   indels, that is, insertions or deletions.
-- Edit / Levenshtein distance [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
+- Unit cost / Levenshtein distance [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
   cost $1$.
 - Arbitrary :: Arbitrary substitution cost $\delta(a, b)$ for matches/mismatches
   between characters $a$ and $b$, and arbitrary cost $w(l)$ for a gap of length
   $l$. Usually $\delta(a,b)\leq 0$ if $a=b$ and $\delta(a,b)>0$ if $a\neq b$.
-- Gap-linear :: The cost of a gap is given by the sum of costs to insert/delete
+- Edit distance :: The cost of a gap is given by the sum of costs to insert/delete
   all characters, $\delta(-, b)>0$ resp. $\delta(a, -)>0$.
-- Gap-affine :: Variant of gap-linear, where
+- Affine cost :: Variant of edit distance, where
   gap costs are affine, i.e. linear with an offset.
   There are costs $O$ (/open/) and $E$ (/extend/), and the cost
   of a gap of length $l$ is $w(l) = O + l\cdot E$.
@@ -47,7 +47,7 @@ matching characters and maximize.
 - Convex :: $w(l)$ is a convex function of $l$, where longer gaps are relatively
   more expensive.
 - Concave :: $w(l)$ is a concave function of $l$, where longer gaps are relatively
-  cheaper. Gap-affine costs are also concave.
+  cheaper. Affine costs are also concave.
 In practice, most methods use a match cost $\delta(a,a) = 0$, fixed mismatch
 cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
 $\delta(a,-) = \delta(-,b) = I$.
