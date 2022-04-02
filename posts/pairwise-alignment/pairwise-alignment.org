@@ -4,8 +4,8 @@
 #+HUGO_TAGS: pairwise-alignment
 #+HUGO_LEVEL_OFFSET: 1
 # NOTE: Run citar-export-local-bib-file to generate local-bib.bib.
-# +BIBLIOGRAPHY: /home/philae/git/eth/references/references.bib
-#+BIBLIOGRAPHY: local-bib.bib
+#+BIBLIOGRAPHY: /home/philae/git/eth/references/references.bib
+# +BIBLIOGRAPHY: local-bib.bib
 #+cite_export: csl
 #+OPTIONS: ^:{}
 #+hugo_auto_set_lastmod: nil
@@ -20,17 +20,23 @@ First, lets quickly go over the existing variants of the pairwise alignment prob
 
 * Variants of pairwise alignment
 
-Pairwise alignment is the problem of finding the lowest cost way to transform a
+/Pairwise alignment/ is the problem of finding the lowest cost way to transform a
 string $A$ of length $n$ into a string $B$ of length $m$ using some set of
 operations, each with their own cost.
 
+A related problem is /approximate string matching/, where the task is to find all
+locations in a text/reference $B$ where a query/pattern $A$ matches with at most
+$k$ differences.
+
 ** Cost models
-See the [[https://github.com/smarco/WFA2-lib][WFA2 readme]] for more detail.
+There are different models to specify the cost of each edit operation. We list
+some of them here.
 Note that as presented each model minimizes the cost. Some papers change the
 sign and maximize the score instead.
-- LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] :: No substitutions allowed. Count minimum number of
-  indels, that is, insertions or deletions.
-- Levenshtein distance / unit costs [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
+- LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] ::
+  Count minimum number of indels, that is, insertions or deletions, to transform
+  $A$ into $B$. This is equivalent to finding the /longest common subsequence/.
+- Levenshtein distance / unit cost [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
   of cost $1$.
 - Edit distance [[[https://en.wikipedia.org/wiki/Edit_distance][wikipedia]]] :: Matches/mismatches between characters $a$ and $b$ have cost $\delta(a, b)$.
   Inserting/removing a character has cost $\delta(-, b)>0$ and $\delta(a, -)>0$ respectively.
@@ -39,7 +45,7 @@ sign and maximize the score instead.
   gap costs are affine, i.e. linear with an offset.
   There are costs $O$ (/open/) and $E$ (/extend/), and the cost
   of a gap of length $l$ is $w(l) = O + l\cdot E$.
-- Dual-cost affine /(rare)/ :: Introduce two gap scores based on $(O_1, E_1)$ and
+- Dual affine /(rare)/ :: Introduce two gap scores based on $(O_1, E_1)$ and
   $(O_2, E_2)$. The cost of a gap of length $l$ is $w(l) = \min(O_1 + l\cdot E_1, O_2 +
   l\cdot E_2)$.
 - Convex, concave /(rare)/ :: Gaps of length $l$ have a cost $w(l)$, where $w(l)$ is a
@@ -56,6 +62,8 @@ $\delta(a,-) = \delta(-,b) = I$. Algorithms that do not explore the entire
 $n\cdot m$ edit graph only work for non-negative costs and /require/ $\delta(a,a) = 0$.
 
 ** Alignment modes
+Besides /global/ pairwise alignment, there are also other alignment modes where
+only a substring of the pattern and text is aligned to each other.
 - Global :: Align both sequences fully, end-to-end.
 - Ends-free :: Indels/gaps at the end are free.
   - Glocal / semi-global / mapping :: Map a read to a substring of a reference.
@@ -87,24 +95,28 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
 
 | Paper                                                  | Time                                        | Space                                | Cost model                      | Methods                                                         | Remarks                                                     |
 |--------------------------------------------------------+---------------------------------------------+--------------------------------------+---------------------------------+-----------------------------------------------------------------+-------------------------------------------------------------|
-| [cite/text/cf:@nw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                       | *DP^{[[NW]]}*                                                       |                                                             |
-| [cite/text/cf:@sankoff]                                | $\boldsymbol{O(nm)}$                        | $O(nm)$                              | LCS                             | *DP*                                                            |                                                             |
-| *[cite/text/cf:@sellers] and [cite/text/cf:@wagner74]* | $O(nm)$                                     | $O(nm)$                              | *edit distance*                 | *NW DP^{[[NW]]}*                                                    |                                                             |
+| [cite/text/cf:@nw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                       | DP^{[[NW]]}                                                         |                                                             |
+| [cite/text/cf:@sankoff]                                | $\boldsymbol{O(nm)}$                        | $O(nm)$                              | LCS                             | DP                                                              |                                                             |
+| *[cite/text/cf:@sellers] and [cite/text/cf:@wagner74]* | $O(nm)$                                     | $O(nm)$                              | *edit distance*                 | DP^{[[NW]]}                                                         |                                                             |
 | *[cite/text/cf:@hirschberg75]*                         | $O(nm)$                                     | $\boldsymbol{O(\min(n,m))}$          | LCS                             | *divide-and-conquer*                                            | introduces linear memory backtracking                       |
 | [cite/text/cf:@hunt77]                                 | $\boldsymbol{O((r+n)\lg n)}$                | $O(r+n)$                             | LCS                             | *thresholds*                                                    | distance only                                               |
 | [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(pn +n \lg\vert\Sigma\vert)}$ | ?                                    | LCS                             | *contours*                                                      | introduces $k$-candidates                                   |
-| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(p(m-p)\lg n)}$               | $\boldsymbol{O(n+(m-p)^2)}$          | LCS                             | ... + band                                                      |                                                             |
+| [cite/text/cf:@hirschberg77]                           | $\boldsymbol{O(p(m-p)\lg n)}$               | $\boldsymbol{O(n+(m-p)^2)}$          | LCS                             | + band                                                          |                                                             |
 | [cite/text/cf:@four-russians-ed]                       | $\boldsymbol{O(nm/\lg n)}$                  | $O(n^2/\lg n)$^{[[score-only]]}          | edit distance^{[[discrete-scores]]} | *four Russians*                                                 | best worst case complexity                                  |
 | [cite/text/cf:@sw]                                     | $O(n^2m)$                                   | $O(nm)$                              | arbitrary                       | DP^{[[SWG]]}                                                        | local alignment                                             |
-| *[cite/text/cf:@gotoh]^{[[bugfix]]}*                       | $O(nm)$                                     | $O(nm)$^{[[score-only]]}                 | *affine^{[[gap-affine]]}*           | *SWG DP^{[[SWG]]}*                                                  |                                                             |
+| *[cite/text/cf:@gotoh]^{[[bugfix]]}*                       | $O(nm)$                                     | $O(nm)$^{[[score-only]]}                 | *affine^{[[gap-affine]]}*           | DP^{[[SWG]]}                                                        |                                                             |
 | [cite/text/cf:@nakatsu82]                              | $\boldsymbol{O(n(m-p))}$                    | $O(n(m-p))$                          | LCS                             | *thresholds DP*                                                 |                                                             |
 | *[cite/text/cf:@ukkonen85]*                            | $\boldsymbol{O(ns)}$                        | $O(ns)$^{[[score-only]]}                 | edit distance                   | *exponential search on band*                                    |                                                             |
 | *[cite/text/cf:@ukkonen85]*                            | $O(s\cdot \min(m,n))$                       | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | unit cost                       | *diagonal transition^{[[diagonal-transition]]}*                     | furthest reaching points                                    |
 | *[cite/text/cf:@myers86]*                              | $O(nd)$                                     | $O(n)$                               | LCS                             | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | $O(n+d^2)$ expected time                                    |
-| *[cite/text/cf:@myers86]*                              | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                             | ... + *suffix tree*                                             |                                                             |
+| *[cite/text/cf:@myers86]*                              | $\boldsymbol{O(n +d^2)}$                    | $O(n)$                               | LCS                             | + *suffix tree*                                                 |                                                             |
 | My observation [find paper?]                           | $\boldsymbol{O(n +s^2)}$                    | $O(n+s^2)$^{[[score-only]]}              | unit cost                       | suffix tree                                                     | apply suffix tree to [cite/text:@ukkonen85]                 |
 | [cite/text/cf:@myers88]                                | $O(nm)$                                     | $O(\min(n,m))$                       | affine                          | divide-and-conquer                                              | improves [cite/text:@gotoh] using [cite/text:@hirschberg75] |
-| [cite/text/cf:@lv89]                                   | $O(nk)$                                     | $\boldsymbol{O(n)}$                  | unit cost                       | suffix tree                                                     | $k$-approximate string matching                             |
+| [cite/text/cf:@lv89]                                   | $O(nk)$                                     | $\boldsymbol{O(n)}$                  | unit cost                       | suffix tree                                                     | approximate string matching                                 |
+| [cite/text/cf:@myers99]                                | $O(nm)$                                     |                                      |                                 |                                                                 | approximate string matching                                 |
+| WFA: [cite:@wfa]                                       | $O(n+s^2)$                                  | $O(n+s^2)$^{[[score-only]]}              | affine                          |                                                                 |                                                             |
+| WFALM: [cite:@wfalm]                                   | $O(n+s^2)$                                  | $O(n+s^{3/2})$^{[[score-only]]}          | affine                          |                                                                 |                                                             |
+| biWFA: [unpublished]                                   | $O(n+s^2)$                                  | $O(n)$                               | affine                          |                                                                 |                                                             |
 
 1. <<NW>> Confusingly, nowadays [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][Needleman-Wunsch (NW)]] is used to refer to the quadratic
    global alignment algorithm introduced by [cite:@sellers;@wagner74]. [cite/text/c:@gotoh] refers to it as
@@ -131,49 +143,100 @@ methods are *exact* (i.e. provable correct) and do *global alignment*.
 
 
 * Important results
+
 We will go over some of the more important results here. Papers differ in the
 notation they use, which will be homogenized here.
-The input is a pair of sequences $(A, B)$ of lengths $n$ and $m \leq n$.
-All DPs are done from the top left $(i,j) = (0,0)$ to the bottom right $(n,m)$.
-Sequence $A$ is at the top of the grid, and sequence $B$ at the left, so that
-$0\leq i\leq n$ indicates a column and $0\leq j\leq m$ indicates a row.
+- We use $D(i,j)$ at the distance/cost matrix to be minimized, and $S(i,j)$ as a
+  score to be maximized.
+- The DP goes from the top left $(0,0)$ to the bottom right $(n,m)$.
+- The lengths of $a$ and $b$ are $n$ and $m$, with $n\geq m$.
+- We use $0$-based indexing for $a$ and $b$, so at match at $(i,j)$ is for
+  characters $A_{i-1}$ and $B_{j-1}$.
+- $a$ is at the top of the grid, and $b$ at the left. $0\leq i\leq n$ indicates
+  a column, and $0\leq j\leq m$ a row.
 
-** Cubic algorithm of [cite/text:@nw]
+** Classic DP algorithms
+
+*** Cubic algorithm of [cite/text:@nw]
 #+caption: The cubic algorithm of [cite/text:@nw].
+#+name: nw-fig
 [[file:nw.png]]
 
-This algorithm defines $D(i,j)$ as the length of the longest LCS ending in $(i,j)$.
-The recursion is
+This algorithm defines $D(i,j)$ as the score of the best path ending with a
+(mis)match in $(i,j)$. The recursion uses that before matching $A_{i-1}$ and $B_{j-1}$,
+either $A_{i-2}$ and $B_{j-2}$ are matched to each other, or one of them is
+matched to some other character:
 \begin{align}
-    D(0,0) &= D(i,0) = D(0,j) = 0\\
-    D(i,j) &= \delta_{a_ib_j} + \max\left( \max_{0\leq i' < i} D(i', j),\, \max_{0\leq j'<j} D(i, j')\right)
+    D(0,0) &= D(i,0) = D(0,j) := 0\\
+    D(i,j) &:= \delta(A_{i{-}1}, B_{j{-}1})&& \text{cost of match}\\
+&\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w(i{-}i'{-}1),&&\text{cost of matching $B_{j-2}$}\\
+&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w(j{-}j'{-}1)\big).&&\text{cost of matching $A_{i-2}$}
 \end{align}
-where $\delta_{xy}$ is the Kronecker delta function that is $1$ when $x=y$ and
-$0$ otherwise. [TODO: Use `[a_i = b_j]` notation instead? $\delta_{xy}$ is
-confusing with $\delta(a_i, b_j)$ (although they do indeed play the same role.]
+The value of $D(n,m)$ is the score of the alignment.
 
-Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of forwards.
+Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of
+forwards. Figure [[nw-fig]] shows the dependencies in the evaluation of a single
+cell. The total runtime is $O(nm \cdot (n+m)) = O(n^2m)$ since each cell needs
+$O(n+m)$ work.
+
+*** A quadratic DP
+#+caption: An example of the edit distance computation between two sequences as shown in [cite/text/cf:@sellers], using unit costs.
+#+caption: /1/ is a special character indicating the start.
+[[file:sellers.png]]
+
+[cite/text/cf:@sellers] and [cite/text/f:@wagner74] both provide the following
+quadratic recursion for edit distance. The improvement here compared to the
+previous cubic algorithm comes from dropping the requirement that $D(i,j)$ has a
+(mis)match between $A_i$ and $B_j$, and dropping the gap cost $w(l)$.
+\begin{align}
+    D(i, 0) &:= \sum_{0\leq i' < i} \delta(A_i, -) \\
+    D(0, j) &:= \sum_{0\leq j' < j} \delta(-, B_j)\\
+    D(i, j) &:= \min\big(D(i-1,j-1) + \delta(A_i, B_j), &&\text{(mis)match}\\
+            &:= \phantom{\min\big(} D(i-1, j) + \delta(A_i, -), && \text{deletion}\\
+            &:= \phantom{\min\big(} D(i, j-1) + \delta(-, B_j)\big). && \text{insertion}.
+\end{align}
+
+This algorithm is now called the Needleman-Wunsch (NW) algorithm, and takes
+$O(nm)$ time since it does one constant time computation per cell.
+
+*** Local alignment
+[cite/text/cf:@sw] introduces local alignment. This is formulated as a maximization
+problem where matching characters give positive score $s(a,b)$.
+Here, the maximum includes $0$ to start a new alignment, and the best local
+alignment corresponds to the larges value $S(i,j)$ in the table.
+\begin{align}
+    S(0, 0) &:= S(i, 0) = S(0, j) := 0 \\
+    S(i,j)  &:= \max\big(0, &&\text{start a new local alignment}\\
+    &\phantom{:=\max\big(} S(i-1, j-1) + s(A_{i{-}1}, B_{j{-}1}), &&\text{(mis)math}\\
+    &\phantom{:=\max\big(} \max_{0\leq i' < i} S(i', j) - w(i{-}i'), &&\text{deletion}\\
+    &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w(j{-}j')\big).&&\text{insertion}
+\end{align}
+This a cubic algorithm again since it depends on the gap costs $w(l)$.
+
+*** Affine costs
+[cite/text/cf:@gotoh] generalized the quadratic recursion to affine costs $w(l)
+= u\cdot l+v$. They use two additional matrices $P(i,j)$ and $Q(i,j)$ that
+contain the minimal cost to get to $(i,j)$, where the last step is required to
+be an insertion/deletion respectively.
+\begin{align}
+    D(i, 0) &= P(i, 0) = I(i, 0) := 0 \\
+    D(0, j) &= P(0, j) = I(0, j) := 0 \\
+    P(i, j) &:= \min\big(D(i-1, j) + u+v, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ P(i-1, j) + u\big)&&\text{extend gap}\\
+    Q(i, j) &:= \min\big(D(i, j-1) + u+v, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ Q(i, j-1) + u\big)&&\text{extend gap}\\
+    D(i, j) &:= \min\big(D(i-1, j-1) + \delta(A_{i-1}, B_{j-1}),\, P(i, j),\, Q(i, j)\big).
+\end{align}
+
+By changing the base values of the recurrence to $0$ and adding a $\min(0,
+\dots)$ term to $D(i,j)$, the same technique can be used for local alignment.
+
+---
+TODO from here
 
 
-** TODO
-[TODO: Explain some of the more important results, including figures from the papers]
-- Cubic NW
-- quadratic NW
-- linear memory traceback of Hirschberg'75
-- thresholds, k-matches, contours (LCS)
-- furthest reaching points, diagonal transition, wavefront (gap linear, gap affine)
-- Theoretical lower bound $O(n)$
-
-
-
-
-
-
-- [cite/text/cf:@gotoh] ::
-  It uses three matrices $D$,
-  $P$, and $Q$, where $P$ and $Q$ correspond to the minimal alignment cost when
-  ending with a deletion or insertion respectively.
-
+** O(ns) methods
+*** LCS: $k$-candidates and contours
 - [cite/text/cf:@hunt77] [[[https://en.wikipedia.org/wiki/Hunt%E2%80%93Szymanski_algorithm][wikipedia]]] :: An $O((r+n) \lg n)$ algorithm for LCS, for $r$ ordered pairs
   of positions where the two sequences match, using an array of /threshold
   values/ $T_{i,k}$: the smallest $j$ such that the prefixes of length $i$ and
@@ -186,6 +249,8 @@ Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of forwa
   between regions of equal $L$-value, and an $O(pn+n\lg n)$ algorithm.  His $O(p
   (m-p) \lg n)$ algorithm is based on using a band of width $m-p$ when the LCS
   has length at least $p$.
+*** Diagonal transition: furthest reaching and wavefronts
+
 
 
 - Ukkonen [cite/text/cf:@ukkonen83 conference;@ukkonen85 paper] ::
@@ -226,6 +291,69 @@ Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of forwa
   queries to extend matching diagonals in $O(1)$ instead of checking one
   character at a time.
 
+** Using less memory
+*** Computing the score in linear space
+[cite/text/cf:@gotoh] was the first to remark that if only the final alignment
+score is needed, and not the alignment itself, linear memory is often sufficient.
+Both the quadratic algorithms presented above can use this technique.
+Since each column $D(i, \cdot)$ of the matrix $D$ (and $P$ and $Q$) only depends on
+the previous column $D(i-1, \cdot)$ (and $P(i-1, \cdot)$ and $Q(i-1, \cdot)$),
+it suffices to only keep those in memory while computing column $i$.
+
+*** Divide-and-conquer
+
+#+caption: Divide-and-conquer as shown in [cite/text/cf:@myers88].
+#+caption: Unlike the the text here, they choose i* to be the middle row instead of the middle column.
+#+name: myers88
+[[file:myers88.png]]
+
+[cite/text/cf:@hirschberg75] introduces a divide-and-conquer algorithm to
+compute the LCS of two sequences in linear space.  This technique was applied
+multiple times to reduce the space complexity of other algorithms as well:
+[cite/text:@myers86] applies it to their $O(ns)$ LCS algorithm,
+[cite/text:@myers88] reduces the $O(nm)$ algorithm by [cite/text:@gotoh] to
+linear memory, and biWFA [unpublished] improves WFA.
+*Method:*
+Instead of computing the alignment from
+$(0,0)$ to $(n,m)$, we fix $i^\star = \lfloor n/2\rfloor$ and split the problem
+into two halves: We compute the /forward/ DP matrix $D(i, j)$ for all $i\leq
+i^\star$, and introduce a /backward/ DP $D'(i, j)$ that is computed for all
+$i\geq i^\star$. Here, $D'(i,j)$ is the minimal cost for aligning suffixes
+of length $n-i$ and $m-j$ of $A$ and $B$.  A theorem of Hirschberg shows that
+there must exist a $j^\star$ such that $D(i^\star, j^\star) + D'(i^\star,
+j^\star) = D(n, m)$, and we can find $j^\star$ as the $j$ that minimizes
+$D(i^\star, j) + D'(i^\star, j)$.
+
+This means that the point $(i^\star, j^\star)$ is part of the optimal alignment.
+The two resulting subproblems of aligning $A[0, i^\star]$ to $B[0, j^\star]$ and
+$A[i^\star, n]$ to $B[j^\star, m]$ can now be solved recursively using the same
+technique, where again we find the midpoint of the alignment. This recursive
+process is shown in figure [[myers88]].
+The recursion stops as soon as the alignment problem becomes trivial.
+
+*Space complexity:*
+At each step we can use the linear-space variant described
+above to compute $D(i^\star, j)$ and $D'(i^\star, j)$ for all $j$.  Since we only do one step at a
+time and the alignment itself (all the pairs $(i^\star, j^\star)$) only takes
+linear space as well, the overall space needed is linear.
+
+*Time complexity:*
+This closely follows [cite/text:@myers88].
+The time taken in the body of each step (excluding the recursive calls) is
+bounded by $C\cdot mn$ for some constant $C$. From figure [[myers88]] it can be seen
+that the total time spent in the two sub-problems is $\frac 12 C\cdot mn$, as
+the corresponding shaded area is half the of the total area. The four
+sub-sub-problems again take half of that time, and a quarter of the total time,
+$\frac 14 C\cdot mn$. Summing over all layers, we get a total run time
+bounded by
+\begin{equation}
+C\cdot mn + \frac 12 C\cdot mn + \frac 14 C\cdot mn + \frac 18C\cdot mn + \dots \leq 2C\cdot mn = O(mn).
+\end{equation}
+In practice, this algorithm indeed takes around twice as long to find an
+alignment as the non-recursive algorithm takes to find just the score.
+
+
+** Theoretical lower bound $O(n)$
 
 - [cite/text/cf:@no-subquadratic-ed] ::
   Shows that edit distance can not be solved in time $O(n^{2-\delta})$
@@ -273,4 +401,5 @@ list current competitive aligners.
   $2^{i}$ /th/ wavefront).
 
 * References
+[TODO: fix the long dash instead of just repeating author name]
 #+print_bibliography:
