@@ -63,7 +63,7 @@ $n\cdot m$ edit graph only work for non-negative costs and /require/ $\delta(a,a
 
 ** Alignment types
 
-#+caption: Overview of different alignment types. (CC0 by Pesho Ivanov, [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/alignment-type.drawio.svg][source]])
+#+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/alignment-types.drawio.svg][source]])
 #+name: alignment-types
 [[file:alignment-types.drawio.svg]]
 
@@ -72,17 +72,14 @@ only a substring of the pattern and text is aligned to each other.
 
 Figure [[alignment-types]] depicts the alignment types described below.
 
-- Global :: Align both sequences fully, end-to-end.
-- Ends-free :: Indels/gaps at the end are free.
-  - Mapping / semi-global / glocal / infix :: Align a full sequence to a substring of a reference.
-    - Approximate string matching :: A variant of semi-global alignment, where we find all
-      locations in a text/reference where a query/pattern matches with at
-      most $k$ differences. [TODO: Consolidate this with semi-global?]
+- Global (end-to-end) :: Align both sequences fully, end-to-end.
+- Ends-free :: Indels/gaps at the end are free. This comes in several variants.
+  - Semi-global (mapping, glocal, infix) :: Align a full sequence to a substring of a reference.
+  - Global-extension / prefix /(unstable name)/ :: Align one sequence to a prefix of the other.
   - Overlap :: Align two partially overlapping reads against each other.
-  - Prefix /(unstable name)/ :: Align one sequence to a prefix of the other.
 - Local :: Aligns a substring of $A$ to a substring of $B$. Like ends-free, but
   now we may skip the and start of both sequences.
-  - Extension /(unstable name)/ :: Align a prefix of the two sequences. Similar to
+  - Extension / prefix /(unstable name)/ :: Align a prefix of the two sequences. Similar to
     local, but anchored at the start.
 
 Some alignment types, in particular local and overlap, typically use a different
@@ -98,6 +95,7 @@ These variables are used for asymptotic complexity and memory usage.
 - $|\Sigma|$: alphabet size.
 
 ---
+
 
 * A chronological overview of global pairwise alignment
 
@@ -118,9 +116,9 @@ TODO: Change $d$ to $s$ everywhere
 
 TODO: nbsp before year
 
-TODO: drop LV89, but mention it somewhere, or just leave for mapping only
 
-TODO: Write on expected runtime somewhere
+TODO: Some overview papers that should be listed somewhere:
+- Navarro 2001
 
 TODO: footnote for n+s^2 expected runtims, subsection explaining the suffix tree
 and expectation analysis
@@ -139,10 +137,9 @@ and expectation analysis
 | [cite/text/cf:@nakatsu82]                            | LCS                              | $\boldsymbol{O(n(m-p))}$      | $O(n(m-p))$                          | *DP on thresholds*                                              | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]        |
 | [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance                    | $\boldsymbol{O(ns)}$          | $O(ns)$^{[[score-only]]}                 | *exponential search on band*                                    | first $O(ns)$ algorithm for edit distance                                   |
 | [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(s\cdot \min(m,n))$         | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | *diagonal transition^{[[diagonal-transition]]}*                     | introduces diagonal transition method for unit cost distance                |
-| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(nd)$                       | $O(n)$                               | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+d^2)$ expected time     |
-| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +d^2)}$      | $O(n)$                               | + *suffix tree*                                                 | better worst case complexity, but slower in practice                        |
+| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(nd)$                       | $O(n)$                               | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time     |
+| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +s^2)}$      | $O(n)$                               | + *suffix tree*                                                 | better worst case complexity, but slower in practice                        |
 | [cite/text/cf:@myers88]                              | affine                           | $O(nm)$                       | $O(\min(n,m))$                       | divide-and-conquer                                              | improves [cite/text:@gotoh] to linear space using [cite/text:@hirschberg75] |
-| [cite/text/cf:@lv89]                                 | unit cost                        | $O(nk)$                       | $\boldsymbol{O(n)}$                  | suffix tree                                                     | approximate string matching                                                 |
 | [cite/text/cf:@chang92]                              |                                  |                               |                                      |                                                                 |                                                                             |
 | [cite/text/cf:@wu96]                                 |                                  |                               |                                      |                                                                 |                                                                             |
 | Edlib                                                |                                  | $O(nm/k)$                     |                                      |                                                                 | global aligner using bit-parallel from [cite/text:@myers99]                 |
@@ -176,9 +173,6 @@ and expectation analysis
    structure of gap-affine costs.
 6. <<diagonal-transition>> [cite/text/c:@ukkonen85] and [cite/text:@myers86]
    independently introduced the diagonal transition method in parallel.
-
-TODO: Some overview papers that should be listed somewhere:
--
 
 ---
 
@@ -301,9 +295,9 @@ mismatch cost)
   space.
 
   Concepts introduced:
-  * $d_{ij}$ is non-decreasing on diagonals, and has bounded increments.
-  * *Furthest reaching point*: Instead of storing $d$, we can store increments
-    only: $f_{kp}$ is the largest $i$ s.t. $d_{ij}=p$ on diagonal $k$ ($j-i=k$).
+  * $D(i,j)$ is non-decreasing on diagonals, and has bounded increments.
+  * *Furthest reaching point*: Instead of storing $D$, we can store increments
+    only: $f_{kp}$ is the largest $i$ s.t. $D(i,j)=p$ on diagonal $k$ ($j-i=k$).
     [TODO: they only generalize it from LCS elsewhere]
   * A recursion on $f_{kp}$ for unit costs, computing /wavefront/ $f_{\bullet,p}$ from
     the previous front $f_{\bullet, p-1}$, by first taking a maximum over
@@ -324,14 +318,15 @@ mismatch cost)
   introduces the concept of furthest reaching point and the
   recursion, but for LCS. Dijkstra's algorithm is used to evaluate DP states in
   order of increasing distance. $O(nd)$. For random strings, they show it runs in
-  $O(n+d^2)$ expected time.
+  $O(n+s^2)$ expected time.
   #+caption: Furthest reaching points for LCS by [cite/text:@myers86].
   #+name: furthest-reaching
   [[file:furthest-reaching.png]]
 
   Uses divide-and-conquer to achieve $O(n)$ space; see below.
 - [cite/text/cf:@lv89], submitted '86 :: Extends [cite/text:@ukkonen85]
-  to finding /all/ matches of a pattern in a text with at most $k$ errors, in
+  to $k$-approximate string matching, the problem of finding /all/ matches of a
+  pattern in a text with at most $k$ errors, in
   $O(nm)$ time. They improve this to $O(nk)$ by using a suffix tree with LCA
   queries to extend matching diagonals in $O(1)$ instead of checking one
   character at a time.
@@ -342,6 +337,9 @@ mismatch cost)
   #+caption: Furthest reaching points for the above example.
   #+name: lv-furthest-reaching
   [[file:lv-furthest-reaching.png]]
+
+** <<ns2-expected>> TODO Suffixtree for $O(n+s^2)$ expected runtime
+
 
 ** Using less memory
 *** Computing the score in linear space
@@ -404,11 +402,14 @@ C\cdot mn + \frac 12 C\cdot mn + \frac 14 C\cdot mn + \frac 18C\cdot mn + \dots 
 In practice, this algorithm indeed takes around twice as long to find an
 alignment as the non-recursive algorithm takes to find just the score.
 
-
 ** Theoretical lower bound
 [cite/text/cf:@no-subquadratic-ed] shows that Levenshtein distance can not be solved in
 time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
 Exponential Time Hypothesis/ is true.
+
+** TODO Local alignment
+Talk about Smith-Waterman paper here.
+
 
 ---
 * TODO Tools
