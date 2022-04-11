@@ -50,17 +50,19 @@ sign and maximize the score instead.
 - Affine cost :: Variant of edit distance, where
   gap costs are affine, i.e. linear with an offset.
   There are costs $O$ (/open/) and $E$ (/extend/), and the cost
-  of a gap of length $l$ is $w(l) = O + l\cdot E$.
-- Dual affine /(rare)/ :: Introduce two gap scores based on $(O_1, E_1)$ and
-  $(O_2, E_2)$. The cost of a gap of length $l$ is $w(l) = \min(O_1 + l\cdot E_1, O_2 +
-  l\cdot E_2)$.
-- Convex, concave /(rare)/ :: Gaps of length $l$ have a cost $w(l)$, where $w(l)$ is a
-  convex/convex function of $l$, where longer gaps are relatively
+  of a gap of length $k$ is $w_k = o + k\cdot e$.
+
+  TOOD: lowercase, $o_{ins}$ and $o_{del}$.
+- Dual affine /(rare)/ :: Introduce two gap scores based on $(o_1, e_1)$ and
+  $(o_2, e_2)$. The cost of a gap of length $k$ is $w_k = \min(o_1 + k\cdot e_1, o_2 +
+  k\cdot e_2)$.
+- Convex, concave /(rare)/ :: Gaps of length $k$ have a cost $w_k$, where $w_k$ is a
+  convex/convex function of $k$, where longer gaps are relatively
   more/less expensive. Affine costs are also concave.
-- Arbitrary /(deprecated)/ :: Generalization of edit distance where a gap of length $l$ has an
-  arbitrary cost $w(l)$.Arbitrary substitution cost $\delta(a, b)$ for matches/mismatches
-  between characters $a$ and $b$, and arbitrary cost $w(l)$ for a gap of length
-  $l$. Not used anymore since it requires cubic algorithms.
+- Arbitrary /(deprecated)/ :: Generalization of edit distance where a gap of length $k$ has an
+  arbitrary cost $w_k$. Arbitrary substitution cost $\delta(a, b)$ for matches/mismatches
+  between characters $a$ and $b$, and arbitrary cost $w_k$ for a gap of length
+  $k$. Not used anymore since it requires cubic algorithms.
 
 In practice, most methods use a match cost $\delta(a,a) = 0$, fixed mismatch
 cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
@@ -123,16 +125,17 @@ TODO: Change $d$ to $s$ everywhere
 
 TODO: nbsp before year
 
-
 TODO: Some overview papers that should be listed somewhere:
 - Navarro 2001
 
 TODO: footnote for n+s^2 expected runtims, subsection explaining the suffix tree
 and expectation analysis
 
-TODO: Use $w_k$ instead of $w(l)$.
-
 TODO: LSCk and LSCk++ papers
+
+TODO: ukkonen'85 (first?) states the link between DP and shortest path (in edit graph)
+
+TODO: DP vs graph (toposort, Dijkstra, A*) algorithms
 
 | Paper                                                | Cost model                       | Time                          | Space                                | Method                                                          | Remarks                                                                     |
 |------------------------------------------------------+----------------------------------+-------------------------------+--------------------------------------+-----------------------------------------------------------------+-----------------------------------------------------------------------------|
@@ -214,8 +217,8 @@ matched to some other character:
 \begin{align}
     D(0,0) &= D(i,0) = D(0,j) := 0\\
     D(i,j) &:= \delta(A_{i{-}1}, B_{j{-}1})&& \text{cost of match}\\
-&\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w(i{-}i'{-}1),&&\text{cost of matching $B_{j-2}$}\\
-&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w(j{-}j'{-}1)\big).&&\text{cost of matching $A_{i-2}$}
+&\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w_{i{-}i'{-}1},&&\text{cost of matching $B_{j-2}$}\\
+&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w_{j{-}j'{-}1)\big}.&&\text{cost of matching $A_{i-2}$}
 \end{align}
 The value of $D(n,m)$ is the score of the alignment.
 
@@ -232,7 +235,7 @@ $O(n+m)$ work.
 [cite/text/cf:@sellers] and [cite/text/f:@wagner74] both provide the following
 quadratic recursion for edit distance. The improvement here compared to the
 previous cubic algorithm comes from dropping the requirement that $D(i,j)$ has a
-(mis)match between $A_i$ and $B_j$, and dropping the gap cost $w(l)$.
+(mis)match between $A_i$ and $B_j$, and dropping the gap cost $w_k$.
 \begin{align}
     D(i, 0) &:= \sum_{0\leq i' < i} \delta(A_i, -) \\
     D(0, j) &:= \sum_{0\leq j' < j} \delta(-, B_j)\\
@@ -253,14 +256,14 @@ alignment corresponds to the larges value $S(i,j)$ in the table.
     S(0, 0) &:= S(i, 0) = S(0, j) := 0 \\
     S(i,j)  &:= \max\big(0, &&\text{start a new local alignment}\\
     &\phantom{:=\max\big(} S(i-1, j-1) + s(A_{i{-}1}, B_{j{-}1}), &&\text{(mis)math}\\
-    &\phantom{:=\max\big(} \max_{0\leq i' < i} S(i', j) - w(i{-}i'), &&\text{deletion}\\
-    &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w(j{-}j')\big).&&\text{insertion}
+    &\phantom{:=\max\big(} \max_{0\leq i' < i} S(i', j) - w_{i{-}i'}, &&\text{deletion}\\
+    &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w_{j{-}j')\big}.&&\text{insertion}
 \end{align}
-This a cubic algorithm again since it depends on the gap costs $w(l)$.
+This a cubic algorithm again since it depends on the gap costs $w_k$.
 
 *** Affine costs
-[cite/text/cf:@gotoh] generalized the quadratic recursion to affine costs $w(l)
-= u\cdot l+v$. They use two additional matrices $P(i,j)$ and $Q(i,j)$ that
+[cite/text/cf:@gotoh] generalized the quadratic recursion to affine costs $w_k
+= u\cdot k+v$. They use two additional matrices $P(i,j)$ and $Q(i,j)$ that
 contain the minimal cost to get to $(i,j)$, where the last step is required to
 be an insertion/deletion respectively.
 \begin{align}
@@ -417,6 +420,8 @@ alignment as the non-recursive algorithm takes to find just the score.
 [cite/text/cf:@no-subquadratic-ed] shows that Levenshtein distance can not be solved in
 time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
 Exponential Time Hypothesis/ is true.
+
+TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
 
 ** TODO Local alignment
 Talk about Smith-Waterman paper here.
