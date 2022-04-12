@@ -11,10 +11,10 @@
 #+hugo_auto_set_lastmod: nil
 #+date: <2022-04-01 Thu>
 
-This post lists some of the more relevant papers and implementations related to
-pairwise alignment.
+This post explains the many variants of pairwise alignment, and covers papers
+defining and exploring the topic.
 
-First, lets quickly go over the existing variants of the pairwise alignment problem.
+Earlier review papers are [cite/text:@kruskal83] and [cite/text:@navarro01].
 
 ---
 
@@ -33,17 +33,18 @@ operations, each with their own cost.
 
 
 There are different models to specify the cost of each edit operation. We list
-some of them here.
+some of them here. See also figure [[cost-models]].
 Note that as presented each model minimizes the cost. Some papers change the
 sign and maximize the score instead.
 
 - LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] ::
-  Count minimum number of indels, that is, insertions or deletions, to transform
+  Count minimum number of /indels/, that is, insertions or deletions, to transform
   $A$ into $B$. This is equivalent to finding the /longest common subsequence/.
-- Levenshtein distance / unit cost [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] :: Minimum number of indels and/or substitutions needed. All
+- Levenshtein distance / unit cost [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] ::
+  Minimum number of indels and/or substitutions needed. All
   of cost $1$.
-- Edit distance [[[https://en.wikipedia.org/wiki/Edit_distance][wikipedia]]] :: Matches/mismatches between characters $a$ and $b$ have cost $\delta(a, b)$.
-  Inserting/removing a character has cost $\delta(-, b)>0$ and $\delta(a, -)>0$ respectively.
+- Edit distance [[[https://en.wikipedia.org/wiki/Edit_distance][wikipedia]]] :: Matches/mismatches between characters $a_i$ and $b_j$ have cost $\delta(a_i, b_j)$.
+  Inserting/deleting a character has cost $\delta(-, b_j)>0$ and $\delta(a_i, -)>0$ respectively.
   Usually $\delta(a,a) \leq 0$ and $\delta(a,b)>0$ for $a\neq b$.
 
   Edit distance is also used to mean Levenshtein distance occasionally.
@@ -52,15 +53,17 @@ sign and maximize the score instead.
   There are costs $o$ (/open/) and $e$ (/extend/), and the cost
   of a gap of length $k$ is $w_k = o + k\cdot e$.
 
-  In some cases the gapcost
+  It's possible to have different parameters $(o_{\mathrm{ins}},
+  e_{\mathrm{ins}})$ and $(o_{\mathrm{del}}, e_{\mathrm{del}})$ for insertions
+  and deletions.
 
 - Dual affine /(rare)/ :: Introduce two gap scores based on $(o_1, e_1)$ and
   $(o_2, e_2)$. The cost of a gap of length $k$ is $w_k = \min(o_1 + k\cdot e_1, o_2 +
   k\cdot e_2)$.
 - Convex, concave /(rare)/ :: Gaps of length $k$ have a cost $w_k$, where $w_k$ is a
   convex/convex function of $k$, where longer gaps are relatively
-  more/less expensive. Affine costs are also concave.
-- Arbitrary /(deprecated)/ :: Generalization of edit distance where a gap of length $k$ has an
+  more/less expensive. Affine costs are an example of a concave gap cost.
+- Arbitrary /(outdated)/ :: Generalization of edit distance where a gap of length $k$ has an
   arbitrary cost $w_k$. Arbitrary substitution cost $\delta(a, b)$ for matches/mismatches
   between characters $a$ and $b$, and arbitrary cost $w_k$ for a gap of length
   $k$. Not used anymore since it requires cubic algorithms.
@@ -73,6 +76,7 @@ $n\cdot m$ edit graph only work for non-negative costs and /require/ $\delta(a,a
 ** Alignment types
 
 #+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/alignment-types.drawio.svg][source]])
+#+caption: TODO: re-scale image
 #+name: alignment-types
 #+attr_html: :class large
 [[file:drawings/alignment-types.drawio.svg]]
@@ -81,12 +85,11 @@ Besides /global/ pairwise alignment, there are also other alignment types where
 only a substring of the pattern and text is aligned to each other.
 
 Figure [[alignment-types]] depicts the alignment types described below.
-
 - Global (end-to-end) :: Align both sequences fully, end-to-end.
 - Ends-free :: Indels/gaps at the end are free. This comes in several variants.
   - Semi-global (mapping, glocal, infix) :: Align a full sequence to a substring of a reference.
   - Global-extension / prefix /(unstable name)/ :: Align one sequence to a prefix of the other.
-  - Overlap :: Align two partially overlapping reads against each other.
+  - Overlap (dovetail) :: Align two partially overlapping reads against each other.
 - Local :: Aligns a substring of $A$ to a substring of $B$. Like ends-free, but
   now we may skip the and start of both sequences.
   - Extension / prefix /(unstable name)/ :: Align a prefix of the two sequences. Similar to
@@ -95,11 +98,17 @@ Figure [[alignment-types]] depicts the alignment types described below.
 Some alignment types, in particular local and overlap, typically use a different
 cost model where matching characters get a bonus.
 
+*A note on naming:*
+Not all names are standard yet and especially global-extension and extension are
+still unclear, as discussed on [[https://mobile.twitter.com/lh3lh3/status/1488580381091770371][this tweet]].  There is a suggestion to rename
+extension to prefix, but it is unclear to me how global-extension should be named in
+that case. Feel free to discuss in the comments at the bottom.
+
+
 ** Parameters for the runtime
 These variables are used for asymptotic complexity and memory usage.
 - $n$, $m$: sequence lengths. I consistently assume $n\geq m$, but some papers differ.
-- $d$: edit distance;
-- $s$: alignment cost (or occasionally edit distance), given some cost model;
+- $s$: alignment cost, given some cost model;
 - $p$: length of LCS (longest common subsequence);
 - $r$: the number of pairs of matching characters between the two sequences;
 - $|\Sigma|$: alphabet size.
@@ -112,7 +121,7 @@ These variables are used for asymptotic complexity and memory usage.
 Here is a chronological summary, assuming finite alphabets where needed.
 $n\geq m$.  Time/space
 improvements and new ideas are bold.  Unless mentioned otherwise, all these
-methods are *exact* (i.e. provable correct) and do *global alignment*.
+methods are *exact* (i.e. provably correct) and do *global alignment*.
 
 TODO: links to sections
 
@@ -120,24 +129,12 @@ TODO: papers before NW
 
 TODO: gotoh: reread intro
 
-TODO: subsection in results regarding local alignment
-
-TODO: Change $d$ to $s$ everywhere
-
-TODO: nbsp before year
-
-TODO: Some overview papers that should be listed somewhere:
-- Navarro 01
-- Kruskal 83
-
 TODO: footnote for n+s^2 expected runtims, subsection explaining the suffix tree
 and expectation analysis
 
 TODO: LSCk and LSCk++ papers
 
 TODO: ukkonen'85 (first?) states the link between DP and shortest path (in edit graph)
-
-TODO: DP vs graph (toposort, Dijkstra, A*) algorithms
 
 TODO: Include Fickett 84 paper for O(ns) variant of dijkstra
 
@@ -157,24 +154,22 @@ submitted in 85
 | [cite/text/cf:@gotoh]^{[[bugfix]]}                       | *affine^{[[gap-affine]]}*            | $O(nm)$                             | $O(nm)$^{[[score-only]]}                 | DP^{[[SWG]]}                                                        | extends [cite/text:@sellers] to affine                                      |
 | [cite/text/cf:@nakatsu82]                            | LCS                              | $\boldsymbol{O(n(m-p))}$            | $O(n(m-p))$                          | *DP on thresholds*                                              | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]        |
 | [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance                    | $\boldsymbol{O(ns)}$                | $O(ns)$^{[[score-only]]}                 | *exponential search on band*                                    | first $O(ns)$ algorithm for edit distance                                   |
-| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(s\cdot \min(m,n))$               | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | *diagonal transition^{[[diagonal-transition]]}*                     | introduces diagonal transition method for unit cost distance                |
-| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(nd)$                             | $O(n)$                               | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time     |
+| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(ns)$^{[[expected-runtime]]}          | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | *diagonal transition^{[[diagonal-transition]]}*                     | introduces diagonal transition method for unit cost distance                |
+| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(ns)$^{[[expected-runtime]]}          | $O(n)$                               | *diagonal transition^{[[diagonal-transition]]}*, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time     |
 | [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +s^2)}$            | $O(n)$                               | + *suffix tree*                                                 | better worst case complexity, but slower in practice                        |
 | [cite/text/cf:@myers88]                              | affine                           | $O(nm)$                             | $O(\min(n,m))$                       | divide-and-conquer                                              | improves [cite/text:@gotoh] to linear space using [cite/text:@hirschberg75] |
-| [cite/text/cf:@chang92]                              |                                  |                                     |                                      |                                                                 |                                                                             |
-| [cite/text/cf:@wu96]                                 |                                  |                                     |                                      |                                                                 |                                                                             |
 | Edlib                                                |                                  | $O(nm/k)$                           |                                      |                                                                 | global aligner using bit-parallel from [cite/text:@myers99]                 |
-| WFA: [cite:@wfa]                                     | affine                           | $O(ns)$                             | $O(n+s^2)$^{[[score-only]]}              |                                                                 | $O(n+s^2)$ expected                                                         |
+| WFA: [cite:@wfa]                                     | affine                           | $O(ns)$^{[[expected-runtime]]}          | $O(n+s^2)$^{[[score-only]]}              |                                                                 | $O(n+s^2)$ expected                                                         |
 | WFALM: [cite:@wfalm]                                 | affine                           | $O(n+s^2)$                          | $O(n+s^{3/2})$^{[[score-only]]}          |                                                                 |                                                                             |
 | biWFA: [unpublished]                                 | affine                           | $O(ns)$                             | $O(n)$                               |                                                                 | $O(n+s^2)$ expected                                                         |
-| A* pairwise aligner                                  | unit cost                        | $O(n)$ expected                     | $O(n)$                               | *A**, *seed heuristic*, *pruning*                               | only for random strings with random errors                                  |
+| A* pairwise aligner                                  | unit cost                        | $O(n)$ expected^{[[astar-bound]]}       | $O(n)$                               | *A**, *seed heuristic*, *pruning*                               | only for random strings with random errors                                  |
 
-1. <<multiple>> Multiple algorithms in a paper
-1. <<NW>> Confusingly, nowadays [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][Needleman-Wunsch (NW)]] is used to refer to the quadratic
+1. <<multiple>> Multiple algorithms in a single paper.
+2. <<NW>> Confusingly, nowadays [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][Needleman-Wunsch (NW)]] is used to refer to the quadratic
    global alignment algorithm introduced by [cite:@sellers;@wagner74]. [cite/text/c:@gotoh] refers to it as
    Needleman-Wunsch-Sellers' algorithm. See also the wiki page on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]].
-2. <<discrete-scores>> The four Russians algorithm of [cite/text:@four-russians-ed] needs discrete scores and a finite alphabet.
-3. <<SWG>> Smith-Waterman-Gotoh (SWG), refers to the gap-affine global alignment
+3. <<discrete-scores>> The four Russians algorithm of [cite/text:@four-russians-ed] needs discrete scores and a finite alphabet.
+4. <<SWG>> Smith-Waterman-Gotoh (SWG), refers to the gap-affine global alignment
    algorithm introduced in [cite/text:@gotoh].
 
    On the other hand, [[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm][Smith-Waterman (SW)]] refers to a quadratic algorithm for
@@ -182,18 +177,22 @@ submitted in 85
    search, and while the technique of [cite/text/c:@gotoh] speeds it up to
    quadratic, that paper does not explicitly state the recursion for the case of
    local alignment.
-3. <<score-only>> When only the score is needed, and not an alignment, these
+5. <<score-only>> When only the score is needed, and not an alignment, these
    methods only need $O(n)$ memory.
-4. <<bugfix>> [cite/text/c:@altschul] fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
-5. <<fixed-indel-cost>> Needs all indel costs $\delta(a, -)$ and $\delta(-,b)$
+6. <<bugfix>> [cite/text/c:@altschul] fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
+7. <<fixed-indel-cost>> Needs all indel costs $\delta(a, -)$ and $\delta(-,b)$
    to be equal.
-5. <<gap-affine>> [cite/text/c:@waterman] explores non-linear cost
+8. <<gap-affine>> [cite/text/c:@waterman] explores non-linear cost
    functions, and gives an example where gaps of size $2$ are cheaper than gaps
    of size $1$. [cite/text/c:@smith81] mentions gap-affine costs in its
    discussion. This [cite:@gotoh] is the first algorithm exploiting the
    structure of gap-affine costs.
-6. <<diagonal-transition>> [cite/text/c:@ukkonen85] and [cite/text:@myers86]
+9. <<diagonal-transition>> [cite/text/c:@ukkonen85] and [cite/text:@myers86]
    independently introduced the diagonal transition method in parallel.
+10. <<astar-bound>> Needs $n\ll |\Sigma|^{1/e}$.
+11. <<expected-runtime>> These methods run in $O(n+s^2)$ expected time, even
+    though not all authors note this. However, the proof of [cite/text:@myers86]
+    applies for all of them. [[ns2-expected][Details here]].
 
 ---
 
@@ -306,7 +305,7 @@ mismatch cost)
   #+caption: Contours as shown in [cite/text:@hirschberg77]
   #+name: contours
   [[file:screenshots/contours.png]]
-*** Diagonal transition: furthest reaching and wavefronts
+*** TODO Diagonal transition: furthest reaching and wavefronts
 
 
 
@@ -338,7 +337,7 @@ mismatch cost)
   Independent of [cite/text:@ukkonen85], this
   introduces the concept of furthest reaching point and the
   recursion, but for LCS. Dijkstra's algorithm is used to evaluate DP states in
-  order of increasing distance. $O(nd)$. For random strings, they show it runs in
+  order of increasing distance. $O(ns)$. For random strings, they show it runs in
   $O(n+s^2)$ expected time.
   #+caption: Furthest reaching points for LCS by [cite/text:@myers86].
   #+name: furthest-reaching
@@ -430,12 +429,23 @@ Exponential Time Hypothesis/ is true.
 
 TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
 
+** TODO LCSk[++] algorithms
+
+- [cite:@lcsk] introduces LCSk: LCS where all matches come $k$ characters at a
+  time. Presents a quadratic NW-like algorithm.
+- [cite:@lcsk++] introduces LCSk++, and an algorithm for it with expected time
+  $O(n + r \lg r)$, where $r$ is the number of $k$-match pairs, similar to
+  [cite:@hunt77].
+- [cite:@lcsk-overview] Overview of LCS algorithms -- nothing new here.
+- [cite:@lcsk-fast] more incremental improvements -- not so interesting
+
 ** TODO Local alignment
 Talk about Smith-Waterman paper here.
 
 ** Graph properties
 TODO: Who uses/introduces gap heuristic?
 
+** A note on DP (toposort) vs Dijkstra vs A*
 ---
 * TODO Tools
 Note: From 1990 to 2010 there is a gap without much theoretical progress on
@@ -479,7 +489,17 @@ list current competitive aligners.
   $2^{i}$ /th/ wavefront).
 
 ---
-* TODO Further observations
+* TODO Notes for other posts
+
+** Semi-global alignment papers
+- [cite:@lv89]
+- [cite:@myers99]
+- [cite:@chang92]
+- [cite:@wu96]
+
+
+
+** Old vs new papers
 
 There's a big dichotomy between the old and the new papers:
 
