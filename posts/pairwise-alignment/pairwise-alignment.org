@@ -49,10 +49,11 @@ sign and maximize the score instead.
   Edit distance is also used to mean Levenshtein distance occasionally.
 - Affine cost :: Variant of edit distance, where
   gap costs are affine, i.e. linear with an offset.
-  There are costs $O$ (/open/) and $E$ (/extend/), and the cost
+  There are costs $o$ (/open/) and $e$ (/extend/), and the cost
   of a gap of length $k$ is $w_k = o + k\cdot e$.
 
-  TOOD: lowercase, $o_{ins}$ and $o_{del}$.
+  In some cases the gapcost
+
 - Dual affine /(rare)/ :: Introduce two gap scores based on $(o_1, e_1)$ and
   $(o_2, e_2)$. The cost of a gap of length $k$ is $w_k = \min(o_1 + k\cdot e_1, o_2 +
   k\cdot e_2)$.
@@ -137,6 +138,11 @@ TODO: ukkonen'85 (first?) states the link between DP and shortest path (in edit 
 
 TODO: DP vs graph (toposort, Dijkstra, A*) algorithms
 
+TODO: Include Fickett 84 paper for O(ns) variant of dijkstra
+
+TODO: mention that ukkonen85 was mostly in 83 conference, and myers86 was
+submitted in 85
+
 | Paper                                                | Cost model                       | Time                          | Space                                | Method                                                          | Remarks                                                                     |
 |------------------------------------------------------+----------------------------------+-------------------------------+--------------------------------------+-----------------------------------------------------------------+-----------------------------------------------------------------------------|
 | [cite/text/cf:@nw]                                   | arbitrary                        | $O(n^2m)$                     | $O(nm)$                              | DP^{[[NW]]}                                                         | first to solve pairwise alignment polynomially                              |
@@ -218,7 +224,7 @@ matched to some other character:
     D(0,0) &= D(i,0) = D(0,j) := 0\\
     D(i,j) &:= \delta(A_{i{-}1}, B_{j{-}1})&& \text{cost of match}\\
 &\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w_{i{-}i'{-}1},&&\text{cost of matching $B_{j-2}$}\\
-&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w_{j{-}j'{-}1)\big}.&&\text{cost of matching $A_{i-2}$}
+&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w_{j{-}j'{-}1}\big).&&\text{cost of matching $A_{i-2}$}
 \end{align}
 The value of $D(n,m)$ is the score of the alignment.
 
@@ -257,7 +263,7 @@ alignment corresponds to the larges value $S(i,j)$ in the table.
     S(i,j)  &:= \max\big(0, &&\text{start a new local alignment}\\
     &\phantom{:=\max\big(} S(i-1, j-1) + s(A_{i{-}1}, B_{j{-}1}), &&\text{(mis)math}\\
     &\phantom{:=\max\big(} \max_{0\leq i' < i} S(i', j) - w_{i{-}i'}, &&\text{deletion}\\
-    &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w_{j{-}j')\big}.&&\text{insertion}
+    &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w_{j{-}j'}\big).&&\text{insertion}
 \end{align}
 This a cubic algorithm again since it depends on the gap costs $w_k$.
 
@@ -426,6 +432,8 @@ TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
 ** TODO Local alignment
 Talk about Smith-Waterman paper here.
 
+** Graph properties
+TODO: Who uses/introduces gap heuristic?
 
 ---
 * TODO Tools
@@ -470,7 +478,21 @@ list current competitive aligners.
   $2^{i}$ /th/ wavefront).
 
 ---
+* TODO Further observations
 
+There's a big dichotomy between the old and the new papers:
+
+- old
+  - short intro
+  - to the point
+  - little context; more theory
+  - short about utility: Gotoh has literally 1 sentence on this: 'can be executed on a small pc with limited memory'
+- new
+  - at least 1 A4 of blahblah
+  - needs to talk about other tools, types of data available (length and error rate of pacbio...)
+  - spends 3 pages on speed compared to others
+
+---
 * References
 [TODO: fix the long dash instead of just repeating author name]
 #+print_bibliography:
