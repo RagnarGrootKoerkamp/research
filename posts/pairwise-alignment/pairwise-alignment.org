@@ -28,7 +28,6 @@ operations, each with their own cost.
 ** Cost models
 
 #+caption: Overview of different cost models. (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/cost-models.drawio.svg][source]])
-#+caption: TODO: Thinner lines / bolder text
 #+name: cost-models
 #+attr_html: :class large
 [[file:drawings/cost-models.drawio.svg]]
@@ -117,8 +116,6 @@ $n\geq m$.  Time/space
 improvements and new ideas are bold.  Unless mentioned otherwise, all these
 methods are *exact* (i.e. provably correct) and do *global alignment*.
 
-[cite/text:@kruskal83] and [cite/text:@navarro01] are other review papers.
-
 The following parameters are used here:
 - $n \geq m$: sequence lengths. Note that some papers assume the opposite.
 - $s$: alignment cost, given some cost model;
@@ -128,15 +125,17 @@ The following parameters are used here:
 
 Methods link to the detailed explanation further down this page.
 
+Not mentioned in the table are two review papers, [cite/text:@kruskal83] and [cite/text:@navarro01].
+
 #+caption: Chronological overview of papers related to exact global pairwise alignment.
 #+name: table
 #+attr_html: :class full-width
 | Paper                                                | Cost model                       | Time                                | Space                                | Method                                                          | Remarks                                                                          |
 |------------------------------------------------------+----------------------------------+-------------------------------------+--------------------------------------+-----------------------------------------------------------------+----------------------------------------------------------------------------------|
-| [cite/text/cf:@vintsyuk68]                           | no deletions                     | $O(nm)$                             | $O(nm)$                              | DP                                                              | different formulation in a different domain, but conceptually similar            |
-| [cite/text/cf:@nw]                                   | *edit distance*                  | $O(n^2m)$                           | $O(nm)$                              | [[#cubic-dp][DP]]^{[[NW]]}                                                         | solves pairwise alignment in polynomial time                                     |
-| [cite/text/cf:@sankoff]                              | LCS                              | $\boldsymbol{O(nm)}$                | $O(nm)$                              | DP                                                              | the first quadratic algorithm                                                    |
-| [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                    | $O(nm)$                             | $O(nm)$                              | [[#quadratic-dp][DP]]^{[[NW]]}                                                         | the quadratic algorithm now known as Needleman-Wunch                             |
+| [cite/text/cf:@vintsyuk68]                           | no deletions                     | $O(nm)$                             | $O(nm)$                              | [[dp-history][DP]]                                                              | different formulation in a different domain, but conceptually similar            |
+| [cite/text/cf:@nw]                                   | *edit distance*                  | $O(n^2m)$                           | $O(nm)$                              | [[#cubic-dp][DP]]                                                              | solves pairwise alignment in polynomial time                                     |
+| [cite/text/cf:@sankoff]                              | LCS                              | $\boldsymbol{O(nm)}$                | $O(nm)$                              | [[dp-history][DP]]                                                              | the first quadratic algorithm                                                    |
+| [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                    | $O(nm)$                             | $O(nm)$                              | [[#quadratic-dp][DP]]                                                              | the quadratic algorithm [[dp-history][now known as Needleman-Wunch]]                             |
 | [cite/text/cf:@hirschberg75]                         | LCS                              | $O(nm)$                             | $\boldsymbol{O(n)}$                  | [[#divide-and-conquer][*divide-and-conquer*]]                                            | introduces linear memory backtracking                                            |
 | [cite/text/cf:@hunt77]                               | LCS                              | $\boldsymbol{O((r+n)\lg n)}$        | $O(r+n)$                             | [[#thresholds][*thresholds*]]                                                    | distance only                                                                    |
 | [cite/text/cf:@hirschberg77]                         | LCS                              | $\boldsymbol{O(p(m-p)\lg n)}$       | $\boldsymbol{O(n+(m-p)^2)}$          | [[#thresholds][*contours*]] + band                                               | for similar sequences                                                            |
@@ -156,31 +155,30 @@ Methods link to the detailed explanation further down this page.
 | A* pairwise aligner [unpublished]                    | unit costs                       | $O(n)$ expected                     | $O(n)$                               | *A**, *seed heuristic*, *pruning*                               | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
 
 1. <<multiple>> Multiple algorithms in a single paper.
-2. <<NW>> Confusingly, nowadays [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][Needleman-Wunsch (NW)]] is used to refer to the quadratic
-   global alignment algorithm introduced by [cite:@sellers;@wagner74]. [cite/text/c:@gotoh] refers to it as
-   Needleman-Wunsch-Sellers' algorithm. See also the wiki page on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]].
-3. <<discrete-scores>> The four Russians algorithm of [cite/text:@four-russians-ed] needs discrete scores and a finite alphabet.
-4. <<score-only>> When only the score is needed, and not an alignment, these
+2. <<discrete-scores>> The four Russians algorithm of [cite/text:@four-russians-ed] needs discrete scores and a finite alphabet.
+3. <<score-only>> When only the score is needed, and not an alignment, these
    methods only need $O(n)$ memory, and for some $O(m)$ additional memory is sufficient.
-5. <<bugfix>> [cite/text/c:@altschul] fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
-6. <<fixed-indel-cost>> Needs all indel costs $\delta(a, -)$ and $\delta(-,b)$
+4. <<bugfix>> [cite/text/c:@altschul] fixes a bug in the backtracking algorithm of [cite/text:@gotoh].
+5. <<fixed-indel-cost>> Needs all indel costs $\delta(a, -)$ and $\delta(-,b)$
    to be equal.
-7. <<diagonal-transition>> [cite/text/c:@ukkonen85] and [cite/text:@myers86]
+6. <<diagonal-transition>> [cite/text/c:@ukkonen85] and [cite/text:@myers86]
    independently introduced the diagonal transition method in parallel.
-8. <<expected-runtime>> These methods run in $O(n+s^2)$ expected time, even
+7. <<expected-runtime>> These methods run in $O(n+s^2)$ expected time, even
    though not all authors note this. However, the proof of [cite/text:@myers86]
    applies for all of them. [[#ns2][Details here]].
-9. <<word-size>> $w=64$ is the word size.
-10. <<lcsk>> LCS$k$ is a variant of LCS where only runs of exactly $k$ consecutive equal
+8. <<word-size>> $w=64$ is the word size.
+9. <<lcsk>> LCS$k$ is a variant of LCS where only runs of exactly $k$ consecutive equal
 characters can be matched.
 
 ---
 
-* Important results
+* Algorithms in detail
 
 We will go over some of the more important results here. Papers differ in the
 notation they use, which will be homogenized here.
-- We use $D(i,j)$ at the distance/cost matrix to be minimized, and $S(i,j)$ as a
+
+** Notation
+- We use $D(i,j)$ at the distance/cost to be minimized, and $S(i,j)$ as a
   score to be maximized.
 - The DP goes from the top left $(0,0)$ to the bottom right $(n,m)$.
 - The lengths of $a$ and $b$ are $n$ and $m$, with $n\geq m$.
@@ -196,10 +194,12 @@ notation they use, which will be homogenized here.
 :CUSTOM_ID: cubic-dp
 :END:
 #+caption: The cubic algorithm of [cite/text:@nw].
-#+name: nw-fig
+#+name: fig:nw
 [[file:screenshots/nw.png]]
 
-This algorithm defines $D(i,j)$ as the score of the best path ending with a
+TODO: max instead of min formulation
+
+This algorithm ([[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][wikipedia]]) defines $D(i,j)$ as the score of the best path ending with a
 (mis)match in $(i,j)$. The recursion uses that before matching $A_{i-1}$ and $B_{j-1}$,
 either $A_{i-2}$ and $B_{j-2}$ are matched to each other, or one of them is
 matched to some other character:
@@ -211,8 +211,8 @@ matched to some other character:
 \end{align}
 The value of $D(n,m)$ is the score of the alignment.
 
-Note that the paper uses $MAT_{ij}$ notation and goes backwards instead of
-forwards. Figure [[nw-fig]] shows the dependencies in the evaluation of a single
+Note that the original paper uses $MAT_{ij}$ notation and goes backwards instead of
+forwards. Figure [[fig:nw]] shows the dependencies in the evaluation of a single
 cell. The total runtime is $O(nm \cdot (n+m)) = O(n^2m)$ since each cell needs
 $O(n+m)$ work.
 
@@ -232,13 +232,47 @@ previous cubic algorithm comes from dropping the requirement that $D(i,j)$ has a
 \begin{align}
     D(i, 0) &:= \sum_{0\leq i' < i} \delta(A_i, -) \\
     D(0, j) &:= \sum_{0\leq j' < j} \delta(-, B_j)\\
-    D(i, j) &:= \min\big(D(i-1,j-1) + \delta(A_i, B_j), &&\text{(mis)match}\\
-            &:= \phantom{\min\big(} D(i-1, j) + \delta(A_i, -), && \text{deletion}\\
-            &:= \phantom{\min\big(} D(i, j-1) + \delta(-, B_j)\big). && \text{insertion}.
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(A_i, B_j), &&\text{(mis)match}\\
+            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(A_i, -), && \text{deletion}\\
+            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(-, B_j)\big). && \text{insertion}.
 \end{align}
 
-This algorithm is now called the Needleman-Wunsch (NW) algorithm, and takes
-$O(nm)$ time since it does one constant time computation per cell.
+This algorithm takes $O(nm)$ time since it does constant work per DP cell.
+
+<<dp-history>> *History and naming:*
+This algorithm is now called the Needleman-Wunsch (NW) algorithm ([[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][wikipedia]]).
+[cite/text/c:@gotoh] refers to it as Needleman-Wunsch-Sellers' algorithm, to
+highlight the speedup that [cite/text:@sellers] contributed.
+apparently he was not aware of the identical formulation in [cite/text:@wagner74].
+
+[cite/text/c:@vintsyuk68] is a quadratic algorithm published already before
+[cite/text:@nw], but in the context of speech recognition, where instead of
+characters there is some cost $d(i,j)$ to match two states. It does not allow
+deletions, and costs are associated with a state $(i,j)$, instead of the
+transitions between them:
+\begin{align}
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1), D(i{-}1, j)\big) + \delta(i,j).
+\end{align}
+
+
+[cite/text:@sankoff] introduces essentially the same quadratic recursion as [cite/text:@sellers], but
+instead of minimizing a cost he gives a positive score $\delta(a_i, b_j)$ to each pair
+of aligned characters, while indels have score $0$. This leads to the recursion
+\begin{align}
+    S(i, j) &:= \max\big(S(i{-}1,j{-}1) + \delta(a_i, b_j),\, D(i{-}1, j), D(i, j{-}1)\big).
+\end{align}
+
+The wiki pages on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]] and [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm#Historical_notes_and_algorithm_development][Needleman-Wunsch]] have some more historical context.
+
+
+*** Minimizing vs. maximizing
+
+[TODO: Find a good place to put this text. Maybe a section for further remarks.]
+
+While the DP formulas for minimizing cost and maximizing score are very
+similar, there are some interesting conceptual differences.
+When maximizing, this is a conceptually similar to computing the LCS: each pair of matching
+characters increases the score. In [cite/text:@nw], there is no penalty
 
 *** Local alignment
 
