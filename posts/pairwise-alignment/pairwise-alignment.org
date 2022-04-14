@@ -179,14 +179,14 @@ characters can be matched.
 We will go over some of the more important results here. Papers differ in the
 notation they use, which will be homogenized here.
 
-** Notation
 - We use $D(i,j)$ at the distance/cost to be minimized, and $S(i,j)$ as a
-  score to be maximized.
+  score to be maximized. However, we use $\delta(a,b)$ both for costs and
+  scores. [TODO: Change to $s(a,b)$ for scores?]
 - The DP goes from the top left $(0,0)$ to the bottom right $(n,m)$.
-- The lengths of $a$ and $b$ are $n$ and $m$, with $n\geq m$.
-- We use $0$-based indexing for $a$ and $b$, so at match at $(i,j)$ is for
-  characters $A_{i-1}$ and $B_{j-1}$.
-- $a$ is at the top of the grid, and $b$ at the left. $0\leq i\leq n$ indicates
+- The lengths of $A$ and $B$ are $n$ and $m$, with $n\geq m$.
+- We use $0$-based indexing for $A$ and $B$, so at match at $(i,j)$ is for
+  characters $a_{i-1}$ and $b_{j-1}$.
+- $A$ is at the top of the grid, and $B$ at the left. $0\leq i\leq n$ indicates
   a column, and $0\leq j\leq m$ a row.
 
 ** Classic DP algorithms
@@ -201,20 +201,22 @@ notation they use, which will be homogenized here.
 
 TODO: max instead of min formulation
 
-This algorithm ([[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][wikipedia]]) defines $D(i,j)$ as the score of the best path ending with a
-(mis)match in $(i,j)$. The recursion uses that before matching $A_{i-1}$ and $B_{j-1}$,
-either $A_{i-2}$ and $B_{j-2}$ are matched to each other, or one of them is
+This algorithm ([[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm#Historical_notes_and_algorithm_development][wikipedia]]) defines $S(i,j)$ as the score of the best path ending with a
+(mis)match in $(i,j)$. The recursion uses that before matching $a_{i-1}$ and $b_{j-1}$,
+either $a_{i-2}$ and $b_{j-2}$ are matched to each other, or one of them is
 matched to some other character:
 \begin{align}
-    D(0,0) &= D(i,0) = D(0,j) := 0\\
-    D(i,j) &:= \delta(A_{i{-}1}, B_{j{-}1})&& \text{cost of match}\\
-&\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w_{i{-}i'{-}1},&&\text{cost of matching $B_{j-2}$}\\
-&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w_{j{-}j'{-}1}\big).&&\text{cost of matching $A_{i-2}$}
+    S(0,0) &= S(i,0) = S(0,j) := 0\\
+    S(i,j) &:= \delta(a_{i{-}1}, b_{j{-}1})&& \text{cost of match}\\
+&\phantom{:=} + \max\big( \max_{0\leq i' < i} S(i', j{-}1) + w_{i{-}i'{-}1},&&\text{cost of matching $b_{j-2}$}\\
+&\phantom{:=+\max\big(} \max_{0\leq j'<j} S(i{-}1, j')+w_{j{-}j'{-}1}\big).&&\text{cost of matching $a_{i-2}$}
 \end{align}
-The value of $D(n,m)$ is the score of the alignment.
+The value of $S(n,m)$ is the score of the alignment.
 
 Note that the original paper uses $MAT_{ij}$ notation and goes backwards instead of
-forwards. Figure [[fig:nw]] shows the dependencies in the evaluation of a single
+forwards. The example they provide is where $\delta(a_i, b_j)$ is $1$ when
+$a_i=b_j$, and thus computes the length of the LCS.
+Figure [[fig:nw]] shows the dependencies in the evaluation of a single
 cell. The total runtime is $O(nm \cdot (n+m)) = O(n^2m)$ since each cell needs
 $O(n+m)$ work.
 
@@ -230,13 +232,13 @@ $O(n+m)$ work.
 [cite/text/cf:@sellers] and [cite/text/f:@wagner74] both provide the following
 quadratic recursion for edit distance. The improvement here compared to the
 previous cubic algorithm comes from dropping the requirement that $D(i,j)$ has a
-(mis)match between $A_i$ and $B_j$, and dropping the gap cost $w_k$.
+(mis)match between $a_i$ and $b_j$, and dropping the gap cost $w_k$.
 \begin{align}
-    D(i, 0) &:= \sum_{0\leq i' < i} \delta(A_i, -) \\
-    D(0, j) &:= \sum_{0\leq j' < j} \delta(-, B_j)\\
-    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(A_i, B_j), &&\text{(mis)match}\\
-            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(A_i, -), && \text{deletion}\\
-            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(-, B_j)\big). && \text{insertion}.
+    D(i, 0) &:= \sum_{0\leq i' < i} \delta(a_i, -) \\
+    D(0, j) &:= \sum_{0\leq j' < j} \delta(-, b_j)\\
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(a_i, b_j), &&\text{(mis)match}\\
+            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(a_i, -), && \text{deletion}\\
+            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(-, b_j)\big). && \text{insertion}.
 \end{align}
 
 This algorithm takes $O(nm)$ time since it does constant work per DP cell.
@@ -245,7 +247,7 @@ This algorithm takes $O(nm)$ time since it does constant work per DP cell.
 This algorithm is now called the Needleman-Wunsch (NW) algorithm ([[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm][wikipedia]]).
 [cite/text/c:@gotoh] refers to it as Needleman-Wunsch-Sellers' algorithm, to
 highlight the speedup that [cite/text:@sellers] contributed.
-apparently he was not aware of the identical formulation in [cite/text:@wagner74].
+Apparently Gotoh was not aware of the identical formulation in [cite/text:@wagner74].
 
 [cite/text/c:@vintsyuk68] is a quadratic algorithm published already before
 [cite/text:@nw], but in the context of speech recognition, where instead of
@@ -257,9 +259,10 @@ transitions between them:
 \end{align}
 
 
-[cite/text:@sankoff] introduces essentially the same quadratic recursion as [cite/text:@sellers], but
-instead of minimizing a cost he gives a positive score $\delta(a_i, b_j)$ to each pair
-of aligned characters, while indels have score $0$. This leads to the recursion
+The quadratic recursion of [cite/text:@sankoff] is similar to the one by
+[cite/text:@sellers], but similar to [cite/text:@nw] this is a maximizing
+formulation. In particular they set $\delta(a_i, b_j)=1$ when $a_i = b_j$ and
+$0$ otherwise, so that they compute the length of the LCS. This leads to the recursion
 \begin{align}
     S(i, j) &:= \max\big(S(i{-}1,j{-}1) + \delta(a_i, b_j),\, D(i{-}1, j), D(i, j{-}1)\big).
 \end{align}
@@ -267,65 +270,108 @@ of aligned characters, while indels have score $0$. This leads to the recursion
 The wiki pages on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]] and [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm#Historical_notes_and_algorithm_development][Needleman-Wunsch]] have some more historical context.
 
 
-*** Minimizing vs. maximizing
+*** Minimizing vs. maximizing duality
 
 [TODO: Find a good place to put this text. Maybe a section for further remarks.]
 
 While the DP formulas for minimizing cost and maximizing score are very
 similar, there are some interesting conceptual differences.
-When maximizing, this is a conceptually similar to computing the LCS: each pair of matching
-characters increases the score. In [cite/text:@nw], there is no penalty
+
+When maximizing the score, this is a conceptually similar to computing the LCS: each pair of matching
+characters increases the score. [cite/text:@nw] gives an example of this.
+As we will see, these algorithms usually consider all pairs of matching
+characters between $A$ and $B$.
+
+Algorithms that minimize the cost instead look at the problem as finding the shortest
+path in a graph, usually with non-negative weights and cost $0$ for matching characters.
+The structure of the corresponding DP matrix turns out to be more complex, but
+can also be exploited for algorithms faster than $O(nm)$.
+
+For the problem of LCS in particular there is a duality. When $p$ is the
+length of the LCS, and $s$ is the cost of aligning the two sequences via
+the LCS cost model where indels cost $1$ and mismatches are not allowed, we have
+\begin{align}
+    2\cdot p + s = n+m.
+\end{align}
+
+More generally for global alignment, [cite/text:@wfalm] show that there is a
+direct correspondence between parameters for maximizing score and minimizing cost,
+under the assumption that each type of operation has a fixed cost.
+In the affine scoring model, let $\delta(a, a) = l_p$, $\delta(a,b) = x_p$,
+and $w_k = o_c + e_c \cdot k$. Then the maximal score satisfies
+\begin{align}
+    p = l_p \cdot L - x_p \cdot X - o_p \cdot O - e_c \cdot E,
+\end{align}
+where $L$ is the number of matches in the optimal alignment, $X$ the number of
+mismatches, $O$ the number of gaps, and $E$ the total length of the gaps.
+From this, they derive an equivalent cost model for minimizing scores:
+\begin{align}
+    l_s &= 0\\
+    x_s &= 2l_p + 2x_p\\
+    o_s &= 2o_p\\
+    e_s &= 2e_p + l_p.
+\end{align}
+Using that $2L+2X+E=M+N$, this results in
+\begin{align}
+    s &= 0\cdot  L + x_s  \cdot X + o_s \cdot O+e_s \cdot E\\
+    &= (2l_p-2l_p) L+ (2l_p+2x_p) X + 2o_p  O + (2e_p+l_p) E\\
+    &= l_p(2L+2X+E) - 2(l_p L - x_p X - o_p  O - e_p E)\\
+    &= l_p\cdot (N+M) - 2p.
+\end{align}
+This shows that any global alignment maximizing $p$ at the same time minimizes $s$ and
+vice versa.
 
 *** Local alignment
-
-   [[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm][Smith-Waterman-Gotoh (SWG)]] (or just SW) refers to a quadratic algorithm for
-   local alignment.  [cite/text/c:@sw] introduce the cubic recursion for local
-   search, and while the technique of [cite/text/c:@gotoh] speeds it up to
-   quadratic, that paper does not explicitly state the recursion for the case of
-   local alignment.
-
-
-[cite/text/cf:@sw] introduces local alignment. This is formulated as a maximization
-problem where matching characters give positive score $s(a,b)$.
-Here, the maximum includes $0$ to start a new alignment, and the best local
-alignment corresponds to the larges value $S(i,j)$ in the table.
+[cite/text/cf:@sw] introduces local alignment ([[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm][wikipedia]]). This is formulated as a maximization
+problem where matching characters give positive score $\delta(a,b)$.
+The maximum includes $0$ to allow starting a new alignment anywhere in the DP
+table, 'discarding' parts that give a negative score.
+The best local alignment corresponds to the larges value $S(i,j)$ in the table.
 \begin{align}
     S(0, 0) &:= S(i, 0) = S(0, j) := 0 \\
     S(i,j)  &:= \max\big(0, &&\text{start a new local alignment}\\
-    &\phantom{:=\max\big(} S(i-1, j-1) + s(A_{i{-}1}, B_{j{-}1}), &&\text{(mis)math}\\
+    &\phantom{:=\max\big(} S(i-1, j-1) + \delta(a_{i{-}1}, b_{j{-}1}), &&\text{(mis)math}\\
     &\phantom{:=\max\big(} \max_{0\leq i' < i} S(i', j) - w_{i{-}i'}, &&\text{deletion}\\
     &\phantom{:=\max\big(} \max_{0\leq j'<j} S(i, j')-w_{j{-}j'}\big).&&\text{insertion}
 \end{align}
-This a cubic algorithm again since it depends on the gap costs $w_k$.
+This algorithm uses arbitrary gap costs $w_k$, as first mentioned
+in [cite/text:@nw] and formally introduced by [cite/text:@waterman].
+Because of this, it runs in $O(n^2m)$.
+
+*History and naming:*
+The quadratic algorithm for local alignment is now usually referred to as the
+Smith-Waterman-Gotoh (SWG) algorithm, since the ideas in [cite/text:@gotoh] can
+be used to reduce the runtime from cubic by assuming affine costs,
+just like to how [cite/text:@sellers] sped up [cite/text:@nw] for global alignment
+costs by assuming linear gap costs.
+Note though that [cite/text:@gotoh] only mentions this speedup in passing, and
+that [cite/author/b:@sw] could have directly based their idea on the quadratic
+algorithm of [cite/text:@sellers] instead.
 
 *** Affine costs
 :PROPERTIES:
 :CUSTOM_ID: affine-costs
 :END:
-[cite/text/cf:@gotoh] generalized the quadratic recursion to affine costs $w_k
-= u\cdot k+v$. They use two additional matrices $P(i,j)$ and $Q(i,j)$ that
-contain the minimal cost to get to $(i,j)$, where the last step is required to
-be an insertion/deletion respectively.
+In their discussion, [cite/text/c:@smith81] make the first mention of affine
+costs that I am aware of.
+[cite/text/cf:@gotoh] generalized the quadratic recursion to these affine costs
+$w_k = o + k\cdot e$, to circumvent the cubic runtime needed for the arbitrary
+gap costs of [cite/text:@waterman]. He introduces two additional matrices
+$P(i,j)$ and $Q(i,j)$ that contain the minimal cost to get to $(i,j)$ where the
+last step is required to be an insertion/deletion respectively.
 \begin{align}
     D(i, 0) &= P(i, 0) = I(i, 0) := 0 \\
     D(0, j) &= P(0, j) = I(0, j) := 0 \\
-    P(i, j) &:= \min\big(D(i-1, j) + u+v, &&\text{new gap}\\
-    &\phantom{:= \min\big(}\ P(i-1, j) + u\big)&&\text{extend gap}\\
-    Q(i, j) &:= \min\big(D(i, j-1) + u+v, &&\text{new gap}\\
-    &\phantom{:= \min\big(}\ Q(i, j-1) + u\big)&&\text{extend gap}\\
-    D(i, j) &:= \min\big(D(i-1, j-1) + \delta(A_{i-1}, B_{j-1}),\, P(i, j),\, Q(i, j)\big).
+    P(i, j) &:= \min\big(D(i-1, j) + o+e, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ P(i-1, j) + e\big)&&\text{extend gap}\\
+    Q(i, j) &:= \min\big(D(i, j-1) + o+e, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ Q(i, j-1) + e\big)&&\text{extend gap}\\
+    D(i, j) &:= \min\big(D(i-1, j-1) + \delta(a_{i-1}, b_{j-1}),\, P(i, j),\, Q(i, j)\big).
 \end{align}
+This algorithm run in $O(nm)$ time.
 
-By changing the base values of the recurrence to $0$ and adding a $\min(0,
-\dots)$ term to $D(i,j)$, the same technique can be used for local alignment.
-
-[TODO: merge this paragraph]
-[cite/text/c:@waterman] introduces arbitrary gap costs
-   $w_1\leq w_2\leq \dots$ and gives an example where gaps of size $2$ are
-   cheaper than gaps of size $1$. [cite/text/c:@smith81] mentions gap-affine
-   costs in its discussion. This [cite:@gotoh] is the first algorithm exploiting
-   the structure of gap-affine costs, and remarks that the arbitrary gap costs
-   of [cite:@waterman] need a cubic algorithm.
+Gotoh mentions that this method can be modified to also solve the local
+alignment of [cite/text:@sw] in quadratic time.
 
 ** TODO $O(ns)$ methods
 TODO: Diagonal transition only works for fixed indel cost (but may have variable
