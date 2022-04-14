@@ -41,7 +41,7 @@ sign and maximize the score instead.
 - LCS [[[https://en.wikipedia.org/wiki/Longest_common_subsequence_problem][wikipedia]]] ::
   Count minimum number of /indels/, that is, insertions or deletions, to transform
   $A$ into $B$. This is equivalent to finding the /longest common subsequence/.
-- Levenshtein distance / unit cost [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] ::
+- Unit cost edit distance / Levenshtein distance [[[https://en.wikipedia.org/wiki/Levenshtein_distance][wikipedia]]] ::
   Minimum number of indels and/or substitutions needed. All
   of cost $1$.
 - Edit distance [[[https://en.wikipedia.org/wiki/Edit_distance][wikipedia]]] :: Matches/mismatches between characters $a_i$ and $b_j$ have cost $\delta(a_i, b_j)$.
@@ -127,6 +127,8 @@ Methods link to the detailed explanation further down this page.
 
 Not mentioned in the table are two review papers, [cite/text:@kruskal83] and [cite/text:@navarro01].
 
+TODO: https://link.springer.com/article/10.1186/1471-2105-10-S1-S10
+
 #+caption: Chronological overview of papers related to exact global pairwise alignment.
 #+name: table
 #+attr_html: :class full-width
@@ -143,12 +145,12 @@ Not mentioned in the table are two review papers, [cite/text:@kruskal83] and [ci
 | [cite/text/cf:@gotoh]^{[[bugfix]]}                       | *affine*                         | $O(nm)$                             | $O(nm)$^{[[score-only]]}                 | [[#affine-costs][DP]]                                                              | extends [cite/text:@sellers] to affine                                           |
 | [cite/text/cf:@nakatsu82]                            | LCS                              | $\boldsymbol{O(n(m-p))}$            | $O(n(m-p))$                          | *DP on thresholds*                                              | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]             |
 | [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance                    | $\boldsymbol{O(ns)}$                | $O(ns)$^{[[score-only]]}                 | [[#exponential-band][*exponential search on band*]]                                    | first $O(ns)$ algorithm for edit distance                                        |
-| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(ns)$^{[[expected-runtime]]}          | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}                     | introduces diagonal transition method for unit cost distance                     |
+| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(ns)$^{[[expected-runtime]]}          | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}                     | introduces diagonal transition method                                            |
 | [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(ns)$^{[[expected-runtime]]}          | $O(n)$                               | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time          |
 | [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +s^2)}$            | $O(n)$                               | + [[#ns2][*suffix-tree*]]                                                 | better worst case complexity, but slower in practice                             |
 | [cite/text/cf:@myers88]                              | affine                           | $O(nm)$                             | $O(m + \lg n)$                       | divide-and-conquer                                              | improves [cite/text:@gotoh] to linear space using [cite/text:@hirschberg75]      |
 | [cite/text/cf:@lcsk-overview]                        | LCS$k$^{[[lcsk]]}                    | $O(n + r \log l)$                   | $O(n + \min(r, nl))$                 | thresholds                                                      | modifies [cite/text:@hunt77] for LCS$k$                                          |
-| Edlib: [cite/text/cf:@edlib]                         | unit costs                       | $O(nm/w)$^{[[word-size]]}               | $O(n)$                               | exponential search, bit-parallel                                | extends bit-parallel [cite:@myers99] to global alignment                         |
+| Edlib: [cite/text/cf:@edlib]                         | unit costs                       | $O(ns/w)$^{[[word-size]]}               | $O(n)$                               | exponential search, bit-parallel                                | extends bit-parallel [cite:@myers99] to global alignment                         |
 | WFA: [cite/text/cf:@wfa]                             | affine                           | $O(ns)$^{[[expected-runtime]]}          | $O(n+s^2)$^{[[score-only]]}              | diagonal-transition                                             | speeds up [cite/text:@gotoh] using diagonal transition                           |
 | WFALM: [cite/text/cf:@wfalm]                         | affine                           | $O(n+s^2)$                          | $O(n+s^{3/2})$^{[[score-only]]}          | diagonal-transition, square-root-decomposition                  | reduces memory usage by only storing $1/\sqrt n$ of wavefronts                   |
 | biWFA [unpublished]                                  | affine                           | $O(ns)$^{[[expected-runtime]]}          | $O(n)$                               | diagonal-transition, divide-and-conquer                         | improves WFA to linear space using [cite/text:@hirschberg75]                     |
@@ -383,6 +385,9 @@ mismatch cost)
   Additionally, this paper introduces an algorithm that does exponential search
   on the band with, leading to an $O(ns)$ algorithm for general costs but using
   $O(ns)$ space.
+
+  Mentions $O(n+s^2)$ best case and that $O(ns)$ is a pessimistic worst case,
+  but no expected case.
 - [cite/text/cf:@myers86], submitted '85 ::
   Independent of [cite/text:@ukkonen85], this
   introduces the concept of furthest reaching point and the
@@ -407,7 +412,7 @@ mismatch cost)
   #+caption: Furthest reaching points for the above example.
   #+name: lv-furthest-reaching
   [[file:screenshots/lv-furthest-reaching.png]]
-** TODO Four russians method
+** TODO Four Russians method
 :PROPERTIES:
 :CUSTOM_ID: four-russians
 :END:
@@ -481,7 +486,7 @@ C\cdot mn + \frac 12 C\cdot mn + \frac 14 C\cdot mn + \frac 18C\cdot mn + \dots 
 In practice, this algorithm indeed takes around twice as long to find an
 alignment as the non-recursive algorithm takes to find just the score.
 
-** Theoretical lower bound
+** TODO Theoretical lower bound
 [cite/text/cf:@no-subquadratic-ed] shows that Levenshtein distance can not be solved in
 time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
 Exponential Time Hypothesis/ is true.
@@ -498,12 +503,14 @@ TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
 - [cite:@lcsk-overview] Overview of LCS algorithms -- nothing new here.
 - [cite:@lcsk-fast] more incremental improvements -- not so interesting
 
-** A note on DP (toposort) vs Dijkstra vs A*
+** TODO A note on DP (toposort) vs Dijkstra vs A*
 TODO: Who uses/introduces gap heuristic?
 
 TODO: ukkonen'85 (first?) states the link between DP and shortest path (in edit graph)
 
 TODO: Include Fickett 84 paper for O(ns) variant of dijkstra
+
+TODO: https://link.springer.com/article/10.1186/1471-2105-10-S1-S10
 
 ---
 * TODO Tools
@@ -520,11 +527,11 @@ list current competitive aligners.
 
 - Greedy matching :: todo
 - Myers bit-parallel algorithm :: todo
-- SeqAN :: todo
+- SeqAN :: $O(nm)$ NW implementation, or $O(nm/w)$ using bit-parallel
+  [cite:@myers99] for unit cost edit distance: [[https://docs.seqan.de/seqan/3.0.3/group__pairwise__alignment.html#gab6ff083328a700c26c90fea870d63491][docs]]
 - Parasail :: todo
 - KSW2 :: todo
-- Edlib :: A fast implementation (using Myers bit-parallel algorithm I believe)
-- Block aligner :: approximate
+- Edlib :: diagonal transition [cite:@ukkonen85] and bit-parallel [cite:@myers99]
 - WFA :: exact, diagonal transition method
 
   States the recurrence for gap-affine costs for the diagonal transition
@@ -547,6 +554,7 @@ list current competitive aligners.
   edit-distance between checkpoints, instead of dynamically storing every
   $2^{i}$ /th/ wavefront).
 
+
 ---
 * TODO Notes for other posts
 
@@ -555,8 +563,9 @@ list current competitive aligners.
 - [cite:@myers99]
 - [cite:@chang92]
 - [cite:@wu96]
+- https://www.biorxiv.org/content/10.1101/133157v3
 
-
+** Approximate pairwise aligners
 
 ** Old vs new papers
 
