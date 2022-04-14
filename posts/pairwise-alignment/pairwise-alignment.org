@@ -132,29 +132,29 @@ TODO: https://link.springer.com/article/10.1186/1471-2105-10-S1-S10
 #+caption: Chronological overview of papers related to exact global pairwise alignment.
 #+name: table
 #+attr_html: :class full-width
-| Paper                                                | Cost model                       | Time                                | Space                                | Method                                                          | Remarks                                                                          |
-|------------------------------------------------------+----------------------------------+-------------------------------------+--------------------------------------+-----------------------------------------------------------------+----------------------------------------------------------------------------------|
-| [cite/text/cf:@vintsyuk68]                           | no deletions                     | $O(nm)$                             | $O(nm)$                              | [[dp-history][DP]]                                                              | different formulation in a different domain, but conceptually similar            |
-| [cite/text/cf:@nw]                                   | *edit distance*                  | $O(n^2m)$                           | $O(nm)$                              | [[#cubic-dp][DP]]                                                              | solves pairwise alignment in polynomial time                                     |
-| [cite/text/cf:@sankoff]                              | LCS                              | $\boldsymbol{O(nm)}$                | $O(nm)$                              | [[dp-history][DP]]                                                              | the first quadratic algorithm                                                    |
-| [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                    | $O(nm)$                             | $O(nm)$                              | [[#quadratic-dp][DP]]                                                              | the quadratic algorithm [[dp-history][now known as Needleman-Wunch]]                             |
-| [cite/text/cf:@hirschberg75]                         | LCS                              | $O(nm)$                             | $\boldsymbol{O(n)}$                  | [[#divide-and-conquer][*divide-and-conquer*]]                                            | introduces linear memory backtracking                                            |
-| [cite/text/cf:@hunt77]                               | LCS                              | $\boldsymbol{O((r+n)\lg n)}$        | $O(r+n)$                             | [[#thresholds][*thresholds*]]                                                    | distance only                                                                    |
-| [cite/text/cf:@hirschberg77]                         | LCS                              | $\boldsymbol{O(p(m-p)\lg n)}$       | $\boldsymbol{O(n+(m-p)^2)}$          | [[#thresholds][*contours*]] + band                                               | for similar sequences                                                            |
-| [cite/text/cf:@four-russians-ed]                     | edit distance^{[[discrete-scores]]}  | $\boldsymbol{O(nm/\min(m, \lg n))}$ | $O(n^2/\lg n)$^{[[score-only]]}          | [[#four-russians][*four Russians*]]                                                 | best known complexity                                                            |
-| [cite/text/cf:@gotoh]^{[[bugfix]]}                       | *affine*                         | $O(nm)$                             | $O(nm)$^{[[score-only]]}                 | [[#affine-costs][DP]]                                                              | extends [cite/text:@sellers] to affine                                           |
-| [cite/text/cf:@nakatsu82]                            | LCS                              | $\boldsymbol{O(n(m-p))}$            | $O(n(m-p))$                          | *DP on thresholds*                                              | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]             |
-| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance                    | $\boldsymbol{O(ns)}$                | $O(ns)$^{[[score-only]]}                 | [[#exponential-band][*exponential search on band*]]                                    | first $O(ns)$ algorithm for edit distance                                        |
-| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(ns)$^{[[expected-runtime]]}          | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}                     | introduces diagonal transition method                                            |
-| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(ns)$^{[[expected-runtime]]}          | $O(n)$                               | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time          |
-| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +s^2)}$            | $O(n)$                               | + [[#ns2][*suffix-tree*]]                                                 | better worst case complexity, but slower in practice                             |
-| [cite/text/cf:@myers88]                              | affine                           | $O(nm)$                             | $O(m + \lg n)$                       | divide-and-conquer                                              | improves [cite/text:@gotoh] to linear space using [cite/text:@hirschberg75]      |
-| [cite/text/cf:@lcsk-overview]                        | LCS$k$^{[[lcsk]]}                    | $O(n + r \log l)$                   | $O(n + \min(r, nl))$                 | thresholds                                                      | modifies [cite/text:@hunt77] for LCS$k$                                          |
-| Edlib: [cite/text/cf:@edlib]                         | unit costs                       | $O(ns/w)$^{[[word-size]]}               | $O(n)$                               | exponential search, bit-parallel                                | extends bit-parallel [cite:@myers99] to global alignment                         |
-| WFA: [cite/text/cf:@wfa]                             | affine                           | $O(ns)$^{[[expected-runtime]]}          | $O(n+s^2)$^{[[score-only]]}              | diagonal-transition                                             | speeds up [cite/text:@gotoh] using diagonal transition                           |
-| WFALM: [cite/text/cf:@wfalm]                         | affine                           | $O(n+s^2)$                          | $O(n+s^{3/2})$^{[[score-only]]}          | diagonal-transition, square-root-decomposition                  | reduces memory usage by only storing $1/\sqrt n$ of wavefronts                   |
-| biWFA [unpublished]                                  | affine                           | $O(ns)$^{[[expected-runtime]]}          | $O(n)$                               | diagonal-transition, divide-and-conquer                         | improves WFA to linear space using [cite/text:@hirschberg75]                     |
-| A* pairwise aligner [unpublished]                    | unit costs                       | $O(n)$ expected                     | $O(n)$                               | *A**, *seed heuristic*, *pruning*                               | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
+| Paper                                                | Cost model                       | Time                                      | Space                                | Method                                                          | Remarks                                                                          |
+|------------------------------------------------------+----------------------------------+-------------------------------------------+--------------------------------------+-----------------------------------------------------------------+----------------------------------------------------------------------------------|
+| [cite/text/cf:@vintsyuk68]                           | no deletions                     | $O(nm)$                                   | $O(nm)$                              | [[dp-history][DP]]                                                              | different formulation in a different domain, but conceptually similar            |
+| [cite/text/cf:@nw]                                   | *edit distance*                  | $O(n^2m)$                                 | $O(nm)$                              | [[#cubic-dp][DP]]                                                              | solves pairwise alignment in polynomial time                                     |
+| [cite/text/cf:@sankoff]                              | LCS                              | $\boldsymbol{O(nm)}$                      | $O(nm)$                              | [[dp-history][DP]]                                                              | the first quadratic algorithm                                                    |
+| [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                    | $O(nm)$                                   | $O(nm)$                              | [[#quadratic-dp][DP]]                                                              | the quadratic algorithm [[dp-history][now known as Needleman-Wunch]]                             |
+| [cite/text/cf:@hirschberg75]                         | LCS                              | $O(nm)$                                   | $\boldsymbol{O(n)}$                  | [[#divide-and-conquer][*divide-and-conquer*]]                                            | introduces linear memory backtracking                                            |
+| [cite/text/cf:@hunt77]                               | LCS                              | $\boldsymbol{O((r+n)\lg n)}$              | $O(r+n)$                             | [[#thresholds][*thresholds*]]                                                    | distance only                                                                    |
+| [cite/text/cf:@hirschberg77]                         | LCS                              | $\boldsymbol{O(p(m-p)\lg n)}$             | $\boldsymbol{O(n+(m-p)^2)}$          | [[#thresholds][*contours*]] + band                                               | for similar sequences                                                            |
+| [cite/text/cf:@four-russians-ed]                     | edit distance^{[[discrete-scores]]}  | $\boldsymbol{O(n\cdot \max(1, m/\lg n))}$ | $O(n^2/\lg n)$^{[[score-only]]}          | [[#four-russians][*four Russians*]]                                                 | best known complexity                                                            |
+| [cite/text/cf:@gotoh]^{[[bugfix]]}                       | *affine*                         | $O(nm)$                                   | $O(nm)$^{[[score-only]]}                 | [[#affine-costs][DP]]                                                              | extends [cite/text:@sellers] to affine                                           |
+| [cite/text/cf:@nakatsu82]                            | LCS                              | $\boldsymbol{O(n(m-p))}$                  | $O(n(m-p))$                          | *DP on thresholds*                                              | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]             |
+| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance                    | $\boldsymbol{O(ns)}$                      | $O(ns)$^{[[score-only]]}                 | [[#exponential-band][*exponential search on band*]]                                    | first $O(ns)$ algorithm for edit distance                                        |
+| [cite/text/cf:@ukkonen85]^{[[multiple]]}                 | edit distance^{[[fixed-indel-cost]]} | $O(ns)$^{[[expected-runtime]]}                | $\boldsymbol{O(n+s^2)}$^{[[score-only]]} | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}                     | introduces diagonal transition method                                            |
+| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $O(ns)$^{[[expected-runtime]]}                | $O(n)$                               | [[#diagonal-transition][*diagonal transition*]]^{[[diagonal-transition]]}, divide-and-conquer | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time          |
+| [cite/text/cf:@myers86]^{[[multiple]]}                   | LCS                              | $\boldsymbol{O(n +s^2)}$                  | $O(n)$                               | + [[#ns2][*suffix-tree*]]                                                 | better worst case complexity, but slower in practice                             |
+| [cite/text/cf:@myers88]                              | affine                           | $O(nm)$                                   | $O(m + \lg n)$                       | divide-and-conquer                                              | improves [cite/text:@gotoh] to linear space using [cite/text:@hirschberg75]      |
+| [cite/text/cf:@lcsk-overview]                        | LCS$k$^{[[lcsk]]}                    | $O(n + r \log l)$                         | $O(n + \min(r, nl))$                 | thresholds                                                      | modifies [cite/text:@hunt77] for LCS$k$                                          |
+| Edlib: [cite/text/cf:@edlib]                         | unit costs                       | $O(ns/w)$^{[[word-size]]}                     | $O(n)$                               | exponential search, bit-parallel                                | extends bit-parallel [cite:@myers99] to global alignment                         |
+| WFA: [cite/text/cf:@wfa]                             | affine                           | $O(ns)$^{[[expected-runtime]]}                | $O(n+s^2)$^{[[score-only]]}              | diagonal-transition                                             | speeds up [cite/text:@gotoh] using diagonal transition                           |
+| WFALM: [cite/text/cf:@wfalm]                         | affine                           | $O(n+s^2)$                                | $O(n+s^{3/2})$^{[[score-only]]}          | diagonal-transition, square-root-decomposition                  | reduces memory usage by only storing $1/\sqrt n$ of wavefronts                   |
+| biWFA [unpublished]                                  | affine                           | $O(ns)$^{[[expected-runtime]]}                | $O(n)$                               | diagonal-transition, divide-and-conquer                         | improves WFA to linear space using [cite/text:@hirschberg75]                     |
+| A* pairwise aligner [unpublished]                    | unit costs                       | $O(n)$ expected                           | $O(n)$                               | *A**, *seed heuristic*, *pruning*                               | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
 
 1. <<multiple>> Multiple algorithms in a single paper.
 2. <<discrete-scores>> The four Russians algorithm of [cite/text:@four-russians-ed] needs discrete scores and a finite alphabet.
@@ -373,6 +373,49 @@ This algorithm run in $O(nm)$ time.
 Gotoh mentions that this method can be modified to also solve the local
 alignment of [cite/text:@sw] in quadratic time.
 
+** Four Russians method
+:PROPERTIES:
+:CUSTOM_ID: four-russians
+:END:
+
+#+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
+#+caption: For each possible /input/ of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
+#+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
+#+name: fig:four-russians
+#+attr_html: :class large
+[[file:drawings/four-russians.drawio.svg]]
+
+The so called /four Russians/ method ([[https://en.wikipedia.org/wiki/Method_of_Four_Russians][wikipedia]]) was introduced by
+[cite/text/f:@four-russians], and may have been named as such since all authors
+worked in Moscow at the time of publication. It is a general method to speed up
+DP algorithm from $n^2$ to $n^2 / \lg n$ provided that entries are integers and
+all operations are 'local'.
+
+[cite/text/c:@four-russians-ed] apply this idea to pairwise alignment, resulting
+in the first subquadratic algorithm for edit distance. Briefly, they partition
+the $n\times m$ matrix in blocks of size $r\times r$, for some $r=\log_k n$, as
+shown in figure [[fig:four-russians]].
+Using this, they speed up the computation of the DP by doing a single $O(r)$
+lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\lg
+n)$.
+
+Assuming a discrete cost function, the number of essentially distinct states
+along the top row and left column of each block (up to adding a constant) is
+bounded by $c^{2r}$ for some $c$, and hence there are a total of $c^{2\log_k n}$
+distinct blocks, which is $O(n^{1/2})$ for an appropriate choice of $k$. For each of
+these blocks we can precompute the corresponding new states on the bottom row
+and rightmost column in $O(n)$ total time. When filling the DP table, we can
+then simply lookup the 'input' of each block to get the corresponding 'output'.
+
+[cite/text/c:@wu96] present a practical implementation of the four Russians
+method for approximate string matching. They suggest a block size of $1\times
+r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
+block to the next.
+
+Nowadays, the bit-parallel technique (e.g. [cite/text:@myers99]) seems to have
+replaced four Russians, since it can compute up to 64 cells in a single step,
+while not having to wait for (comparatively) slow lookups of the precomputed data.
+
 ** TODO $O(ns)$ methods
 TODO: Diagonal transition only works for fixed indel cost (but may have variable
 mismatch cost)
@@ -458,12 +501,6 @@ mismatch cost)
   #+caption: Furthest reaching points for the above example.
   #+name: lv-furthest-reaching
   [[file:screenshots/lv-furthest-reaching.png]]
-** TODO Four Russians method
-:PROPERTIES:
-:CUSTOM_ID: four-russians
-:END:
-[[https://en.wikipedia.org/wiki/Method_of_Four_Russians][wikipedia]]
-
 ** TODO Suffixtree for $O(n+s^2)$ expected runtime
 :PROPERTIES:
 :CUSTOM_ID: ns2
@@ -626,11 +663,19 @@ list current competitive aligners.
 ** Semi-global alignment papers
 - [cite:@lv89]
 - [cite:@myers99]
-- [cite:@chang92]
-- [cite:@wu96]
+- [cite:@chang92]: shows that ukkonens idea (Finding approximate patterns in
+  strings, also '85) runs in $O(nk)$
+  expected time for $k$-approximate string matching, when the reference is a
+  random string.
+- [cite:@wu96]: Efficient four russians in combination with 'ukkonens zone'
+  $O(kn/\lg s)$ when $O(s)$ space is available for lookup.
+- Baeza-Yates Gonnet 92
+- Baeza-Yates Navarro 96
 - https://www.biorxiv.org/content/10.1101/133157v3
 
 ** Approximate pairwise aligners
+
+- Block aligner
 
 ** Old vs new papers
 
@@ -641,10 +686,13 @@ There's a big dichotomy between the old and the new papers:
   - to the point
   - little context; more theory
   - short about utility: Gotoh has literally 1 sentence on this: 'can be executed on a small pc with limited memory'
+  - Examples: [cite:@sw], the original four russians paper
+
 - new
   - at least 1 A4 of blahblah
   - needs to talk about other tools, types of data available (length and error rate of pacbio...)
   - spends 3 pages on speed compared to others
+
 
 ---
 * References
