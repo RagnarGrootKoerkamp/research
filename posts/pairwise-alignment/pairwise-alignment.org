@@ -532,13 +532,6 @@ C\cdot mn + \frac 12 C\cdot mn + \frac 14 C\cdot mn + \frac 18C\cdot mn + \dots 
 In practice, this algorithm indeed takes around twice as long to find an
 alignment as the non-recursive algorithm takes to find just the score.
 
-** TODO Theoretical lower bound
-[cite/text/cf:@no-subquadratic-ed] shows that Levenshtein distance can not be solved in
-time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
-Exponential Time Hypothesis/ is true.
-
-TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
-
 ** TODO LCSk[++] algorithms
 
 - [cite:@lcsk] introduces LCSk: LCS where all matches come $k$ characters at a
@@ -548,6 +541,32 @@ TODO: Note that $n^2/\lg n$ is not $O(n^{2-\delta})$ for any $\delta>0$.
   [cite:@hunt77].
 - [cite:@lcsk-overview] Overview of LCS algorithms -- nothing new here.
 - [cite:@lcsk-fast] more incremental improvements -- not so interesting
+
+** Theoretical lower bound
+[cite/text/cf:@no-subquadratic-ed] show that Levenshtein distance can not be solved in
+time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
+Exponential Time Hypothesis/ (SETH) is true.
+Note that the $n^2/\lg n$ runtime of the four Russians method is not
+$O(n^{2-\delta})$ for any $\delta>0$, and hence does not contradict this.
+
+They use a reduction from the /Orthogonal Vectors Problem/ (OVP): given two sets
+$A, B\subseteq \{0,1\}^d$ with $|A|=|B|=n$, determine whether there exists $x\in
+A$ and $y\in B$ such that $x\cdot y=\sum_{j=1}^d x_j y_j$ equals $0$. Their
+reduction involved constructing a string (/gadget/) $VG'_1(a)$ for each $a\in A$
+and $VG'_2(b)$ for each $b\in B$, such that $EDIT(VG'_1(a), VG'_2(b))$ equals $C_0$
+if $a\cdot b=0$ and equals $C_1>C_0$ otherwise. Then they construct strings
+\begin{align}
+    P_1 &= VG'_1(a_1) \cdots VG'_1(a_n)\\
+    P_2 &= \big[VG'_2(f)\big]^{n-1} \cdot \big[VG'_2(b_1) \cdots VG'_2(b_n)\big] \cdot \big[VG'_2(f)\big]^{n-1}
+\end{align}
+for some fixed element $f$, and conclude that the cost of a
+semi-global alignment of $P_1$ to $P_2$ is some constant $X$ if $a\cdot b=0$ is
+not possible, and at most $X-2$ otherwise.
+
+If edit distance can be computed in strongly subquadratic time, then so can
+semi-global alignment. Using the reduction above that would imply a subquadratic
+solution for OVP, contradicting SETH.
+
 
 ** TODO A note on DP (toposort) vs Dijkstra vs A*
 TODO: Who uses/introduces gap heuristic?
