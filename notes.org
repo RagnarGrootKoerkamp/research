@@ -2,7 +2,6 @@
 #+HUGO_BASE_DIR: .
 #+HUGO_SECTION: notes
 #+HUGO_AUTO_SET_LASTMOD: t
-#+FILETAGS: @notes
 
 * Hello, World!
 CLOSED: [2021-10-13]
@@ -62,6 +61,9 @@ CLOSED: [2021-10-22 Fri 11:41]
 Experiments and their analysis should be reproducible, and all data/figures in a
 paper should be reviewable. Pipelines (e.g. ~snakemake~ files) to generated them
 should be attached to the paper.
+
+I've asked for automated scripts to reproduce test data on 3+ github repositories
+now, and got a satisfactory answer zero times.
 * DONE RTFE :quote:
 CLOSED: [2021-10-22 Fri 15:16]
 :PROPERTIES:
@@ -72,39 +74,3 @@ Read The F*ing Error
 - When you complain about an error without reading it first.
 - When you assume you understand the problem halfway through reading the error,
   and only after more debugging you realize you failed to read properly.
-* DONE A* and heuristics avoiding expanded states :astar:
-CLOSED: [2021-12-11 Sat 10:24]
-:PROPERTIES:
-:EXPORT_FILE_NAME: astar-heuristic
-:END:
-Let the start vertex be $s$ and the end be $t$. $d(s,t)$ is the distance we are
-looking for.
-
-An A* heuristic has to satisfy $h(u) \leq d(u, t)$ to be /admissible/: the
-estimated distance to the end should never be larger than the actual distance to
-guarantee that the algorithm finds a shortest path.
-
-We can do better: it is sufficient that $h(u) \leq d'(u,t)$, where $d'(u,t)$ is the
-length of the shortest path from $u$ to the end that /does not use any already
-expanded state/. Note that this restriction is looser than the original one,
-since $d'(u,t)\geq d(u,t)$ trivially holds.
-
-- Proof ::
-    Let $x$ be an already expanded
-    state, and let $u$ be an unexpanded state where we are evaluating $h$.
-
-    The shortest path through $x$ will have length $l = d(s, x) + d(x, t)$, where
-    $d(s,x)$ is already known since $x$ was expanded.
-
-    If the global shortest path goes through $x$, its length is $l$, and we
-    cannot do better by going via $u$: replacing $d(s,x)$ by $d(s,u) + d(u,x)$
-    can not decrease the distance (by the triangle
-    inequality, or by definition of $x$ already being expanded).
-
-    Thus, in an unexpanded state $u$, taking a path through an already expanded
-    state will never lead to a global minimum. (It may give the shortest distance
-    from $s$ to $t$ via $u$, but that is not what we are looking for.)
-
-    Conclusion: In order for a path through $u$ to be a candidate for the global
-    minimum, it has to avoid all already expanded states. The heuristic $h$ we use
-    can reflect this, and is allowed to satisfy $h(u) \leq d'(u,t)$.
