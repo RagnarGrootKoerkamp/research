@@ -26,7 +26,6 @@ function handler(updates) {
   selection = (selection || updates).map(
     (s) => updates.find((e) => e.target === s.target) || s
   );
-  console.log("update");
   // Clear all.
   for (s of selection) {
     if (!s.isIntersecting) {
