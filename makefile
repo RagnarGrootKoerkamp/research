@@ -21,6 +21,7 @@ open:
 
 .PHONY: build-content
 build-content:
+	rm -rf content
 # Build temporary minimal EMACS installation separate from the one in the machine.
 	XDG_CONFIG_HOME= HOME=$(EMACS_BUILD_SRC) BASE_DIR=$(BASE_DIR) emacs -Q --batch --load $(EMACS_BUILD_SRC)/init.el --execute "(build/export-all)" --kill
 # Fixes bad URLs when the baseURL (this case) is not the root URL.
