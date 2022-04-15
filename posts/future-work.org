@@ -1,0 +1,48 @@
+#+title: Future Work
+#+HUGO_BASE_DIR: ..
+#+HUGO_CATEGORIES: posts
+#+HUGO_LEVEL_OFFSET: 1
+# NOTE: Run citar-export-local-bib-file to generate local-bib.bib.
+# +BIBLIOGRAPHY: /home/philae/git/eth/references/references.bib
+#+BIBLIOGRAPHY: pairwise-alignment/local-bib.bib
+#+cite_export: csl ../chicago-author-date.csl
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: t
+#+date: <2022-04-15 Thu>
+
+#+toc: headlines 2
+
+Here I list some ideas for research topics / papers:
+
+** Current work in progress
+- A* pairwise aligner :: Exact global pairwise alignment of random strings in
+  expected linear time.
+
+  Contains proof of correctness, implementation, evals and comparison with WFA
+  and edlib on random data.
+
+  [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][GitHub repo]]
+
+- Exact global pairwise alignment review :: Convert the [[file:pairwise-alignment/pairwise-alignment.org][post]] into a paper, once
+  it's done.
+
+** On hold
+- Spaced $k$mer similarity :: See [[file:spaced-kmer-distance.org][this post]].
+
+** Future plans
+- Review paper on semi-global pairwise alignment :: Similar to the table I made for
+  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
+  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
+  string matching, but it quite old by now.
+- Proof of expected linear time alignment :: I have a proof of concept to show that a
+  simplified version of the algorithm currently implemented by A* pairwise
+  aligner runs in expected linear time on random input with sufficiently low
+  edit distance ($|\Sigma|^{1/e} \ll n$), but need to spend some time on details
+  and writing it down.
+- Extend A* pairwise aligner to use diagonal-transition :: Currently the algorithm is
+  based on the vanilla $O(nm)$ DP. Instead we can base it on the diagonal
+  transition methods to reduce the number of states visited and the memory
+  needed to store $g$.
+
+  This should provide a speedup especially in regions where the linear search
+  falls back to quadratic behaviour.

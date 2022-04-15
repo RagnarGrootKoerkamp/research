@@ -3,7 +3,7 @@
 #+HUGO_CATEGORIES: posts
 #+HUGO_TAGS: average-seeded-distance spaced-kmers evolutionary-distance
 #+date: <2021-10-20 Wed>
-
+#+toc: headlines 2
 
 \[
 \newcommand{\vp}{\varphi}
@@ -244,7 +244,7 @@ for _ in range(r): # Repeat r times.
 return candidate_matches
 #+end_src
 
-*** Improving performance
+** Improving performance
 *Memory usage*
 
 The major bottleneck of the algoritm is memory usage: for each window it
@@ -298,7 +298,7 @@ basepairs, =AC=, will be used to select which of the $16$ hashtables
 will be used, and the remainder of the hash, =AT=, will be used as a key
 in this hashtable.
 
-*** Analysis
+** Analysis
 This analysis assumes that the input sequences are uniform random
 sequences over
 $\A = \\{\texttt A, \texttt C, \texttt G, \texttt T\\}$.
@@ -348,7 +348,7 @@ even more of these high distance pairs can be found.
 For windows with a distance of only $5\%$, doing $20$ repeats
 already covers more than $99.8\%$ of the pairs.
 
-*** Pruning false positive candidate matches
+** Pruning false positive candidate matches
 When $l$ is chosen too low and the dataset is sufficiently large, the
 algorithm will produce false positives: windows that match in the
 sampled $l$ positions, but are otherwise unrelated. This may seem like
