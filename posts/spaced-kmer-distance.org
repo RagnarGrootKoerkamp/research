@@ -135,6 +135,41 @@ d_\mh &: \N^h \times \N^h \to \mathbb R \\
 \end{align}
 
 > TODO: some small example of MinHash.
+** Terminology
+- k-mer ::
+  A (sub)string of $k$ consecutive characters.
+
+- Spaced seed ::
+  A /pattern/ of length $l$ and weight $w$: given a substring of
+  length $l$, the $w$ positions indicate the subset of positions we consider.
+  A pattern can be given as a binary string containing $w$
+  ones, or as a subset of size $w$ of $\{1, \dots, l\}$.
+
+  In the literature, a spaced seed usually includes the first and last character (those at
+  positions $1$ and $l$). We do not assume this.
+
+- Spaced k-mer ::
+  The $w$ characters induced by a spaced seed of weight $w$.
+
+- Matching positions ::
+  We say that two positions /match/ (assuming a spaced seed) if the spaced k-mers
+  induced by the spaced seed starting at these positions are the same.
+
+- Window ::
+  The $l$ characters surrounding a spaced k-mer, corresponding to the
+  chosen spaced seed. The window may extend outside the range of the leftmost and
+  right most character in the spaced k-mer.
+
+  TODO: Maybe we actually should include both ends, as that should reduce
+  vulnerability to accidentally having undetected indels at the ends, which
+  is bad for measuring the hamming distance.
+
+*** Example
+The string ~ACTGC~ contains:
+- the $4$-mers ~ACTG~ and ~CTGC~;
+- for the spaced seed ~1101~, the spaced k-mers ~ACG~ and ~CTC~.
+- the window ~ACTG~ and ~CTGC~. These are the same as the $4$-mers, but we will
+  use this term explicitly for the characters surrounding a spaced k-mer.
 
 * Introduction
 While playing around with some datasets to test homology search methods,
@@ -203,45 +238,49 @@ their Hamming distance is typically large.
 Thus, a naive python implementation of the algorithm using typical
 parameter values proceeds as follows:
 
-#+begin_src python
-r = 20    # The number of repeats.
-w = 128   # The size of the windows.
-l = 20    # The size of the subsample.
+#+BEGIN_SRC python
+r = 20    # The number spaced seed and filter pairs to average over.
+l = 128   # The length of the spaced seeds.
+w = 20    # The weight of the spaced seeds.
+f = 3     # The size of the filter
 
-# Input: a list of strings, e.g.
-# ['ACGACTTAG', 'ACTGAC', ...]
-# Output: a set of matching window pairs.
-def hamming_distance_sketching(sequences):
-    # The candidate matches, a set of pairs of windows.
-candidate_matches = set()
+# Input: a pair of sequences.
+# Output: a list of pairs of matching positions.
+def get_matching_positions(A, B):
+    # A list of pairs of matching pairs of positions.
+    matching_positions = []
 
-for _ in range(r): # Repeat r times.
-    # Hash table mapping the subsampled kmers back to the windows.
-    hashtable = defaultdict(list)
+    for _ in range(r): # Repeat r times.
+        # Pick a random spaced seed of length l and weight w.
+        # Note that the code uses 0-based indices while the analysis is 1-based.
+        W = random.sample(range(l), k=w)
 
-    # Pick l distinct random integers in {0, ..., w-1}.
-    # Note that the code uses 0-based indices while the analysis is 1-based.
-    L = random.sample(range(w), k=l)
+        # Pick a random filter.
+        F = random.choose('ACTG', k=f)
 
-    # Loop over all sequences.
-    for i, s in enumerate(sequences):
-        # Loop over the start positions of all windows.
-    for j in range(len(s) - w + 1):
-        window = s[j : j+w]
-        subsample = [window[Li] for Li in L]
-        # The window is identified by the sequence index
-        # and its start position in the sequence.
-        hashtable[subsample].append((i, j))
+        # Hash all windows to their spaced kmers.
+        # Hash table mapping spaced kmers the windows where they occur.
+        spaced_kmer_occurences = defaultdict(list)
+        # Loop over the two sequences
+        for s in [A, B]:
+            # Loop over start positions
+            for j in range(len(s) - l + 1):
+                window = s[j : j+l]
+                spaced_kmer = [window[Li] for Li in L]
+                # Does the spaced kmer pass the filter?
+                if spaced_kmer[0:f] == F:
+                    # A window is identified by its sequence and start position..
+                    spaced_kmer_occurences[spaced_kmer].append((s, j))
 
-    # All pairs of windows that hash to the same bucket are candidate matches.
-    for kmer in hashtable:
-        # Loop over all unordered pairs of kmers with this hash.
-    for w1, w2 in itertools.combinations(hashtable[kmer], 2):
-        # Add the unordered pair into the set of candidate matches
-        candidate_matches.insert({w1, w2})
+        # All pairs of windows that hash to the same bucket are candidate matches.
+        for spaced_kmer in spaced_kmers:
+            # Loop over all unordered pairs of windows inducing this spaced k-mer.
+            for p1, p2 in itertools.combinations(spaced_kmer_occurences[spaced_kmer], 2):
+                # Add the pair into the list of candidate matches
+                matching_positions.append((p1, p2))
 
-return candidate_matches
-#+end_src
+    return matching_positions
+#+END_SRC
 
 ** Improving performance
 *Memory usage*
@@ -347,6 +386,15 @@ even more of these high distance pairs can be found.
 For windows with a distance of only $5\%$, doing $20$ repeats
 already covers more than $99.8\%$ of the pairs.
 
+*TODO: Separation*
+
+Some result on the probability of reporting $f(A_1, A_2) < f(B_1, B_2)$ given
+the actual distances $d(A_1, A_2)$ and $d(B_1, B_2)$.
+
+*TODO: Compare sensitivity*
+
+Other papers introduce a sensitivity. We could compare with this.
+
 ** Pruning false positive candidate matches
 When $l$ is chosen too low and the dataset is sufficiently large, the
 algorithm will produce false positives: windows that match in the
@@ -394,18 +442,23 @@ between sequence $A$ and $B$.
 
 Python pseudocode for this would be
 
-#+begin_src python
-  def distance(candidate_matches, seq_a, seq_b):
-      total_distance = 0
-      num_pairs = 0
-    for w1, w2 in candidate_matches:
-      if ((w1.seq == seq_a and w2.seq == seq_b) or
-          (w1.seq == seq_a and w2.seq == seq_b)):
-          num_pairs += 1
-          total_distance += HammingDistance(w1, w2)
+#+BEGIN_SRC python
+# Input: a pair of sequences.
+# Output: the average distance
+def distance(A, B):
+    matching_positions = get_matching_positions([A, B])
 
-    return total_distance / num_pairs
-#+end_src
+    total_distance = 0
+    count = 0
+
+    for pa, pb in matching_positions:
+        window_a = A[pa:pa+l]
+        window_b = B[pb:pb+l]
+        total_distance += hamming_distance(pa, pb)
+        count += 1
+
+    return total_distance / count
+#+END_SRC
 
 In practice, we implemented this in a slightly different way: We
 observed that for many buckets in the hash table, there are many windows
@@ -433,7 +486,7 @@ To prevent the average distance to be too much skewed to one particular
 repeated window, we only pick one random representative in these cases
 and ignore all repeats of the window within a sequence.
 
-*** Running the algorithm
+** Running the algorithm
 We tested this phylogeny reconstruction algorithm on a few datasets from
 the Alignment Free project ([[http://afproject.org][afproject.org]]).
 
@@ -459,9 +512,8 @@ distances between sequences only a few hundreds basepairs in length.
 TODO: Plot RF distance as function of $l$ for one/a few datasets.
 #+end_quote
 
-* Assembly
+* TODO Assembly
 We'll also test the algorithm for both long and short read assembly.
-This is currently on the TODO list.
 
 [fn:1] Better name needed.
 
