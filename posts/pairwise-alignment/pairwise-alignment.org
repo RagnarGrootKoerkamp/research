@@ -266,57 +266,6 @@ $0$ otherwise, so that they compute the length of the LCS. This leads to the rec
 The wiki pages on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]] and [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm#Historical_notes_and_algorithm_development][Needleman-Wunsch]] have some more historical context.
 
 
-*** Minimizing vs. maximizing duality
-
-[TODO: Find a good place to put this text. Maybe a section for further remarks.]
-
-While the DP formulas for minimizing cost and maximizing score are very
-similar, there are some interesting conceptual differences.
-
-When maximizing the score, this is a conceptually similar to computing the LCS: each pair of matching
-characters increases the score. [cite/text:@nw] gives an example of this.
-As we will see, these algorithms usually consider all pairs of matching
-characters between $A$ and $B$.
-
-Algorithms that minimize the cost instead look at the problem as finding the shortest
-path in a graph, usually with non-negative weights and cost $0$ for matching characters.
-The structure of the corresponding DP matrix turns out to be more complex, but
-can also be exploited for algorithms faster than $O(nm)$.
-
-For the problem of LCS in particular there is a duality. When $p$ is the
-length of the LCS, and $s$ is the cost of aligning the two sequences via
-the LCS cost model where indels cost $1$ and mismatches are not allowed, we have
-\begin{align}
-    2\cdot p + s = n+m.
-\end{align}
-
-More generally for global alignment, [cite/text:@wfalm] show that there is a
-direct correspondence between parameters for maximizing score and minimizing cost,
-under the assumption that each type of operation has a fixed cost.
-In the affine scoring model, let $\delta(a, a) = l_p$, $\delta(a,b) = x_p$,
-and $w_k = o_c + e_c \cdot k$. Then the maximal score satisfies
-\begin{align}
-    p = l_p \cdot L - x_p \cdot X - o_p \cdot O - e_c \cdot E,
-\end{align}
-where $L$ is the number of matches in the optimal alignment, $X$ the number of
-mismatches, $O$ the number of gaps, and $E$ the total length of the gaps.
-From this, they derive an equivalent cost model for minimizing scores:
-\begin{align}
-    l_s &= 0\\
-    x_s &= 2l_p + 2x_p\\
-    o_s &= 2o_p\\
-    e_s &= 2e_p + l_p.
-\end{align}
-Using that $2L+2X+E=M+N$, this results in
-\begin{align}
-    s &= 0\cdot  L + x_s  \cdot X + o_s \cdot O+e_s \cdot E\\
-    &= (2l_p-2l_p) L+ (2l_p+2x_p) X + 2o_p  O + (2e_p+l_p) E\\
-    &= l_p(2L+2X+E) - 2(l_p L - x_p X - o_p  O - e_p E)\\
-    &= l_p\cdot (N+M) - 2p.
-\end{align}
-This shows that any global alignment maximizing $p$ at the same time minimizes $s$ and
-vice versa.
-
 *** Local alignment
 [cite/text/cf:@sw] introduces local alignment ([[https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm][wikipedia]]). This is formulated as a maximization
 problem where matching characters give positive score $\delta(a,b)$.
@@ -368,6 +317,63 @@ This algorithm run in $O(nm)$ time.
 
 Gotoh mentions that this method can be modified to also solve the local
 alignment of [cite/text:@sw] in quadratic time.
+
+** Minimizing vs. maximizing duality
+
+While the DP formulas for minimizing cost and maximizing score are very
+similar, there are some interesting conceptual differences.
+
+When maximizing the score, this is a conceptually similar to computing the LCS: each pair of matching
+characters increases the score. [cite/text:@nw] gives an example of this.
+As we will see, these algorithms usually consider all pairs of matching
+characters between $A$ and $B$.
+
+Algorithms that minimize the cost instead look at the problem as finding the shortest
+path in a graph, usually with non-negative weights and cost $0$ for matching characters.
+The structure of the corresponding DP matrix turns out to be more complex, but
+can also be exploited for algorithms faster than $O(nm)$.
+
+Maximizing score is typically used for local alignment, since it needs an
+explicit bonus for each matches character. Most modern aligners are based on
+finding the shortest path, and hence minimize cost.
+
+*LCS:*
+For the problem of LCS in particular there is a duality. When $p$ is the
+length of the LCS, and $s$ is the cost of aligning the two sequences via
+the LCS cost model where indels cost $1$ and mismatches are not allowed, we have
+\begin{align}
+    2\cdot p + s = n+m.
+\end{align}
+
+*Parameter correspondence:*
+More generally for global alignment, [cite/text:@wfalm] show that there is a
+direct correspondence between parameters for maximizing score and minimizing cost,
+under the assumption that each type of operation has a fixed cost[fn:: Is
+it possible to extend this to arbitrary mismatch costs $\delta(a,b)$? Probably
+not since the proof relies on the LCS duality.].
+In the affine scoring model, let $\delta(a, a) = l_p$, $\delta(a,b) = x_p$,
+and $w_k = o_c + e_c \cdot k$. Then the maximal score satisfies
+\begin{align}
+    p = l_p \cdot L - x_p \cdot X - o_p \cdot O - e_c \cdot E,
+\end{align}
+where $L$ is the number of matches in the optimal alignment, $X$ the number of
+mismatches, $O$ the number of gaps, and $E$ the total length of the gaps.
+From this, they derive an equivalent cost model for minimizing scores:
+\begin{align}
+    l_s &= 0\\
+    x_s &= 2l_p + 2x_p\\
+    o_s &= 2o_p\\
+    e_s &= 2e_p + l_p.
+\end{align}
+Using that $2L+2X+E=M+N$, this results in
+\begin{align}
+    s &= 0\cdot  L + x_s  \cdot X + o_s \cdot O+e_s \cdot E\\
+    &= (2l_p-2l_p) L+ (2l_p+2x_p) X + 2o_p  O + (2e_p+l_p) E\\
+    &= l_p(2L+2X+E) - 2(l_p L - x_p X - o_p  O - e_p E)\\
+    &= l_p\cdot (N+M) - 2p.
+\end{align}
+This shows that any global alignment maximizing $p$ at the same time minimizes $s$ and
+vice versa.
 
 ** Four Russians method
 :PROPERTIES:
