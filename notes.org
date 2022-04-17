@@ -2,6 +2,7 @@
 #+HUGO_BASE_DIR: .
 #+HUGO_SECTION: notes
 #+HUGO_AUTO_SET_LASTMOD: t
+#+bibliography: local-bib.bib
 
 * Hello, World!
 CLOSED: [2021-10-13]
@@ -74,3 +75,52 @@ Read The F*ing Error
 - When you complain about an error without reading it first.
 - When you assume you understand the problem halfway through reading the error,
   and only after more debugging you realize you failed to read properly.
+
+* DONE Gap-close cost for diagonal transition
+CLOSED: [2022-04-17 Sun 03:14]
+:PROPERTIES:
+:EXPORT_FILE_NAME: affine-gap-close-cost
+:END:
+
+[cite/text:@biwfa] introduces the classic divide-and-conquer approach of
+[cite/text:@hirschberg75] to their WFA [cite:@wfa] algorithm.
+
+In this, they run their *gap-open* affine cost variant of the diagonal transition
+method from both ends towards the middle of the sequence until they overlap.
+This has the drawback that the sides need to run until $s_l + s_r \geq s + o$,
+where $s_l$ and $s_r$ are the distances 'searched' from the start and end
+respectively, $s$ is the total cost, and $o$ is the gap open penalty.
+
+I think it is possible to change the gap-open affine cost model to a *gap-close*
+affine cost model, so that the meet-in-the-middle can be stopped as soon as the
+two fronts touch, instead of when they overlap sufficiently.
+
+The original WFA recursion is this (copied from the BiWFA paper, [cite/text:@biwfa]):
+\begin{align}
+I_{s,k} &= \max\big\{M_{s-o-e,k-1}-1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s-o-e,k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s,k}, D_{s,k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big)
+\end{align}
+where $LCP$ is the length of the longest common prefix of the two strings.
+
+I propose the following recursion, which only adds the cost $o$ when $I$ and $D$ are
+/merged/ into a matching state $M$ (or $X$), instead of adding it when /branching off/ a
+matching state $M$.
+\begin{align}
+I_{s,k} &= \max\big\{M_{s-e,k-1}-1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s-e,k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s-o,k}, D_{s-o,k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+Here it is again, but with additions in green and deletions in red:
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k-1}-1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o},k}, D_{s\mathbf{\color{lime}-o},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+
+** References
+
+#+print_bibliography:
