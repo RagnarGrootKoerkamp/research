@@ -1,0 +1,108 @@
+#+TITLE: [WIP] Linear time pairwise alignment
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: pairwise-alignment
+#+HUGO_LEVEL_OFFSET: 1
+#+bibliography: local-bib.bib
+#+cite_export: csl ../../chicago-author-date.csl
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+date: <2022-04-24 Thu>
+
+#+toc: headlines 3
+
+This post is a work in progress [WIP]/sketch proof to show that pairwise
+alignment of random strings with random mutations can be done in linear time.
+
+* Pairwise alignment in subquadratic time
+
+[cite/text/c:@no-subquadratic-ed] show that computing edit distance can not be
+done in strongly subquadratic time (i.e. $O(n^{2-\delta})$ for any $\delta >0$)
+assuming the Strong Exponential Time Hypothesis.
+
+To break this barrier, there are multiple approaches:
+
+1. <<exact>> Use algorithms with an output-sensitive runtime: $O(ns)$ or $O(n + s^2)$,
+  which is $o(n^2)$ when $s = o(n)$.
+2. Use approximation algorithms: these do not have to adhere to the $n^2$
+  lower bound for exact algorithms.
+3. Assume (uniform) random input, which is what we will do here. There are a few possibilities:
+
+   1. <<one-random>> A given string, and a random string.
+   2. <<independent>> Two independent random strings.
+   3. <<both-random>> One random string, of which the other is a random mutation via some model.
+   4. <<random-string>> A random string, and a non-random/arbitrary/adverse mutation of it.
+   5. <<random-muts>> A non-random/arbitrary string, and a random mutation of it.
+
+   |                                           | given $A$         | random $A$                                               |
+   | given $B$                                 | $\Theta(n^2)$     | -                                                        |
+   | $B$ given at distance $s$                 | [[exact]]: $O(n+s^2)$ | [[random-string]]: ?                                         |
+   | independent random $B$                    | [[one-random]]: ?     | [[independent]]: ?                                           |
+   | $B$ random $e\%\leq f(n)$ mutation of $A$ | [[random-muts]]: ?    | [[both-random]]: $O(n)$ [fn:: or $O(n \log n)$?] , this post |
+
+We will make the strongest possible assumption on the randomness of the input:
+that $A$ is random, and that $B$ is a random mutation of $A$ with a
+limited/bounded error rate $e \leq f(n)$.
+
+
+* Random model
+
+There a few possible models of randomness we can choose:
+** Iterated errors
+Fix an error rate $e$. From this derive the number of mutations either as
+$e\cdot n$, or via a sample from a Binomial $B(n, e)$ distribution.
+For each mutation, first choose whether it will be an insertion, deletion, or
+substitution. Then choose a random position in the string, and for insertions
+and substitutions a replacement character. Implementations differ on whether this
+replacement character can be the equal to original character or not.
+
+** Up-front
+Another possibility is to generate all errors up-front before applying any. This
+can work by generating a list of insert/delete/substitute instructions, and then
+executing them. Substitute instructions always refer to characters of the
+original string (never to inserted characters), and inserted characters are
+never deleted.
+
+** Comparison
+The main difference between these methods is that the first one slightly favours
+longer runs of inserts: once a character is inserted, the probability that a
+second character will be inserted in the same 'run' is slightly larger because
+now there are two positions instead of just one.
+
+The benefit of the up-front method is that it is easier to analyse the
+probability distribution of the number of errors in an interval, since the
+generated mutations do not depend on earlier mutations. I think this is the
+model of choice to analyse our probabilistic algorithm.
+
+* Algorithm
+The algorithm runs an A* search from $s$ to $t$, using a heuristic $h$.
+During the algorithm, a match is /pruned/ as soon as its start is expanded. This
+increases the value of $h$ and thus improves the A*.
+
+** Counting-seeds heuristic
+
+We use a simplified version of the /chained-seeds/ heuristic used in A*PA, that
+is in fact much closer to the original seed-heuristic of [cite/text:@astarix-2]. We
+partition $A$ into seeds of length $k$, and find all matches for each seed.
+The heuristic at a state $u$ is simply the number of /remaining/ seeds for which
+no matches exist. This is an admissible heuristic, i.e. lower bound on the
+remaining distance to $t$, since all remaining seeds must be aligned, and each
+seed without a match will incur a cost of at least $1$ for its alignment.
+
+Note that the value of $h(u)$ only depends on the seed that 'covers' $u$.
+
+** Match pruning
+
+Once we expand the start of a match, we remove this match from consideration. If
+this is the last non-pruned match for a given seed, this means that $h$
+increases by $1$ for all states left of $u$. This can be implemented using e.g.
+a Fenwick tree: both queries and updates take $O(\log (n/k))$ time this way.
+
+* TODO Analysis
+
+We can choose $k \geq 2\log_\Sigma n$ to ensure $O(1)$ false-positive matches in total.
+
+
+
+
+* References
+#+print_bibliography:
