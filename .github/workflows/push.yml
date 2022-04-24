@@ -1,0 +1,17 @@
+name: Deploy site
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    name: Deploy site
+    runs-on: self-hosted
+    steps:
+      - name: build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /srv/nginx/research/ && git pull https://${GITHUB_TOKEN}@github.com/ragnargrootkoerkamp/research.git && git submodule update
+          cd /srv/nginx/research/ && make build
