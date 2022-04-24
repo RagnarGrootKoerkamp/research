@@ -50,10 +50,10 @@ There are multiple possible random models. One decision to make is the
 number of errors to introduce for a given error rate:
 - Fixed total :: Use exactly $e\cdot n$ errors.
 - Binomial total :: Use $Bin(n, e)$ errors.
-- Bernoulli per-character :: Loop over the characters, and for each character apply a
-  mutation with probability $1/e$.
-- Exponential per-character :: A character can be mutated multiple times. Use an
-  exponential distribution with parameter $e$ for the number of mutations.
+- Bernoulli per position :: Loop over the positions, and for each character apply a
+  mutation with probability $e$.
+- Geometric per position :: A position can be mutated multiple times. Use a
+  geometric distribution with parameter $p = 1-e$ for the number of mutations.
 
 Another choice is the order in which mutations are applied:
 - Iterated errors ::
@@ -73,7 +73,7 @@ A final choice is whether or not to allow identity substitutions that do not
 change the current character.
 
 ** Comparison
-The main difference between these methods is that the first one slightly favours
+The main difference between these methods is that iterative errors slightly favours
 longer runs of inserts: once a character is inserted, the probability that a
 second character will be inserted in the same 'run' is slightly larger because
 now there are two positions instead of just one.
