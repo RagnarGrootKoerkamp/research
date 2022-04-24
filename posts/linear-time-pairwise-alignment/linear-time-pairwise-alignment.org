@@ -30,7 +30,7 @@ To break this barrier, there are multiple approaches:
    1. <<one-random>> A given string, and a random string.
    2. <<independent>> Two independent random strings.
    3. <<both-random>> One random string, of which the other is a random mutation via some model.
-   4. <<random-string>> A random string, and a non-random/arbitrary/adverse mutation of it.
+   4. <<random-string>> A random string, and a non-random/arbitrary/adversarial mutation of it.
    5. <<random-muts>> A non-random/arbitrary string, and a random mutation of it.
 
    |                                            | given $A$         | random $A$                                               |
@@ -46,21 +46,31 @@ limited/bounded error rate $e \leq f(n)$.
 
 * Random model
 
-There a few possible models of randomness we can choose:
-** Iterated errors
-Fix an error rate $e$. From this derive the number of mutations either as
-$e\cdot n$, or via a sample from a Binomial $B(n, e)$ distribution.
-For each mutation, first choose whether it will be an insertion, deletion, or
-substitution. Then choose a random position in the string, and for insertions
-and substitutions a replacement character. Implementations differ on whether this
-replacement character can be the equal to original character or not.
+There are multiple possible random models. One decision to make is the
+number of errors to introduce for a given error rate:
+- Fixed total :: Use exactly $e\cdot n$ errors.
+- Binomial total :: Use $Bin(n, e)$ errors.
+- Bernoulli per-character :: Loop over the characters, and for each character apply a
+  mutation with probability $1/e$.
+- Exponential per-character :: A character can be mutated multiple times. Use an
+  exponential distribution with parameter $e$ for the number of mutations.
 
-** Up-front
-Another possibility is to generate all errors up-front before applying any. This
-can work by generating a list of insert/delete/substitute instructions, and then
-executing them. Substitute instructions always refer to characters of the
-original string (never to inserted characters), and inserted characters are
-never deleted.
+Another choice is the order in which mutations are applied:
+- Iterated errors ::
+  For each mutation, first choose whether it will be an insertion, deletion, or
+substitution. Then choose a random position in the string, and for insertions
+  and substitutions a replacement character. This way, mutations can affect
+  earlier mutations.
+
+- Up-front ::
+  Another possibility is to generate all errors up-front before applying any. This
+  can work by generating a list of insert/delete/substitute instructions, and then
+  executing them. Substitute instructions always refer to characters of the
+  original string (never to inserted characters), and inserted characters are
+  never deleted.
+
+A final choice is whether or not to allow identity substitutions that do not
+change the current character.
 
 ** Comparison
 The main difference between these methods is that the first one slightly favours
