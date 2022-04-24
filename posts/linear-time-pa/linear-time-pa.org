@@ -25,19 +25,20 @@ To break this barrier, there are multiple approaches:
   which is $o(n^2)$ when $s = o(n)$.
 2. Use approximation algorithms: these do not have to adhere to the $n^2$
   lower bound for exact algorithms.
-3. Assume (uniform) random input, which is what we will do here. There are a few possibilities:
+3. Assume (uniform) random input, which is what we will do here. There are a few
+   possibilities:
 
    1. <<one-random>> A given string, and a random string.
-   2. <<independent>> Two independent random strings.
-   3. <<both-random>> One random string, of which the other is a random mutation via some model.
+   2. <<random-muts>> A non-random/arbitrary string, and a random mutation of it.
    4. <<random-string>> A random string, and a non-random/arbitrary/adversarial mutation of it.
-   5. <<random-muts>> A non-random/arbitrary string, and a random mutation of it.
+   3. <<independent>> Two independent random strings.
+   4. <<both-random>> One random string, of which the other is a random mutation via some model.
 
-   |                                            | given $A$         | random $A$                                               |
-   | given $B$                                  | $\Theta(n^2)$     | -                                                        |
-   | $B$ given at distance $s$                  | [[exact]]: $O(n+s^2)$ | [[random-string]]: ?                                         |
-   | independent random $B$                     | [[one-random]]: ?     | [[independent]]: ?                                           |
-   | $B$ random $e\%\leq f(n)$ mutations of $A$ | [[random-muts]]: ?    | [[both-random]]: $O(n)$ [fn:: or $O(n \log n)$?] , this post |
+   |                                            | given $A$              | random $A$                                               |
+   | given $B$                                  | $\omega(n^{2-\delta})$ | -                                                        |
+   | $B$ given at distance $s$                  | [[exact]]: $O(n+s^2)$      | [[random-string]]: ?                                         |
+   | independent random $B$                     | [[one-random]]: ?          | [[independent]]: ?                                           |
+   | $B$ random $e\%\leq f(n)$ mutations of $A$ | [[random-muts]]: ?         | [[both-random]]: $O(n)$ [fn:: or $O(n \log n)$?] , this post |
 
 We will make the strongest possible assumption on the randomness of the input:
 that $A$ is random, and that $B$ is a random mutation of $A$ with a
@@ -73,6 +74,11 @@ Another choice is the order in which mutations are applied:
 A final choice is whether or not to allow identity substitutions that do not
 change the current character.
 
+For any model, we have a mapping between the characters of $A$ and $B$. In
+particular for the up-front model, each character of $A$ maps to some
+interval of $B$, and each character of $B$ maps to a single character of $A$.
+These characters /correspond/ to each other.
+
 ** Comparison
 The main difference between these methods is that iterative errors slightly favours
 longer runs of inserts: once a character is inserted, the probability that a
@@ -99,7 +105,7 @@ no matches exist. This is an admissible heuristic, i.e. lower bound on the
 remaining distance to $t$, since all remaining seeds must be aligned, and each
 seed without a match will incur a cost of at least $1$ for its alignment.
 
-Note that the value of $h(u)$ only depends on the seed that 'covers' $u$.
+Note that the value of $h(u)$ only depends on the position of the seed that 'covers' $u$.
 
 ** Match pruning
 
@@ -110,7 +116,25 @@ a Fenwick tree: both queries and updates take $O(\log (n/k))$ time this way.
 
 * TODO Analysis
 
-We can choose $k \geq 2\log_\Sigma n$ to ensure $O(1)$ false-positive matches in total.
+We can choose $k \geq \log_\Sigma n^2$ to ensure $o(1)$ false-positive matches in total.
+
+We make the following assumptions, and show that each is false only with
+exponentially small probability.
+
+- All matches are /true positives/: they indicate a substring of $B$ that
+  corresponds to a substring of $A$.
+- The optimal alignment of $A$ and $B$ goes through all matches.
+- [There will probably be more.]
+
+A* works by keeping a priority queue of states ordered by $f = g + h$. Our
+$h\langle i, j\rangle$ only depends on $i$, and is non-increasing. This means
+that $f=g+h$ can only increase when $g$ goes up by $1$ (because of
+mismatch/indels) while $h$ stays the same. Let $F$ be the minimum $
+Thus, if it weren't for pruning, at
+any point in time all states have either value $F$ or $F+1$, where $F$ is the
+smallest $f(u)$ over explored (non-expanded) states $u$.
+
+In our model, we will pay for the expansion of a
 
 
 
