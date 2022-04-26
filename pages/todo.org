@@ -10,7 +10,7 @@
 
 #+toc: headlines 2
 
-Here I list some ideas for research topics / papers:
+Here I list some ideas for research topics / papers / tasks that need doing:
 
 ** In progress
 - A* pairwise aligner [[[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][GitHub]]] :: Exact global pairwise alignment of random strings in
@@ -19,30 +19,55 @@ Here I list some ideas for research topics / papers:
   Contains proof of correctness, implementation, evals and comparison with WFA
   and edlib on random data.
 
-
-- Exact global pairwise alignment review :: Convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
-  it's done.
-
-** On hold
-- Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]].
-
-** Future plans
-- Review paper on semi-global pairwise alignment :: Similar to the table I made for
-  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
-  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
-  string matching, but it quite old by now.
 - Proof of expected linear time alignment :: I have a proof of concept to show that a
   simplified version of the algorithm currently implemented by A* pairwise
   aligner runs in expected linear time on random input with sufficiently low
   edit distance ($|\Sigma|^{1/e} \ll n$), but need to spend some time on details
-  and writing it down.
-- Extend A* pairwise aligner to use diagonal-transition :: Currently the algorithm is
+  and writing it down. WIP post: [[file:~/git/eth/research/posts/linear-time-pa/linear-time-pa.org][linear time pairwise alignment]].
+- Finish review post :: Write text on diagonal transition and fill in other
+  remaining TODO sections.
+- Post comparing heuristics :: A comparison of the different heuristics that have
+  been used so far.
+
+** On hold
+- Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]].
+
+** Planned blogposts
+- A*PA post :: A blogpost on the A*PA paper.
+- Semi-global pairwise alignment review :: similar to the global pairwise
+  alignment review, but for semi-global / $k$-approximate string matches.
+
+** Smaller tasks
+- Extract A*PA benchmarks :: Extract the ~evals~ directory to a separate reusable repo with benchmarks and
+  tests.
+
+** Future plans
+- Exact global pairwise alignment review :: Finish that post, and convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
+  it's done.
+- Review paper on semi-global pairwise alignment :: Similar to the table I made for
+  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
+  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
+  string matching, but it quite old by now.
+- Extend A*PA to build on diagonal-transition :: Currently the algorithm is
   based on the vanilla $O(nm)$ DP. Instead we can base it on the diagonal
   transition methods to reduce the number of states visited and the memory
   needed to store $g$.
 
   This should provide a speedup especially in regions where the linear search
   falls back to quadratic behaviour.
+- More A*PA extensions ::
+  - Ends-free/semi-global alignment :: easy; I know how this would work and just
+    needs doing.
+  - Affine costs :: should be possible, but harder. Will be very tricky to get
+    right (bug-free).
+  - Replace gap-cost transition by letter-count-cost transition :: very unclear
+    how this would work, and whether the transformation can be preserved.
 
 ** Open questions
 - Can WFA/diagonal transition benefit from bit-parallel techniques?
+- [unrelated] Given a function $f : \Sigma^k \to \{0,1\}$ on $k$-mers. How often
+  do you expect this to change value when computing it for all $k$-mers of a
+  length $2k$ string. Assume that $f$ has some structure (so that its values
+  correlate for similar strings), but is mostly independent (?) for unrelated
+  stirngs, i.e. something similar to the sign of Tensor Sketching, or e.g.
+  whether the number of zeros or ones in the $k$mer is larger.
