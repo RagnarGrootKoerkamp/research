@@ -1,4 +1,4 @@
-#+title: Current research topics
+#+title: Research topics
 #+HUGO_BASE_DIR: ..
 #+hugo_section: pages
 #+HUGO_LEVEL_OFFSET: 1
@@ -30,17 +30,17 @@ Here I list some ideas for research topics / papers / tasks that need doing:
   been used so far.
 
 ** On hold
-- Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]].
+- Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]]. Not as interesting as the A*PA work.
 
 ** Planned blogposts
-- A*PA post :: A blogpost on the A*PA paper.
+- A*PA post :: A post on the A*PA paper.
 - Semi-global pairwise alignment review :: similar to the global pairwise
   alignment review, but for semi-global / $k$-approximate string matches.
 
 ** Smaller tasks
-- Extract A*PA benchmarks :: Extract the ~evals~ directory to a separate reusable repo with benchmarks and
+- Extract A*PA benchmarks :: =simple coding task= Extract the ~evals~ directory to a separate reusable repo with benchmarks and
   tests.
-- Find ONT reads corresponding to a reference :: It would be nice to test A*PA
+- Find ONT reads corresponding to a reference :: =annoying= It would be nice to test A*PA
   on a set of real ONT reads. We need to find a dataset where the reads are from
   exactly the same genome as the reference, so that no biological mutations (in
   particular long indels) are present in the data.
@@ -48,11 +48,7 @@ Here I list some ideas for research topics / papers / tasks that need doing:
 ** Future plans
 - Exact global pairwise alignment review :: Finish that post, and convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
   it's done.
-- Review paper on semi-global pairwise alignment :: Similar to the table I made for
-  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
-  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
-  string matching, but it quite old by now.
-- Extend A*PA to build on diagonal-transition :: Currently the algorithm is
+- Extend A*PA to build on diagonal-transition :: =needs work= Currently the algorithm is
   based on the vanilla $O(nm)$ DP. Instead we can base it on the diagonal
   transition methods to reduce the number of states visited and the memory
   needed to store $g$.
@@ -60,15 +56,20 @@ Here I list some ideas for research topics / papers / tasks that need doing:
   This should provide a speedup especially in regions where the linear search
   falls back to quadratic behaviour.
 - More A*PA extensions ::
-  - Ends-free/semi-global alignment :: easy; I know how this would work and just
+  - Ends-free/semi-global alignment :: =easy= I know how this would work and just
     needs doing.
-  - Affine costs :: should be possible, but harder. Will be very tricky to get
+  - Affine costs :: =tricky= should be possible, but harder. Will be very tricky to get
     right (bug-free).
-  - Replace gap-cost transition by letter-count-cost transition :: very unclear
+  - Replace gap-cost transition by letter-count-cost transition :: =hard= very unclear
     how this would work, and whether the transformation can be preserved.
+- Review paper on semi-global pairwise alignment :: =low priority= =lots of work/time= Similar to the table I made for
+  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
+  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
+  string matching, but it quite old by now.
 
 ** Open questions
-- Can WFA/diagonal transition benefit from bit-parallel techniques?
+- Can WFA/diagonal transition benefit from bit-parallel techniques? (Likely
+  answer: No.)
 - [unrelated] Given a function $f : \Sigma^k \to \{0,1\}$ on $k$-mers. How often
   do you expect this to change value when computing it for all $k$-mers of a
   length $2k$ string. Assume that $f$ has some structure (so that its values
