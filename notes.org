@@ -150,6 +150,45 @@ M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 ** References
 
 #+print_bibliography:
-* TODO Motivation
-- it's not the need for faster software that motivates; it's the mathematical
+* DONE Motivation
+CLOSED: [2022-04-28 Thu 23:22]
+:PROPERTIES:
+:EXPORT_FILE_NAME: motivation
+:END:
+It's not the need for faster software that motivates; it's the mathematical
   discovery that needs sharing.
+* DONE Benchmark attention points
+CLOSED: [2022-04-28 Thu 23:33]
+:PROPERTIES:
+:EXPORT_FILE_NAME: benchmarks
+:END:
+- Pin CPU frequency ::
+  CPUs, especially laptops, have turboboost, (thermal) throttling, and powersave
+  features. Make sure to pin the CPU core frequency low enough that it can be
+  sustained for long times without throttling.
+
+  In my case, the `performance` governor can fix the CPU frequency. The base
+  frequency of my CPU is ~2.6GHz~, but I set it slightly lower since I prefer consistency.
+  #+BEGIN_SRC shell
+  sudo cpupower frequency-set -g performance
+  sudo cpupower frequency-set -u 1.8GHz
+  sudo cpupower frequency-set -d 1.8GHz
+  #+END_SRC
+- Pin program to core ::
+  Make sure your program only executes on one core. Do this using e.g.
+  #+begin_src shell
+  taskset -c 0 <shell invocation>
+  #+end_src
+  When running multiple experiments in parallel, use distincs ids instead of ~0~.
+- Do not use hyper threads ::
+  Never use both hyper threads of a single core. On my 6-CPU machine, thread ~i~
+  and thread ~i+6~ share their core, so I only use threads with id ~0~ to ~5~.
+- Limit number of CPUs used ::
+  Memory bound programs share resources, even if running on disjoint CPUs. In my
+  case, using all 6 cores gives a ~30%~ slowdown compared to only using 1 core
+  at a time (on some specific experiment).
+  Using 3 cores gives only ~10%~ slowdown, which is acceptable.
+- Use a low job niceness ::
+  At any point in time, multiple jobs need CPU resources. Use a low job
+  /niceness/ (like ~-20~) to give your experiment a higher priority. As an example,
+  input (keyboard) and audio processing usually runs with a low niceness.
