@@ -391,8 +391,8 @@ vice versa.
 :END:
 
 #+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
-#+caption: For each block, differences between DP table cells along the top row ($R$) and left column ($S$) are the /input/, together with the corresponding substrings of $A$ and $B$.
-#+caption: The /output/ are the differences along the bottom row ($R'$) and right column ($S'$).
+#+caption: For each block, differences between DP table cells along the top row $R$ and left column $S$ are the /input/, together with the corresponding substrings of $A$ and $B$.
+#+caption: The /output/ are the differences along the bottom row $R'$ and right column $S'$.
 #+caption: For each possible input of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
 #+caption: Red shaded states are not visited.
 #+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
@@ -400,8 +400,8 @@ vice versa.
 #+attr_html: :class large
 [[file:drawings/four-russians.drawio.svg]]
 
-The so called /four Russians/ method ([[https://en.wikipedia.org/wiki/Method_of_Four_Russians][wikipedia]]) was introduced by
-[cite/text/f:@four-russians], and was named as such since all authors
+The so called /four Russians method/ ([[https://en.wikipedia.org/wiki/Method_of_Four_Russians][wikipedia]]) was introduced by
+[cite/text/f:@four-russians], and who all
 worked in Moscow at the time of publication. It is a general method to speed up
 DP algorithm from $n^2$ to $n^2 / \lg n$ provided that entries are integers and
 all operations are 'local'.
@@ -417,6 +417,9 @@ the substrings $a_i\cdots a_{i+r}$ and $b_j\cdots b_{j+r}$. This means that for
 some value of $k$, $r=\log_k n$ is small enough so that we can precompute the
 values of $R'$ and $S'$ for all possibilities of $(R, S, a_i\cdots a_{i+r},
 b_j\cdots b_{j+r})$ in $O(n^2)$ time.
+
+Note that $k$ depends on the size of the alphabet, $|\Sigma|$. In practice this
+needs to be quite small.
 
 Using this precomputation, the DP can be sped up by doing a single $O(r)$
 lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\lg
