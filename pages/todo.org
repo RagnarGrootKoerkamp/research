@@ -38,6 +38,16 @@ Here I list some ideas for research topics / papers / tasks that need doing:
     existing ideas/algorithms/papers.
 - Semi-global pairwise alignment review :: similar to the global pairwise
   alignment review, but for semi-global / $k$-approximate string matches.
+- Finding (in)exact matches ::
+  This turns out to be hard to do fast. For exact matches the fastest is a
+  hashmap mapping qgrams to locations. Instead of an ~absl::flat_hash_map~, it
+  may be better to handroll something and ignore/bail on collisions.
+
+  For inexact matches, everything is more complicated, but again the fastest
+  seems to be a hashmap and looking up all mutations of a string.
+
+  A simple optimization here is to build a map over $A$, which contains only
+  $n/k$ seeds, and do lookups for all $n$ $k$mers in $B$.
 
 ** Smaller tasks
 - Extract A*PA benchmarks :: =simple coding task= Extract the ~evals~ directory to a separate reusable repo with benchmarks and
