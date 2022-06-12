@@ -145,6 +145,14 @@ D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k+1}, D_{s-e,k+1}\big\}\\
 X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o-e},k}, D_{s\mathbf{\color{lime}-o-e},k}\big\}\\
 M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 \end{align}
+At this point it makes more sense to reorder these equations. Sadly this becomes
+slightly more ugly now, having the extend phase in the middle instead of at the end.
+\begin{align}
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o-e},k}, D_{s\mathbf{\color{lime}-o-e},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big)\\
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k-1}-1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k+1}, D_{s-e,k+1}\big\}.
+\end{align}
 
 Alternatively, the formulas could be made symmetric by incurring a cost of $o/2$
 to open a gap and a cost of $o/2$ when closing a gap:
