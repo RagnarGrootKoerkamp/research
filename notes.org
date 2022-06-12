@@ -222,3 +222,98 @@ CLOSED: [2022-04-28 Thu 23:33]
   At any point in time, multiple jobs need CPU resources. Use a low job
   /niceness/ (like ~-20~) to give your experiment a higher priority. As an example,
   input (keyboard) and audio processing usually runs with a low niceness.
+* DONE A* variants
+CLOSED: [2022-06-12 Sun 12:04]
+:PROPERTIES:
+:EXPORT_FILE_NAME: astar-variants
+:END:
+
+
+These are some quick notes listing papers related to A* itself and variants. In
+particular, here I'm interested in papers that update $h$ during the A* search,
+as a background for [[http:../../posts/pruning][pruning]].
+
+Specifically, our version of pruning increases $h$ during a /single/ A* search,
+and in fact the heuristic becomes /in-admissible/ after pruning.
+
+** Changing $h$
+The original A* paper has a proof of optimality. Later papers consider this also
+with heuristics that change their value over time.
+- Original A* paper [cite:@astar-hart67] does not consider a changing heuristic.
+  - A later addendum [cite:@astar-correction-hart72] removes the need for the
+    heuristic to be consistent in the optimality proof, but does not otherwise
+    change things.
+- [cite/t:@astar-optimality-gelperin] considers that $h$ may depend on the A*
+  state. Notation: $\hat h(n, m)$: the value of $h$ in $n$ just before closing
+  (expanding) $m$, and $\hat h(n, \overline m)$, the value of $h$ in $n$ just
+  after closing $m$. State: $\Sigma(m)$ resp. $\Sigma(\overline m)$. Second
+  argument may be omitted:
+
+  #+begin_quote
+  When is it neither necessary nor helpful to use this new notation, we will
+  use the older notation with search-state dependence understood.
+  #+end_quote
+- [cite/t:@asar-optimality-revisited-dechter83] comment on and extend the proof
+  of [cite:@astar-optimality-gelperin], but are not specific about $h$ depending
+  on the state.
+- Somewhat unrelated, a nice paper going over some tricky details regarding A* is [cite/t:@astar-misconceptions].
+- /Multiple-path pruning/ is the technique from [cite:@artint] to remove paths
+  going through expanded nodes to which an optimal path has been found.
+
+** Variants
+There are some variants of A* for repeated searches that do incremental updates
+of $h$ between iterations. Note that $h$ is assumed to be admissible, and
+usually also consistent.
+- D* (Dynamic A*) [cite:@dstar;@dstar-focussed] :: Setting: a robot is
+  navigating and discovers new obstacles along the way.  This leads to increasing
+  (or possibly decreasing) edge weights. They keep ~OPEN~, ~RAISE~, and ~LOWER~ lists.
+  $h$ is assumed to the distance to the end in the so-far explored graph.
+
+- Adaptive A* [cite:@adaptive-astar] ::
+  Setting: repeatedly find
+  shortest path to a fixed set of goal states, but varying star states. Input:
+  a *consistent* heuristic $h$. (I'm not sure where/why consistency is needed.)
+
+  Intuitively, it uses that after making a search from $s$, we know that
+  all states close to $s$ must have a distance that is not much smaller than the
+  distance from $s$.
+
+  The main insight of Adaptive A* is this: after running one iteration from $s$
+  to $t$, let the distance from $s$ to $t$ be $h^*(s)$, and let $g(u)$ be the
+  shortest distance from $s$ to $u$ found so far. Write $g^*$ for the distance
+  from $s$, $h^*$ for the distance to $t$, and $f^*$ for their sum.
+  By the triangle inequality, $h^*(s) \leq f^*(u)$. We get
+  \begin{equation}
+  h^*(s) \leq f^*(u) = g^*(u) + h^*(u) \leq g(u) + h^*(u).
+  \end{equation}
+  Rewriting gives $h^*(u) \geq h^*(s) - g(u)$, which we can use as a new value
+  for $h$ that is possibly better than the user provided value.
+
+  Edge weights may increase over time.
+
+- Real-Time Adaptive A* (RTAA*) [cite:@real-time-adaptive-astar] :: Same setting
+  as Adaptive A*, but now the model is a robot searching the grid. There is a
+  limit on the /lookahead/ and /movements/ it may make.
+
+  After increasing edge weights, they show that the heuristic remains
+  consistent.
+
+- Generalized Adaptive A* (GAA*) [cite:@generalized-adaptive-astar] ::
+  Can additionally handle decrements in edge weights and changes of goal state.
+  Input: a consistent heuristic $H(s, t)$ for any pair of states, that
+  additionally satisfies the more general triangle inequality.
+
+- D* Lite [cite:@dstar-lite] :: Again models a robot moving around.
+
+** Conclusion
+
+While there are many methods that (implicitly) modify $h$, their setting is
+usually in that of changing surroundings, repeated searches, or constrained to a
+single moving robot. All these are different from our case, where we are able to
+increase $h$ during a single search for a single shortest path. Further, most
+variants keep a more complicated state to handle the updates than that of a
+single A*.
+
+** References
+
+#+print_bibliography:
