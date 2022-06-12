@@ -137,6 +137,14 @@ D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k+1}, D_{s-e,k+1}\big\}\\
 X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o},k}, D_{s\mathbf{\color{lime}-o},k}\big\}\\
 M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 \end{align}
+We may also need to move the first edge cost to the other side of the gap, to
+achieve full symmetry with the original one.
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k-1}-1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o-e},k}, D_{s\mathbf{\color{lime}-o-e},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
 
 Alternatively, the formulas could be made symmetric by incurring a cost of $o/2$
 to open a gap and a cost of $o/2$ when closing a gap:
