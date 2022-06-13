@@ -1,0 +1,120 @@
+#+title: Gap-close cost for diagonal transition
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: method pairwise-alignment diagonal-transition
+#+HUGO_LEVEL_OFFSET: 1
+#+BIBLIOGRAPHY: local-bib.bib
+#+cite_export: csl ../../chicago-author-date.csl
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: t
+#+date: <2022-04-17 Sun 03:14>
+#+author: Ragnar Groot Koerkamp
+#+toc: headlines 3
+*cross references:* [[https://github.com/smarco/BiWFA-paper/issues/4][BiWFA GitHub issue]]
+
+[cite/text:@biwfa] introduces the classic divide-and-conquer approach of
+[cite/text:@hirschberg75] to their WFA [cite:@wfa] algorithm.
+
+In this, they run the *gap-open* affine cost variant of the diagonal transition
+method from both ends towards the middle of the sequence until they overlap.
+This has the drawback that the sides need to run until $s_l + s_r \geq s + o$,
+where $s_l$ and $s_r$ are the distances 'searched' from the start and end
+respectively, $s$ is the total cost, and $o$ is the gap open penalty.
+
+The reason this overlap is needed is because the DP is not /symmetric/, meaning
+that when running it from the start and end to some state (on the optimal path),
+the sum of the costs does not equal the cost of the optimal path through the
+state. This is caused by paying the gap-open cost $o$ for both sides of the gap.
+
+It is possible to change the /gap-open/ affine cost model to a *gap-close*
+affine cost model to make them mirrors of each other, so that the
+meet-in-the-middle can be stopped as soon as the two fronts reach the same state.
+
+The original WFA recursion is this (copied from the BiWFA paper, [cite/text:@biwfa]):
+\begin{align}
+I_{s,k} &= \max\big\{M_{s-o-e,k-1}+1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s-o-e,k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s,k}, D_{s,k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big)
+\end{align}
+where $LCP$ is the length of the longest common prefix of the two strings.
+
+The following new recursion, which only adds the cost $o$ when $I$ and $D$ are
+/merged/ into a matching state $M$ (or $X$), instead of adding it when /branching off/ a
+matching state $M$. (Equivalently: it pays $o$ when leaving the affine layer,
+instead of when entering it.) Additions are in green and deletions in red:
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k-1}+1, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o},k}, D_{s\mathbf{\color{lime}-o},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+In fact, to make the gap-close cost completely equivalent to gap-open cost
+running in reverse, we need to preserve symmetry for all these items:
+
+#+name: table
+#+attr_html: :class small
+| What                       | Gap open    | Gap close     |
+| Initial cost $o$           | start       | end           |
+| Extend cost $e$            | all but end | all but start |
+| Furthest reaching $+ 1$    | all but end | all but start |
+
+The flexibility here comes from the fact that an indel of length $l$ corresponds
+to $l+1$ /edges/ in the /DP-graph/: $1$ edge into the affine layer, $l-1$ edges
+inside the affine layer, and $1$ edge to leave the affine layer. This means that
+the per-character changes (extend cost $e$ and furthest reaching index $+1$) should be
+done for only one of entering/leaving the affine layer.
+
+Thus, the fully mirrored recursion becomes
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k-1}\mathbf{\color{red}+1}, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o-e},k}\mathbf{\color{lime}+1}, D_{s\mathbf{\color{lime}-o-e},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+At this point it makes more sense to reorder these equations. Sadly this becomes
+slightly more ugly now, having the extend phase in the middle instead of at the end.
+\begin{align}
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o-e},k}\mathbf{\color{lime}+1}, D_{s\mathbf{\color{lime}-o-e},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big)\\
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k-1}\mathbf{\color{red}+1}, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o-e},k+1}, D_{s-e,k+1}\big\}.
+\end{align}
+
+Using this formula for the reverse part of BiWFA, the forward and reverse costs
+to each (affine) state sum exactly to the total cost of the corresponding path
+through that state, simplifying the meeting conditions.
+
+** Symmetric alternatives
+
+The formulas could be made symmetric by incurring a cost of $(o+e)/2$
+to open a gap and a cost of $(o+e)/2$ when closing a gap, and by extending the
+FR point by a half in each case.
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e/2},k-1}\mathbf{\color{lime}+\tfrac12}, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e/2},k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o/2-e/2},k}\mathbf{\color{lime}+\tfrac12}, D_{s\mathbf{\color{lime}-o/2-e/2},k}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+
+An alternative solution, that makes the affine path have length $l$,
+would be to make $X_{s,k}$ depend on $I_{x-e,k-1}$ by /inlining/ one extend step
+of $I$ into $X$. This removes the issue with having $l$ increments for $l+1$
+edges. However, this has the drawback that gaps of size $1$ need an extra
+workaround, and the open cost still needs to be distributed:
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k-1}\mathbf{\color{lime}+1}, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k+1}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o/2-e},k}\mathbf{\color{lime}+1}, D_{s\mathbf{\color{lime}-o/2-e},k}, \\
+        &\phantom{=\max\big\{}\;\mathbf{\color{lime}M_{s-o-e, k-1}+1}, \mathbf{\color{lime}M_{s-o-e, k+1}}\big\}\\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+
+Note that I consider both of these variants theoretically interesting, but not
+practically relevant for now. Maintaining a separate forward and backward
+implementation seems simpler than the overhead of having fractional costs or
+doubling all costs.
+
+
+** References
+
+#+print_bibliography:
