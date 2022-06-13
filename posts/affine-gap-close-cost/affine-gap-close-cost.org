@@ -33,7 +33,7 @@ meet-in-the-middle can be stopped as soon as the two fronts reach the same state
 
 #+name: gap-open
 #+caption: Dependencies for Gap Open recursion.
-#+caption: The rows correspond to the insert ($I$), match/substitution ($M, X$), and delete ($D$) layers respectively.
+#+caption: The rows correspond to the affine insert ($I$), linear match/substitution ($M, X$), and affine delete ($D$) layers respectively.
 #+caption: Arrow labels are costs, i.e. the number of fronts to look back.
 #+caption: The horizontal axis indicates consecutive cells in the direction of each layer.
 #+caption: For the insert and main layer, this corresponds to a $+1$ increase of the furthest reaching point index.
@@ -128,11 +128,11 @@ M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 #+attr_html: :class medium
 [[file:gapcost-symmetric-2.svg]]
 
-An alternative solution, that makes the affine path have length $l$,
+An alternative solution (Figure [[symmetric-2]]), that makes the affine path have length $l$,
 would be to make $X_{s,k}$ depend on $I_{x-e,k-1}$ by /inlining/ one extend step
 of $I$ into $X$. This removes the issue with having $l$ increments for $l+1$
-edges. However, this has the drawback that gaps of size $1$ need an extra
-workaround, and the open cost still needs to be distributed: (Figure [[symmetric-2]])
+edges. However, this has the drawback that gaps of size $1$ are not possible,
+and it does not fix the $o/2$ issue.
 \begin{align}
 I_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k-1}\mathbf{\color{lime}+1}, I_{s-e,k-1}+1\big\}\\
 D_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k+1}, D_{s-e,k+1}\big\}\\
@@ -140,6 +140,9 @@ X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o/2-e},k}\mathbf{\col
         &\phantom{=\max\big\{}\;\mathbf{\color{lime}M_{s-o-e, k-1}+1}, \mathbf{\color{lime}M_{s-o-e, k+1}}\big\}\\
 M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 \end{align}
+Also note that this does not allow for length $1$ affine indels, but those can
+easily be handled separately in the linear $X$ layer itself, as in the linear
+diagonal-transition algorithm.
 
 Note that I consider both of these variants theoretically interesting, but not
 practically relevant for now. Maintaining a separate forward and backward
