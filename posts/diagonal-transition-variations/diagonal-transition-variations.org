@@ -1,4 +1,4 @@
-#+title: Variations on affine diagonal transition
+#+title: Variations of affine diagonal transition
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: method pairwise-alignment diagonal-transition
 #+HUGO_LEVEL_OFFSET: 1
@@ -19,7 +19,7 @@ formulations.
 ** Gap open
 WFA [cite:@wfa] introduces the affine cost variant of the classic diagonal
 transition method.
-Let us call it a /gap-open/ variant, because the gap-open cost $o$ is payed when
+Let us call it a *gap-open* variant, because the gap-open cost $o$ is payed when
 opening the gap, that is, when jumping from the $M$ /layer/ to the $I$ or $D$ /layer/.
 
 [cite/text:@biwfa] introduces the classic divide-and-conquer approach of
@@ -31,10 +31,9 @@ is at least $o$: $s_l + s_r \geq s + o$,
 where $s_l$ and $s_r$ are the distances 'searched' from the start and end
 respectively, $s$ is the total cost, and $o$ is the gap open penalty.
 
-The reason that this overlap of $o$ is needed is because the DP is not /symmetric/, meaning
-that when running it from the start and end to some state (on the optimal path),
-the sum of the costs does not equal the cost of the optimal path through the
-state. This is caused by paying the gap-open cost $o$ for both sides of the gap.
+Note that in practice this overlap does not create any big problems, apart from
+a possibly slightly more tricky implementation. Nevertheless I find it
+theoretically displeasing.
 
 #+name: gap-open
 #+caption: Dependencies for Gap Open recursion.
@@ -45,6 +44,11 @@ state. This is caused by paying the gap-open cost $o$ for both sides of the gap.
 #+caption: Lastly, note that this uses separate costs for insertions and deletions.
 #+attr_html: :class medium
 [[file:gapcost-gap-open.svg]]
+
+The reason that this overlap of $o$ is needed is because the DP is not /symmetric/, meaning
+that when running it from the start and end to some state (on the optimal path),
+the sum of the costs does not equal the cost of the optimal path through the
+state. This is caused by paying the gap-open cost $o$ for both sides of the gap.
 
 The original WFA recursion is this (copied from the BiWFA paper, [cite/text:@biwfa]):
 \begin{align}
@@ -123,7 +127,10 @@ through that state, simplifying the meeting conditions.
 #+attr_html: :class medium
 [[file:gapcost-symmetric-1.svg]]
 
-A first attempt to make the diagram symmetric is by incurring a cost of $(o+e)/2$
+To avoid having a separate implementation for the forward and reverse DP, it may
+be possible to have a single, symmetric, recursion.
+
+A first attempt at this is by incurring a cost of $(o+e)/2$
 to open a gap and a cost of $(o+e)/2$ when closing a gap, and by extending the
 FR point by a half in each case: Figure [[symmetric-1]],
 \begin{align}
@@ -143,8 +150,7 @@ when entering the affine layer, but not when leaving it.
 An alternative solution (Figure [[symmetric-2]]), that makes the affine path have length $l$,
 is be to make $X_{s,k}$ depend on $I_{x-e,k-1}$ by /inlining/ one extend step
 of $I$ into $X$. This removes the issue with having $l$ increments for $l+1$
-edges. This only leaves the $o/2$ issue, which seems inevitable in
-any symmetric representation:
+edges.
 \begin{align}
 I_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k-1}\,\mathbf{\color{lime}+1}, I_{s-e,k-1}+1\big\}\\
 D_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2-e},k+1}, D_{s-e,k+1}\big\}\\
@@ -152,47 +158,73 @@ X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o/2-e},k\mathbf{\colo
         &\phantom{=\max\big\{}\;\mathbf{\color{lime}M_{s-o-e, k-1}+1}, \mathbf{\color{lime}M_{s-o-e, k+1}}\big\}\\
 M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
 \end{align}
-Also note that this does not allow for length $1$ affine indels, but those can
-easily be handled separately in the linear $X$ layer itself, as in the linear
-diagonal-transition algorithm.
+This does not allow for length $1$ affine indels, so those are explicitly handled
+separately in the linear $X$ layer itself, as in the linear diagonal-transition
+algorithm.
 
-The updated table is:
+#+name: symmetric-3
+#+caption: Symmetric version 3, where transitions between layers do not process characters.
+#+attr_html: :class medium
+[[file:gapcost-symmetric-3.svg]]
+
+Another option is to use to following recursion, that transitions between the
+main/linear layer and affine layers without processing any characters:
+\begin{align}
+I_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2},k\mathbf{\color{red}-1}}, I_{s-e,k-1}+1\big\}\\
+D_{s,k} &= \max\big\{M_{s\mathbf{\color{lime}-o/2},k\mathbf{\color{red}+1}}, D_{s-e,k+1}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+1, I_{s\mathbf{\color{lime}-o/2},k\mathbf{\color{red}-1}}, D_{s\mathbf{\color{lime}-o/2},k\mathbf{\color{red}+1}}\big\} \\
+M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big).
+\end{align}
+
+This only leaves the $o/2$ issue, which seems inevitable in
+any symmetric representation:
 #+name: table-symmetric
-#+attr_html: :class small
-| What                      | Gap open    | Gap close     | Symmetric 1   | Symmetric 2 |
-| Open cost ($o$)           | start       | end           | $o/2$         | $o/2$       |
-| Extend cost ($e$)         | all but end | all but start | $e/2$         | $e$         |
-| Furthest reaching ($+ 1$) | all but end | all but start | $+1/2$        | $+1$        |
-| Diagonal shift ($k\pm 1$) | all but end | all but start | all but end?! | everywhere  |
+| What                      | Gap open    | Gap close     | Symmetric 1   | Symmetric 2 | Symmetric 3      |
+| Open cost ($o$)           | start       | end           | $o/2$         | $o/2$       | $o/2$            |
+| Extend cost ($e$)         | all but end | all but start | $e/2$         | $e$         | $0$              |
+| Furthest reaching ($+ 1$) | all but end | all but start | $+1/2$        | $+1$        | $0$ at start/end |
+| Diagonal shift ($k\pm 1$) | all but end | all but start | all but end?! | everywhere  | $0$ at start/end |
 
 Note that I consider both of these variants theoretically interesting, but not
 practically relevant for now. Maintaining a separate forward and backward
 implementation seems simpler than the overhead of having fractional costs or
 doubling all costs.
 
-** Even more symmetry
+** Another symmetry
 
 All the formulas so far have an asymmetry between the two sequences: when
 extending an insertion, we increase the furthest reaching point ($f$) by $1$,
 while we do not do this for deletions. The reason is that furthest reaching
 points are stored by their $i$-index. Instead, we can store the
-(more symmetric) sum of indices $i+j$. This changes the value of $f$ to simply
+sum of indices $i+j$. This changes the value of $f$ to simply
 the number of characters of both $A$ and $B$ processed up to this point.
 
 The original gap-open formulation becomes:
 \begin{align}
 I_{s,k} &= \max\big\{M_{s-o-e,k-1}+1, I_{s-e,k-1}+1\big\}\\
 D_{s,k} &= \max\big\{M_{s-o-e,k+1}\,\mathbf{\color{lime}+1}, D_{s-e,k+1}\,\mathbf{\color{lime}+1}\big\}\\
-X_{s,k} &= \max\big\{M_{s-x,k}+1\,\mathbf{\color{lime}+1}, I_{s,k}, D_{s,k}\big\}\\
+X_{s,k} &= \max\big\{M_{s-x,k}+\mathbf{\color{lime}2}, I_{s,k}, D_{s,k}\big\}\\
 M_{s,k} &= X_{s,k} + \mathbf{\color{lime}2\times} LCP\big(A[\mathbf{\color{lime}(}X_{s,k}\mathbf{\color{lime}+k)/2} \dots], B[\mathbf{\color{lime}(}X_{x,k}\mathbf{\color{lime}-k)/2}\dots]\big).
 \end{align}
 Note that the length of the longest common prefix is doubled, since for each
 match we process two characters, one of $A$ and one of $B$.
-
 The end condition changes from $f \geq |A|$ to $f \geq |A| + |B|$.
+
+While this formula contains more symbols, it seems more consistent to me, making
+it easier to understand, and less bug-prone to implement.
 
 The only remaining difference (anti-symmetry) between $I$ and $D$ is whether we shift a diagonal up or down
 ($k\pm1$), which will always be needed.
+
+** Conclusions
+
+- To prevent having overlap $o$ in the forward and backward DP runs, a
+  /gap-close/ variant of the recursion may be used.
+- Instead, a single symmetric recursion could also be used.
+  - This adds cost $o/2$ when entering/exiting an affine layer, which is
+    problematic for odd $o$. Doubling of costs is possible but ugly.
+- The recursion can be conceptually simplified by storing furthest reaching
+  points as sum of their coordinates, instead of only the first coordinate.
 
 ** References
 
