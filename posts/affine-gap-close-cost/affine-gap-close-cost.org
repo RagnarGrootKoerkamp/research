@@ -1,4 +1,4 @@
-#+title: Gap-close cost for diagonal transition
+#+title: Variations on affine diagonal transition
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: method pairwise-alignment diagonal-transition
 #+HUGO_LEVEL_OFFSET: 1
@@ -11,28 +11,30 @@
 #+toc: headlines 3
 *cross references:* [[https://github.com/smarco/BiWFA-paper/issues/4][BiWFA GitHub issue]]
 
-In this post I will explore some variations of the recursion used by WFA/BiWFA.
-In particular, we will go over a /gap-close/ variant, and look into more symmetric
+In this post I will explore some variations of the recursion used by WFA/BiWFA
+for the affine version of the diagonal transition algorithm.
+In particular, we will go over a /gap-close/ variant, and look into some more symmetric
 formulations.
 
 ** Gap open
-[cite/text:@biwfa] introduces the classic divide-and-conquer approach of
-[cite/text:@hirschberg75] to their WFA [cite:@wfa] algorithm.
+WFA [cite:@wfa] introduces the affine cost variant of the classic diagonal
+transition method.
+Let us call it a /gap-open/ variant, because the gap-open cost $o$ is payed when
+opening the gap, that is, when jumping from the $M$ /layer/ to the $I$ or $D$ /layer/.
 
-In this, they run the *gap-open* affine cost variant of the diagonal transition
-method from both ends towards the middle of the sequence until they overlap.
-This has the drawback that the sides need to run until $s_l + s_r \geq s + o$,
+[cite/text:@biwfa] introduces the classic divide-and-conquer approach of
+[cite/text:@hirschberg75] to WFA, resulting in BiWFA.
+Here, the WFA
+method is run from both ends towards the middle of the sequences until the fronts overlap.
+It turns out this has the drawback that the sides need to run until the overlap
+is at least $o$: $s_l + s_r \geq s + o$,
 where $s_l$ and $s_r$ are the distances 'searched' from the start and end
 respectively, $s$ is the total cost, and $o$ is the gap open penalty.
 
-The reason that this overlap $o$ is needed is because the DP is not /symmetric/, meaning
+The reason that this overlap of $o$ is needed is because the DP is not /symmetric/, meaning
 that when running it from the start and end to some state (on the optimal path),
 the sum of the costs does not equal the cost of the optimal path through the
 state. This is caused by paying the gap-open cost $o$ for both sides of the gap.
-
-It is possible to change the /gap-open/ affine cost model to a *gap-close*
-affine cost model to make them mirrors of each other, so that the
-meet-in-the-middle can be stopped as soon as the two fronts reach the same state.
 
 #+name: gap-open
 #+caption: Dependencies for Gap Open recursion.
@@ -55,11 +57,15 @@ where $LCP$ is the length of the longest common prefix of the two strings. This
 recursion is shown in Figure [[gap-open]].
 
 ** Gap close
+It is possible to change the /gap-open/ affine cost model to a *gap-close*
+affine cost model so that they are mirrored versions of each other. This way, the
+meet-in-the-middle can be stopped as soon as the two fronts reach the same state.
 
-The following new recursion, which only adds the cost $o$ when $I$ and $D$ are
-/merged/ into a matching state $M$ (or $X$), instead of adding it when /branching off/ a
-matching state $M$. (Equivalently: it pays $o$ when leaving the affine layer,
-instead of when entering it.) Additions are in green and deletions in red:
+The following new recursion only adds the cost $o$ when the affine $I$ and $D$
+layers are /merged/ into the main layer $M$ (or $X$), instead of adding it
+when /branching off/ a matching state $M$. (Equivalently: it pays $o$ when
+leaving the affine layer, instead of when entering it.) Additions are in green
+and deletions in red:
 \begin{align}
 I_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k-1}+1, I_{s-e,k-1}+1\big\}\\
 D_{s,k} &= \max\big\{M_{s\mathbf{\color{red}-o}-e,k+1}, D_{s-e,k+1}\big\}\\
