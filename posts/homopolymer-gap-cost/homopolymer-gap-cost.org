@@ -1,0 +1,103 @@
+#+title: [WIP] Homopolymer gap cost
+#+HUGO_BASE_DIR: ../..
+# +HUGO_TAGS: method pairwise-alignment diagonal-transition homopolymer
+#+HUGO_LEVEL_OFFSET: 1
+#+BIBLIOGRAPHY: local-bib.bib
+#+cite_export: csl ../../chicago-author-date.csl
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: t
+#+date: <2022-06-13 Mon>
+#+author: Ragnar Groot Koerkamp
+#+toc: headlines 3
+# Hidden post
+#+hugo_custom_front_matter: :_build '((list . "never"))
+
+A typical error in ONT reads is that for (long?) runs of the same
+character (/homopolymers/), the read may report an incorrect number of characters.
+One way to work around this during alignment is by doing /homopolymer
+compression/ (see e.g [cite/t:@hicanu-nurk2020]), where repeated copies (/runs/)
+of a character are replaced by a single copy.
+
+In a discussion with Sergey Nurk and Pesho Ivanov, the idea came up to introduce
+a new type of mutation for pairwise alignment that corrects for this type of errors.
+
+This posts goes over some possible implementations of this idea. Further work
+will be needed to choose the right one and find good parameters for the
+actual discrepancy between real and observed homopolymer lengths (eg Fig. 9 of [cite:@ont-reads-delahaye2021]).
+
+* What do we actually want?
+
+First some intuition:
+1. Homopolymer indels should consist only of the same character.
+   - e.g. ~AC => ABBBC~
+2. They should be cheaper than normal indels in most cases. (Otherwise, what's
+   the point.)
+   - e.g. ~ABC => ABBBC~ should be cheaper than ~ABC => ABXXC~.
+3. Longer indels should cost more, given the same context.
+   - e.g. ~ABBC => ABBBBBC~ should be more expensive than ~ABBC => ABBBC~.
+4. The more copies of the character surround the indel, the cheaper it should be.
+   - e.g. ~ABBC => ABBBBC~ should be cheaper than ~ABC => ABBBC~.
+
+In general, we need a cost function for the cost of inserting/deleting $m$ equal
+characters, given that $k$ respectively $l$ copies precede the indel in the two strings:
+
+- cost function ::
+  $c(k, l; m)$ is the cost of an indel of size $m>0$, when $k\geq 0$ resp.
+  $l\geq 0$ copies of
+  the character precede the indel.
+
+  - I.e., the cost of transforming ~A (k*B) | C~ into ~A (l*B) | (m*B) C~, where
+    we assume everything before the ~|~ has already been aligned, and none of
+    $k$, $l$, and $m$ could increase.
+
+    (We assume that greedy matching another ~B~ is not possible.)
+
+The intuition from before translates to:
+- $c(k,l;m)$ is increasing[fn:1] in $m$;
+- $c(k,l;m)$ is decreasing[fn:1] in each of $k$ and $l$.
+
+[fn:1] Non-strict.
+
+* What can we compute
+
+* Possible definitions
+
+Let's first discuss some ways of defining /homopolymer indels/. For now we
+assume insertions and deletions are symmetric.
+
+- Basic idea ::
+  Any indel of equal characters is allowed.
+
+One problem with this approach is that any indel becomes a homopolymer indel.
+That could be fixed by using affine costs, but that would penalize e.g. ~AAA =>
+AAAA~ as much as ~AC => ABC~, while the goal is to make homopolymer indels
+cheaper, even if they are only of length $1$.
+
+- $c(0,0;1) = \infty$
+
+Thus, we need a /context aware/ definition.
+
+- Absolute contextual bound ::
+  Require that at least $k>0$ preceding (non-indel) characters are equal to
+  the indel char in both strings.
+
+  For $k=2$ we may have ~ABBC => ABBBC~. Note that ~ABC => BBBC~ would not be
+  allowed in this case.
+
+This has the benefit that an absolute lower bound on the number of equal preceding characters is easy to check algorithmically.
+
+- Relative contextual bound ::
+  For an indel of length $l$, require at least $f\cdot l$ adjacent copies of the
+  same character, for some $f> 0$.
+
+
+
+
+* Linear costs
+
+
+
+
+* Affine costs
+* References
+#+print_bibliography:
