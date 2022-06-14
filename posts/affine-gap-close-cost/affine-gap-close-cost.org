@@ -169,8 +169,10 @@ doubling all costs.
 All the formulas so far have an asymmetry between the two sequences: when
 extending an insertion, we increase the furthest reaching point ($f$) by $1$,
 while we do not do this for deletions. The reason is that furthest reaching
-points are only indicated by one of their indices. Instead, we can store the
-(more symmetric) sum of indices.
+points are stored by their $i$-index. Instead, we can store the
+(more symmetric) sum of indices $i+j$. This changes the value of $f$ to simply
+the number of characters of both $A$ and $B$ processed up to this point.
+
 The original gap-open formulation becomes:
 \begin{align}
 I_{s,k} &= \max\big\{M_{s-o-e,k-1}+1, I_{s-e,k-1}+1\big\}\\
@@ -178,11 +180,13 @@ D_{s,k} &= \max\big\{M_{s-o-e,k+1}\,\mathbf{\color{lime}+1}, D_{s-e,k+1}\,\mathb
 X_{s,k} &= \max\big\{M_{s-x,k}+1\,\mathbf{\color{lime}+1}, I_{s,k}, D_{s,k}\big\}\\
 M_{s,k} &= X_{s,k} + \mathbf{\color{lime}2\times} LCP\big(A[\mathbf{\color{lime}(}X_{s,k}\mathbf{\color{lime}+k)/2} \dots], B[\mathbf{\color{lime}(}X_{x,k}\mathbf{\color{lime}-k)/2}\dots]\big).
 \end{align}
-The end condition changes from $f \geq n$ to $f \geq n+m$.
+Note that the length of the longest common prefix is doubled, since for each
+match we process two characters, one of $A$ and one of $B$.
+
+The end condition changes from $f \geq |A|$ to $f \geq |A| + |B|$.
 
 The only remaining difference (anti-symmetry) between $I$ and $D$ is whether we shift a diagonal up or down
 ($k\pm1$), which will always be needed.
-
 
 ** References
 
