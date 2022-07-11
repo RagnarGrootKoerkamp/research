@@ -1,0 +1,56 @@
+#+title: The BiWFA meeting condition
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: method pairwise-alignment diagonal-transition affine
+#+HUGO_LEVEL_OFFSET: 1
+#+BIBLIOGRAPHY: local-bib.bib
+#+cite_export: csl ../../chicago-author-date.csl
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: t
+#+date: <2022-07-11 Mon>
+#+author: Ragnar Groot Koerkamp
+#+toc: headlines 3
+*cross references:* [[https://github.com/smarco/BiWFA-paper/issues/8][BiWFA GitHub issue]]
+
+It seems that getting the meeting/overlap condition of BiWFA
+([cite/text:@biwfa], Algorithm 1 and Lemma 2.1) correct is tricky.
+
+Let $p := \max(x, o+e)$ be the maximal cost of any edge in the edit graph.
+As in the BiWFA paper, let $s_f$ and $s_r$ be the distances of the /forward/ and
+/reverse/ fronts computed so far.
+
+We prove the following lemma:
+
+*Lemma*
+Once BiWFA has expanded the forward and reverse fronts up to $s_f$ and $s_r$ and
+has found /some/ path of cost $s \leq s_f + s_r$,
+expanding the fronts until $s'_f + s'_r \geq s+p+o$ is guaranteed to find an
+/optimal/ path.
+
+*Proof*
+1. Increment $s_f$ and $s_r$ up to the point (but excluding)
+   where $s'_f + s'_r = s + p + o$.
+2. Let $\pi$ be a shortest path in the edit graph of cost $s_\pi$.
+3. Let $I$ be the interval of distances on the path $\pi$ from the start that are covered by both
+   the forward and reverse fronts. (This probably needs a more formal
+   definition.)
+4. $I = [s_\pi -s'_r+o, s'_f)$ or $I = (s_\pi - s'_r+o, s'_f]$
+   is covered both in the forward and reverse direction for all (affine) layers
+   ($M$, $I$, $D$). The side on which $I$ is open depends on whether $s'_f$ or
+   $s'_r$ was incremented last.
+5. Since $s_\pi \leq s$, we have
+   \begin{align}
+   |I| &= s'_f - (s_\pi - s'_r + o)\\
+       &= s'_f + s'_r - s_\pi - o \\
+       &= s+p+o - s_\pi - o \\
+       &= s-s_\pi +p \\
+       &\geq p.
+   \end{align}
+6. Each edge in the edit graph has cost at most $p = \max(x, o+e)$.
+7. $\pi$ contains at least one node every $p$ fronts, as long as $s_f \leq s_\pi$ and $s_r \leq s_\pi$.
+8. Since the interval $I$ has size $p$ it contains at least one node of $\pi$.
+9. Thus, the forward and reverse wavefronts overlap sufficiently to find a
+   shortest path.
+
+** References
+
+#+print_bibliography:
