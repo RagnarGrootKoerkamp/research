@@ -48,6 +48,21 @@ Some ideas I have, that each deserve at least a blogpost once I find the time.
 
   TODO: Figure out how to use pruning heuristics in this case -- so far this
   only works well for non-pruning/static heuristics.
+- WFA with /diamond optimization/ ::
+  Instead of defining WFA fronts as those of constant $s$, the search can be
+  directed towards the target diagonal: compute /layers/ of /rectangles/. It
+  turns out this does not work well in practice because it's hard to
+  parallelize. A writeup on the details would be nice.
+- Match score for asymmetric and dual affine costs :: As mentioned in the
+  =WFAlm= paper by Eizenga and Paten, a match score can be handled in the
+  cost-only setting by instead increasing the cost of mismatches and extends.
+  This idea generalizes to asymmetric costs and dual affine costs. Further, it
+  can be modified to not have half-integer costs: instead of effectively adding
+  cost $l/2$ per processed character, we can add cost $l$ each time a character
+  of $A$ is processed (that is, for mismatches and deletion-extend edges). By
+  adding it in the direction of the shorter sequence, the final score will be
+  lower. Some investigation is needed to see whether adding score $l$ to
+  characters of $A$ or $B$ actually makes a significant difference.
 - Homopolymer affine layers ::
   We could make affine layers with a special (lower) cost that only allows homopolymer
   inserts/deletes. From first experiments that such a cost is not necessarily
