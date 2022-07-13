@@ -32,7 +32,26 @@ Here I list some ideas for research topics / papers / tasks that need doing:
 ** On hold
 - Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]]. Not as interesting as the A*PA work.
 
-** Planned blogposts
+** Pending ideas/blogposts
+Some ideas I have, that each deserve at least a blogpost once I find the time.
+- Low memory WFA backtracking ::
+  Instead of storing furthest reaching points for
+  all wavefronts, it is sufficient to only store /critical/ points where paths
+  split/merge.
+  This should lower memory usage of WFA to close to linear, without needing BiWFA.
+- NW/Diagonal transition with exponential search and heuristics ::
+  Think about merging NW/Diagonal transition with exponential search and
+  heuristics.
+  When doing exponential search, we can use a heuristic to limit the band/number
+  of diagonals to process. If we are given the actual distance, this may lead to
+  a linear time algorithm to prove that it is indeed the correct distance.
+
+  TODO: Figure out how to use pruning heuristics in this case -- so far this
+  only works well for non-pruning/static heuristics.
+- Homopolymer affine layers ::
+  We could make affine layers with a special (lower) cost that only allows homopolymer
+  inserts/deletes. From first experiments that such a cost is not necessarily
+  well-defined, so further evaluations are needed.
 - A*PA post :: A post on the A*PA paper.
   - Additionally, there can be a post on how it extends/is similar to many other
     existing ideas/algorithms/papers.
@@ -48,6 +67,10 @@ Here I list some ideas for research topics / papers / tasks that need doing:
 
   A simple optimization here is to build a map over $A$, which contains only
   $n/k$ seeds, and do lookups for all $n$ $k$mers in $B$.
+- /Diamond optimization/ for WFA ::
+  We spent some time trying to implement this, but then realized it can never
+  work efficiently because of dependencies between consecutive states. A short
+  write-up on this would be nice.
 
 ** Smaller tasks
 - Extract A*PA benchmarks :: =simple coding task= Extract the ~evals~ directory to a separate reusable repo with benchmarks and
@@ -56,6 +79,17 @@ Here I list some ideas for research topics / papers / tasks that need doing:
   on a set of real ONT reads. We need to find a dataset where the reads are from
   exactly the same genome as the reference, so that no biological mutations (in
   particular long indels) are present in the data.
+- Test/bench datasets ::
+  It would be nice to have more testcases than just random ones. In particular,
+  the following would be nice:
+  - random strings with 1 long indels
+  - random strings with multiple long indels
+  - repeating strings, but with a different number of repeats
+  - repeating strings, but with additional mutations (both $A$ and $B$ are $e/2$
+    mutations away from the pattern). May also have a different number of repeats.
+  - Random with non-uniform mutations (only inserts, only deletions, ...)
+  - Random with different length distribution on indel length, so they are
+    longer than the defaul geometric distribution.
 
 ** Future plans
 - Exact global pairwise alignment review :: Finish that post, and convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
@@ -86,5 +120,5 @@ Here I list some ideas for research topics / papers / tasks that need doing:
   do you expect this to change value when computing it for all $k$-mers of a
   length $2k$ string. Assume that $f$ has some structure (so that its values
   correlate for similar strings), but is mostly independent (?) for unrelated
-  stirngs, i.e. something similar to the sign of Tensor Sketching, or e.g.
+  strings, i.e. something similar to the sign of Tensor Sketching, or e.g.
   whether the number of zeros or ones in the $k$mer is larger.
