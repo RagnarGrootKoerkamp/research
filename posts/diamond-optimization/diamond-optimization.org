@@ -1,0 +1,81 @@
+#+TITLE: Diamond optimization for Diagonal Transition
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: pairwise-alignment diagonal-transition
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+date: <2022-08-01 Mon>
+# Hidden post
+#+hugo_custom_front_matter: :_build '((list . "never"))
+
+#+toc: headlines 3
+#+author: Mykola Akulov
+
+
+* Diamond transition or how technicalities can break concepts
+
+_\*Reader is supposed to have some basic knowledge about pairwise alignment._
+
+Let’s take a look at one of the most important and eficient algorithms for pairwise alignment - WFA. It already looks good, is pretty efficient. On the picture, rows are wavefronts, and columns are diagonals. Light-blue color shows stored states. Green color shows current cell, and dark-blue color shows on what cells value of current (green) cell does depend.
+
+#+caption: WFA algorithm
+#+name: wfa
+[[file:WFA.svg]]
+
+If path is not required, we can use linear-memory optimization, Figure [[wfa-mem-save]].
+
+#+caption: WFA algorithm with linear-memory optimization
+#+name: wfa-mem-save
+[[file:WFA_mem_save.svg]]
+
+It is good for parallel calculations (which are extremely fast).
+
+#+caption: Parallel WFA algorithm
+[[file:WFA_parallel.svg]]
+
+And this parallel optimization can also have linear memory.
+
+#+caption: Parallel WFA algorithm with linear-memory optimization
+[[file:WFA_parallel_mem_save.svg]]
+
+But the idea for improvement of this algorithm may cross your mind. In the very beginning, we know on which diagonal the answer will appear $answer\_diagonal = length\_of\_first\_seq – length\_of\_second\_seq$. This "answer" diagonal is highlighted in red on pictures. So why do we calculate whole triangle? We never use corners, but we waste time on that. Let’s try to calculate only cells, needed to explore new cells on the answer diagonal. Knowing that every cell depends on maximum three cells one level up, we can figure out that we do not need to store whole triangle, only part of it.
+
+#+caption: Diamond optimization
+[[file:diamond.svg]]
+
+The form of the covered area looks like a diamond, so let’s call it a Diamond optimization.
+
+Less cells to store means memory optimization; less cells to calculate - runtime optimization! It should be at least two times faster! Looks like it can be parallelized just as WFA.
+
+#+caption: Parallel diamond optimization
+[[file:diamond_parallel.svg]]
+
+We also do no not need to store all states if we do not need to trace back path,
+so we can make a linear memory optimization.
+
+#+caption: Parallel diamond optimization with linear-memory optimization
+[[file:diamond_parallel_mem_save.svg]]
+
+Looks like an amazing alternative to WFA!
+
+** But let’s take a closer look
+
+Let’s take a look at this picture again:
+
+#+caption: Diamond optimization
+[[file:diamond.svg]]
+
+In one layer, we need to firstly cover one side, then another one. Stunts like this make implementation harder and more error-prune.
+
+The second detail is that cells in one layer do depend on previous cells in the SAME layer. What does it mean? It means we can say “Auf Wiedersehen” to parallel calculations. On the contrary, in usual WFA current layer depends ONLY on previous layers, so you can all cells in the layer at the same time.
+
+And finally, for WFA formula is very simple – take maximum from the previous layer on the main diagonal, one diagonal left, and one diagonal right, extend. The author is simplifying here a bit, for you usually also add constant summand to these diagonals, but this formula is still straightforward. While in Diamond optimization you will need to work with three layers at the same time and have some special cases for cells near “answer” or “diamond” diagonal. So, this picture is completely wrong, and gives hope only at the first sight.
+
+Also, diamond optimization requrires us to extend only one (maximum two - from both sides) diagonal at the same time, while in WFA you can extend all diagonals in the same layer at the same time for they do not depend on each other and can be calculated simultaneously. This becomes a bottleneck, making trivial for loop (which can be very fast) a set of non-trivial operations.
+
+#+caption: Parallel diamond optimization
+[[file:diamond_parallel.svg]]
+
+** Conclusion
+
+So this double speed-up is just fading comparing to what hurdles and obstacles this “improvement” brings. But one more important fact is that you can get approximately the same effect by using BiWFA (in two words, running WFA from both sides), which keeps all the benefits of usual WFA, allowing to reduce space and time usage.
