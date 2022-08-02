@@ -4,58 +4,82 @@
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
 #+hugo_auto_set_lastmod: nil
-#+date: <2022-08-01 Mon>
-# Hidden post
-#+hugo_custom_front_matter: :_build '((list . "never"))
+#+date: <2022-08-01>
+#+author: Mykola Akulov
+#+author: Ragnar Groot Koerkamp
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
 
 #+toc: headlines 3
-#+author: Mykola Akulov
-
 
 * Diamond transition or how technicalities can break concepts
 
-_\*Reader is supposed to have some basic knowledge about pairwise alignment._
+/We assume the reader has some basic knowledge about pairwise alignment
+and in particular the WFA algorithm./
 
-Let’s take a look at one of the most important and eficient algorithms for pairwise alignment - WFA. It already looks good, is pretty efficient. On the picture (Figure [[wfa]]), rows are wavefronts, and columns are diagonals. Light-blue color shows stored states. Green color shows current cell, and dark-blue color shows on what cells value of current (green) cell does depend.
+Let’s take a look at one of the most important and efficient algorithms for
+pairwise alignment --- WFA [cite:@wfa]. It already looks good, is pretty efficient. On
+Figure [[wfa]], which copies the style of Figure 1 in [cite/t:@wfalm], rows are wavefronts, and columns are diagonals. Light-blue
+states are stored in memory. Green shows the current state being computed, and dark-blue
+shows what cells the computation of the current (green) cell depends on.
 
 #+caption: WFA algorithm
 #+name: wfa
+#+attr_html: :class inset small
 [[file:WFA.svg]]
 
-If path is not required, we can use linear-memory optimization, Figure [[wfa-mem-save]].
+If a path is not required, we can use the linear-memory optimization, Figure
+[[wfa-mem-save]].
 
 #+caption: WFA algorithm with linear-memory optimization
 #+name: wfa-mem-save
 [[file:WFA_mem_save.svg]]
 
-It is good for parallel calculations (which are extremely fast), Figure [[wfa-parallel]].
+WFA is especially good for parallel calculations (which are extremely fast using
+SIMD), Figure [[wfa-parallel]].
 
 #+caption: Parallel WFA algorithm
 #+name: wfa-parallel
 [[file:WFA_parallel.svg]]
 
-And this parallel optimization can also have linear memory (Figure[[wfa-parallel-mem-save]].
+The parallel wavefront computation also applies with the linear memory optimization,
+Figure[[wfa-parallel-mem-save]].
 
 #+caption: Parallel WFA algorithm with linear-memory optimization
 #+name: wfa-parallel-mem-save
 [[file:WFA_parallel_mem_save.svg]]
 
-But the idea for improvement of this algorithm may cross your mind. In the very beginning, we know on which diagonal the answer will appear $answer\_diagonal = length\_of\_first\_seq – length\_of\_second\_seq$. This "answer" diagonal is highlighted in red on pictures. So why do we calculate whole triangle? We never use corners, but we waste time on that. Let’s try to calculate only cells, needed to explore new cells on the answer diagonal. Knowing that every cell depends on maximum three cells one level up, we can figure out that we do not need to store whole triangle, only part of it. The Figure[[diamond]] shows this.
+The following idea for improvement of this algorithm may cross your mind: In the very
+beginning, we already know in which diagonal (column) the answer will appear:
+\begin{equation}
+answer\_diagonal = length\_of\_first\_seq - length\_of\_second\_seq.
+\end{equation}
+This "answer" diagonal is highlighted in red in the figures. So why do we
+calculate whole triangle? We never use the bottom left and right corners, but we
+do waste time on that. Let’s
+try to calculate only cells needed to explore new cells on the answer diagonal.
+Knowing that every cell depends on at most three cells in the previous wavefront, we can
+realize we do not need to store whole triangle, only part of it.
+Figure [[diamond]] shows this.
 
 #+caption: Diamond optimization
 #+name: diamond
+#+attr_html: :class inset small
 [[file:diamond.svg]]
 
-The form of the covered area looks like a diamond, so let’s call it a Diamond optimization.
+The form of the covered area looks like a diamond, so let’s call it a Diamond
+optimization. (This name was fist coined by Santiago and his team.)
 
-Less cells to store means memory optimization; less cells to calculate - runtime optimization! It should be at least two times faster! Looks like it can be parallelized just as WFA (Figure [[diamond-parallel]]).
+Less cells to store means memory optimization; less cells to calculate - runtime
+optimization! It should be at least two times faster! Looks like it can be
+parallelized just as WFA (Figure [[diamond-parallel]]).
 
 #+caption: Parallel diamond optimization
 #+name: diamond-parallel
 [[file:diamond_parallel.svg]]
 
 We also do no not need to store all states if we do not need to trace back path,
-so we can make a linear memory optimization (Figure [[diamond-parallel-mem-save]]). 
+so we can make a linear memory optimization (Figure [[diamond-parallel-mem-save]]).
 
 #+caption: Parallel diamond optimization with linear-memory optimization
 #+name: diamond-parallel-mem-save
@@ -65,16 +89,46 @@ Looks like an amazing alternative to WFA!
 
 ** But let’s take a closer look
 
-Let’s take a look at Figure[[diamond]] again:
+Let’s take a look at Figure [[diamond]] again.
 
-In one layer, we need to firstly cover one side, then another one. Stunts like this make implementation harder and more error-prune.
+In one layer, we need to first cover one side of the diamond, then the other one. Stunts like
+this make the implementation harder and more error-prone.
 
-The second detail is that cells in one layer do depend on previous cells in the SAME layer. What does it mean? It means we can say “Auf Wiedersehen” to parallel calculations. On the contrary, in usual WFA current layer depends ONLY on previous layers, so you can all cells in the layer at the same time.
+The second detail is that cells in one layer /do/ depend on previous cells in the
+SAME layer. What does it mean? It means we can say “Auf Wiedersehen” to parallel
+calculations. On the contrary, in usual WFA the current layer depends ONLY on
+previous layers, so you can compute all cells in the layer at the same time (in parallel).
 
-And finally, for WFA formula is very simple – take maximum from the previous layer on the main diagonal, one diagonal left, and one diagonal right, extend. The author is simplifying here a bit, for you usually also add constant summand to these diagonals, but this formula is still straightforward. While in Diamond optimization you will need to work with three layers at the same time and have some special cases for cells near “answer” or “diamond” diagonal. So, Figure[diamond-parallel] and Figure[diamond-parallel-mem-save] are completely wrong and give hope only at the first sight.
+And finally, for WFA the formula is very simple – take the maximum of the cells
+in the previous layer on the same diagonal and the diagonals left and right of
+it, and then extend.
+The author is simplifying here a bit, for you usually also add constant
+to these diagonals, but this formula is still straightforward.
 
-Also, diamond optimization requrires us to extend only one (maximum two - from both sides) diagonal at the same time, while in WFA you can extend all diagonals in the same layer at the same time for they do not depend on each other and can be calculated simultaneously. This becomes a bottleneck, making trivial for loop (which can be very fast) a set of non-trivial operations.
+On the other hand, in the Diamond
+optimization you will need to work with three layers at the same time and have
+some special edge cases for cells near the answer diagonal. So,
+Figure [[diamond-parallel]] and Figure [[diamond-parallel-mem-save]] are completely
+wrong and give hope only at the first sight.
+
+Furthermore, in the diamond optimization we can only extend one diagonal at a
+time (or possibly two --- one at each side), while in WFA we can extend all
+diagonals in the same layer at the same time since they do not depend on each
+other and can be calculated simultaneously.  This becomes a bottleneck: the
+for-loop over each side of the diamond now has iterations that are dependent on
+each other, so the next cell can only be computed after the previous one has
+been computed. Also, each iteration contains an extend step resulting in
+hard-to-predict memory access pattern.
+
+Overall, this is simply too complex to optimize well.
 
 ** Conclusion
 
-So this double speed-up is just fading comparing to what hurdles and obstacles this “improvement” brings. But one more important fact is that you can get approximately the same effect by using BiWFA (in two words, running WFA from both sides), which keeps all the benefits of usual WFA, allowing to reduce space and time usage.
+So this double speed-up is just fading comparing to what hurdles and obstacles
+this “improvement” brings. But one more important fact is that you can get
+approximately the same effect by using BiWFA [cite:@biwfa] (in two words, running WFA from
+both sides), which keeps all the benefits of usual WFA, allowing to reduce space
+and time usage.
+
+* References
+#+print_bibliography:
