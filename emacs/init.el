@@ -60,6 +60,12 @@
 (with-eval-after-load 'ox-hugo
   (plist-put org-hugo-citations-plist :bibliography-section-heading ""))
 
+; Auto-prefix type (figure/table) of links.
+; https://ox-hugo.scripter.co/doc/linking-numbered-elements/#fnref:1
+(with-eval-after-load 'ox-hugo
+  (setq org-hugo-link-desc-insert-type t))
+
+
 ;;;
 ;;; Public functions
 ;;;
