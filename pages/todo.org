@@ -48,11 +48,6 @@ Some ideas I have, that each deserve at least a blogpost once I find the time.
 
   TODO: Figure out how to use pruning heuristics in this case -- so far this
   only works well for non-pruning/static heuristics.
-- WFA with /diamond optimization/ ::
-  Instead of defining WFA fronts as those of constant $s$, the search can be
-  directed towards the target diagonal: compute /layers/ of /rectangles/. It
-  turns out this does not work well in practice because it's hard to
-  parallelize. A writeup on the details would be nice.
 - Match score for asymmetric and dual affine costs :: As mentioned in the
   =WFAlm= paper by Eizenga and Paten, a match score can be handled in the
   cost-only setting by instead increasing the cost of mismatches and extends.
@@ -82,10 +77,6 @@ Some ideas I have, that each deserve at least a blogpost once I find the time.
 
   A simple optimization here is to build a map over $A$, which contains only
   $n/k$ seeds, and do lookups for all $n$ $k$mers in $B$.
-- /Diamond optimization/ for WFA ::
-  We spent some time trying to implement this, but then realized it can never
-  work efficiently because of dependencies between consecutive states. A short
-  write-up on this would be nice.
 
 ** Smaller tasks
 - Extract A*PA benchmarks :: =simple coding task= Extract the ~evals~ directory to a separate reusable repo with benchmarks and
@@ -97,14 +88,10 @@ Some ideas I have, that each deserve at least a blogpost once I find the time.
 - Test/bench datasets ::
   It would be nice to have more testcases than just random ones. In particular,
   the following would be nice:
-  - random strings with 1 long indels
   - random strings with multiple long indels
-  - repeating strings, but with a different number of repeats
-  - repeating strings, but with additional mutations (both $A$ and $B$ are $e/2$
-    mutations away from the pattern). May also have a different number of repeats.
   - Random with non-uniform mutations (only inserts, only deletions, ...)
   - Random with different length distribution on indel length, so they are
-    longer than the defaul geometric distribution.
+    longer than the default geometric distribution.
 
 ** Future plans
 - Exact global pairwise alignment review :: Finish that post, and convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
