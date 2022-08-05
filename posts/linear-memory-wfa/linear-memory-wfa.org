@@ -1,0 +1,344 @@
+#+TITLE: Linear memory diagonal transition?
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: pairwise-alignment diagonal-transition linear-memory
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+date: <2022-08-05>
+#+author: Ragnar Groot Koerkamp
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
+#+cite_export: csl ../../chicago-author-date.csl
+#+toc: headlines 3
+# Hidden post
+#+hugo_custom_front_matter: :_build '((list . "never"))
+
+In this post I'll discuss an idea to run diagonal transition/WFA using linear memory, while still
+allowing us to trace back the optimal path from the target back to the start of
+the search.
+
+I am writing this as I discover new things and try to make this work, so bear
+with me and let's see where this goes!
+
+* Motivation
+
+It's cool! But if you insist (/why not simply do BiWFA which does tracing in
+linear memory?/), here's a post factum argument:
+
+We are also working on A*-based alignment. Meet-in-the-middle for A* is much
+harder than for the simpler Dijkstra and WFA algorithms, and no
+sufficiently good/convenient/simple bidirectional variant is available to make obvious
+improvement there. Thus, we are stuck with the forward-only version for now. It
+already runs smooth on simpler inputs, but needs quadratic memory on bigger/more
+complicated inputs. Being able to reduce this will hopefully allow better scaling.
+
+* Path traceback: two strategies
+
+#+name: wfa
+#+caption: Computing wavefronts step by step in the diagonal-transition algorithm.
+[[../diamond-optimization/WFA.svg]]
+
+First, here is the basic recurrence relation on the furthest reaching (/f.r./)
+points $f_{s, k}$ (cost $s$, diagonal $k$)for unit-costs:
+#+name: eq
+\begin{align}
+f &= \max(f_{s-1, k} + 1, f_{s-1, k-1} +1, f_{s-1, k+1})\\
+f_{s, k} &= extend(f).
+\end{align}
+Thus, first we take the maximum furthest-reaching point over the three parents in
+the current diagonal and the one above/below, and then we extend this point
+further along matching characters. [[wfa]] shows an example: columns are diagonals
+$k$, rows are wavefronts $f_{s, \bullet}$, the current cell $f_{s, k}$ being
+computed is in green, and its dependencies (the three f.r. points in the
+maximum) are in dark blue.
+
+The parent f.r. point of a given $f_{s, k}$ is simply the $f_{s-1, k'}$ in the arg-max of the maximum.
+Since we store all previously computed values of $f_{s,k}$, this is easily computed.
+
+Now, there are two ways to actually recover the path from the parent $f_{s-1,
+k'}$ to the current state $f_{s, k}$:
+
+- Forward greedy ::
+  The first option is the one described in [cite:@wfa]: let $f = \max(f_{s-1, k} + 1,
+  f_{s-1, k-1} +1, f_{s-1, k+1})$. We have $f_{s,k} = extend(f) \geq f$, and the
+  difference is exactly the number of characters the f.r. point was extended.
+
+  To get the path to the parent, we simply walk back $f_{s,k} - f$ matching
+  characters, and then make a single mutation as needed to get to
+  the parent $f_{s-1, k'}$.
+
+  #+name: forward-greedy
+  #+caption: Diagonal transition with forward-greedy path tracing.
+  #+caption: The coloured cells are those computed/visited by diagonal transition.
+  #+caption: The final path is thick black, and tracebacks (parents) of visited states are dark grey.
+  #+caption: Note how paths exactly follow the coloured regions.
+  #+caption: All figures in this post are generated using[[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner/blob/master/examples/path-tracing.rs][ this code]].
+  #+attr_html: :class inset
+  [[file:./forward-greedy.png]]
+
+- Backward greedy ::
+  In this case, we greedily match as many matches as possible going back from
+  $f_{s,k}$. There will be at least $f_{s,k} - f$ such matches by construction
+  of the algorithm, but there may be more in cases where the parent is via
+  insertion or deletion.
+
+  After the greedy matching, we again make a single mutation to get to the
+  parent diagonal $k'$.
+  In the substitution case we will exactly reach the parent $f_{s-1, k'}$. In
+  case of an insertion/deletion, we will reach a state on diagonal $k'$ of cost
+  $s-1$, but not necessarily the furthest one. It can be at any point
+  $f_{s-2, k'} < CurrentPosition \leq f_{s-1, k'}$ along the diagonal.
+
+  As you can see in [[backward-greedy]], in this case traced paths typically do not correspond to
+  the forward-greedy paths that exactly follow the wavefronts.
+
+  #+name: backward-greedy
+  #+caption: Diagonal transition with backward-greedy path tracing.
+  #+caption: In this case, note that paths diverge from the visited states,
+  #+caption: but have the same cost.
+  #+attr_html: :class inset
+  [[file:./backward-greedy.png]]
+
+* Observations
+
+/This section is just a blob of thoughts -- parts may be obscure,
+so please skip to the next section, [[*A pragmatic solution]]./
+
+#+caption: Forward greedy traceback.
+[[file:./forward-greedy.png]]
+#+caption: Backward greedy traceback.
+[[file:./backward-greedy.png]]
+
+I'm showing the same images again here on the right so I can make some remarks
+while they are in view:
+- The forward-greedy tracebacks exactly follow the visited states.
+  This is expected, since the diagonal-transition in itself is already
+  forward-greedy via the ~extend~ step.
+- The forward-greedy tracebacks are often nicely linear, as for example the
+  first (leftmost) three /branches/ (as in a tree. Better terminology needed?)
+  on the bottom-left, and the last (bottommost) two /branches/ on the top-right.
+- For *every* position above the optimal path in both versions, an optimal traceback contains
+  only matches, substitutions, and deletions (horizontal edges, that skip over
+  characters of sequence $A$ at the top of the figure).
+- There is /only one/ horizontal edge in the bottom of both versions where the traceback
+  moves away from the main diagonal.
+- The backward-greedy tracebacks never /cross/ the forward-greedy paths, and
+  never 'enter' the 'previous' branch. They always stay within the same white
+  unexplored region, until they branch back into an (indirect) parent of where
+  they left the coloured branch.
+- For forward-greedy traceback, we need to know exactly the parent value of $f$.
+- Starting anywhere outside the main path, the only information needed for
+  backward-greedy tracing is whether we should make an insertion or deletion
+  after greedily matching characters.
+- No substitutions occur in the white regions. Backward-greedy edges there are
+  either matches or indels.
+- Forward-greedy and backward-greedy have exactly the same set of substitution edges.
+- The $i$th branch on each side tells us how far we can get with $i$
+  substitutions.
+- More generally, substitution edges outside the main path are rare. Most
+  diagonal edges there are matches, but those (and only those?) starting in a
+  state where the tree splits (into multiple branches) are substitutions.
+
+This leads me to:
+- Hypothesis 1 ::
+  The tree splits at the start (top-left) of every forward-greedy substitution edge,
+  and every split is followed by a /critical/ substitution edge.
+
+  A *split* is where a branch splits into two branches.
+
+  An edge is *critical* when it is included in every optimal path to
+  the state at the end of the edge.
+
+** What information is needed
+
+Let's take another look at [[forward-greedy]] and determine the minimal information
+needed with which we could reconstruct tracebacks from each visited (coloured)
+state. (Jup, I'm just going to keep repeating this every time it scrolls out of
+my view ;)) The previous observations hinted at substitutions being important,
+so I'm highlighting those red in [[forward-greedy-grey]]. (The lazy
+way to do side-by-side figures.) To reduce distractions,
+I'm removing the gradient and drawing f.r. states as grey. States that are
+visited while extending are lighter grey.
+
+#+name: forward-greedy-grey
+#+caption: The same forward greedy and backward greedy tracebacks, showing substitutions in red.
+#+caption: Grey cells are f.r. points and lighter grey cells are passed though while extending.
+#+caption: Note that the set of substitutions is the same in both cases.
+#+attr_html: :class inset
+| [[file:./forward-greedy-grey.png]] | [[file:./backward-greedy-grey.png]] |
+
+The starting point will be the following. (I'm skipping a few earlier iterations
+with tricky issues, so this may turn out to /actually work/.)
+- Memory reduction hypothesis 2 ::
+  All tracebacks can be reconstructed from the induced sub-graph on substitution
+  edges and branch-tips.
+
+To expand on this: the set of all tracebacks together forms a tree, which is
+just a special kind of graph. Now take all states that are either at the
+start or end of a substitution edge, or at the /tip/ of a branch, i.e. a /leaf/ of
+the tree. The induced subgraph is the graph on these states that connects two
+states when they are joined by a path in the tree that does not go through any
+other selected states.
+
+Let's see how we could use this information to generate a backward greedy traceback starting at
+a given tip:
+
+- Algorithm 1 ::
+  From the tip, we know the parent state that is at start/end of a substitution.
+  The path to the parent can contain no other substitutions, and so consists of
+  matches and indels only. Alternate backward-greedy matching with single
+  indel steps /in the right direction/ (i.e. towards the diagonal of the parent)
+  until the parent is reached. Then repeat.
+  Take a substitution step only when 
+
+This looks great! In fact, I think this can recover the entire figure above!
+However, there is one subtle point: it depends on the following hypothesis:
+- <<hyp2>> Hypothesis 2 ::
+  The path from a visited state to its parent (that is, the first state on the
+  traceback at either the start or end of a substitution edge) does not contains
+  insertion edges or does not contain deletion edges. Which of the two naturally
+  depends on whether the parent is on a diagonal above or below the current position.
+
+#+name: detail
+#+caption: The optimal path contains an insertion (vertical edge) followed by matches and then a deletion (horizontal edge) without in-between substitutions.
+[[./detail.png]]
+
+So, let's do some reasoning on this. Suppose the path to the parent contains
+both insertions and deletions. Then there is an insertion that is followed by a
+deletion, with at least one match in between. (An insertion directly following a deletion
+is never optimal.)
+
+[[detail]] on the right shows such a case, where
+there is not a single substitution on the final path.
+Note however that the path includes two states at the start of a substitution
+edge: those at the start of the insertion and deletion respectively.
+Thus, [[hyp2][Hypothesis 2]] above reduces to this:
+
+- <<hyp3>> Hypothesis 3 ::
+  Every time a traceback has an insertion, then matches, and then a
+  deletion, the start of the deletion is also the start of a critical
+  substitution edge (i.e. coloured red in our figures).
+
+This would prevent the existence of both insertions and deletions between
+consecutive substitution states.
+
+Here is where things get unsure though, because my feeling is that this can
+/not/ be guaranteed. There could be ... /<deleted ramblings>/.
+
+.
+
+.
+
+/Later that day/:  After going through many random alignments, indeed here is a counter example:
+
+#+attr_html: :class inset large
+#+caption: A counter example to Hypotheses 1, 2, and 3. The optimal path contains an insertion (vertical edge) followed by two matches and then a deletion (horizontal edge). There is no /critical/ (red) substitution edge starting at the start of the deletion, contradicting the hypotheses.
+[[file:detail-tricky.png]]
+
+This means that starting in the bottom right, it is not sufficient to store the
+first substitution on the traceback as the parent: the path goes down one
+diagonal beyond the substitution, and then comes back up. Algorithm 1 can't
+handle this, as it only walks greedily towards the parent diagonal, and never
+away from it.
+
+* A pragmatic solution
+
+To better show what is going on, I'm switching to a more complicated input:
+given a pattern of length $10$, $A$ and $B$ are respectively $11$ and $6$ copies
+of the pattern after applying $20\%$ of mutations. This creates repetitive
+strings with many good alignment candidates, [[repeats]].
+
+#+name: repeats
+#+caption: WFA on two sequences made of $11$ and $6$ copies of a repeating
+#+caption: pattern with $20\%$ mutations applied to each.
+#+caption: F.r. states are grey, and extended states are lighter grey.
+#+caption: Substitutions on the tracebacks are red.
+#+caption: Click the image to open a larger version in a new tab.
+#+attr_html: :class inset large :target _blank
+[[file:repeats.png][file:repeats.png]]
+
+As before the idea is to remove as much information as possible while still
+being able to recover all tracebacks.
+
+The first step is to throw away all matching edges. WFA also doesn't store
+extended states (the light grey ones), and we easily recover them via backwards
+greedy matching.
+
+#+name: repeats-no-matches
+#+caption: Even without storing matching edges, we can still
+#+attr_html: :class inset large :target _blank
+[[file:repeats-no-matches.png][file:repeats-no-matches.png]]
+
+But as already discussed before (Algorithm 1), we can actually do better using
+the following idea:
+
+- Algorithm 2 ::
+  Given some /parent state/ $f_{s', k'}$ of a state $f_{s, k}$, the path from
+  $f_{s,k}$ to $f_{s', k'}$ is found by alternating the following steps:
+  1. Greedily match edges backwards.
+  2. Make an insertion if $k' > k$ or a deletion if $k' < k$.
+
+     If $k' = k$ and we have not yet reached $f \leq f_{s', k'}$, make a single
+     substitution, and then assert that we are in $f_{s,k}$.
+
+As a start, let's only preserve the substitution edges, and throw out all indel
+edges, [[repeats-subs]]. The parent of each state is the first state on its traceback at the start
+of a substitution.
+
+#+name: repeats-subs
+#+caption: Here, we only store substitutions.
+#+attr_html: :class inset large :target _blank
+[[file:repeats-subs.png][file:repeats-subs.png]]
+
+As you can see, there are still a lot of substitution edges to be stored. We
+don't actually need all of them! Only the paths leading to an /active/ f.r.
+point on the last wavefront can become part of the final shortest path. So,
+let's only store the tracebacks from the last front, [[repeats-active]].
+
+#+name: repeats-active
+#+caption: Storing only tracebacks from the last wavefront, there are much fewer substitutions to keep track of.
+#+caption: However, we don't have enough information anymore to fully reconstruct all tracebacks.
+#+attr_html: :class inset large :target _blank
+[[file:repeats-active.png][file:repeats-active.png]]
+
+But now, the algorithm would broken for the main path! It changes diagonals
+back-and-forth without any parent state (substitution) to guide us! Thus, we add
+in extra parent states every time a path changes diagonals in opposite directions.
+To be precise: Each time a path has insertions, followed by matches, followed by
+a deletion (or the reverse), the state at the start of the deletion is also
+stored as a parent state. These are magenta in [[repeats-fixed]].
+
+#+name: repeats-fixed
+#+caption: We additionally store indel edges when the path /changes the direction/ of the change of diagonals.
+#+caption: These additional edges are shown in magenta.
+#+caption: In total, we need to store around $50$ states to have enough information to reconstruct all tracebacks.
+#+attr_html: :class inset large :target _blank
+[[file:repeats-fixed.png][file:repeats-fixed.png]]
+
+To wrap up, here is the same data for the simpler figure we started with. As you
+can see, only $12$ states are needed here.
+
+#+name: simple-final
+#+caption: The storage needed to generate all tracebacks in [[forward-greedy]].
+#+attr_html: :class inset :target _blank
+[[file:simple-final.png][file:simple-final.png]]
+
+
+* Conclusion
+
+We have found a method to significantly reduce the amount of memory needed to
+store tracebacks for WFA. For simple inputs, this will likely be linear in the
+edit distance, $O(s)$. For repetitive sequences with multiple good candidates,
+more memory may be needed, but it should still be less than the typical memory
+required by WFA.
+
+*Implementation.* The next step here is to implement this and see how well it works in practice.
+While it's relatively simple to compute the important states at the end of the
+algorithm (for the visualizations), doing this on the fly seems more tricky.
+I'm a bit worried that constantly updating the induced graph (adding new parent
+states; discarding parts that do not reach the last front anymore) may take
+longer than just the computation of each next wavefront.
+
+*Experiments.* Using an implementation, we can run this on much larger inputs
+and see the effect it has on memory consumption. It should be evaluated on
+hard-to-align sequence pairs to evaluate the memory savings in such cases as well.
