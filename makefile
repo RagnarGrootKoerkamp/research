@@ -24,11 +24,6 @@ build-content:
 	rm -rf content
 # Build temporary minimal EMACS installation separate from the one in the machine.
 	XDG_CONFIG_HOME= HOME=$(EMACS_BUILD_SRC) BASE_DIR=$(BASE_DIR) emacs -Q --batch --load $(EMACS_BUILD_SRC)/init.el --execute "(build/export-all)" --kill
-# Fixes bad URLs when the baseURL (this case) is not the root URL.
-# There is the option to change the template but I think the solution is too intrusive and it should pass through
-# changing the layout as it is seems to be a bug within HUGO.
-# https://github.com/kaushalmodi/ox-hugo/issues/460
-#find $(BASE_DIR)/content -type f -exec sed -i '' -e 's|figure src="/ox-hugo/|figure src="ox-hugo/|g' {} \;
 
 .PHONY: build-site
 build-site:
