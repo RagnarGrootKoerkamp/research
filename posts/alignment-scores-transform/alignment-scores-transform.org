@@ -4,15 +4,13 @@
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
 #+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
+#+cite_export: csl
+#+toc: headlines 3
 #+date: <2022-08-11>
 #+author: Mykola Akulov
 #+author: Ragnar Groot Koerkamp
-#+hugo_front_matter_key_replace: author>authors
-#+bibliography: local-bib.bib
-# #+cite_export: csl ../../chicago-author-date.csl
-#+toc: headlines 3
-# hide this post
-#+hugo_custom_front_matter: :_build '((list . "never"))
 
 * Tricks with match bonus or how to fool Dijkstra's limitations
 
@@ -86,10 +84,6 @@ particular, in Jonson's algorithm $-\phi(u) = d(s, u)$ is the length of the
 shortest path from a fixed vertex $s$ to $u$. This somewhat defeats our purpose
 though: computing shortest paths is what we are trying to do in the first place.
 
-#+NAME: grid
-#+CAPTION: Coordinate grid for vertexes
-[[file:edit-graph-coords.drawio.svg]]
-
 In our case, the edit graph is weighted, directed, without cycles, and "all roads lead to Rome" in
 it – any way you can take in the edit graph will end in the target point to
 which we are finding a shortest path.  To get to this terminus we need to cross
@@ -98,13 +92,21 @@ corner to the bottom right one. All paths take the same number of steps down,
 and the same number of steps to the right, where an insertion is one step down,
 a deletion is one step right, and a match and mismatch are one step down and one step right.
 
+#+NAME: transformed
+#+CAPTION: Edit graph with /transformed/ non-negative edges so that $M'=0$.
+[[file:edit-graph-transformed.drawio.svg]]
+
 We can increase the cost of each horizontal step by $\Delta_D$ and the cost of
-each vertical step by $\Delta_I$, so that (mis)matches become
+each vertical step by $\Delta_I$ ([[transformed]]), so that (mis)matches become
 $\Delta_I+\Delta_D$ more expensive. This way, the total cost of the alignment
 goes up by $n\cdot \Delta_D + m \cdot \Delta_I$.
 
 Now, a simple way to get rid of negative match edges is to simply require that
 $\Delta_I + \Delta D \geq B$.
+
+#+NAME: grid
+#+CAPTION: Coordinate grid for vertexes
+[[file:edit-graph-coords.drawio.svg]]
 
 Let $u=\langle i, j\rangle$ denote the vertex in column $i$ and row $j$ ([[grid]]).
 Then, the above is equivalent to a potential $\phi$ given by
@@ -148,10 +150,6 @@ $\Delta_D$. Generally, lower costs lead to faster algorithms, so we will
 restrict ourselves to the case where $M' = M + \Delta_D + \Delta_I = 0$, i.e. where exact matches are free.
 
 There are a few natural choices that we cover now.
-
-#+NAME: transformed
-#+CAPTION: Edit graph with /transformed/ non-negative edges so that $M'=0$.
-[[file:edit-graph-transformed.drawio.svg]]
 
 - Symmetric cost increase ::
   $\Delta_D = \lfloor B/2 \rfloor$ and $\Delta_I = \lceil B/2 \rceil$.
