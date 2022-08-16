@@ -104,36 +104,66 @@ CLOSED: [2022-04-28 Thu 23:33]
 :PROPERTIES:
 :EXPORT_FILE_NAME: benchmarks
 :END:
+/Benchmarking is harder than you think, even when taking into account this rule./
+
+This post lists some lessons I learned while attempting to run benchmarks for
+[[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][A* pairwise aligner]]. I was doing this on a laptop, which likely has different
+characteristics from CPUs in a typical server rack. All the programs I run are
+single threaded.
+
+*** Hardware
+- Do not run while charging the laptop ::
+  Charging makes the battery hot and causes throttling. Run either on
+  battery power or with a completely full battery to prevent this.
+- Disable hyperthreading ::
+  Completely disable hyperthreading in the BIOS.
+  Multiple programs running on the same core may fight for resources.
+
+*** CPU settings
 - Pin CPU frequency ::
   CPUs, especially laptops, have turboboost, (thermal) throttling, and powersave
   features. Make sure to pin the CPU core frequency low enough that it can be
   sustained for long times without throttling.
 
-  In my case, the `performance` governor can fix the CPU frequency. The base
-  frequency of my CPU is ~2.6GHz~, but I set it slightly lower since I prefer consistency.
+  In my case, the ~performance~ governor can fix the CPU frequency. The base
+  frequency of my CPU is ~2.6GHz~, so that's where I pinned it.
   #+BEGIN_SRC shell
-  sudo cpupower frequency-set -g performance
-  sudo cpupower frequency-set -u 1.8GHz
-  sudo cpupower frequency-set -d 1.8GHz
+sudo cpupower frequency-set -g performance
+sudo cpupower frequency-set -u 2.6GHz
+sudo cpupower frequency-set -d 2.6GHz
   #+END_SRC
+
+  Note that even with a pinned CPU frequency, thermal throttling can reduce it.
 - Pin program to core ::
   Make sure your program only executes on one core. Do this using e.g.
   #+begin_src shell
-  taskset -c 0 <shell invocation>
+taskset -c 0 <shell invocation>
   #+end_src
-  When running multiple experiments in parallel, use distincs ids instead of ~0~.
-- Do not use hyper threads ::
-  Never use both hyper threads of a single core. On my 6-CPU machine, thread ~i~
-  and thread ~i+6~ share their core, so I only use threads with id ~0~ to ~5~.
-- Limit number of CPUs used ::
-  Memory bound programs share resources, even if running on disjoint CPUs. In my
-  case, using all 6 cores gives a ~30%~ slowdown compared to only using 1 core
-  at a time (on some specific experiment).
-  Using 3 cores gives only ~10%~ slowdown, which is acceptable.
+  When running multiple experiments in parallel, use distinct ids instead of ~0~.
+*** Software
 - Use a low job niceness ::
   At any point in time, multiple jobs need CPU resources. Use a low job
-  /niceness/ (like ~-20~) to give your experiment a higher priority. As an example,
-  input (keyboard) and audio processing usually runs with a low niceness.
+  /niceness/ (like ~-20~, needs root) to give your experiment a higher priority. As an example,
+  input (keyboard) and audio processing usually runs with niceness ~-20~.
+
+  This should reduce the number of (kernel) interrupts to your program.
+
+  #+begin_src shell
+nice -n -20 <command>
+  #+end_src
+- Do not use Snakemake for benchmarking memory usage ::
+  It [[https://github.com/snakemake/snakemake/issues/851][turns out]] that Snakemake's polling-based memory-usage measurement
+  can be very imprecise. Apart from the first =30s= (or really =15s= actually), it polls every =30s=. This
+  means that for programs whose memory usage grows linear with time, the measured
+  memory usage of can be off by a factor 2 when it runs for =59s=.
+- Limit the number of parallel jobs ::
+  Memory bound programs share resources, even when running on disjoint CPUs. In my
+  case, using all 6 cores (running 6 benchmarks simultaneously) gives a
+  ~30%~ slowdown compared to only using 1 core at a time (on some specific
+  experiment).  Using 3 cores simultaneously gives only ~10%~ slowdown, which is
+  acceptable in my case.
+
+
 * DONE A* variants
 CLOSED: [2022-06-12 Sun 12:04]
 :PROPERTIES:
