@@ -139,28 +139,24 @@ The above equations give us some flexibility in choosing $\Delta_I$ and
 $\Delta_D$. We will restrict ourselves to the case where $M' = M + \Delta_D +
 \Delta_I = 0$, i.e. where exact matches are free.
 
-There are a few natural choices that we cover now.
+There are a few natural choices of $\Delta_D$ and $\Delta_I$ that we cover in
+the table below.
 
-- Symmetric cost increase ::
-  $\Delta_D = \lfloor B/2 \rfloor$ and $\Delta_I = \lceil B/2 \rceil$.
+#+attr_html: :class small
+| Type                 | $\Delta_D$            | $\Delta_I$         | $M'$ | $X'$  | $D'$                   | $I'$                 |
+| *Symmetric*          | $\lfloor B/2 \rfloor$ | $\lceil B/2\rceil$ | $0$  | $X+B$ | $D+\lfloor B/2\rfloor$ | $I+\lceil B/2\rceil$ |
+| Expensive deletions  | $B$                   | $0$                | $0$  | $X+B$ | $D+B$                  | $I$                  |
+| Expensive insertions | $0$                   | $B$                | $0$  | $X+B$ | $D$                    | $I+B$                |
+| Free deletions       | $-D$                  | $B+D$              | $0$  | $X+B$ | $0$                    | $I+B+D$              |
+| Free insertions      | $B+I$                 | $-I$               | $0$  | $X+B$ | $D+B+I$                | $0$                  |
 
-  $D' = D + \lfloor B/2\rfloor$, $I' = I + \lceil B/2\rceil$, $M' = 0$.
-- Insertion cost increase :: $\Delta_D = 0$ and $\Delta_I = B$.
+The /symmetric/ option in the first row is the most natural choice, and roughly
+corresponds to the transformation suggested in [cite/t:@wfalm]. It differs in
+that all costs are divided by $2$ and the half-integer costs in the odd $B$ case
+are distributed between $I'$ and $D'$.
 
-  $D' = D$, $I' = I + B$, $M' = 0$.
-- Deletion cost increase :: $\Delta_D = B$ and $\Delta_I = 0$.
-
-  $D' = D+B$, $I' = I$, $M' = 0$.
-
-On the extreme end, we could even make insertions or deletions free as well,
-/transferring/ all cost into the other direction. Note that we can even do this
-when matches are already free ($M = -B=0$).
-- Free insertions :: $\Delta_D = B+I$ and $\Delta_I = -I$.
-
-  $D' = D+B+I$, $I' = 0$, $M' = 0$.
-- Free deletions :: $\Delta_D = -D$ and $\Delta_I = B+D$.
-
-  $D' = 0$, $I' = I+B+D$, $M' = 0$.
+The bottom two rows are even applicable when matches are already free ($B=0$), and
+/transfer/ the cost of horizontal steps to vertical steps or vice-versa.
 
 
 ** Some notes
@@ -193,9 +189,8 @@ The potentials defined above naturally extend to affine costs. Each state in an 
 naturally corresponds to a state $\langle i,j\rangle$ in the main layer, and can
 use the corresponding potential.
 
-This means that the delete-open and delete-extend edges become $\Delta_D$ more
-expensive, and similarly the insert-open and insert-extend edges become $\Delta_I$ more
-expensive.
+This means that the delete-extend cost increases with $\Delta_D$,
+and similarly the insert-extend cost increases with $\Delta_I$.
 
 *** Substitution matrices
 The [[https://en.wikipedia.org/wiki/BLOSUM][BLOSUM]] matrix specifies a match score for each pair of amino acids, with
@@ -291,6 +286,16 @@ transformed into an equivalent cost model using only non-negative costs when
 doing global alignment. This transformation even works for affine and asymmetric
 costs. It avoids doubling costs (to preserve integral values) by distributing an
 odd match bonus unevenly over the horizontal and vertical steps in the edit graph.
+
+To summarize: when the cost model is given by match cost $M=-B$, mismatch cost
+$X$, insertion cost $I$, and deletion cost $D$, the equivalent cost model for
+global alignment with non-negative costs is given by:
+\begin{align}
+M' &= 0,\\
+X' &= M+B,\\
+D' &= D + \lfloor B/2 \rfloor,\\
+I' &= I + \lceil B/2 \rceil.
+\end{align}
 
 
 * References
