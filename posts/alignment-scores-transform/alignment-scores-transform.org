@@ -191,19 +191,27 @@ naturally corresponds to a state $\langle i,j\rangle$ in the main layer, and can
 use the corresponding potential.
 
 This means that the delete-extend cost increases with $\Delta_D$,
-and similarly the insert-extend cost increases with $\Delta_I$.
+and similarly the insert-extend cost increases with $\Delta_I$,
+while gap-open costs remain the same.
 
 *** Substitution matrices
-The [[https://en.wikipedia.org/wiki/BLOSUM][BLOSUM]] matrix specifies a match score for each pair of amino acids, with
-some entries being positive (indicating similarity) and some being negative.
-The transformation using potentials even works in this case.
 
-Let $B$ be the maximum score assigned to any pair of letters, i.e. the maximum
+#+name: blosum
+#+caption: The BLOSUM matrix. CC BY-SA 4.0 via Wikipedia.
+[[file:blosum.png]]
+
+The [[https://en.wikipedia.org/wiki/BLOSUM][BLOSUM]] matrix ([[blosum]]) specifies a match score for each pair of amino acids, with
+some entries being positive (indicating similarity) and some being negative,
+so we are maximizing the score. This can be transformed into a cost model by
+simply negating all scores, which allows us the previous techniques.
+
+In general, let $B$ be the maximum score assigned to any pair of letters in the
+substitution matrix $S$,[fn::I'm using $S$ instead of $M$ to
+indicate that this is a /score/ instead of a /cost/.] i.e. the maximum
 entry in the matrix. Again we choose $\Delta_D$ and $\Delta_I$ such that
 $\Delta_D + \Delta_I \geq B$.
 Then, we simply replace each matrix element $S_{xy}$ by
-$S_{xy}' = S_{xy} - \Delta_D - \Delta_I$.[fn::I'm using $S$ instead of $M$ to
-indicate that this is a /score/ instead of a /cost/.]
+$S_{xy}' = S_{xy} - \Delta_D - \Delta_I$.
 
 *** But not local alignment
 I will stress here that this idea /does not/ work for local alignment.
