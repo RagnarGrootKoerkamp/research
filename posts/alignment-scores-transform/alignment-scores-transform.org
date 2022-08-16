@@ -1,4 +1,4 @@
-#+TITLE: Turning match bonus into costs
+#+TITLE: Transforming match bonus into cost
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: pairwise-alignment optimisation match-bonus alignment-scores
 #+HUGO_LEVEL_OFFSET: 1
@@ -62,7 +62,9 @@ distance between them.)
   $O(s^2)$ expected case. Only works for non-negative edges.
 
 As you can see, only the Needleman-Wunsch DP can handle the negative cost edges
-created by introducing a match bonus. All other algorithms break.
+created by introducing a match bonus.[fn::That's because NW visits all vertices
+in topologically sorted order, and hence considers /all/ possible path to each
+vertex.] All other algorithms break.
 
 ** Potentials
 
@@ -105,7 +107,7 @@ Now, a simple way to get rid of negative match edges is to simply require that
 $\Delta_I + \Delta_D \geq B$.
 
 #+NAME: grid
-#+CAPTION: Coordinate grid for vertexes
+#+CAPTION: Coordinate grid for states/vertices.
 [[file:edit-graph-coords.drawio.svg]]
 
 Let $u=\langle i, j\rangle$ denote the vertex in column $i$ and row $j$ ([[grid]]).
@@ -132,10 +134,10 @@ and $\Delta_I$ must satisfy the following constraints:
     \Delta_D + \Delta_I &\geq -M = B \geq 0.
 \end{align}
 
-** Multiple variants
+*** Multiple variants
 The above equations give us some flexibility in choosing $\Delta_I$ and
-$\Delta_D$. Generally, lower costs lead to faster algorithms, so we will
-restrict ourselves to the case where $M' = M + \Delta_D + \Delta_I = 0$, i.e. where exact matches are free.
+$\Delta_D$. We will restrict ourselves to the case where $M' = M + \Delta_D +
+\Delta_I = 0$, i.e. where exact matches are free.
 
 There are a few natural choices that we cover now.
 
@@ -161,9 +163,10 @@ when matches are already free ($M = -B=0$).
   $D' = 0$, $I' = I+B+D$, $M' = 0$.
 
 
-** WFA
+** Some notes
+*** WFA
 For WFA this cost transformation is a life-saver because with $M'=0$ it allows
-for "greedy matching" again – the core of the algorithm that enables fast
+for "greedy matching" again---the core of the algorithm that enables fast
 extending diagonals.  This is important, because one of the main WFA data
 structures is a wavefront, which covers all states that can be reached with
 specific cost. If the cost could go down, it could disrupt previous wavefronts,
@@ -171,14 +174,49 @@ which would break the logic of the algorithm. The drawback of the cost
 transformation is that it increases the cost of the optimal alignment, and hence
 increases the number of wavefronts, leading to a slower WFA execution.
 
-Thus, we expect that the lower the cost of the target state, the faster the WFA
+Thus, we expect that the lower the potential of the target state, the faster the WFA
 algorithm runs.
 
-** Affine costs
+*** A*
+The A* algorithm by itself can not handle negative costs. However, a heuristic
+function $h$ can be modified to achieve exactly the same result as the
+potentials introduced above by using
+\begin{equation}
+h'(u) := h(u) + \phi(u).
+\end{equation}
+This works in our case because it ensures that $f(u) = g(u) + h'(u)$ can never
+decrease when taking an edge.
 
+** Extending to different cost models
+*** Affine costs
 The potentials defined above naturally extend to affine costs. Each state in an affine layer
 naturally corresponds to a state $\langle i,j\rangle$ in the main layer, and can
 use the corresponding potential.
+
+This means that the delete-open and delete-extend edges become $\Delta_D$ more
+expensive, and similarly the insert-open and insert-extend edges become $\Delta_I$ more
+expensive.
+
+*** Substitution matrices
+The [[https://en.wikipedia.org/wiki/BLOSUM][BLOSUM]] matrix specifies a match score for each pair of amino acids, with
+some entries being positive (indicating similarity) and some being negative.
+The transformation using potentials even works in this case.
+
+Let $B$ be the maximum score assigned to any pair of letters, i.e. the maximum
+entry in the matrix. Again we choose $\Delta_D$ and $\Delta_I$ such that
+$\Delta_D + \Delta_I \geq B$.
+Then, we simply replace each matrix element $S_{xy}$ by
+$S_{xy}' = S_{xy} - \Delta_D - \Delta_I$.[fn::I'm using $S$ instead of $M$ to
+indicate that this is a /score/ instead of a /cost/.]
+
+*** Not local alignment
+I will stress here that this idea /does not/ work for local alignment.
+The reason it works for global alignment is that the cost of /each/ path is
+increased by the same amount. Two local alignments can have completely different
+lengths and thus span a different number of rows/columns of the table. That
+means that the cost increase $\phi(end) - \phi(start)$ of these two local
+alignments is different, and hence their final scores are not directly
+comparable.
 
 ** Evaluations
 
@@ -193,21 +231,23 @@ We will use the following cost model:
 *** Unequal string length
 
 Firstly, let's make an experiment on sequences where the first sequence is
-longer than the second, i.e. $n > m$.
+longer than the second, i.e. $|A| = n > m = |B|$.
 
 Given the match bonus, we can take different values for $\Delta_I$ and
-$\Delta_D$. According to our hypothesis of keeping the cost increase minimal, the optimal option should be $\Delta_I =
-2$ and $\Delta_D = 0$, since $\Delta_I$ is multiplied by $m$. Let's check that![fn::The author's laptop was made in
+$\Delta_D$. According to our hypothesis of keeping the cost increase minimal,
+the optimal option should be $\Delta_I = 2$ and $\Delta_D = 0$, since $\Delta_I$
+is multiplied by $m=\min(m,n)$. Let's check that![fn::The author's laptop was made in
 times of the Second Punic War, so he decided not to take very long sequences to
-save his working station.][fn::Also, the code is not optimized in the first place.]
+save his working station.][fn::Also, the code is not optimized in the first
+place. Look at relative timings only.]
 
 #+name: t1
 #+caption: Timing and number of expanded states of WFA when $n > m$.
 #+attr_html: :class small
 | $n$ | $m$ | $\Delta_D$ | $\Delta_I$ | Cost | Time (ms) | #expanded |
-| 260 | 199 | $2$        | $0$        | -275 |        26 |     92628 |
-| 260 | 199 | $1$        | $1$        | -275 |        11 |     48895 |
-| 260 | 199 | $0$        | $2$        | -275 |         6 |     42610 |
+| 260 | 199 | 2          | 0          | -275 |        26 |     92628 |
+| 260 | 199 | 1          | 1          | -275 |        11 |     48895 |
+| 260 | 199 | 0          | 2          | -275 |         6 |     42610 |
 
 I think the numbers are eloquent enough, so let's look at the pixels. As you can
 see the second sequence has a suffix of the first one deleted.
@@ -217,7 +257,8 @@ see the second sequence has a suffix of the first one deleted.
 | [[file:unequal_delta_i.png]] | [[file:unequal_equal.png]] | [[file:unequal_delta_d.png]] |
 
 We can clearly see that increasing $\Delta_I$ (the vertical cost) instead of
-$\Delta_D$ yields less downward expansion, and fewer visited states in total.
+$\Delta_D$ (the horizontal cost) yields less downward expansion, and fewer
+visited states in total.
 
 *** Equal string lengths
 
