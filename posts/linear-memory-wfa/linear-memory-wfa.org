@@ -1,4 +1,4 @@
-#+TITLE: [Draft] Linear memory WFA?
+#+TITLE: Linear memory WFA?
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: pairwise-alignment diagonal-transition memory
 #+HUGO_LEVEL_OFFSET: 1
@@ -6,19 +6,26 @@
 #+hugo_auto_set_lastmod: nil
 #+hugo_front_matter_key_replace: author>authors
 #+bibliography: local-bib.bib
-#+cite_export: csl ../../chicago-author-date.csl
+#+cite_export: csl
 #+toc: headlines 3
-#+date: <2022-08-05>
+#+date: <2022-08-17>
 #+author: Ragnar Groot Koerkamp
-# Hidden post
-#+hugo_custom_front_matter: :_build '((list . "never"))
 
-In this post I'll discuss an idea to run unit-cost WFA using linear memory, while still
+#+name: result
+#+caption: Only the red substitutions and blue indel need to be stored to trace the entire path.
+[[file:simple-final.png][file:simple-final.png]]
+
+In this post I'll discuss an idea to run WFA using less memory, while still
 allowing us to trace back the optimal path from the target state back to the start of
 the search.
 
-I am writing this as I discover new things and try to make this work, so bear
-with me and let's see where this goes!
+Parts of this were written while I was discovering new things and trying to make this work, so bear
+with me.
+
+*Tl;dr*: Storing a small subset of all visited states is sufficient to trace
+back paths from all furthest reaching points on the active wavefront. For
+sufficiently nice/simple inputs, this seems to only need $O(s)$ memory ([[result]]).
+
 
 * Motivation
 
@@ -26,8 +33,8 @@ It's cool! But if you insist (/why not simply do BiWFA which does tracing in
 linear memory?/), here's a post factum argument:
 
 We are also working on A*-based alignment. Meet-in-the-middle for A* is much
-harder than for the simpler Dijkstra and WFA algorithms, and no
-sufficiently good/convenient/simple bidirectional variant is available to make obvious
+more complicated than for the simpler Dijkstra and WFA algorithms, and no
+sufficiently simple bidirectional variant is available to make obvious
 improvements to A*. Thus, we are stuck with the forward-only version for now. A*
 already runs smooth on simpler inputs, but needs quadratic memory on bigger/more
 complicated inputs. Being able to reduce this will hopefully allow better scaling.
@@ -47,21 +54,21 @@ f_{s, k} &= extend(f).
 \end{align}
 Thus, first we take the maximum furthest-reaching point over the three parents in
 the current diagonal and the one above/below, and then we extend this point
-further along matching characters. [[wfa]] shows an example: columns are diagonals
-$k$, rows are wavefronts $f_{s, \bullet}$, the current cell $f_{s, k}$ being
-computed is in green, and its dependencies (the three f.r. points in the
-maximum) are in dark blue.
+further along matching characters. [[wfa]] shows the dependencies between states:
+columns are diagonals $k$, rows are wavefronts $f_{s, \bullet}$, the current
+cell $f_{s, k}$ being computed is in green, and its dependencies (the three f.r.
+points in the maximum) are in dark blue.
 
 The parent f.r. point of a given $f_{s, k}$ is simply the $f_{s-1, k'}$ in the arg-max of the maximum.
 Since we store all previously computed values of $f_{s,k}$, this is easily computed.
 
-Now, there are two ways to actually recover the path from the parent $f_{s-1,
+Now, there are two distinct ways to actually recover the /path/ from the parent $f_{s-1,
 k'}$ to the current state $f_{s, k}$:
 
 - Forward greedy ::
   The first option is the one described in [cite:@wfa]: let $f = \max(f_{s-1, k} + 1,
   f_{s-1, k-1} +1, f_{s-1, k+1})$. We have $f_{s,k} = extend(f) \geq f$, and the
-  difference is exactly the number of characters the f.r. point was extended.
+  difference $f_{s,k}-f$ is exactly the number of characters the f.r. point was extended.
 
   To get the path to the parent, we simply walk back $f_{s,k} - f$ matching
   characters, and then make a single mutation as needed to get to
@@ -79,9 +86,9 @@ k'}$ to the current state $f_{s, k}$:
 
 - Backward greedy ::
   In this case, we greedily match as many matches as possible going back from
-  $f_{s,k}$. There will be at least $f_{s,k} - f$ such matches by construction
-  of the algorithm, but there may be more in cases where the parent is via
-  insertion or deletion.
+  $f_{s,k}$. As in the forward case, there will be at least $f_{s,k} - f$ such
+  matches by construction of the algorithm, but there may be more in cases where
+  the parent f.r. point is on a different diagonal.
 
   After the greedy matching, we again make a single mutation to get to the
   parent diagonal $k'$.
@@ -103,8 +110,7 @@ k'}$ to the current state $f_{s, k}$:
 
 * Observations
 
-/This section is just a blob of thoughts -- parts may be obscure and disorganised,
-so feel free to skip to the next section, [[*A pragmatic solution]]./
+/This section is just a blob of thoughts -- parts are likely obscure and disorganised. Consider skipping to the next section [[*A pragmatic solution]], or proceed at your own risk./
 
 #+caption: Forward greedy traceback.
 [[file:./forward-greedy.png]]
@@ -269,62 +275,72 @@ extended states (the light grey ones), and we easily recover them via backwards
 greedy matching.
 
 #+name: repeats-no-matches
-#+caption: Even without storing matching edges, we can still
+#+caption: After discarding matching edges (made grey here) and
+#+caption: only storing indels (black) and substitutions (red)
+#+caption: we can still trace back all paths.
 #+attr_html: :class inset large :target _blank
 [[file:repeats-no-matches.png][file:repeats-no-matches.png]]
 
-But as already discussed before (Algorithm 1), we can actually do better using
-the following idea:
+Additionally, let's try to only preserve the substitution edges, and throw out all indel
+edges, [[repeats-subs]].
 
-- Algorithm 2 ::
-  Let $f_{s,k}$ be the current state and let $f_{s',k'}$ be a /parent state/ on the
-  optimal traceback from $f_{s,k}$, possibly with $s' < s-1$ and $|k-k'| > 1$.
-  The path from $f_{s,k}$ to $f_{s', k'}$ is found by alternating the following steps:
+#+name: repeats-subs
+#+caption: Here, we only store the red substitution edges.
+#+attr_html: :class inset large :target _blank
+[[file:repeats-subs.png][file:repeats-subs.png]]
+
+As you can see, there are still a lot of substitution edges to be stored in [[repeats-subs]]. We
+don't actually need all of them! Only the paths leading to an /active/ f.r.
+point on the last wavefront can become part of the final shortest path. So,
+let's only store the tracebacks starting from the last front, [[repeats-active]].
+
+#+name: repeats-active
+#+caption: Storing only tracebacks from the last wavefront, there are much fewer substitutions to keep track of.
+#+attr_html: :class inset large :target _blank
+[[file:repeats-active.png][file:repeats-active.png]]
+
+Now, we could trace the path as follows:
+
+- Algorithm 2 (broken attempt) ::
+  Let the /parent/ $f_{s',k'}$ of a given state $f_{s,k}$ be the f.r. point at
+  the start of the last (furthest) substitution on its traceback, where it is possible that
+  $s' < s-1$ and $|k-k'| > 1$.
+
+  The path from $f_{s,k}$ to $f_{s', k'}$ can be found by alternating the following steps:
   1. Greedily match edges backwards.
-  2. Make an insertion if $k' > k$ or a deletion if $k' < k$.
+  2. Make an insertion (increasing $k$) if $k' > k$ or a deletion (decreasing
+     $k$) if $k' < k$.
 
      If $k' = k$ and we have not yet reached $f \leq f_{s', k'}$, make a single
      substitution, and then assert that we are in $f_{s,k}$.
 
-As a start, let's only preserve the substitution edges, and throw out all indel
-edges, [[repeats-subs]]. The parent of each state is the first state on its traceback at the start
-of a substitution.
-
-#+name: repeats-subs
-#+caption: Here, we only store substitutions.
-#+attr_html: :class inset large :target _blank
-[[file:repeats-subs.png][file:repeats-subs.png]]
-
-As you can see, there are still a lot of substitution edges to be stored. We
-don't actually need all of them! Only the paths leading to an /active/ f.r.
-point on the last wavefront can become part of the final shortest path. So,
-let's only store the tracebacks from the last front, [[repeats-active]].
-
-#+name: repeats-active
-#+caption: Storing only tracebacks from the last wavefront, there are much fewer substitutions to keep track of.
-#+caption: However, we don't have enough information anymore to fully reconstruct all tracebacks.
-#+attr_html: :class inset large :target _blank
-[[file:repeats-active.png][file:repeats-active.png]]
-
-But now, the algorithm would broken for the main path! It changes diagonals
-back-and-forth without any parent state (substitution) to guide us! Thus, we add
-in extra parent states every time a path changes diagonals in opposite directions.
+It turns out this algorithm is broken for the main path in
+[[repeats-active]]![fn::It actually took a lot of tries to find such an example.]
+Just below the middle it changes diagonals back-and-forth a few times, without
+a substitution to guide us. This would cause the assertion at the end of the
+algorithm above to fail. Thus, we need to track more information: we add in
+extra parent states every time a path changes diagonals back-and-forth.
 To be precise: Each time a path has insertions, followed by matches, followed by
 a deletion (or the reverse), the state at the start of the deletion is also
-stored as a parent state. These are magenta in [[repeats-fixed]].
+stored as a parent state. These are blue in [[repeats-fixed]].
 
 #+name: repeats-fixed
 #+caption: We additionally store indel edges when the path /changes the direction/ of the change of diagonals.
-#+caption: These additional edges are shown in magenta.
-#+caption: In total, we need to store around $50$ states to have enough information to reconstruct all tracebacks.
+#+caption: These additional edges are shown in blue.
+#+caption: In total, for this sample we need to store around 50 parent states to have enough information to reconstruct all tracebacks.
 #+attr_html: :class inset large :target _blank
 [[file:repeats-fixed.png][file:repeats-fixed.png]]
 
-To wrap up, here is the same data for the simpler figure we started with. As you
-can see, only $12$ states are needed here.
+- Algorithm 2 (fixed) ::
+  Same as the broken attempt for Algorithm 2, but now let the parent be the start of the last red /or
+  blue edge on the traceback.
+
+To wrap up, here is the same data for the simpler figure we started with. In
+this case, only very few states (less than $s$, in fact) need to be tracked to
+be able to reconstruct the traceback for /all/ states on the last wavefront.
 
 #+name: simple-final
-#+caption: The storage needed to generate all tracebacks in [[forward-greedy]].
+#+caption: The storage needed (12 states) to generate all tracebacks in [[forward-greedy]].
 #+attr_html: :class inset :target _blank
 [[file:simple-final.png][file:simple-final.png]]
 
@@ -336,13 +352,47 @@ Each path can be written down as a sequence of operations ~M~ (match), ~X~
 (mismatch), ~I~ (insert), and ~D~ (delete), like ~MXMIMIMMDDMM~.
 Let's drop all the matches ~M~, giving ~XIIDD~. Now, let's insert the diagonal
 before each character: ~(0)X (0)I (-1)I (-2)D (-1)D~. Now drop all ~I~'s and
-~D~'s, apart from those preceded by a ~D~ or ~I~ respectively: ~(0)X (-2)D~.
+~D~'s, apart from those preceded by a ~D~ or ~I~ (the opposite one) respectively: ~(0)X (-2)D~.
 Let's call this the /compressed path/.
 
-The red edges from before now correspond to the ~X~'s, and the magenta edges
+The red edges from before now correspond to the ~X~'s, and the blue edges
 correspond to the ~D~'s. Just this string is sufficient to reconstruct the
 entire path: From the back, walk to the next listed diagonal while greedily
 matching edges, and whenever you encounter an ~X~, make a substitution.
+
+* Affine costs
+Note that everything so far works for both unit costs and linear costs.
+For affine costs, something more is needed.
+
+In particular, the backward-greedy path tracing idea does not work in this case,
+since alternating insertions and deletions is not free anymore, and it is not
+clear when to end each affine indel.
+
+It seems that the best we can do is to explicitly mark each affine
+gap-open location, and ignore substitutions.
+In terms of the CIGAR-strings above, we keep the first ~I~ and ~D~ of each run
+of insertion/deletion characters, annotated with the exact location the gap opens.
+
+[[affine]] shows the resulting stored states.
+
+#+name: affine
+#+caption: For affine costs, we can instead store all gap-open locations, marked in blue, and ignore the substitutions. There are roughly 65 of them.
+#+attr_html: :class inset :target _blank
+[[file:affine-repeats-open.png][file:affine-repeats-open.png]]
+
+The simpler input that we started with looks like [[affine-simple]].
+
+#+name: affine-simple
+#+caption: Gap-open locations for the test case from the start.
+#+attr_html: :class inset :target _blank
+[[file:affine-simple-open.png][file:affine-simple-open.png]]
+
+For completeness, the algorithm to find the traceback is as follows:
+- Algorithm 3 (affine traceback) ::
+  Given a state $f_{s,k}$ and the last gap-open state on its path $f_{s', k'}$,
+  the path in between can be found as follows:
+  1. Walk diagonally with matches and mismatch until reaching the row or column of the parent.
+  2. Make an indel to the start of the gap.
 
 * Conclusion
 
@@ -362,11 +412,8 @@ longer than just the computation of each next wavefront.
 *Experiments.* Using an implementation, we can run this on much larger inputs
 and see the effect it has on memory consumption. It should be evaluated on
 hard-to-align sequence pairs to evaluate the memory savings in such cases as well.
-
-*Linear & Affine costs.* I expect this concept to apply to linear
-costs without any issues. For affine costs, I'm sure something similar is
-possible, but we will need to be more careful since we need traceback
-information for the front in all three (main/insert/delete) layers.
+A slightly simpler thing to do would be to only count the number of parents that
+needs to be stored in both the linear and affine cases.
 
 * References
 #+print_bibliography:
