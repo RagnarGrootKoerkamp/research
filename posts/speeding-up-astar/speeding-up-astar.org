@@ -1,0 +1,197 @@
+#+title: Speeding Up A*
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: pairwise-alignment diagonal-transition astar gpu
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
+#+cite_export: csl
+#+toc: headlines 3
+#+date: <2022-09-23>
+#+author: Ragnar Groot Koerkamp
+
+* Or: /Computational volumes/ and /pre-pruning/
+
+This post build on top of the recent preprint [cite/t:@astarpa] I wrote together with
+Pesho Ivanov, and gives a quick overview of some of my new ideas to
+significantly speed up exact global pairwise alignment.
+
+#+caption: Figure 4b from our preprint: at $e=5\%$ error rate, the seed heuristic (SH) only outperforms BiWFA from $n=30kbp$ onward.
+#+label: comparison
+[[./comparison.png]]
+
+In the preprint, we present an algorithm with
+near-linear runtime on random sequences. However, despite its linear runtime, it
+only outperforms BiWFA and Edlib for sequences with length $n\geq30kbp$, due to
+the bad constant in the complexity.
+
+As a quick comparison, BiWFA and A*PA have similar runtime at $n=30kbp$, $e=5\%$
+([[comparison]]). BiWFA, with complexity $O(s^2) = O(e\cdot n)^2$, needs to do
+$(0.05\cdot 30\ 000)^2 = 1500^2 = 2.25M = 75 \times n$ operations.  Conclusion:
+the constant of our A*-based algorithm is $75$ times worse than that of BiWFA.
+Plenty of headroom for optimizations.
+
+** Why is A* slow?
+Even though our implementation uses $O(1)$ datastructures for the
+things it needs to do (i.e. a bucket queue and hashmap), that does not mean
+these operations are actually fast.
+
+In general, the A* has to do a lot of work for each processed state.
+- compute $h$ for each expanded and explored state;
+- push and pop each state to/from the priority queue;
+- store the value of $g$ of each state in a hashmap.
+
+Individually, these may not sound too bad, but taken together, the algorithm has
+to do a lot of work per state.
+
+Another reason this is not /fast/ is because none of it parallelizes well in
+terms of SIMD and instruction-pipelining. Only one state can be processed at a time
+(assuming single-threaded code), and all the intermediate datastructures prevent
+looking ahead.[fn::I suppose it would be possible to expand a few states in
+parallel, but that does not sound fun at all.]
+
+WFA and Edlib on the other hand are DP based algorithms that
+benefit a lot from SIMD. In WFA, each furthest reaching point in wavefront
+$W_{i+1}$ can be computed from wavefront $W_i$ independently using equivalent
+and simple formulas -- perfect for SIMD.[fn::For linear and single affine costs,
+the bottleneck is actually the /Extend/ operation. Thanks to Santiago for this insight.]
+
+This also has do to with memory locality: A* jumps all over the place in
+unpredictable ways, whereas WFA processes the input in a completely predictable
+way. Processors are good at processing memory linearly and have to resort
+to slower (L2/L3) caches for random access operations. Again this does not work
+in our favour.
+
+** Speeding up A* with computational volumes
+
+#+caption: Figure from [cite:@spouge89]. The dotted line shows a computational volume in the dotted where $g(x) + h(x) \leq 13$, where $g$ are the numbers as shown, and $h$ is $2$ per indel needed to get to the end.
+[[./computational-volume.png]]
+
+We have to do less and more predictable work.
+
+A first step towards this are /computational volumes/ [cite:@spouge89].
+Let's *assume we already know the length $d$ of the optimal path*. Then A* will
+expand all states $u$ with $f(u) = g(u) + h(u) < d$, and some states with $f(u) = d$.
+It would be much more efficient to simply process exactly these states in order.
+
+That's actually pretty straightforward: we can simply process them column-by-column
+(or using WFA) and filter out states where $g(u) + h(u) > d$.
+
+We can save more time by not evaluating $h$ in every state, but only those on
+the boundary of the column (or wavefront): the boundary of the next column will
+be similar to the boundary of the current column, so we can first determine
+those and then fill the interior using standard SIMD-based methods.
+
+More generally, we can run this without knowing the actual distance $d$, but for
+any test value $t$. When $t<d$, the computational volume will not include the
+end and we can rerun with increased $t$.  When $t>d$, the right answer will be
+found, at the cost of increasing the width of the volume by roughly $t-d$ on
+each side.
+
+Unlike in [cite/t:@ukkonen85] and Edlib [cite:@edlib], the band-doubling approach does
+not guarantee a good performance here. When $t=d-1$ fails, doubling to $t=2d-2$
+increases the number of computed states by $2\cdot(d-2)\cdot n$.
+This is much more than just the $n$ states that are computed when a perfect
+heuristic is used.
+
+** Dealing with pruning
+
+So, this is all nice, but actually our linear runtime heavily depends on pruning.
+Without pruning we inevitably get a 'blow-up' (Dijkstra-like behaviour) around the
+start of the search, where the band increases by $1$ for each error not
+predicted by the heuristic.
+
+A match is pruned once the state at its start is expanded. After pruning, the
+heuristic increases for all states preceding the match. When processing states
+column-by-column, this means that all states that could have been skipped
+because of pruning have already been computed anyway. The solution is to prune
+matches right from the start: /pre-pruning/.
+
+*Assume we already have a candidate alignment $\pi^*$ of cost $d$.*
+For now, let's additionally assume that $\pi^*$ is an optimal alignment, as
+indicated by the ${}^*$.
+
+From $\pi^*$, we can infer the distance $g(u)$ to each state $u$ on $\pi^*$.
+Now, go though the matches on $\pi^*$ in reverse order (starting at the end),
+and prune each match (starting at $u$) for which $f(u) = g(u) + h(u) < d$.
+
+After this process, the value of $f$ anywhere on $\pi^*$ will be at most
+$d$.[fn::Proof needed.]
+Note that $f$ may be less than $d$, and can go down from $d$ to $d-1$. This
+means that $h$ is not consistent anymore, but that will not be a problem since
+all we need is admissibility ($h(u) \leq d(u, v_t)$), which still holds[fn::Proof needed.].
+
+Now, we have a fixed (as in, not changing because of pruning)  heuristic, and we
+can apply the computational volumes technique from the previous section again.
+
+If $\pi^*$ is indeed an optimal path, this will efficiently prove that indeed
+$\pi^*$ is optimal.
+
+*When $\pi$ is not optimal* (we drop the ${}^*$ from the notation), let's assume
+it has cost $t$, while $d$ is still the optimal cost. We constructed $f$ to take
+values up to $t$, and so our heuristic definitely is not admissible anymore.
+However, in this case $h$ will overestimate the true distance to the end $h^*$ by at most
+$e:=t-d$.[fn::Proof needed.]
+
+The /bandwidth condition/ of [cite/t:@harris74][fn::Amit Patel remarked
+[[http://theory.stanford.edu/~amitp/GameProgramming/Variations.html#bandwidth-search][on his blog]] that this looked useful in 1997 but he has never seen it being used. Mathematics
+will find its way, even if it takes some time.] tells us that when $h$
+overestimates $h^*$ by at most $e$, A* is guaranteed to find a shortest path after
+expanding all states with $f \leq d + e = t$[fn::Our $e$ is the same as in
+[cite/t@harris74], but our $d$, the distance to the end, is his $f(p^*)$.].  Thus, the previous algorithm still
+works, even when the path $\pi$ is not optimal!
+
+
+** Algorithm summary
+- Input ::
+  Some alignment $\pi$ of cost $t$.
+- Output ::
+  An optimal alignment $\pi^*$ of cost $d\leq t$.
+- Algorithm ::
+  1. Construct the (chaining) seed heuristic $h$.
+  2. Compute $g(u)$ for all states on $\pi$.
+  3. In reverse order, remove from $h$ all matches on the path $\pi$ with
+      $f(u) = g(u) + h(u) < t$ where $u$ is the start of the match.
+  4. Run your favourite alignment algorithm (Edlib/WFA), but after each /layer/ (ie column
+     or wavefront), shrink the ends of the layer as long as $f(u) > t$ for
+     states at those ends.
+  5. When the algorithm finishes, it will have found a shortest path.
+
+When the input $\pi$ is optimal, this algorithm should have the complexity of A*
+(ie near-linear on random input), but the low constant of DP based approaches.
+
+** Challenges
+- When $\pi$ overestimates the actual distance by $e$, $2e\cdot n$ extra work is
+  done, since the computational volume increases in width.
+- A good candidate $\pi$ needs to be found. This could be done by
+  finding the longest chain of matches in $h$ and filling in the gaps using a DP
+  approach, or by running a banded alignment algorithm.
+- Computing $h$ requires building a hashmap of kmers (or a suffix array). While
+  that is relatively fast, it can in fact become the bottleneck when the rest of
+  the algorithm is made more efficient. We'll have to see how this ends up after
+  doing experiments.
+- It could happen that there are two good candidate alignments that are far from
+  each other. In this case we should split each layer (column/wavefront) into
+  two intervals, instead of treating them as one long interval.
+
+** Results
+
+For now, I only did one small experiment on this where I compared A*PA to a
+non-optimized (read: very slow) implementation of WFA with a pre-pruned
+heuristic, and the WFA version was $3$ times faster that the A* version.
+I expect my WFA implementation to improve at least $10\times$ after I optimize
+it for SIMD, so this sounds promising.
+
+** TODOs
+- Write down the proofs that are omitted here.
+- A more efficient implementation of WFA with heuristic is needed. Either I need
+  to improve my own Rust implementation, or I need to path it into WFA directly.
+- When that's available, proper experiments need to be done with different
+  approximate alignments $\pi$.
+- The time spent in various parts of the algorithm needs to be analysed.
+- Write a paper.
+
+** References
+
+#+print_bibliography:
