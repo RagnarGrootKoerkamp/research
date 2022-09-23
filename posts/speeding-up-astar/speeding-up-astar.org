@@ -16,6 +16,8 @@ overview of some of my new ideas to significantly speed up exact global pairwise
 alignment. It's recommended you understand the /seed heuristic/ and /match
 pruning/ before reading this post.
 
+** Motivation
+
 #+caption: Figure 4b from our preprint: at $e=5\%$ error rate, the seed heuristic (SH) only outperforms BiWFA from $n=30kbp$ onward.
 #+label: comparison
 [[./comparison.png]]
@@ -25,10 +27,23 @@ near-linear runtime on random sequences. However, despite its linear runtime, it
 only outperforms BiWFA and Edlib for sequences with length $n\geq30kbp$, due to
 the bad constant in the complexity.
 As a quick comparison, BiWFA and A*PA have similar runtime at $n=30kbp$, $e=5\%$
-([[comparison]]). BiWFA, with complexity $O(s^2) = O(e\cdot n)^2$, needs to do
-$(0.05\cdot 30\ 000)^2 = 1500^2 = 2.25M = 75 \times n$ operations.  Conclusion:
+([[comparison]]). BiWFA, with complexity $O(s^2)$, needs to do
+$$ s^2 = (e\cdot n)^2 = (0.05\cdot 30\ 000)^2 = 1500^2 = 2.25M = 75 \times n$$
+operations.  Conclusion:
 the constant of our $O(n)$ A*-based algorithm is $75$ times worse than that of BiWFA.
 Plenty of headroom for optimizations.
+
+** Summary
+
+This methods needs a candidate alignment $\pi$ of cost $t$ as input. Especially
+when $\pi$ happens to already be an optimal alignment this method should be an efficient
+way to prove that $\pi$ is optimal indeed.
+
+Instead of /match-pruning/ the heuristic on the fly, we /pre-prune/ the
+the matches on $\pi$ up-front. Then, instead of doing A*, we do
+WFA, but only on those states that satisfy $f(u) = g(u) + h(u) \leq t$.
+The simplest way to do this is to simply trim from the ends of each wavefront
+states with $f(u) > t$.
 
 ** Why is A* slow?
 Even though our implementation uses $O(1)$ datastructures for the
