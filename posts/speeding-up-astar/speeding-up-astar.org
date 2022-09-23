@@ -43,7 +43,7 @@ In general, the A* has to do a lot of work for each processed state.
 Individually, these may not sound too bad, but taken together, the algorithm has
 to do a lot of work per state.
 
-Another reason this is not /fast/ is because none of it parallelizes well in
+*SIMD.* Another reason A* is not /fast/ is because none of it parallelizes well in
 terms of SIMD and instruction-pipelining[fn::Verification needed].
 Only one state can be processed at a time
 (assuming single-threaded code), and all the intermediate datastructures prevent
@@ -56,7 +56,7 @@ $W_{i+1}$ can be computed from wavefront $W_i$ independently using equivalent
 and simple formulas -- perfect for SIMD.[fn::For linear and single affine costs,
 the bottleneck is actually the /Extend/ operation. Thanks to Santiago for this insight.]
 
-This also has do to with memory locality: A* jumps all over the place in
+*Memory locality.* This also has do to with memory locality: A* jumps all over the place in
 unpredictable ways, whereas WFA processes the input in a completely predictable
 way. Processors are good at processing memory linearly and have to resort
 to slower (L2/L3) caches for random access operations. Again this does not work
@@ -74,26 +74,38 @@ A first step towards this are /computational volumes/ [cite:@spouge89], see [[co
 Let's *assume we already know the length $d$ of the optimal path*. Then A* will
 expand all states $u$ with $f(u) = g(u) + h(u) < d$, and some states with $f(u) = d$.
 It would be much more efficient to simply process exactly these states in order.
-
 That's actually pretty straightforward: we can simply process them column-by-column
 (or using WFA) and filter out states where $g(u) + h(u) > d$.
 
-We can save more time by not evaluating $h$ in every state, but only in those on
-the boundary (top/bottom states) of the column (or wavefront): the boundary of
-the next column will be similar to the boundary of the current column, so we can
-first determine those and then fill the interior using standard SIMD-based methods.
+*Precomputing layer boundaries.* We can save more time by not evaluating $h$ in
+every state, but only in those on the boundary (top/bottom states) of the column
+(or wavefront): the boundary of the next column will be similar to the boundary
+of the current column, so we can first determine those and then fill the
+interior using standard SIMD-based methods.
 
-More generally, we can run this without knowing the actual distance $d$, but for
+*Testing $\leq t$.* More generally, we can run this without knowing the actual distance $d$, but for
 any test value $t$. When $t<d$, the computational volume will not include the
 end and we can rerun with increased $t$.  When $t>d$, the right answer will be
 found, at the cost of increasing the width of the volume by roughly $t-d$ on
 each side.
 
-Unlike in [cite/t:@ukkonen85] and Edlib [cite:@edlib], the band-doubling approach does
+*Band-doubling.* Unlike in [cite/t:@ukkonen85] and Edlib [cite:@edlib], the band-doubling approach does
 not guarantee a good performance here. When $t=d-1$ fails, doubling to $t=2d-2$
 increases the number of computed states by $2\cdot(d-2)\cdot n$.
 This is much more than just the $n$ states that would be computed when a perfect
 heuristic is used.
+
+*Order of computations.*
+One we determine which states need to computed, we can compute them in any
+order we like:
+1. row/column-wise,
+1. anti-diagonal-wise,
+1. order of $g$ (as in Dijkstra and WFA),
+1. order of $f=g+h'$ (as in A*), where $h'$ can be a different heuristic than
+   the one used before.
+For now my feeling is that option 3 is the fastest, but option 4 (in particular
+WFA with gap-cost) may need some
+investigation as well.
 
 ** Dealing with pruning
 
@@ -122,8 +134,9 @@ Note that $f$ may be less than $d$, and can go down from $d$ to $d-1$. This
 means that $h$ is not consistent anymore, but that will not be a problem since
 all we need is admissibility ($h(u) \leq d(u, v_t)$), which still holds[fn::Proof needed.].
 
-Now, we have a fixed (as in, not changing because of pruning)  heuristic, and we
-can apply the computational volumes technique from the previous section again.
+Now, we have a fixed (as in, not changing anymore because of pruning)
+heuristic, and we can apply the computational volumes technique from the
+previous section again.
 
 If $\pi^*$ is indeed an optimal path, this will efficiently prove that indeed
 $\pi^*$ is optimal.
@@ -142,7 +155,6 @@ find a shortest path after expanding all states with $f \leq d + e = t$[fn::Our
 $e$ is the same as in [cite/t:@harris74], but our $d$, the distance to the end,
 is his $f(p^*)$.].  Thus, the previous algorithm still works, even when the path
 $\pi$ is not optimal!
-
 
 ** Algorithm summary
 - Input ::
