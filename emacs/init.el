@@ -11,7 +11,7 @@
 
 (require 'subr-x)
 
-(toggle-debug-on-error)                                       ;; Show debug informaton as soon as error occurs.
+; (toggle-debug-on-error)                                       ;; Show debug information as soon as error occurs.
 (setq
  make-backup-files nil                                        ;; Disable "<file>~" backups.
 )
