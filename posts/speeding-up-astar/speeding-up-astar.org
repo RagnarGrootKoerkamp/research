@@ -1,4 +1,4 @@
-#+title: Speeding Up A*
+#+title: Speeding Up A*: computational volumes and pre-pruning
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: pairwise-alignment diagonal-transition astar gpu
 #+HUGO_LEVEL_OFFSET: 1
@@ -6,12 +6,10 @@
 #+hugo_auto_set_lastmod: nil
 #+hugo_front_matter_key_replace: author>authors
 #+bibliography: local-bib.bib
-#+cite_export: csl
+#+cite_export: csl ../../chicago-author-date.csl
 #+toc: headlines 3
 #+date: <2022-09-23>
 #+author: Ragnar Groot Koerkamp
-
-* Or: /Computational volumes/ and /pre-pruning/
 
 This post build on top of the recent preprint [cite/t:@astarpa] I wrote together with
 Pesho Ivanov, and gives a quick overview of some of my new ideas to
@@ -63,14 +61,15 @@ way. Processors are good at processing memory linearly and have to resort
 to slower (L2/L3) caches for random access operations. Again this does not work
 in our favour.
 
-** Speeding up A* with computational volumes
+** Computational volumes
 
-#+caption: Figure from [cite:@spouge89]. The dotted line shows a computational volume in the dotted where $g(x) + h(x) \leq 13$, where $g$ are the numbers as shown, and $h$ is $2$ per indel needed to get to the end.
+#+caption: Figure from [cite/t:@spouge89]. The dotted line shows a computational volume in the dotted where $g(u) + h(u) \leq 13$, where $g$ are the numbers as shown, and $h$ is $2$ per indel needed to get to the end.
+#+label: computational-volume
 [[./computational-volume.png]]
 
 We have to do less and more predictable work.
 
-A first step towards this are /computational volumes/ [cite:@spouge89].
+A first step towards this are /computational volumes/ [cite:@spouge89], see [[computational-volume]].
 Let's *assume we already know the length $d$ of the optimal path*. Then A* will
 expand all states $u$ with $f(u) = g(u) + h(u) < d$, and some states with $f(u) = d$.
 It would be much more efficient to simply process exactly these states in order.
@@ -135,12 +134,13 @@ However, in this case $h$ will overestimate the true distance to the end $h^*$ b
 $e:=t-d$.[fn::Proof needed.]
 
 The /bandwidth condition/ of [cite/t:@harris74][fn::Amit Patel remarked
-[[http://theory.stanford.edu/~amitp/GameProgramming/Variations.html#bandwidth-search][on his blog]] that this looked useful in 1997 but he has never seen it being used. Mathematics
-will find its way, even if it takes some time.] tells us that when $h$
-overestimates $h^*$ by at most $e$, A* is guaranteed to find a shortest path after
-expanding all states with $f \leq d + e = t$[fn::Our $e$ is the same as in
-[cite/t@harris74], but our $d$, the distance to the end, is his $f(p^*)$.].  Thus, the previous algorithm still
-works, even when the path $\pi$ is not optimal!
+[[http://theory.stanford.edu/~amitp/GameProgramming/Variations.html#bandwidth-search][on his site]] that this looked useful in 1997 but he has never seen it actually
+being used. A nice example of how maths may only become useful much later.]
+tells us that when $h$ overestimates $h^*$ by at most $e$, A* is guaranteed to
+find a shortest path after expanding all states with $f \leq d + e = t$[fn::Our
+$e$ is the same as in [cite/t:@harris74], but our $d$, the distance to the end,
+is his $f(p^*)$.].  Thus, the previous algorithm still works, even when the path
+$\pi$ is not optimal!
 
 
 ** Algorithm summary
@@ -190,7 +190,18 @@ it for SIMD, so this sounds promising.
 - When that's available, proper experiments need to be done with different
   approximate alignments $\pi$.
 - The time spent in various parts of the algorithm needs to be analysed.
-- Write a paper.
+- We can efficiently proof the correctness of candidate alignments, but do
+  people care?
+- Write a paper. (Current ETA: Q1'23. Help with coding it is welcome.)
+
+** Extensions
+
+- It may be possible to use this with BiWFA, when the heuristic is used on
+  both sides.
+- Instead of doubling $t$, we could double the band when $t$ is too small. That
+  way, we will never do more than twice (or maybe $4$ times) the optimal amount
+  of work. But it's not clear yet to me in what ways doubling of band differs
+  from increasing $t$. This requires some more thought.
 
 ** References
 
