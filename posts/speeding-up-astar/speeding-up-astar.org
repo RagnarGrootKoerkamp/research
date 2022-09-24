@@ -87,11 +87,11 @@ in our favour.[fn::Again, verification needed.]
 We have to do less and more predictable work.
 
 A first step towards this are /computational volumes/ [cite:@spouge89], see [[computational-volume]].
-Let's *assume we already know the length $d$ of the optimal path*. Then A* will
-expand all states $u$ with $f(u) = g(u) + h(u) < d$, and some states with $f(u) = d$.
+Let's *assume we already know the length $s$ of the optimal path*. Then A* will
+expand all states $u$ with $f(u) = g(u) + h(u) < s$, and some states with $f(u) = s$.
 It would be much more efficient to simply process exactly these states in order.
 That's actually pretty straightforward: we can simply process them column-by-column
-(or using WFA) and filter out states where $g(u) + h(u) > d$.
+(or using WFA) and filter out states where $g(u) + h(u) > s$.
 
 *Precomputing layer boundaries.* We can save more time by not evaluating $h$ in
 every state, but only in those on the boundary (top/bottom states) of the column
@@ -99,19 +99,11 @@ every state, but only in those on the boundary (top/bottom states) of the column
 of the current column, so we can first determine those and then fill the
 interior using standard SIMD-based methods.
 
-*Testing $\leq t$.* More generally, we can run this without knowing the actual distance $d$, but for
-any test value $t$. When $t<d$, the computational volume will not include the
-end and we can rerun with increased $t$.  When $t>d$, the right answer will be
-found, at the cost of increasing the width of the volume by roughly $t-d$ on
+*Testing $\leq t$.* More generally, we can run this without knowing the actual distance $s$, but for
+any test value $t$. When $t<s$, the computational volume will not include the
+end and we can rerun with increased $t$.  When $t>s$, the right answer will be
+found, at the cost of increasing the width of the volume by roughly $t-s$ on
 each side.
-
-*Band-doubling does not help.*
-In [cite/t:@ukkonen85] and Edlib [cite:@edlib], a
-band-doubling approach is used to find $d$. Sadly, that approach does
-not guarantee a good performance in our case. When $t=d-1$ fails, doubling to $t=2d-2$
-increases the number of computed states by $2\cdot(d-2)\cdot n$.
-This is much more than just the $n$ states that would be computed when a perfect
-heuristic is used.
 
 *Order of computations.*
 One we determine which states need to computed, we can compute them in any
@@ -138,19 +130,19 @@ column-by-column, this means that all states that could have been skipped
 because of pruning have already been computed anyway. The solution is to prune
 matches right from the start: /pre-pruning/.
 
-*Assume we already have a candidate alignment $\pi^*$ of cost $d$.*
+*Assume we already have a candidate alignment $\pi^*$ of cost $s$.*
 For now, let's additionally assume that $\pi^*$ is an optimal alignment, as
 indicated by the ${}^*$.
 
 From $\pi^*$, we can infer the distance $g(u)$ to each state $u$ on $\pi^*$.
 Now, go though the matches on $\pi^*$ in reverse order (starting at the end),
-and prune each match (starting at $u$) for which $f(u) = g(u) + h(u) < d$.
+and prune each match (starting at $u$) for which $f(u) = g(u) + h(u) < s$.
 
 After this process, the value of $f$ anywhere on $\pi^*$ will be at most
-$d$.[fn::Proof needed.]
-Note that $f$ may be less than $d$, and can go down from $d$ to $d-1$. This
+$s$.[fn::Proof needed.]
+Note that $f$ may be less than $s$, and can go down from $s$ to $s-1$. This
 means that $h$ is not consistent anymore, but that will not be a problem since
-all we need is admissibility ($h(u) \leq d(u, v_t)$), which still holds[fn::Proof needed.].
+all we need is admissibility ($h(u) \leq h^*(u) = d(u, v_t)$), which still holds[fn::Proof needed.].
 
 Now, we have a fixed (as in, not changing anymore because of pruning)
 heuristic, and we can apply the computational volumes technique from the
@@ -160,25 +152,25 @@ If $\pi^*$ is indeed an optimal path, this will efficiently prove that indeed
 $\pi^*$ is optimal.
 
 *When $\pi$ is not optimal* (we drop the ${}^*$ from the notation), let's assume
-it has cost $t$, while $d$ is still the optimal cost. We constructed $f$ to take
+it has cost $t$, while $s$ is still the optimal cost. We constructed $f$ to take
 values up to $t$, and so our heuristic definitely is not admissible anymore.
 However, in this case $h$ will overestimate the true distance to the end $h^*$ by at most
-$e:=t-d$.[fn::Proof needed.]
+$e:=t-s$.[fn::Proof needed.]
 
 The /bandwidth condition/ of [cite/t:@harris74][fn::Amit Patel remarked
 [[http://theory.stanford.edu/~amitp/GameProgramming/Variations.html#bandwidth-search][on his site]] that this looked useful in 1997 but he has never seen it actually
 being used. A nice example of how maths may only become useful much later.]
 tells us that when $h$ overestimates $h^*$ by at most $e$, A* is guaranteed to
-find a shortest path after expanding all states with $f \leq d + e = t$[fn::Our
-$e$ is the same as in [cite/t:@harris74], but our $d$, the distance to the end,
-is his $f(p^*)$.].  Thus, the previous algorithm still works, even when the path
+find a shortest path after expanding all states with $f \leq s + e = t$.[fn::Our
+$e$ is the same as in [cite/t:@harris74]. Our $s$ is his $f(p^*)$.] Thus, the
+previous algorithm still works, even when the path
 $\pi$ is not optimal!
 
 ** Algorithm summary
 - Input ::
   Some alignment $\pi$ of cost $t$.
 - Output ::
-  An optimal alignment $\pi^*$ of cost $d\leq t$.
+  An optimal alignment $\pi^*$ of cost $s\leq t$.
 - Algorithm ::
   1. Construct the (chaining) seed heuristic $h$.
   2. Compute $g(u)$ for all states on $\pi$.
@@ -216,6 +208,76 @@ non-optimized (read: very slow) implementation of WFA with a pre-pruned
 heuristic, and the WFA version was $3$ times faster that the A* version.
 I expect my WFA implementation to improve at least $10\times$ after I optimize
 it for SIMD, so this sounds promising.
+
+** What about band-doubling?
+
+In [cite/t:@ukkonen85] and Edlib [cite:@edlib], the band-doubling approach is used
+to find $s$, instead of an oracle/test-value $t$. This works by first testing
+$t=1$, and then doubling $t$ as long as testing $t$ does not give an answer (i.e.
+$t<s$).
+This approach finds the right distance $s$ with optimal complexity $O(ns)$. The reason for
+this is twofold:
+- Iterations with too small $t<s$ do not add a significant overhead because of the
+  exponential growth of the band: $1+2+4+\dots+2^k < 2^{k+1}=t_{final}$.
+- The final iteration (the first with $t_{final}\geq s$) has $t_{final}\leq 2s$, which again has only constant
+  overhead over $s$.
+
+Sadly, the same idea does not work as well when using a heuristic:
+When $h$ is a perfect heuristic, testing $t=s$ takes $O(n)$ time.
+When doing $t$-doubling again, suppose that $t=s-1$ failed. Then, we test
+$t=2s-2$. This increases the number of computed states to $2(t-s) \cdot n
+\approx 2s\cdot n$. When $s$ is large and grows with $n$, this is quadratic
+instead of linear!
+
+
+*** Maybe doubling can work after all?
+/This subsection is speculative./
+
+I'm thinking that maybe band-doubling can still work in a different way: Instead
+of doubling a global parameter, we double the size of each layer
+(column/wavefront) whenever it needs to grow. But each layer depends on previous
+layers, so they need to grow as well to be able to compute the new layer.
+Now, instead of a global threshold $t$ we have a threshold $t_\ell$ for each
+layer $ell$.
+
+Let's assume that the size of a layer roughly
+corresponds to the difference between the smallest and largest value of
+$f$ of states in the layer.[fn::Or maybe the difference between the smallest and largest $g$ or $h$?
+Needs investigation.]
+Then, one way to double the size of a layer is to double this difference:
+
+- Let $f_{min, \ell}$ be the minimum value of $f$ in layer $\ell$. The
+  maximum value is $t_{\ell}$ by construction.
+- Extend this and previous layers up to $f\leq t_\ell + t_\ell - f_{min,\ell} = 2t_\ell-f_{min,\ell}$.
+  Thus, set $t_{\ell'} = \max(t_{\ell'}, 2t_\ell - f_{min,\ell})$ for all $\ell' \leq \ell$.
+- For each previous layer $\ell'$ that grows, make sure that its size (difference
+  between $t_{\ell'}$ and $f_{min, \ell'}$) at least doubles.
+  If not, further increase $t_{\ell'}$ and additionally increase $t$ for
+  previous layers.
+
+Now, this should[fn::experiments needed] guarantee that each layer at least
+doubles in size.
+
+To implement this, we keep all layers in memory and simply grow them whenever needed.
+
+*And pruning?* I think this can also work with a pre-pruned heuristic,
+but we need to be careful since $h$ is not consistent. That means that after
+growing a layer, we may need to update already computed states of next layers.
+But since we make sure to at least double the size of each layer, just
+recomputing the entire next layer doesn't hurt the complexity.
+
+I'm also hopeful that a fully pre-pruned heuristic (i.e. with /all/ matches on
+the path removed) can work here. The most important requirement is that we need
+to make sure that eventually all states at the start of a pruned match are
+indeed expanded. Otherwise it wouldn't have been allowed to prune the match at all.
+
+Maybe a middle-ground between online and pre-pruning is possible:
+Once a path to a match has been found, we prune it from that point onward. For
+all future band-doublings we will take into account the pruned match. A
+drawback here is that the pruning only happens /after/ the current doubling of the band.
+This means we compute too many states. But maybe since we're only doubling on
+each iteration everything is fine. Again, experiments needed.
+
 
 ** TODOs
 - Write down the proofs that are omitted here.
