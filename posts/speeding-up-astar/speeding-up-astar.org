@@ -181,7 +181,9 @@ $\pi$ is not optimal!
   1. Construct the (chaining) seed heuristic $h$.
   2. Compute $g(u)$ for all states on $\pi$.
   3. In reverse order, remove from $h$ all matches (with start $u$) on the path $\pi$ with
-      $f(u) = g(u) + h(u) < t$.
+     $f(u) = g(u) + h(u) < t$.\\
+     Note: this pruning can be done directly during the construction of $h$,
+     since contours/layers in the heuristic are also constructed backwards.
   4. Run your favourite alignment algorithm (Edlib/WFA), but after each /layer/ (ie column
      or wavefront), shrink the ends of the layer as long as $f(u) > t$ for
      states at those ends.
