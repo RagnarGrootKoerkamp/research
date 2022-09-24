@@ -105,8 +105,10 @@ end and we can rerun with increased $t$.  When $t>d$, the right answer will be
 found, at the cost of increasing the width of the volume by roughly $t-d$ on
 each side.
 
-*Band-doubling.* Unlike in [cite/t:@ukkonen85] and Edlib [cite:@edlib], the band-doubling approach does
-not guarantee a good performance here. When $t=d-1$ fails, doubling to $t=2d-2$
+*Band-doubling does not help.*
+In [cite/t:@ukkonen85] and Edlib [cite:@edlib], a
+band-doubling approach is used to find $d$. Sadly, that approach does
+not guarantee a good performance in our case. When $t=d-1$ fails, doubling to $t=2d-2$
 increases the number of computed states by $2\cdot(d-2)\cdot n$.
 This is much more than just the $n$ states that would be computed when a perfect
 heuristic is used.
@@ -131,7 +133,7 @@ start of the search, where the band increases by $1$ for each error not
 predicted by the heuristic.
 
 A match is pruned once the state at its start is expanded. After pruning, the
-heuristic increases for all states preceding the match. When processing states
+heuristic typically increases for most states preceding the match. When processing states
 column-by-column, this means that all states that could have been skipped
 because of pruning have already been computed anyway. The solution is to prune
 matches right from the start: /pre-pruning/.
@@ -204,7 +206,8 @@ When the input $\pi$ is optimal, this algorithm should have the complexity of A*
   doing experiments.
 - It could happen that there are two good candidate alignments that are far from
   each other. In this case we should split each layer (column/wavefront) into
-  two intervals, instead of treating them as one long interval.
+  two smaller intervals of states $f\leq t$ that cover the good candidate
+  states, and skip the states in the middle with $f > t$.
 
 ** Results
 
