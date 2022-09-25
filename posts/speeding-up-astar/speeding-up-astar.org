@@ -93,7 +93,7 @@ It would be much more efficient to simply process exactly these states in order.
 That's actually pretty straightforward: we can simply process them column-by-column
 (or using WFA) and filter out states where $g(u) + h(u) > s$.
 
-*Precomputing layer boundaries.* We can save more time by not evaluating $h$ in
+*Precomputing front boundaries.* We can save more time by not evaluating $h$ in
 every state, but only in those on the boundary (top/bottom states) of the column
 (or wavefront): the boundary of the next column will be similar to the boundary
 of the current column, so we can first determine those and then fill the
@@ -178,8 +178,8 @@ $\pi$ is not optimal!
      $f(u) = g(u) + h(u) < t$.\\
      Note: this pruning can be done directly during the construction of $h$,
      since contours/layers in the heuristic are also constructed backwards.
-  4. Run your favourite alignment algorithm (Edlib/WFA), but after each /layer/ (ie column
-     or wavefront), shrink the ends of the layer as long as $f(u) > t$ for
+  4. Run your favourite alignment algorithm (Edlib/WFA), but after each /front/ (ie column
+     or wavefront), shrink the ends of the front as long as $f(u) > t$ for
      states at those ends.
   5. When the algorithm finishes, it will have found a shortest path.
 
@@ -197,7 +197,7 @@ When the input $\pi$ is optimal, this algorithm should have the complexity of A*
   the algorithm is made more efficient. We'll have to see how this ends up after
   doing experiments.
 - It could happen that there are two good candidate alignments that are far from
-  each other. In this case we should split each layer (column/wavefront) into
+  each other. In this case we should split each front (column/wavefront) into
   two smaller intervals of states $f\leq t$ that cover the good candidate
   states, and skip the states in the middle with $f > t$.
 
@@ -234,37 +234,37 @@ instead of linear!
 /This subsection is speculative./
 
 I'm thinking that maybe band-doubling can still work in a different way: Instead
-of doubling a global parameter, we double the size of each layer
-(column/wavefront) whenever it needs to grow. But each layer depends on previous
-layers, so they need to grow as well to be able to compute the new layer.
+of doubling a global parameter, we double the size of each front
+(column/wavefront) whenever it needs to grow. But each front depends on previous
+fronts, so they need to grow as well to be able to compute the new front.
 Now, instead of a global threshold $t$ we have a threshold $t_\ell$ for each
-layer $ell$.
+front $ell$.
 
-Let's assume that the size of a layer roughly
+Let's assume that the size of a front roughly
 corresponds to the difference between the smallest and largest value of
-$f$ of states in the layer.[fn::Or maybe the difference between the smallest and largest $g$ or $h$?
+$f$ of states in the front.[fn::Or maybe the difference between the smallest and largest $g$ or $h$?
 Needs investigation.]
-Then, one way to double the size of a layer is to double this difference:
+Then, one way to double the size of a front is to double this difference:
 
-- Let $f_{min, \ell}$ be the minimum value of $f$ in layer $\ell$. The
+- Let $f_{min, \ell}$ be the minimum value of $f$ in front $\ell$. The
   maximum value is $t_{\ell}$ by construction.
-- Extend this and previous layers up to $f\leq t_\ell + t_\ell - f_{min,\ell} = 2t_\ell-f_{min,\ell}$.
+- Extend this and previous front up to $f\leq t_\ell + t_\ell - f_{min,\ell} = 2t_\ell-f_{min,\ell}$.
   Thus, set $t_{\ell'} = \max(t_{\ell'}, 2t_\ell - f_{min,\ell})$ for all $\ell' \leq \ell$.
-- For each previous layer $\ell'$ that grows, make sure that its size (difference
+- For each previous front $\ell'$ that grows, make sure that its size (difference
   between $t_{\ell'}$ and $f_{min, \ell'}$) at least doubles.
   If not, further increase $t_{\ell'}$ and additionally increase $t$ for
-  previous layers.
+  previous fronts.
 
-Now, this should[fn::experiments needed] guarantee that each layer at least
+Now, this should[fn::experiments needed] guarantee that each front at least
 doubles in size.
 
-To implement this, we keep all layers in memory and simply grow them whenever needed.
+To implement this, we keep all fronts in memory and simply grow them whenever needed.
 
 *And pruning?* I think this can also work with a pre-pruned heuristic,
 but we need to be careful since $h$ is not consistent. That means that after
-growing a layer, we may need to update already computed states of next layers.
-But since we make sure to at least double the size of each layer, just
-recomputing the entire next layer doesn't hurt the complexity.
+growing a front, we may need to update already computed states of next fronts.
+But since we make sure to at least double the size of each front, just
+recomputing the entire next front doesn't hurt the complexity.
 
 I'm also hopeful that a fully pre-pruned heuristic (i.e. with /all/ matches on
 the path removed) can work here. The most important requirement is that we need
