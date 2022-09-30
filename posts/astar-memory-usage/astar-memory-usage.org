@@ -1,0 +1,77 @@
+#+title: Reducing A* memory usage using fronts
+#+HUGO_BASE_DIR: ../..
+#+HUGO_TAGS: astar layers fronts
+#+HUGO_SECTION: notes
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+cite_export: csl
+#+toc: headlines 3
+#+date: <2022-09-26>
+#+author: Ragnar Groot Koerkamp
+
+
+Here is an idea to reduce the memory usage of A* by only storing one /front/ at
+a time, similar to what Edlib and WFA do. Note that for now this *will not
+work*, but I'm putting this online anyway.
+
+** Motivation
+
+In our [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][implementation]] of A*PA, we use a hashmap to store the value of $g$ of all
+visited (explored/expanded) states by A*. This can take up a lot of memory and
+simply reading/writing $g$ in the hashmap can take over half the total execution
+time.
+
+** Parititioning A* memory by fronts
+
+Needleman-Wunsch and WFA have a similar problem of requiring quadratic ($O(n^2)$
+resp. $O(s^2)$) memory to store all their history.
+This can be solved by only storing the last /front/ (column/wavefront), since
+each front only depends on the one before it. This way, only linear ($O(n)$
+resp. $O(s)$) memory is needed.
+
+We can try the same for A*. For now, assume the
+heuristic $h$ is /consistent/. Then:
+- Define /front/ $f$ as those states $u$ with $f(u) = f$.
+- Store the $g$ values in a separate hashmap for each front.
+- Since $h$ is consistent, $f$ can only go up when traversing an edge.
+  In our case (with unit costs), $f$ goes up by at most $2$.[fn::That happens when both $g$ and $h$ go up by $1$.]
+- Thus, exploring neighbours of front $f$ only results in $f(u)=f+1$ and $f(u)=f+2$.
+- Given front $f$, A* effectively does two things:
+  - A BFS over all states with $f(u) = f$.
+  - Pushing all states with $f < f(u) \leq f+2$ onto the priority queue and
+    updating their values of $g$ in the hashmap for front $f(u)$.
+- After completing the previous step, we can simply drop the hashmap for front
+  $f$, since it will not be needed anymore.
+
+This way, we only need to keep around a limited number of hashmaps.
+
+*BUT THIS IS BROKEN*: One important property of A* is that it only opens nodes
+when $g$ decreases. We must ensure that we do not open nodes that already have a
+smaller value of $g$. If we only store hashmaps for the last front, we 'forget'
+$g$ for states in previous fronts. This is not a problem in NW/WFA, since those
+algorithms process states from left to right/diagonally, and they can never
+visit a state twice. A* on the other hand does not follow such a structure, and
+losing the information of previous fronts would mean that A* revisits those
+already computed states.
+
+
+*** Non-consistent heuristics
+
+When $h$ is not consistent, $f$ can drop. In our case, it drops by at most $1$
+or $2$. Also $h$ is only 'locally' inconsistent: after a short greedy
+exploration $f$ will go back up again.
+
+*** Front indexing
+In NW and WFA, each front has a nice structure: it contains one state per column
+or diagonal respectively. When doing A*, this is not necessarily true anymore.
+Still, more efficient indexing/addressing scheme than simple hashmaps may be possible.
+
+** Tracing back the path
+
+I'm skipping over the issue of tracing back the final alignment path for now.
+Edlib and WFA solve this by doing Hirschberg's divide-and-conquer approach, but
+meet-in-the-middle A* is quite tricky[fn::See notes [[../../notes/bidirectional-astar][here]].].
+
+Another option is to use the ideas from [[../posts/linear-memory-wfa/linear-memory-wfa.org][this linear-memory WFA post]].
