@@ -16,6 +16,10 @@ overview of some of my new ideas to significantly speed up exact global pairwise
 alignment. It's recommended you understand the /seed heuristic/ and /match
 pruning/ before reading this post.
 
+Two subsections contain ideas that I haven't fully thought through yet but sound
+promising[fn::More promising than the main text, in fact, because they do not
+depend on a given path as input.].
+
 ** Motivation
 
 #+caption: Figure 4b from our preprint: at $e=5\%$ error rate, the seed heuristic (SH) only outperforms BiWFA from $n=30kbp$ onward.
@@ -166,6 +170,22 @@ $e$ is the same as in [cite/t:@harris74]. Our $s$ is his $f(p^*)$.] Thus, the
 previous algorithm still works, even when the path
 $\pi$ is not optimal!
 
+*** Thoughts on more aggressive pruning
+/This subsection is speculative./
+
+*Full pruning.* Maybe it's even possibly to pre-prune *all* matches on the guessed path. That
+makes the heuristic inadmissible, but my feeling is that as long as we make sure
+to expand the start of all pruned matches at some point, this still works. Proof needed.
+
+In combination with the front-doubling approach below, this could have the
+additional benefit that no initial path/cost estimate is needed.
+
+I'm not quite sure whether this actually makes sense though. After pruning all
+matches on the path there is nothing to guide the heuristic anymore. The search
+will still be pushed towards the tip, but the tip will not be pulled across long
+indels.
+
+
 ** Algorithm summary
 - Input ::
   Some alignment $\pi$ of cost $t$.
@@ -233,9 +253,9 @@ instead of linear!
 *** Maybe doubling can work after all?
 /This subsection is speculative./
 
-I'm thinking that maybe band-doubling can still work in a different way: Instead
-of doubling a global parameter, we double the size of each front
-(column/wavefront) whenever it needs to grow. But each front depends on previous
+*Front-doubling.* I'm thinking that maybe band-doubling can still work in a different way: Instead
+of doubling a global parameter, *we double the size of each front
+(column/wavefront) whenever it needs to grow*. But each front depends on previous
 fronts, so they need to grow as well to be able to compute the new front.
 Now, instead of a global threshold $t$ we have a threshold $t_\ell$ for each
 front $ell$.
