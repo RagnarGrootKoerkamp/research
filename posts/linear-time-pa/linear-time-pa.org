@@ -132,9 +132,9 @@ A proof could consist of the following steps:
 
 - With high probability, all matches are /true positives/. In particular, the
   number of false positives should be exponentially (or super-quadratically) small.
-- The optimal alignment of $A$ and $B$ goes through all matches.
   - Both this point and the next can probably reuse ideas/techniques/theorems
     from [cite/t:@ganesh20].
+- The optimal alignment of $A$ and $B$ goes through all matches.
 - In regions with $x$ /excess errors/ (see below), pruning ensures the
   local runtime is $O(x^2)$.
 - Having $x$ excess errors is exponentially rare, $o(e^{-x})$.
@@ -155,16 +155,18 @@ is $O(1+x)$.
 
 Let $P(i)$ be the potential in column $i$, i.e. the maximal number of
 errors the heuristic can anticipate from $i$ to the end. The /average potential
-per character/ is $P(0) \approx p := r/k = 1/k$ for exact matches, which equals the maximal
+per character/ is $P(0)/n \approx p := r/k = 1/k$ for exact matches, which equals the maximal
 error rate the heuristic can anticipate.
 
-Let $E(i)$ be the minimal number of errors on a path from column $i$ to the end.
-Write $e(i) = E(i) - E(i+1)$ as /the number of errors in column $i$/.
+Let $E_i$ be the minimal number of errors on a path from column $i$ to the
+end.[fn::Alternatively: given some shortest path $\pi$ from $s$ to $t$, the
+distance from column $i$ to the end along $\pi$.]
+Write $e_i = E_i - E_{i+1}$ as /the number of errors in column $i$/.
 
 *Hypothesis*: The number of states expanded by A* with seed heuristic and match
 pruning is $O(X) = O(X_0)$, defined by $X_n = 1$ and
 \begin{align}
-X_i = \max(1, X_{i+1} + e(i) - p) = \max(1, X_{i+1} + E(i) - E(i+1) - r/k)
+X_i = \max(1, X_{i+1} + e_i - p) = \max(1, X_{i+1} + E_i - E_{i+1} - r/k)
 \end{align}
 
 
