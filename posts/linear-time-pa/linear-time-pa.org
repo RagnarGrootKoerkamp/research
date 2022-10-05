@@ -1,9 +1,9 @@
-#+TITLE: [WIP] Linear time pairwise alignment of random strings
+#+TITLE: Proof sketch for linear time seed heuristic alignment
 #+HUGO_BASE_DIR: ../..
 #+HUGO_TAGS: pairwise-alignment
 #+HUGO_LEVEL_OFFSET: 1
 #+bibliography: local-bib.bib
-#+cite_export: csl ../../chicago-author-date.csl
+#+cite_export: csl
 #+OPTIONS: ^:{}
 #+hugo_auto_set_lastmod: nil
 #+HUGO_SECTION: notes
@@ -11,8 +11,9 @@
 
 #+toc: headlines 3
 
-This post is a work in progress [WIP]/sketch proof to show that pairwise
-alignment of random strings with random mutations can be done in linear time.
+This post is a proof sketch to show that A* with the /seed heuristic/
+[cite:@astarpa] does exact pairwise alignment of random strings with random
+mutations in near linear time.
 
 * Pairwise alignment in subquadratic time
 
@@ -71,7 +72,6 @@ Another choice is the order in which mutations are applied:
   executing them. Substitute instructions always refer to characters of the
   original string (never to inserted characters), and inserted characters are
   never deleted.
-  This seems to be similar to the /indel channel/ model [TODO: read on this; citation].
 
 A final choice is whether or not to allow identity substitutions that do not
 change the current character.
@@ -81,8 +81,6 @@ particular for the up-front model, each character of $A$ maps to some
 interval of $B$, and each character of $B$ maps to a single character of $A$.
 These characters /correspond/ to each other.
 
-
-** Comparison
 The main difference between these methods is that iterative errors slightly favours
 longer runs of inserts: once a character is inserted, the probability that a
 second character will be inserted in the same 'run' is slightly larger because
@@ -93,15 +91,20 @@ probability distribution of the number of errors in an interval, since the
 generated mutations do not depend on earlier mutations. I think this is the
 model of choice to analyse our probabilistic algorithm.
 
+Previous work has used an *indel channel* [cite/t:@ganesh20] which covers all of
+the above points. This seems to be a promising approach since they already have
+results on it.
+
+
+
 * Algorithm
 The algorithm runs an A* search from $s$ to $t$, using a heuristic $h$.
 During the algorithm, a match is /pruned/ as soon as its start is expanded. This
 increases the value of $h$ and thus improves the A*.
 
-** Counting-seeds heuristic
+** Seed heuristic
 
-We use a simplified version of the /chained-seeds/ heuristic used in A*PA, that
-is in fact much closer to the original seed-heuristic of [cite/text:@astarix-2]. We
+We use a the /seed heuristic/ used in A*PA. We
 partition $A$ into seeds of length $k$, and find all matches for each seed.
 The heuristic at a state $u$ is simply the number of /remaining/ seeds for which
 no matches exist. This is an admissible heuristic, i.e. lower bound on the
@@ -117,31 +120,61 @@ this is the last non-pruned match for a given seed, this means that $h$
 increases by $1$ for all states left of $u$. This can be implemented using e.g.
 a Fenwick tree: both queries and updates take $O(\log (n/k))$ time this way.
 
-* TODO Analysis
+* Analysis
 
-We can choose $k \geq \log_\Sigma n^2$ to ensure $o(1)$ false-positive matches in total.
+** Expanded states
 
-We make the following assumptions, and show that each is false only with
-exponentially small probability.
+Here is a sketch to show that the number of expanded states is linear in $n$.
 
-- All matches are /true positives/: they indicate a substring of $B$ that
-  corresponds to a substring of $A$.
+Choose $\log_\Sigma n^2 <  k < 1/e$.
+
+A proof could consist of the following steps:
+
+- With high probability, all matches are /true positives/. In particular, the
+  number of false positives should be exponentially (or super-quadratically) small.
 - The optimal alignment of $A$ and $B$ goes through all matches.
-- [There will probably be more.]
+  - Both this point and the next can probably reuse ideas/techniques/theorems
+    from [cite/t:@ganesh20].
+- In regions with $x$ /excess errors/ (see below), pruning ensures the
+  local runtime is $O(x^2)$.
+- Having $x$ excess errors is exponentially rare, $o(e^{-x})$.
 
 A* works by keeping a priority queue of states ordered by $f = g + h$. Our
 $h\langle i, j\rangle$ only depends on $i$, and is non-increasing. This means
 that $f=g+h$ can only increase when $g$ goes up by $1$ (because of
-mismatch/indels) while $h$ stays the same. Let $F$ be the minimum $
-Thus, if it weren't for pruning, at
-any point in time all states have either value $F$ or $F+1$, where $F$ is the
-smallest $f(u)$ over explored (non-expanded) states $u$.
+mismatch/indels) while $h$ stays the same.
+If it weren't for pruning, at any point in time all states have either value $f$
+or $f+1$, where $f$ is the smallest $f(u)$ over explored (non-expanded) states
+$u$.
 
-In our model, we will pay for the expansion of all states at distance $F$ as
-soon as $F$ first reaches that value.
+In our model, we will pay for the expansion of all states at distance $f$ as
+soon as $f$ first reaches that value. We want to show that this number of states
+is $O(1+x)$.
+
+*** Excess errors
+
+Let $P(i)$ be the potential in column $i$, i.e. the maximal number of
+errors the heuristic can anticipate from $i$ to the end. The /average potential
+per character/ is $P(0) \approx p := r/k = 1/k$ for exact matches, which equals the maximal
+error rate the heuristic can anticipate.
+
+Let $E(i)$ be the minimal number of errors on a path from column $i$ to the end.
+Write $e(i) = E(i) - E(i+1)$ as /the number of errors in column $i$/.
+
+*Hypothesis*: The number of states expanded by A* with seed heuristic and match
+pruning is $O(X) = O(X_0)$, defined by $X_n = 1$ and
+\begin{align}
+X_i = \max(1, X_{i+1} + e(i) - p) = \max(1, X_{i+1} + E(i) - E(i+1) - r/k)
+\end{align}
 
 
-
+** Algorithmic complexity
+- Finding the matches is $O(n)$ when there are no false-positives.
+- Evaluating the heuristic is $O(1)$.
+- When there are only true positive matches, pruning is $O(1)$.
+- /Reordering/ states (updating their value in the priority queue) should only
+  happen a logarithmic number of times per state. But it may well turn out to be
+  $O(1)$ in this case.
 
 * References
 #+print_bibliography:
