@@ -161,13 +161,16 @@ error rate the heuristic can anticipate.
 Let $E_i$ be the minimal number of errors on a path from column $i$ to the
 end.[fn::Alternatively: given some shortest path $\pi$ from $s$ to $t$, the
 distance from column $i$ to the end along $\pi$.]
-Write $e_i = E_i - E_{i+1}$ as /the number of errors in column $i$/.
+Write $e_i := E_i - E_{i+1}$ as /the number of errors in column $i$/.
+
+We define $x_i$ as the /excess errors/ at $i$: $x_n = 0$,
+\begin{align}
+x_i := \max(0, x_{i+1} + e_i - p) = \max(0, x_{i+1} + E_i - E_{i+1} - r/k)
+\end{align}
+The /total excess/ is $X := \sum x_i$.
 
 *Hypothesis*: The number of states expanded by A* with seed heuristic and match
-pruning is $O(X) = O(X_0)$, defined by $X_n = 1$ and
-\begin{align}
-X_i = \max(1, X_{i+1} + e_i - p) = \max(1, X_{i+1} + E_i - E_{i+1} - r/k)
-\end{align}
+pruning is $O(X)$.
 
 
 ** Algorithmic complexity
