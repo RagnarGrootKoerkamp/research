@@ -25,7 +25,7 @@ History of suffix array construction algorithms:
 
 - String $S = s_0\dots s_{n-1}s_n$.
 - $s_n=\$$ is the sentinel, smaller than all other characters.
-- Suffix from $i$: $S_i := $s_i\dots s_n$.
+- Suffix from $i$: $S_i := s_i\dots s_n$.
 - $i$ indexes the string $S$.
 - $j$ indexes the suffix array $A$.
 - Let $P_i$ be the position of suffix $S_i$ in the suffix array.
@@ -74,6 +74,7 @@ partial suffix array of small suffixes:
 3. Now we iterate over the suffix array position $j$ from $0$ to $n$ to fill in
    the large suffixes in the right places. Recall that $S_{A_j}$ is the suffix
    at position $j$ of the suffix array, and $S_{A_j-1}$ is its previous-suffix.
+   Also, $A_0 = n$ by definition, since $S_n = \$$ is minimal.
 4. If the previous-suffix $S_{A_j-1}$ is small, it is smaller than $S_{A_j}$
    and hence already positioned at a smaller position $j' = P_{A_j-1} < j$.
 5. If the previous-suffix $S_{A_j-1}$ is large, this is the next-smallest
