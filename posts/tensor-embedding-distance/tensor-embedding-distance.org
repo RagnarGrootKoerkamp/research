@@ -1,0 +1,111 @@
+#+title: Tensor embedding preserves Hamming distance
+#+HUGO_BASE_DIR: ../..
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: tensor-sketch
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
+#+cite_export: csl
+#+toc: headlines 3
+#+date: <2022-10-14>
+#+author: Ragnar Groot Koerkamp
+#+author: Amir Joudaki
+
+This is a proof that Tensor Embedding
+[cite:@tensorssketch-joudaki20] with $\ell^2$-norm preserves the Hamming distance.
+
+This is in collaboration with Amir Joudaki.
+
+\begin{equation}
+\newcommand{\Alph}{\mathcal A}
+\newcommand{\alph}{\alpha}
+\newcommand{\I}{\mathcal I}
+\newcommand{\It}{\mathcal I^t}
+\newcommand{\E}{\mathbb E}
+\end{equation}
+
+** Definitions
+
+- Notation ::
+  - The set of indices is $\It := \{(i_1, \dots, i_t) \in [n]^t: i_1 < \dots < i_t\}$.
+  - Given a string $a_1\dots a_n = a\in \Alph^n$, we define the /$I$-index/ as
+    $a_I = (a_{i_1}, \dots, a_{i_t})$.
+  - We write $[ X ]$ for the indicator variable of event $X$, which is $1$ when
+    $X$ holds and $0$ otherwise.
+
+- Definition 1: Tensor embedding ::
+  Given $a\in \Alph^n$, the /tensor embedding/ $T_a$ is the $\alph^t$ tensor
+  given by $T_a[s] = \sum_{I\in It} [A_i = s]$ for each $s\in \Alph^t$.
+
+  The /normalized tensor embedding distance/ $d_{te}$ between two sequences $a$
+  and $b$ is defined as
+  \begin{equation}
+  d_{te}(a,b) := \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b||_2^2.
+  \end{equation}
+
+- Lemma 1: Tensor embedding preserves Hamming distance under $\ell^2$ norm ::
+  Let $a$ be a uniform random sequence of length $n$ in $\Alph^n$, and for a
+  given mutation rate $r\in (0,1]$ let $b$ be a sequence where
+  $a_i$ is substituted by a new character $b_i \in Unif(\Alph \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
+  Then:
+  \begin{equation}
+    \E_{a,b}[d_{te}(a,b)] = (1+o(1))\cdot 2^{2t-1}\cdot \alph^{-t+1} \cdot r.
+  \end{equation}
+
+
+** Proof of Lemma 1
+By definition we have
+\begin{align}
+\binom{n}{2t-1}d_{te}(a,b)
+ &= \|T_a - T_b||_2^2
+ = \sum_{s\in \Alph^t} \left(\sum_{I\in \It} [a_I = s] - \sum_{I\in \It}[b_I = s]\right)^2
+ \\
+&= \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
+\end{align}
+By symmetry between $a$ and $b$, the first and last terms, and second and third
+terms are equal, reducing this to
+\begin{align}
+\|T_a-T_b\|_2^2&=2 \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\\
+&=2 \sum_{I,J\in \It} \sum_{s\in \Alph^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\\
+&=2 \sum_{I,J\in \It} \Big([a_I = a_J] - [a_I=b_J]\Big).
+\end{align}
+In the remainder of the proof we estimate $\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big)$.
+
+When $I\cap J=\emptyset$, i.e. the indices $I$ and $J$ are completely disjoint,
+$a_J$ and $b_J$ are both independent of $a_I$, implying $\Delta(I, J)= 0$.
+
+Otherwise, let $0<p\leq t$ be the size of the intersection $|I\cap J|$.
+Let the /compressed/ indices $I'$ and $J'$ be such that
+$I'\cup J'=[2t-p]$ and $I'_i < J'_j$ if and only if $I_i < J_j$ for any $i,j\in [t]$.
+Each pair of indices $(I, J)$ has a unique compression, and $\Delta(I', J') = \Delta(I, J)$.
+
+Given a compressed pair of indices $(I', J')$ with intersection of size $p$,
+there are exactly $\binom{n}{2t-p}$ pairs $(I, J)$ compressing to $(I', J')$.
+This gives
+\begin{align}
+\E_{a,b} \|T_a-T_b\|_2^2
+&=2 \sum_{I,J\in \It} \E(\Delta(I, J)) =2 \sum_{I,J\in \It} \E(\Delta(I', J'))\\
+&=2 \sum_{p=1}^t \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=p, \\I'\cup J'=[2t-p]}}
+    \binom{n}{2t-p}\cdot \E(\Delta(I', J')).
+\end{align}
+Now, note that while $\E(\Delta(I', J'))$ depends on $t$ and $r$, it does not
+depend on $n$. Thus, we may treat it as a constant for the purposes of the
+asymptotic analysis in $n$.
+Assuming that not all terms with $p=1$ have $0$ constant, which will be shown below,
+this entire expression is a polynomial in $n$ of degree $2t-1$. Any term with a
+lower degree will be insignificant and go to $0$ after dividing by
+$\binom{n}{2t-1}$. Thus, we simplify to
+\begin{align}
+\E_{a,b}(d_{te}(a,b))
+&=2\cdot(1+o(1)) \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}}
+    \E(\Delta(I', J')).
+\end{align}
+
+TODO:
+- Define /overlap/ $q$ as number of position with $I_i = J_i$.
+- Argue that $\Delta(I', J')$ is only non-zero when $q>0$. (I.e. $p>0$ is not sufficient.)
+- Compute $\Delta(I', J')$ given $q=1$ and show that it is independent of the
+  choise of $I'$ and $J'$: $\alph^{-t+1}\cdot r$.
+- Count the number of tuples $(I', J')$: $4^(t-1)$.
