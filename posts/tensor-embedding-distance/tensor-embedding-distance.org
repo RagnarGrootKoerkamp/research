@@ -52,7 +52,7 @@ This is in collaboration with Amir Joudaki.
   $a_i$ is substituted by a new character $b_i \in Unif(\Alph \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
   Then:
   \begin{equation}
-    \E_{a,b}[d_{te}(a,b)] = (1+O(n^{-1}))\cdot (4/\alph)^{t-1} \cdot r,
+    \E_{a,b}[d_{te}(a,b)] = \Big(1+O(2t\alph/4^{t-1}n)\Big)\cdot (4/\alph)^{t-1} \cdot r,
   \end{equation}
   which for DNA with $\alph=4$ gives $\E[d_{te}(a,b)] = (1 + O(n^{-1})) \cdot r$.
 
@@ -80,7 +80,7 @@ $q(I, J) := |\{x\in [t]: I_x = J_x\}|$. We will show using induction on $t$ that
 $\E[a_I=b_J]=(\alph(1-r))^q\alph^{-t}$.
 For $t=0$ we have $I=J=\emptyset$ and trivially $\E[a_I = b_J] = 1$.
 For $t>0$, write $I'$ and $J'$ for the tuples $(I_1, \dots, I_{t-1})$ and
-$(J_0, \dots, J_{t-1})$.
+$(J_1, \dots, J_{t-1})$.
 When $I_t = J_t$, the characters $a_{I_t}$ and $b_{J_t}$ are independent of the
 earlier characters and equal with
 probability $1-r$, and $q(I', J') = q-1$, so that
@@ -102,7 +102,7 @@ b_{J_t}]$ is independent from $[a_{I'} = b_{I'}]$.
 \end{align}
 We conclude that
 \begin{equation}
-\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big) = \alph^{-t+q}\big(1-(1-r)^{q(I, J)}\big).
+\E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big) = \alph^{-t+q}\big(1-(1-r)^{q(I, J)}\big).
 \end{equation}
 This difference vanishes for $q=0$, and thus in \eqref{eq:delta} we only have to
 consider $(I, J)$ with $q(I, J) \geq 1$. The summation can now be rewritten as
@@ -110,23 +110,19 @@ consider $(I, J)$ with $q(I, J) \geq 1$. The summation can now be rewritten as
 \E_{a,b}\left(\|T_a-T_b\|_2^2\right)
 &= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}}\E \Big([a_I = a_J] - [a_I=b_J]\Big)\\
 &= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}} \alph^{-t+q}\big(1-(1-r)^q\big)\\
-&= 2 \sum_{q=1}^t \alph^{-t+q}\big(1-(1-r)^q\big)\cdot \big|\{I,J\in \It: q(I, J) = q\}\big|.
+&= 2 \sum_{q=1}^t \alph^{-t+q}\big(1-(1-r)^q\big)\cdot f_q,
+\tag{ii}\label{eq:ii}
 \end{align}
-Denote the size of this last set by $f_q$ and continue with \eqref{eq:delta}:
-\begin{equation}
-    \E(d_{te}(a,b)) = \binom{n}{2t-1}^{-1} \sum_{q=1}^t f_q \cdot \alph^{-t+q}\big(1-(1-r)^q\big).
-    \tag{ii}\label{eq:ii}
-\end{equation}
+where $f_q$ counts the number of pairs $(I, J)$ with $q(I, J) = q$.
 Since $|I\cap J|\geq q$, the total
 number of distinct indices is bounded by $|I\cup J| \leq 2t-q$. This directly
-implies that $f_q \leq \binom{n}{2t-q}$, which for $q\geq 2$ and $n\geq
-2t\alpha/r$ gives
+implies that $f_q \leq \binom{n}{2t-q}$, which for $q\geq 2$
+gives
 \begin{equation}
     \binom{n}{2t-1}^{-1} \binom{n}{2t-q} \cdot \alph^{-t+q}\big(1-(1-r)^q\big)
-    = O(n^{-1}),
+    = O((2t\alph/n)^{q-1}) \cdot \alph^{1-t} r.
 \end{equation}
-where terms start to vanish for $n \geq 2t\alph/r$.
-When $q=1$ but $|I\cup J| < 2t-1$ the same argument applies, and we are left with
+When $q=1$ but $|I\cup J| < 2t-1$ a similar argument applies, and we are left with
 the case where $q=1$ and $|I\cup J| = 2t-1$. We can first choose the $2t-1$
 distinct values for $I\cup J$ in $\binom n{2t-1}$ ways, and then assume that $I\cup J =
 [2t-1]$. The overlap can be at any odd position $2k+1\in\{1,3,\dots, 2t-1\}$, since
@@ -138,11 +134,14 @@ following number of $(I, J)$ pairs with $q=1$ and $|I\cup J| = 2t-1$:
 \binom{n}{2t-1}\cdot\sum_{k=0}^{t-1}\binom{2k}{k} \binom{2(t-1-k)}{t-1-k} =\binom{n}{2t-1}\cdot 4^{t-1},
 \end{equation}
 a well-known equality [CITATIONS HERE].
-Equation \eqref{eq:ii} now simplifies to
+Splitting \eqref{eq:ii} into the cases $q=1$ (with  $|I\cap J|=1$ and $|I\cap
+J|>1$) and $q>2$, and assuming that $n\gg 2t\alph$, we get:
 \begin{align}
     \E(d_{te}(a,b))
-    &= (1+O(n^{-1})) \cdot 4^{t-1} \alph^{-t+1} \big(1 - (1-r)^1\big)\\
-    &= (1+O(n^{-1})) \cdot (4/\alph)^{t-1}\cdot r.&& \square
+    &= (4/\alph)^{t-1} \cdot r+ O(2t\alph/n) \cdot \alph^{-t} r
+     + \sum_{q=2}^t O((2t\alph/n)^{q-1}) \cdot \alph^{1-t} r\\
+    &= (4/\alph)^{t-1} \cdot r + O(2t\alph/n) \cdot \alph^{1-t} r\\
+    &= \Big(1 + O(2t\alph /4^{t-1}n)\Big)\cdot (4/\alph)^{t-1} \cdot r.
 \end{align}
 
 ** References
