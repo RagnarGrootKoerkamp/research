@@ -43,137 +43,106 @@ This is in collaboration with Amir Joudaki.
   The /normalized tensor embedding distance/ $d_{te}$ between two sequences $a$
   and $b$ is defined as
   \begin{equation}
-  d_{te}(a,b) := \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b||_2^2.
+  d_{te}(a,b) := \frac 12 \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b||_2^2.
   \end{equation}
 
 - Lemma 1: Tensor embedding preserves Hamming distance under $\ell^2$ norm ::
   Let $a$ be a uniform random sequence of length $n$ in $\Alph^n$, and for a
-  given mutation rate $r\in [0,1]$ let $b$ be a sequence where
+  fixed mutation rate $r\in [0,1]$ let $b$ be a sequence where
   $a_i$ is substituted by a new character $b_i \in Unif(\Alph \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
   Then:
   \begin{equation}
-    \E_{a,b}[d_{te}(a,b)] = (1+o(1))\cdot 2^{2t-1}\cdot \alph^{-t+1} \cdot r.
+    \E_{a,b}[d_{te}(a,b)] = (1+O(n^{-1}))\cdot (4/\alph)^{t-1} \cdot r,
   \end{equation}
+  which for DNA with $\alph=4$ gives $\E[d_{te}(a,b)] = (1 + O(n^{-1})) \cdot r$.
 
 
 ** Proof of Lemma 1
 By definition we have
 \begin{align}
-\binom{n}{2t-1}d_{te}(a,b)
+2\binom{n}{2t-1}d_{te}(a,b)
  &= \|T_a - T_b||_2^2
  = \sum_{s\in \Alph^t} \left(\sum_{I\in \It} [a_I = s] - \sum_{I\in \It}[b_I = s]\right)^2
  \\
 &= \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
 \end{align}
 By symmetry between $a$ and $b$, the first and last term, and second and third
-term are equal, reducing this to
+term are equal in expected value, reducing this to
 \begin{align}
-\|T_a-T_b\|_2^2&=2 \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\\
-&=2 \sum_{I,J\in \It} \sum_{s\in \Alph^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\\
-&=2 \sum_{I,J\in \It} \Big([a_I = a_J] - [a_I=b_J]\Big).
-\end{align}
-To simplify notation, we define $\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big)$.
-
-When $I\cap J=\emptyset$, i.e. the indices $I$ and $J$ are completely disjoint,
-$a_J$ and $b_J$ are both independent of $a_I$, implying $\Delta(I, J)= 0$.
-
-Otherwise, let $0<p\leq t$ be the size of the intersection $|I\cap J|$.
-Let the /compressed/ indices $I'$ and $J'$ be such that
-$I'\cup J'=[2t-p]$ and $I'_i < J'_j$ if and only if $I_i < J_j$ for any $i,j\in [t]$.
-Each pair of indices $(I, J)$ has a unique compression, and $\Delta(I', J') =
-\Delta(I, J)$ since the relevant /structure/ is preserved.
-
-For each compressed pair of indices $(I', J')$ with intersection of size $p$,
-there are exactly $\binom{n}{2t-p}$ pairs $(I, J)$ compressing to $(I', J')$.
-This gives
-\begin{align}
-\E_{a,b} \|T_a-T_b\|_2^2
-&=2 \sum_{I,J\in \It} \E(\Delta(I, J)) =2 \sum_{I,J\in \It} \E(\Delta(I', J'))\\
-&=2 \sum_{p=1}^t \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=p, \\I'\cup J'=[2t-p]}}
-    \binom{n}{2t-p}\cdot \E(\Delta(I', J')).
-\end{align}
-Now, note that while $\E(\Delta(I', J'))$ depends on $t$ and $r$, it does not
-depend on $n$. Thus, we may treat it as a constant for the purposes of the
-asymptotic analysis in $n$.
-Assuming that not all terms with $p=1$ have a vanishing constant, which will be shown below,
-this expression is a polynomial in $n$ of degree $2t-1$. Any term with a
-lower degree will be insignificant and go to $0$ after dividing by
-$\binom{n}{2t-1}$. Thus, we simplify to
-\begin{align}
-\E_{a,b}(d_{te}(a,b))
-&=2\cdot(1+o(1)) \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}}
-    \E(\Delta(I', J')).
+\E_{a,b}\left(\|T_a-T_b\|_2^2\right)
+&=\E \left(2 \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\right)\\
+&=\E\left( 2 \sum_{I,J\in \It} \sum_{s\in \Alph^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\right)\\
+&= 2 \sum_{I,J\in \It}\E \Big([a_I = a_J] - [a_I=b_J]\Big).\tag{i}\label{eq:delta}
 \end{align}
 
-Define the /overlap/ $q$ as the number of positions where a pair of indices is
-equal, $q(I, J) = |\{x\in [t]: I_x = J_x\}|$. Naturally, $0\leq q\leq p$. We
-will now show that $\Delta(I, J)=0$ when $q(I, J) = 0$, and that $\Delta(I, J) =
-r\alph^{-t+1}$ when $p=q=1$.
-
-First consider the case $p=1$ and $q=0$, and suppose that $I_x = J_y$ for a
-single pair $x\neq y$. We have
+Define the /overlap/ $q$ as the number of positions where $I$ and $J$ are equal,
+$q(I, J) := |\{x\in [t]: I_x = J_x\}|$. We will show using induction on $t$ that
+$\E[a_I=b_J]=(\alph(1-r))^q\alph^{-t}$.
+For $t=0$ we have $I=J=\emptyset$ and trivially $\E[a_I = b_J] = 1$.
+For $t>0$, write $I'$ and $J'$ for the tuples $(I_1, \dots, I_{t-1})$ and
+$(J_0, \dots, J_{t-1})$.
+When $I_t = J_t$, the characters $a_{I_t}$ and $b_{J_t}$ are independent of the
+earlier characters and equal with
+probability $1-r$, and $q(I', J') = q-1$, so that
 \begin{align}
-[a_I = a_J]
-&= [a_{I_0}=a_{J_0} \land \dots \land a_{I_t} = a_{J_t}]\\
-&= [a_{I_x}=a_{J_x} \land a_{I_y}=a_{J_y}] \prod_{i\in [t]\backslash\{x,y\}} [a_{I_i} =a_{J_i}]\\
-&= [a_{J_x} = a_{I_x} = a_{J_y} = a_{I_y}] \cdot \alph^{-(t-2)}
+\E[a_I = b_J]
+ &= (1-r) \E[a_{I'} = b_{J'}]\\
+ &= (1-r) \cdot (\alph(1-r))^{q-1}\alph^{-(t-1)}\\
+ &= (\alph(1-r))^{q}\alph^{-t}.
 \end{align}
-Assume that $x<y$. Then, $J_x < J_y = I_x < I_y$, so that $a_{J_x}$ and
-$a_{I_y}$ are two distinct characters and both independent of $a_{I_x}=a_{J_y}$.
-This means that the equation above simply equals $\E [a_I=a_J] = \alph^{-t}$.
-The case of $x>y$ is similar.
-
-In the case of $a_I = b_J$ we get
-\begin{equation}
-\E[a_I = b_J] = \E[b_{J_x} = a_{I_x} = b_{J_y} = a_{I_y}] \cdot \alph^{-(t-2)}.
-\end{equation}
-Again we see that $b_{J_x}$ and $a_{I_y}$ are independent random characters,
-resulting in $\E[a_I=b_J] = \alph^{-t}$. Indeed, this means that $\Delta(I, J) =
-\alph^{-t} - \alph^{-t}=0$  in this case.
-
-When $p=q=1$, there is an $x\in[t]$ such that $I_x = J_x$ with all other indices
-being distinct. We get
-\begin{equation}
-\E[a_I = a_J] = \E[a_{I_x} = a_{J_x}] \prod_{i\in [t]\backslash\{x\}} \E[a_{I_i} =a_{J_i}]
-= 1\cdot \alph^{-(t-1)} = \alph^{-t+1},
-\end{equation}
-and similarly
-\begin{equation}
-\E[a_I = b_J] = \E[a_{I_x} = b_{J_x}] \prod_{i\in [t]\backslash\{x\}} \E[a_{I_i} =b_{J_i}]
-= (1-r)\cdot \alph^{-t+1}.
-\end{equation}
-Putting everything together, we obtain $\Delta(I, J) = (1-(1-r))\alph^{-t+1} =
-r\cdot \alph^{-t+1}$, so that
+When $I_t \neq J_t$, assume without loss of generality that $I_t < J_t$. Then
+$I_x < J_t$ for all $x\in [t]$, resulting in $b_{J_t}$ is
+independent from the characters seen so far.  This implies that $[a_{I_t} =
+b_{J_t}]$ is independent from $[a_{I'} = b_{I'}]$.
 \begin{align}
-\E(d_{te}(a,b))
-&=2\cdot(1+o(1)) \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}}
-    r\cdot \alph^{-t+1}\\
-&=2\cdot(1+o(1)) \cdot r\cdot \alph^{-t+1}
- \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}} 1.
+\E[a_I = b_J]
+ &= \E[a_{I_t} = b_{J_t}] \E[a_{I'} = b_{J'}]\\
+ &= \alpha \cdot (\alph(1-r))^q\alph^{-(t-1)}\\
+ &= (\alph(1-r))^q\alph^{-t}.
 \end{align}
-
-The only step remaining is to count the number of compressed pairs of intervals
-with overlap $p=q=1$. Suppose that $x\in [t]$ is fixed. Then we must choose the
-relative order of the $2(x-1)$ indices $I_0<\dots<I_{x-1}$ and
-$J_0<\dots<J_{x-1}$. This can be done in $\binom{2(x-1)}{x-1}$ ways.
-Additionally, we must choose the relative order of the $2(t-x)$ larger indices
-$I_{x+1}<\dots<I_t$ and $J_{x+1}<\dots<J_t$. This can be done in
-$\binom{2(t-x)}{t-x}$ ways.
-In total, this gives
-\begin{equation}
-\sum_{x\in [t]} \binom{2(x-1)}{x-1}\binom{2(t-x)}{t-x}
-= \sum_{k=0}^{t-1} \binom{2k}{k}\binom{2(t-1)}{(t-1)-k} = 4^{t-1}.
-\end{equation}
-This equality follows from Jensen's formula [CITE 1902 paper, eq 18]  by substituting
-$a=0$, $b=2(t-1)$, and $\beta=2$, or via the Chu-Vandermonde identity [Cite 1303
-and 1772 paper] by substituting $m=n=-\frac 12$ and using the $-\frac 12$
-transformation [CITE GOULD].
-[TODO: Figure out inconsistent factor 2 that comes from Jensen equality??]
-
 We conclude that
+\begin{equation}
+\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big) = \alph^{-t+q}\big(1-(1-r)^{q(I, J)}\big).
+\end{equation}
+This difference vanishes for $q=0$, and thus in \eqref{eq:delta} we only have to
+consider $(I, J)$ with $q(I, J) \geq 1$. The summation can now be rewritten as
 \begin{align}
-\E(d_{te}(a,b))
-&=2\cdot(1+o(1)) \cdot \alph^{-t+1} \cdot 4^{t-1} \cdot r.
+\E_{a,b}\left(\|T_a-T_b\|_2^2\right)
+&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}}\E \Big([a_I = a_J] - [a_I=b_J]\Big)\\
+&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}} \alph^{-t+q}\big(1-(1-r)^q\big)\\
+&= 2 \sum_{q=1}^t \alph^{-t+q}\big(1-(1-r)^q\big)\cdot \big|\{I,J\in \It: q(I, J) = q\}\big|.
+\end{align}
+Denote the size of this last set by $f_q$ and continue with \eqref{eq:delta}:
+\begin{equation}
+    \E(d_{te}(a,b)) = \binom{n}{2t-1}^{-1} \sum_{q=1}^t f_q \cdot \alph^{-t+q}\big(1-(1-r)^q\big).
+    \tag{ii}\label{eq:ii}
+\end{equation}
+Since $|I\cap J|\geq q$, the total
+number of distinct indices is bounded by $|I\cup J| \leq 2t-q$. This directly
+implies that $f_q \leq \binom{n}{2t-q}$, which for $q\geq 2$ and $n\geq
+2t\alpha/r$ gives
+\begin{equation}
+    \binom{n}{2t-1}^{-1} \binom{n}{2t-q} \cdot \alph^{-t+q}\big(1-(1-r)^q\big)
+    = O(n^{-1}),
+\end{equation}
+where terms start to vanish for $n \geq 2t\alph/r$.
+When $q=1$ but $|I\cup J| < 2t-1$ the same argument applies, and we are left with
+the case where $q=1$ and $|I\cup J| = 2t-1$. We can first choose the $2t-1$
+distinct values for $I\cup J$ in $\binom n{2t-1}$ ways, and then assume that $I\cup J =
+[2t-1]$. The overlap can be at any odd position $2k+1\in\{1,3,\dots, 2t-1\}$, since
+$I$ and $J$ must both have an equal number of distinct elements smaller (resp.
+larger) than $2k+1$. Given $2k+1$, the $2k$ smaller positions can be split into two
+halves in $\binom{2k}{k}$ ways, and similarly for the right half, leading to the
+following number of $(I, J)$ pairs with $q=1$ and $|I\cup J| = 2t-1$:
+\begin{equation}
+\binom{n}{2t-1}\cdot\sum_{k=0}^{t-1}\binom{2k}{k} \binom{2(t-1-k)}{t-1-k} =\binom{n}{2t-1}\cdot 4^{t-1},
+\end{equation}
+a well-known equality [CITATIONS HERE].
+Equation \eqref{eq:ii} now simplifies to
+\begin{align}
+    \E(d_{te}(a,b))
+    &= (1+O(n^{-1})) \cdot 4^{t-1} \alph^{-t+1} \big(1 - (1-r)^1\big)\\
+    &= (1+O(n^{-1})) \cdot (4/\alph)^{t-1}\cdot r.&& \square
 \end{align}
 
 ** References
