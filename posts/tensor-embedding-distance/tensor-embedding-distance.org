@@ -29,6 +29,7 @@ This is in collaboration with Amir Joudaki.
 ** Definitions
 
 - Notation ::
+  - The alphabet is $\Alph$, of size $|\Alph| = \alph$.
   - The set of indices is $\It := \{(i_1, \dots, i_t) \in [n]^t: i_1 < \dots < i_t\}$.
   - Given a string $a_1\dots a_n = a\in \Alph^n$, we define the /$I$-index/ as
     $a_I = (a_{i_1}, \dots, a_{i_t})$.
@@ -37,7 +38,7 @@ This is in collaboration with Amir Joudaki.
 
 - Definition 1: Tensor embedding ::
   Given $a\in \Alph^n$, the /tensor embedding/ $T_a$ is the $\alph^t$ tensor
-  given by $T_a[s] = \sum_{I\in It} [A_i = s]$ for each $s\in \Alph^t$.
+  given by $T_a[s] = \sum_{I\in \It} [A_I = s]$ for each $s\in \Alph^t$.
 
   The /normalized tensor embedding distance/ $d_{te}$ between two sequences $a$
   and $b$ is defined as
@@ -47,7 +48,7 @@ This is in collaboration with Amir Joudaki.
 
 - Lemma 1: Tensor embedding preserves Hamming distance under $\ell^2$ norm ::
   Let $a$ be a uniform random sequence of length $n$ in $\Alph^n$, and for a
-  given mutation rate $r\in (0,1]$ let $b$ be a sequence where
+  given mutation rate $r\in [0,1]$ let $b$ be a sequence where
   $a_i$ is substituted by a new character $b_i \in Unif(\Alph \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
   Then:
   \begin{equation}
@@ -64,14 +65,14 @@ By definition we have
  \\
 &= \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
 \end{align}
-By symmetry between $a$ and $b$, the first and last terms, and second and third
-terms are equal, reducing this to
+By symmetry between $a$ and $b$, the first and last term, and second and third
+term are equal, reducing this to
 \begin{align}
 \|T_a-T_b\|_2^2&=2 \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\\
 &=2 \sum_{I,J\in \It} \sum_{s\in \Alph^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\\
 &=2 \sum_{I,J\in \It} \Big([a_I = a_J] - [a_I=b_J]\Big).
 \end{align}
-In the remainder of the proof we estimate $\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big)$.
+To simplify notation, we define $\Delta(I,J) := \E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big)$.
 
 When $I\cap J=\emptyset$, i.e. the indices $I$ and $J$ are completely disjoint,
 $a_J$ and $b_J$ are both independent of $a_I$, implying $\Delta(I, J)= 0$.
@@ -79,9 +80,10 @@ $a_J$ and $b_J$ are both independent of $a_I$, implying $\Delta(I, J)= 0$.
 Otherwise, let $0<p\leq t$ be the size of the intersection $|I\cap J|$.
 Let the /compressed/ indices $I'$ and $J'$ be such that
 $I'\cup J'=[2t-p]$ and $I'_i < J'_j$ if and only if $I_i < J_j$ for any $i,j\in [t]$.
-Each pair of indices $(I, J)$ has a unique compression, and $\Delta(I', J') = \Delta(I, J)$.
+Each pair of indices $(I, J)$ has a unique compression, and $\Delta(I', J') =
+\Delta(I, J)$ since the relevant /structure/ is preserved.
 
-Given a compressed pair of indices $(I', J')$ with intersection of size $p$,
+For each compressed pair of indices $(I', J')$ with intersection of size $p$,
 there are exactly $\binom{n}{2t-p}$ pairs $(I, J)$ compressing to $(I', J')$.
 This gives
 \begin{align}
@@ -93,8 +95,8 @@ This gives
 Now, note that while $\E(\Delta(I', J'))$ depends on $t$ and $r$, it does not
 depend on $n$. Thus, we may treat it as a constant for the purposes of the
 asymptotic analysis in $n$.
-Assuming that not all terms with $p=1$ have $0$ constant, which will be shown below,
-this entire expression is a polynomial in $n$ of degree $2t-1$. Any term with a
+Assuming that not all terms with $p=1$ have a vanishing constant, which will be shown below,
+this expression is a polynomial in $n$ of degree $2t-1$. Any term with a
 lower degree will be insignificant and go to $0$ after dividing by
 $\binom{n}{2t-1}$. Thus, we simplify to
 \begin{align}
@@ -103,9 +105,77 @@ $\binom{n}{2t-1}$. Thus, we simplify to
     \E(\Delta(I', J')).
 \end{align}
 
-TODO:
-- Define /overlap/ $q$ as number of position with $I_i = J_i$.
-- Argue that $\Delta(I', J')$ is only non-zero when $q>0$. (I.e. $p>0$ is not sufficient.)
-- Compute $\Delta(I', J')$ given $q=1$ and show that it is independent of the
-  choise of $I'$ and $J'$: $\alph^{-t+1}\cdot r$.
-- Count the number of tuples $(I', J')$: $4^(t-1)$.
+Define the /overlap/ $q$ as the number of positions where a pair of indices is
+equal, $q(I, J) = |\{x\in [t]: I_x = J_x\}|$. Naturally, $0\leq q\leq p$. We
+will now show that $\Delta(I, J)=0$ when $q(I, J) = 0$, and that $\Delta(I, J) =
+r\alph^{-t+1}$ when $p=q=1$.
+
+First consider the case $p=1$ and $q=0$, and suppose that $I_x = J_y$ for a
+single pair $x\neq y$. We have
+\begin{align}
+[a_I = a_J]
+&= [a_{I_0}=a_{J_0} \land \dots \land a_{I_t} = a_{J_t}]\\
+&= [a_{I_x}=a_{J_x} \land a_{I_y}=a_{J_y}] \prod_{i\in [t]\backslash\{x,y\}} [a_{I_i} =a_{J_i}]\\
+&= [a_{J_x} = a_{I_x} = a_{J_y} = a_{I_y}] \cdot \alph^{-(t-2)}
+\end{align}
+Assume that $x<y$. Then, $J_x < J_y = I_x < I_y$, so that $a_{J_x}$ and
+$a_{I_y}$ are two distinct characters and both independent of $a_{I_x}=a_{J_y}$.
+This means that the equation above simply equals $\E [a_I=a_J] = \alph^{-t}$.
+The case of $x>y$ is similar.
+
+In the case of $a_I = b_J$ we get
+\begin{equation}
+\E[a_I = b_J] = \E[b_{J_x} = a_{I_x} = b_{J_y} = a_{I_y}] \cdot \alph^{-(t-2)}.
+\end{equation}
+Again we see that $b_{J_x}$ and $a_{I_y}$ are independent random characters,
+resulting in $\E[a_I=b_J] = \alph^{-t}$. Indeed, this means that $\Delta(I, J) =
+\alph^{-t} - \alph^{-t}=0$  in this case.
+
+When $p=q=1$, there is an $x\in[t]$ such that $I_x = J_x$ with all other indices
+being distinct. We get
+\begin{equation}
+\E[a_I = a_J] = \E[a_{I_x} = a_{J_x}] \prod_{i\in [t]\backslash\{x\}} \E[a_{I_i} =a_{J_i}]
+= 1\cdot \alph^{-(t-1)} = \alph^{-t+1},
+\end{equation}
+and similarly
+\begin{equation}
+\E[a_I = b_J] = \E[a_{I_x} = b_{J_x}] \prod_{i\in [t]\backslash\{x\}} \E[a_{I_i} =b_{J_i}]
+= (1-r)\cdot \alph^{-t+1}.
+\end{equation}
+Putting everything together, we obtain $\Delta(I, J) = (1-(1-r))\alph^{-t+1} =
+r\cdot \alph^{-t+1}$, so that
+\begin{align}
+\E(d_{te}(a,b))
+&=2\cdot(1+o(1)) \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}}
+    r\cdot \alph^{-t+1}\\
+&=2\cdot(1+o(1)) \cdot r\cdot \alph^{-t+1}
+ \sum_{\substack{I',J'\in \It:\\ |I'\cap J'|=1, \\I'\cup J'=[2t-1]}} 1.
+\end{align}
+
+The only step remaining is to count the number of compressed pairs of intervals
+with overlap $p=q=1$. Suppose that $x\in [t]$ is fixed. Then we must choose the
+relative order of the $2(x-1)$ indices $I_0<\dots<I_{x-1}$ and
+$J_0<\dots<J_{x-1}$. This can be done in $\binom{2(x-1)}{x-1}$ ways.
+Additionally, we must choose the relative order of the $2(t-x)$ larger indices
+$I_{x+1}<\dots<I_t$ and $J_{x+1}<\dots<J_t$. This can be done in
+$\binom{2(t-x)}{t-x}$ ways.
+In total, this gives
+\begin{equation}
+\sum_{x\in [t]} \binom{2(x-1)}{x-1}\binom{2(t-x)}{t-x}
+= \sum_{k=0}^{t-1} \binom{2k}{k}\binom{2(t-1)}{(t-1)-k} = 4^{t-1}.
+\end{equation}
+This equality follows from Jensen's formula [CITE 1902 paper, eq 18]  by substituting
+$a=0$, $b=2(t-1)$, and $\beta=2$, or via the Chu-Vandermonde identity [Cite 1303
+and 1772 paper] by substituting $m=n=-\frac 12$ and using the $-\frac 12$
+transformation [CITE GOULD].
+[TODO: Figure out inconsistent factor 2 that comes from Jensen equality??]
+
+We conclude that
+\begin{align}
+\E(d_{te}(a,b))
+&=2\cdot(1+o(1)) \cdot \alph^{-t+1} \cdot 4^{t-1} \cdot r.
+\end{align}
+
+** References
+
+#+print_bibliography:
