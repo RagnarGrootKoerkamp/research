@@ -18,131 +18,128 @@ This is a proof that Tensor Embedding
 
 This is in collaboration with Amir Joudaki.
 
-\begin{equation}
-\newcommand{\Alph}{\mathcal A}
-\newcommand{\alph}{\alpha}
+\begin{equation*}
 \newcommand{\I}{\mathcal I}
-\newcommand{\It}{\mathcal I^t}
-\newcommand{\E}{\mathbb E}
-\end{equation}
+\newcommand{\EE}{\mathbb E}
+\end{equation*}
 
 ** Definitions
 
 - Notation ::
-  - The alphabet is $\Alph$, of size $|\Alph| = \alph$.
-  - The set of indices is $\It := \{(i_1, \dots, i_t) \in [n]^t: i_1 < \dots < i_t\}$.
-  - Given a string $a_1\dots a_n = a\in \Alph^n$, we define the /$I$-index/ as
+  - The alphabet is $\Sigma$, of size $|\Sigma| = \sigma$.
+  - The set of indices is $\I := \{(i_1, \dots, i_t) \in [n]^t: i_1 < \dots < i_t\}$.
+  - Given a string $a_1\dots a_n = a\in \Sigma^n$, we define the /$I$-index/ as
     $a_I = (a_{i_1}, \dots, a_{i_t})$.
   - We write $[ X ]$ for the indicator variable of event $X$, which is $1$ when
     $X$ holds and $0$ otherwise.
 
 - Definition 1: Tensor embedding ::
-  Given $a\in \Alph^n$, the /tensor embedding/ $T_a$ is the $\alph^t$ tensor
-  given by $T_a[s] = \sum_{I\in \It} [A_I = s]$ for each $s\in \Alph^t$.
+  Given $a\in \Sigma^n$, the /tensor embedding/ $T_a$ is the $\sigma^t$ tensor
+  given by $T_a[s] = \sum_{I\in \I} [A_I = s]$ for each $s\in \Sigma^t$.
 
   The /normalized tensor embedding distance/ $d_{te}$ between two sequences $a$
   and $b$ is defined as
-  \begin{equation}
+  \begin{equation*}
   d_{te}(a,b) := \frac 12 \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b||_2^2.
-  \end{equation}
+  \end{equation*}
 
 - Lemma 1: Tensor embedding preserves Hamming distance under $\ell^2$ norm ::
-  Let $a$ be a uniform random sequence of length $n$ in $\Alph^n$, and for a
+  Let $a$ be a uniform random sequence of length $n$ in $\Sigma^n$, and for a
   fixed mutation rate $r\in [0,1]$ let $b$ be a sequence where
-  $a_i$ is substituted by a new character $b_i \in Unif(\Alph \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
-  Then:
-  \begin{equation}
-    \E_{a,b}[d_{te}(a,b)] = \Big(1+O(2t\alph/4^{t-1}n)\Big)\cdot (4/\alph)^{t-1} \cdot r,
-  \end{equation}
-  which for DNA with $\alph=4$ gives $\E[d_{te}(a,b)] = (1 + O(n^{-1})) \cdot r$.
+  $a_i$ is substituted by a new character $b_i \in Unif(\Sigma \backslash a_i)$ with probability $r$ and $b_i = a_i$ otherwise.
+  Then for $n\gg 2t\sigma$:
+  \begin{equation*}
+    \EE_{a,b}[d_{te}(a,b)]
+    = (4/\sigma)^{t-1} \cdot r + O(2t\sigma^{2-t}/n) \cdot r,
+  \end{equation*}
+  which for DNA with $\sigma=4$ and fixed $t$ gives $\EE[d_{te}(a,b)] = (1 + O(n^{-1})) \cdot r$.
 
 
 ** Proof of Lemma 1
 By definition we have
-\begin{align}
+\begin{align*}
 2\binom{n}{2t-1}d_{te}(a,b)
  &= \|T_a - T_b||_2^2
- = \sum_{s\in \Alph^t} \left(\sum_{I\in \It} [a_I = s] - \sum_{I\in \It}[b_I = s]\right)^2
+ = \sum_{s\in \Sigma^t} \left(\sum_{I\in \I} [a_I = s] - \sum_{I\in \I}[b_I = s]\right)^2
  \\
-&= \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
-\end{align}
+&= \sum_{s\in \Sigma^t} \sum_{I,J\in \I} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
+\end{align*}
 By symmetry between $a$ and $b$, the first and last term, and second and third
 term are equal in expected value, reducing this to
-\begin{align}
-\E_{a,b}\left(\|T_a-T_b\|_2^2\right)
-&=\E \left(2 \sum_{s\in \Alph^t} \sum_{I,J\in \It} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\right)\\
-&=\E\left( 2 \sum_{I,J\in \It} \sum_{s\in \Alph^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\right)\\
-&= 2 \sum_{I,J\in \It}\E \Big([a_I = a_J] - [a_I=b_J]\Big).\tag{i}\label{eq:delta}
-\end{align}
+\begin{align*}
+\EE_{a,b}\left(\|T_a-T_b\|_2^2\right)
+&=\EE \left(2 \sum_{s\in \Sigma^t} \sum_{I,J\in \I} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s]\Big)\right)\\
+&=\EE\left( 2 \sum_{I,J\in \I} \sum_{s\in \Sigma^t}\Big([a_I = s \land a_J=s] - [a_I=s \land b_J=s]\Big)\right)\\
+&= 2 \sum_{I,J\in \I}\EE \Big([a_I = a_J] - [a_I=b_J]\Big).\tag{i}\label{eq:delta}
+\end{align*}
 
 Define the /overlap/ $q$ as the number of positions where $I$ and $J$ are equal,
 $q(I, J) := |\{x\in [t]: I_x = J_x\}|$. We will show using induction on $t$ that
-$\E[a_I=b_J]=(\alph(1-r))^q\alph^{-t}$.
-For $t=0$ we have $I=J=\emptyset$ and trivially $\E[a_I = b_J] = 1$.
+$\EE[a_I=b_J]=(\sigma(1-r))^q\sigma^{-t}$.
+For $t=0$ we have $I=J=\emptyset$ and trivially $\EE[a_I = b_J] = 1$.
 For $t>0$, write $I'$ and $J'$ for the tuples $(I_1, \dots, I_{t-1})$ and
 $(J_1, \dots, J_{t-1})$.
 When $I_t = J_t$, the characters $a_{I_t}$ and $b_{J_t}$ are independent of the
 earlier characters and equal with
 probability $1-r$, and $q(I', J') = q-1$, so that
-\begin{align}
-\E[a_I = b_J]
- &= (1-r) \E[a_{I'} = b_{J'}]\\
- &= (1-r) \cdot (\alph(1-r))^{q-1}\alph^{-(t-1)}\\
- &= (\alph(1-r))^{q}\alph^{-t}.
-\end{align}
+\begin{align*}
+\EE[a_I = b_J]
+ &= (1-r) \EE[a_{I'} = b_{J'}]\\
+ &= (1-r) \cdot (\sigma(1-r))^{q-1}\sigma^{-(t-1)}\\
+ &= (\sigma(1-r))^{q}\sigma^{-t}.
+\end{align*}
 When $I_t \neq J_t$, assume without loss of generality that $I_t < J_t$. Then
 $I_x < J_t$ for all $x\in [t]$, resulting in $b_{J_t}$ is
 independent from the characters seen so far.  This implies that $[a_{I_t} =
-b_{J_t}]$ is independent from $[a_{I'} = b_{I'}]$.
-\begin{align}
-\E[a_I = b_J]
- &= \E[a_{I_t} = b_{J_t}] \E[a_{I'} = b_{J'}]\\
- &= \alpha \cdot (\alph(1-r))^q\alph^{-(t-1)}\\
- &= (\alph(1-r))^q\alph^{-t}.
-\end{align}
+b_{J_t}]$ is independent from $[a_{I'} = b_{I'}]$:
+\begin{align*}
+\EE[a_I = b_J]
+ &= \EE[a_{I_t} = b_{J_t}] \EE[a_{I'} = b_{J'}]\\
+ &= \sigma \cdot (\sigma(1-r))^q\sigma^{-(t-1)}\\
+ &= (\sigma(1-r))^q\sigma^{-t}.
+\end{align*}
 We conclude that
-\begin{equation}
-\E_{a,b}\big([a_I=a_J]-[a_I=b_J]\big) = \alph^{-t+q}\big(1-(1-r)^{q(I, J)}\big).
-\end{equation}
+\begin{equation*}
+\EE_{a,b}\big([a_I=a_J]-[a_I=b_J]\big) = \sigma^{-t+q}\big(1-(1-r)^{q(I, J)}\big).
+\end{equation*}
 This difference vanishes for $q=0$, and thus in \eqref{eq:delta} we only have to
 consider $(I, J)$ with $q(I, J) \geq 1$. The summation can now be rewritten as
-\begin{align}
-\E_{a,b}\left(\|T_a-T_b\|_2^2\right)
-&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}}\E \Big([a_I = a_J] - [a_I=b_J]\Big)\\
-&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \It:\\ q(I, J) = q}} \alph^{-t+q}\big(1-(1-r)^q\big)\\
-&= 2 \sum_{q=1}^t \alph^{-t+q}\big(1-(1-r)^q\big)\cdot f_q,
+\begin{align*}
+\EE_{a,b}\left(\|T_a-T_b\|_2^2\right)
+&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \I:\\ q(I, J) = q}}\EE \Big([a_I = a_J] - [a_I=b_J]\Big)\\
+&= 2 \sum_{q=1}^t \sum_{\substack{I,J\in \I:\\ q(I, J) = q}} \sigma^{-t+q}\big(1-(1-r)^q\big)\\
+&= 2 \sum_{q=1}^t \sigma^{-t+q}\big(1-(1-r)^q\big)\cdot f_q,
 \tag{ii}\label{eq:ii}
-\end{align}
+\end{align*}
 where $f_q$ counts the number of pairs $(I, J)$ with $q(I, J) = q$.
 Since $|I\cap J|\geq q$, the total
 number of distinct indices is bounded by $|I\cup J| \leq 2t-q$. This directly
-implies that $f_q \leq \binom{n}{2t-q}$, which for $q\geq 2$
+implies that $f_q \leq (1+o(1)) \binom{n}{2t-q}$, which for $q\geq 2$
 gives
-\begin{equation}
-    \binom{n}{2t-1}^{-1} \binom{n}{2t-q} \cdot \alph^{-t+q}\big(1-(1-r)^q\big)
-    = O((2t\alph/n)^{q-1}) \cdot \alph^{1-t} r.
-\end{equation}
-When $q=1$ but $|I\cup J| < 2t-1$ a similar argument applies, and we are left with
+\begin{equation*}
+    \binom{n}{2t-1}^{-1} \binom{n}{2t-q} \cdot \sigma^{-t+q}\big(1-(1-r)^q\big)
+    = O((2t\sigma/n)^{q-1} \sigma^{1-t} r).
+\end{equation*}
+When $q=1$ and $|I\cup J| < 2t-1$ a similar argument applies, and we are left with
 the case where $q=1$ and $|I\cup J| = 2t-1$. We can first choose the $2t-1$
 distinct values for $I\cup J$ in $\binom n{2t-1}$ ways, and then assume that $I\cup J =
 [2t-1]$. The overlap can be at any odd position $2k+1\in\{1,3,\dots, 2t-1\}$, since
 $I$ and $J$ must both have an equal number of distinct elements smaller (resp.
-larger) than $2k+1$. Given $2k+1$, the $2k$ smaller positions can be split into two
+larger) than $2k+1$. Given the overlap at $2k+1$, the $2k$ smaller positions can be split into two
 halves in $\binom{2k}{k}$ ways, and similarly for the right half, leading to the
 following number of $(I, J)$ pairs with $q=1$ and $|I\cup J| = 2t-1$:
-\begin{equation}
+\begin{equation*}
 \binom{n}{2t-1}\cdot\sum_{k=0}^{t-1}\binom{2k}{k} \binom{2(t-1-k)}{t-1-k} =\binom{n}{2t-1}\cdot 4^{t-1},
-\end{equation}
-a well-known equality [CITATIONS HERE].
+\end{equation*}
+a well-known identity [cite:@jensen1902;@combinatorial-identity-duarte12].
 Splitting \eqref{eq:ii} into the cases $q=1$ (with  $|I\cap J|=1$ and $|I\cap
-J|>1$) and $q>2$, and assuming that $n\gg 2t\alph$, we get:
-\begin{align}
-    \E(d_{te}(a,b))
-    &= (4/\alph)^{t-1} \cdot r+ O(2t\alph/n) \cdot \alph^{-t} r
-     + \sum_{q=2}^t O((2t\alph/n)^{q-1}) \cdot \alph^{1-t} r\\
-    &= (4/\alph)^{t-1} \cdot r + O(2t\alph/n) \cdot \alph^{1-t} r\\
-    &= \Big(1 + O(2t\alph /4^{t-1}n)\Big)\cdot (4/\alph)^{t-1} \cdot r.
-\end{align}
+J|>1$) and $q\geq 2$, and assuming that $n\gg 2t\sigma$, we get our result:
+\begin{align*}
+    \EE(d_{te}(a,b))
+    &= (4/\sigma)^{t-1} \cdot r+ O(2t\sigma/n \cdot \sigma^{-t} r)
+     + \sum_{q=2}^t O((2t\sigma/n)^{q-1} \cdot \sigma^{1-t} r)\\
+    &= (4/\sigma)^{t-1} \cdot r + O(2t\sigma^{2-t}/n) \cdot r.
+\end{align*}
 
 ** References
 
