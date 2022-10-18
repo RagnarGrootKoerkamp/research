@@ -21,12 +21,13 @@ This is in collaboration with Amir Joudaki.
 \begin{equation*}
 \newcommand{\I}{\mathcal I}
 \newcommand{\EE}{\mathbb E}
+\newcommand{\var}{\operatorname{Var}}
 \end{equation*}
 
 ** Definitions
 
 - Notation ::
-  - The alphabet is $\Sigma$, of size $|\Sigma| = \sigma$.
+  - The sigmaabet is $\Sigma$, of size $|\Sigma| = \sigma$.
   - The set of indices is $\I := \{(i_1, \dots, i_t) \in [n]^t: i_1 < \dots < i_t\}$.
   - Given a string $a_1\dots a_n = a\in \Sigma^n$, we define the /$I$-index/ as
     $a_I = (a_{i_1}, \dots, a_{i_t})$.
@@ -40,7 +41,7 @@ This is in collaboration with Amir Joudaki.
   The /normalized tensor embedding distance/ $d_{te}$ between two sequences $a$
   and $b$ is defined as
   \begin{equation*}
-  d_{te}(a,b) := \frac 12 \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b||_2^2.
+  d_{te}(a,b) := \frac 12 \binom{n}{2t-1}^{-1}\cdot \|T_a - T_b\|_2^2.
   \end{equation*}
 
 - Lemma 1: Tensor embedding preserves Hamming distance under $\ell^2$ norm ::
@@ -54,12 +55,18 @@ This is in collaboration with Amir Joudaki.
   \end{equation*}
   which for DNA with $\sigma=4$ and fixed $t$ gives $\EE[d_{te}(a,b)] = (1 + O(n^{-1})) \cdot r$.
 
+- Lemma 2: Variance of Tensor embedding ::
+  In the same setting as Lemma 1,
+  \begin{equation*}
+    \var_{a,b}[d_{te}(a,b)] = TODO.
+  \end{equation*}
+
 
 ** Proof of Lemma 1
 By definition we have
 \begin{align*}
 2\binom{n}{2t-1}d_{te}(a,b)
- &= \|T_a - T_b||_2^2
+ &= \|T_a - T_b\|_2^2
  = \sum_{s\in \Sigma^t} \left(\sum_{I\in \I} [a_I = s] - \sum_{I\in \I}[b_I = s]\right)^2
  \\
 &= \sum_{s\in \Sigma^t} \sum_{I,J\in \I} \Big([a_I = s][a_J=s] - [a_I=s][b_J=s] - [b_I=s][a_J=s] + [b_I=s][b_J=s]\Big).
@@ -139,6 +146,63 @@ J|>1$) and $q\geq 2$, and assuming that $n\gg 2t\sigma$, we get our result:
     &= (4/\sigma)^{t-1} \cdot r+ O(2t\sigma/n \cdot \sigma^{-t} r)
      + \sum_{q=2}^t O((2t\sigma/n)^{q-1} \cdot \sigma^{1-t} r)\\
     &= (4/\sigma)^{t-1} \cdot r + O(2t\sigma^{2-t}/n) \cdot r.
+\end{align*}
+
+** TODO Proof of Lemma 2
+We compute the $m$th moment:
+\begin{align*}
+\EE_{a,b}\|T_a - T_b\|_2^{2m}
+ &= \EE\left(\sum_{s\in \Sigma^t} \left(\sum_{I\in \I} [a_I = s] - \sum_{I\in \I}[b_I = s]\right)^2\right)^m
+ \\
+&= \EE \left(\sum_{I, J}\big([a_I=a_J] - [a_I=b_J] - [b_I=a_J] + [b_I=b_J]\big)\right)^m\\
+&= \sum_{I^1,J^1}\dots \sum_{I^m,J^m} \EE_{a,b}\prod_{i\in [m]}\big([a_{I^i}=a_{J^i}] - [a_{I^i}=b_{J^i}] - [b_{I^i}=a_{J^i}] + [b_{I^i}=b_{J^i}]\big).
+\end{align*}
+Suppose for the moment that there is an $i$ such that $I^i$ (or $J^i$ for that
+matter) is disjoint from all other $I^j$ ($j\in [m]\backslash \{i\}$) and all $J^j$ ($j\in
+[m]$). Then, all events involving $a_{I^i}$ and $b_{I^i}$ are independent from
+all others. Thus, we may compute the factor for $i$ separately, and it equals
+\begin{equation*}
+\EE_{a,b}\big([a_{I^i}=a_{J^i}] - [a_{I^i}=b_{J^i}] - [b_{I^i}=a_{J^i}] + [b_{I^i}=b_{J^i}]\big)
+= \sigma^{-t} - \sigma^{-t} - \sigma^{-t} + \sigma^{-t} = 0.
+\end{equation*}
+This implies that non-zero terms in the summation can only occur when none of the
+$I^i$ and $J^i$ is disjoint from all the others. It follows that
+$U:=\left|\bigcup_{i\in [m]} I_i\cup J_i\right| \leq m(2t-1)$.
+As in the proof of the expected value, the total number of tuples $(I_1, J_1,
+\dots, I_m, J_m)$ is $\binom{n}{m(2t-1)} f(t)$ for some function $f$ independent
+of $n$, and the contribution of each tuple will also be independent of $n$. As
+$n\to \infty$, all terms with $U<m(2t-1)$ will only contribute a fraction
+$O(n^{-1})$ of the terms with $U=m(2t-1)$, ass
+
+---
+
+We can reduce arbitrary $t$ to $t=1$ and simply multiply everything by
+$\sigma^{-m(t-1)}$, since $t-1$ characters of each equality are completely
+independent of the rest. Thus, assume $t=1$, and identify the $1$-tuple $I^i$
+with the corresponding integer.
+
+For $m=2$, we can have either $(I^1, I^2) = (J^1, J^2)$ or $(I^1, I^2) = (J^2,
+J^1)$. In the first case, the product comes out as $(2r)^2 = 4r^2$, and in the
+second case it equals $2r^2$. Thus, the expected value comes out as
+\begin{align*}
+\EE_{a,b}\|T_a - T_b\|_2^{2m}
+&= \sum_{I^1,J^1}\dots \sum_{I^m,J^m} \EE_{a,b}\prod_{i\in [m]}\big([a_{I^i}=a_{J^i}] - [a_{I^i}=b_{J^i}] - [b_{I^i}=a_{J^i}] + [b_{I^i}=b_{J^i}]\big)\\
+&= \big(1+O(n^{-1})\big) \binom{n}{4t-2} \binom{4t-2}{2} 6r^2 \cdot \sigma^{-2(t-1)}.
+\end{align*}
+
+This means that the variance is given by
+\begin{align*}
+\var_{a,b}\|T_a - T_b\|_2
+&= \big(1+O(n^{-1})\big) \binom{n}{4t-2} \binom{4t-2}{2} 6r^2 \cdot \sigma^{-2(t-1)} -
+ \left((1+O(n^{-1})\cdot 2\binom{n}{2t-1} (4/\sigma)^{t-1} r\right)^2\\
+&= \big(1+O(n^{-1})\big) \binom{n}{4t-2} \binom{4t-2}{2} 6r^2 \cdot \sigma^{-2(t-1)} -
+ \left((1+O(n^{-1})\cdot 2\binom{n}{2t-1} (4/\sigma)^{t-1} r\right)^2.
+\end{align*}
+
+For higher moments, this would generalize to
+\begin{align*}
+\EE_{a,b}\|T_a - T_b\|_2^{2m}
+&= \big(1+O(n^{-1})\big) \binom{n}{m(2t-1)} \binom{m(2t-1)}{2t-1, \dots, 2t-1} 4^{m(t-1)} f_m r^m \cdot \sigma^{-m(t-1)}.
 \end{align*}
 
 ** References
