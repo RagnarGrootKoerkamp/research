@@ -1,0 +1,130 @@
+#+title: BWT and FM-index
+#+HUGO_BASE_DIR: ../..
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: bwt
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+cite_export: csl
+#+toc: headlines 3
+#+date: <2022-10-18>
+#+author: Ragnar Groot Koerkamp
+
+These are some notes about the [[https://en.wikipedia.org/wiki/Burrows%E2%80%93Wheeler_transform][Burrows-Wheeler Transform]] (BWT) and [[https://en.wikipedia.org/wiki/FM-index][FM-index]].
+
+See also my post on the [[../suffix-array-construction/][linear time suffix array construction algorithm]] for
+notation and terminology.
+
+** Burrows-Wheeler Transformation (BWT)
+
+The BWT of a string $S$ is generated as follows:
+1. Generate all rotations of $S$.
+2. Sort the rotations. Their order is given by the suffix array of $S$$.
+3. Store the last column $L$ of the sorted rotations.
+
+Using the /last-to-first/ mapping described below, the original string can be
+reconstructed from this last column! One benefit of applying the BWT to a string
+is that typically the BWT contains long runs of equal characters, and hence can
+be compressed better. E.g. when a string contains many copies of ~ABC~,
+the rotations starting with ~BC~ are close together, and many of those will have
+an ~A~ in the last column.
+
+#+caption: The BWT of a string.
+#+attr_html: :class full-width inset
+[[file:bwt.png]]
+
+** Last-to-first mapping (LF mapping)
+
+Now assume that $S$ ends with a sentinel ~$~.
+
+Look at [[lf]] below, and in particular at those rotations starting with ~G~. Since
+all those rotations start with the same character, dropping this first character
+from each of them does not change their relative order. In fact, these are
+rotations, so this is equivalent to rotating the string by one, moving the first
+character to the back. Thus, the order of ~G~'s in the last column is the same as
+in the first column.
+
+#+name: lf
+#+caption: The LF correspondence: the order of the rotations starting with ~G~ is the same as those ending with ~G~.
+#+caption: The j=14'th sorted rotation (the 5'th starting with a ~G~) starts at index i=8.
+#+caption: The next character is a ~T~ at position i=9.
+#+caption: The suffix-array entry for this ~T~ (j=17, A[17]=9) is the 5'th rotation ending in ~G~.
+#+attr_html: :class full-width inset
+[[file:lf.png]]
+
+Now, we define the /LF-mapping/ as follows: Given a position $j$ in the suffix
+array, the LF-mapping of $j$ is the position in the suffix array of $A[j]-1$,
+i.e., the sorted position of the previous-suffix of the $j$'th row.
+
+To efficiently compute this, we use two datastructures, shown in [[lf-mapping]]:
+- $C[c]$ counts the number of characters less than $c$ in $S$.
+- $Occ[c][j]$ counts for each character $c$ and each BWT-index $j$ the
+   number of rotations ending in $c$ before position $j$.
+Now, suppose that rotation $j$ that starts at $i:=A[j]$ in the string $S$ ends in
+character $c:=s_{i-1}$. Then, $S_{i-1}$, the suffix starting at position $i-1$,
+starts with a $c$ and is followed by $S_i$.
+We can find its position in $A$ as follows:
+1. There are $C[c]$ entries with a character $<c$ that we must skip first, since
+   $S_{i-1}$ starts with a $c$.
+2. Then, because of the LF-correspondence, the number of entries starting with
+   $c$ that must be skipped is the same as the number of $c$'s in the last
+   column before position $j$, i.e. $Occ[c][j]$.
+3. Thus, $LF(j) = C[c] + Occ[c][j]$, or equivalently, $A[C[c] + Occ[c][j]] = j-1$.
+
+#+name: lf-mapping
+#+caption: The LF Mapping datastructures ~Occ~ counting
+#+caption: the number occurrences of each character before each position, and ~C~, the number of characters less than each character.
+#+attr_html: :class full-width inset
+[[file:lf-mapping.png]]
+
+** Pattern matching
+
+Now suppose we would like to find the range of the suffix array that starts with
+some pattern/query $Q$. It turns out the LF mapping can help us to answer this
+in $O(|Q|)$ time. The idea is to start at the end of the query and iteratively
+prepend characters, while keeping track of the range of the suffix array that
+corresponds to the current suffix of the query.
+
+The core observation is this: Let $s_i$ be the first position in the suffix
+array starting with the query-suffix $Q_i = q_i \dots q_{|q|-1}$. (Or more
+generally, the first position $j$ with $S_{A[j]} \geq Q_i$.) Then, if we
+prepend character $c:= q_{i-1}$, exactly the first $Occ[c][s_i]$ rotations
+starting with $c$ will be less than $Q_{i-1}$. Thus, the new starting position
+of the range is
+\begin{equation}
+s_{i-1} = C[q_{i-1}] + Occ[q_{i-1}][s_i].
+\end{equation}
+Similarly, we can define the (exclusive) end $t_i$ of the range as the first index starting
+with a string $>Q_i$. We update it using the same rule:
+\begin{equation}
+t_{i-1} = C[q_{i-1}] + Occ[q_{i-1}][t_i].
+\end{equation}
+The initialization is for $i=|Q|$ where the corresponding interval is the entire
+suffix array: $s_{|Q|} = 0$ and $t_{|Q|} = n$.
+
+Note that when no rotation starting with $Q_i$ ends in $q_{i-1}$, i.e. when
+$Occ[q_{i-1}][s_i] = Occ[q_{i-1}][t_i]$, the values of $s_{i-1}$ and $t_{i-1}$
+become equal. This means that the search range is empty and $Q_{i-1}$ does not
+occur in the string. In this case, $s_i$ and $t_i$ still indicate the position
+where the query suffix would be ordered in the suffix array.
+
+One step of this process is shown in [[query]] and fully in the visualization at the end.
+
+#+name: query
+#+caption: A step of the pattern matching algorithm.
+#+caption: On the left, 2 characters (~CC~) have been processed to give the range from s_2=7 and t_2=9. The next character is c=s_1=T.
+#+caption: There are C[T]=16 characters <T, 2 T's before the start of the interval, and 3 T's before the end of the interval. Thus, the new interval (shown on the right) is from s_1=16+2=18 to t_1=16+3=19.
+#+attr_html: :class full-width inset
+| [[file:query-before.png]] | [[file:query-after.png]] |
+
+
+** Visualization
+
+This visualization is generated using [[https://github.com/RagnarGrootKoerkamp/suffix-array-construction][the code here]].
+If you run that yourself you can use any input and query string and step through
+at your own pace.
+
+#+caption: Visualization of the construction of the BWT, FM-index, and how they can be used to query a string.
+#+attr_html: :class full-width inset large
+[[file:bwt.gif]]
