@@ -1,0 +1,344 @@
+#+title: Local Doubling
+#+HUGO_BASE_DIR: ../..
+#+HUGO_SECTION: posts
+#+HUGO_TAGS: pairwise-alignment
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_auto_set_lastmod: nil
+#+hugo_front_matter_key_replace: author>authors
+#+bibliography: local-bib.bib
+#+cite_export: csl
+#+toc: headlines 3
+#+date: <2022-10-19>
+#+author: Ragnar Groot Koerkamp
+#+PROPERTY: header-args :exports results :results file link :eval never-export :session t
+
+\begin{equation*}
+\newcommand{\st}[2]{\langle #1,#2\rangle}
+\newcommand{\g}{g^*}
+\newcommand{\fm}{f_{max}}
+\newcommand{\gap}{\operatorname{Gap}}
+\end{equation*}
+
+This post is an overview/review of existing alignment algorithms, explained
+using visualizations. This builds up to the introduction of /local doubling/, an
+idea I had while writing a previous [[../speeding-up-astar][post on pre-pruning]]. My hope is that this
+can combine the efficiency of Needleman-Wunsch or Diagonal Transition
+implementations (e.g. Edlib and WFA using bitpacking and SIMD), while having the better complexity
+of A*-based alignment.
+
+See also my [[../pairwise-alignment][review post on pairwise alignment]], comparing algorithms and their
+runtime/memory trade-offs. This post aims to be visual and intuitive, while
+that one (as for now) is more formal/technical.
+
+** Notation
+- Input: sequences of length $n$ and $m$. For complexity analysis, we assume that $m=n$.
+- States of the alignment graph:
+  - states $u = \st ij$,
+  - start $s = \st 00$,
+  - end $t = \st nm$.
+- Distances:
+  - distance between vertices $d(u, v)$,
+  - distance from start $g = g(u) := d(s, u)$,
+  - gapcost: $\gap(u, v) = \gap(\st ij, \st {i'}{j'}) = |(i'-i) - (j'-j)|$.
+
+
+** Needleman-Wunsch: where it all begins
+- Invented by [cite:@nw] and others. See the [[../pairwise-alignment][review post.]]
+- Visits all states $\st ij$ of the DP table ordered by column $i$.
+- In fact, any topological sort (total order) of the states of the underlying dependency graph
+  (partially ordered set) is allowed. One particular optimization is process
+  anti-diagonals in order. Those correspond to anti-chains in the poset, and
+  hence can be computed independently of each other.
+- Complexity: $O(n^2)$.
+
+#+begin_src sh :var F="nw" :file nw.png
+INPUT="-n 1000 -e 0.15 --error-model noisy-insert --seed 123 -s"
+VIS="--cell-size 1"
+FILTER="-filter_complex 'split[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse=dither=bayer'"
+astarpa $INPUT $VIS \
+    -a nw -H none \
+    --save last \
+    --save-path $F.bmp
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw
+#+caption: NW expands all 1000x1000 states. Ignore the right half for now.
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw.png]]
+
+** Dijkstra/BFS: visiting fewer states
+- Mentioned in [cite/t:@ukkonen85]
+- Visit states ordered by the distance from start $s$: $g(u) := d(s, u)$.
+- Visits exactly those states with
+  \begin{equation}
+  g(u) \leq \g,\label{dijsktra}
+  \end{equation}
+  where $\g := d(s, t)$ is the total alignment distance.
+- Drawback: much slower:
+  - bithacks/SIMD don't work,
+  - queues are slow compared to iteration.
+- Complexity: $O(n d)$, where $d=\g$ is the edit distance.
+  - Typical notation is $O(ns)$ for arbitrary scores and $O(nd)$ for edit
+    distance. I'd use $O(n\g)$ for consistency but it's ugly and non-standard.
+
+#+begin_src sh :var F="dijkstra" :file dijkstra.png
+astarpa $INPUT $VIS \
+    -a astar -H none \
+    --save last \
+    --save-path $F.bmp
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: dijkstra
+#+caption: Dijkstra
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:dijkstra.png]]
+
+
+** Band doubling: Dijkstra, but more efficient
+- Introduced in [cite/t:@ukkonen85]
+- Idea: use NW's efficient column-order to compute only the states with $g(u) \leq \g$.
+- We don't know $\g$, but we can find it using /exponential search/ or /band
+  doubling/.
+- For a guess $\fm$ of $\g$:
+  - Compute all states with
+    \begin{equation}
+    \gap(s, u) \leq \fm,\label{doubling}
+    \end{equation}
+    where $\gap(s, \st ij)$ is the
+    cost of indels (gapcost) needed to go from $s$ to $\st ij$. For edit distance this is simply $|i-j|$.
+  - When $g(t) \leq \fm$, all states with $g\leq \g =g(t) \leq \fm$ have been
+    computed, and we found an optimal path.
+  - Otherwise, *double* the value of $\fm$ and try again.
+- Starting with $\fm = 1$, this takes $T:=1n + 2n + \dots + f_{last}\cdot n$ time. Since
+  $f_{last}/2 < \g$ we have $T= (2f_{last}-1)n \leq 4\g n$.
+- Complexity: $O(nd)$
+
+#+begin_src sh :var F="nw-doubling" :file nw-doubling.png
+astarpa $INPUT $VIS \
+    -a nw --exp-search -H none \
+    --save layers \
+    --save-path $F
+# ffmpeg -y -framerate 0.3 -i $F/%d.bmp $FILTER $F.gif
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-doubling
+#+caption: NW + doubling
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-doubling.png]]
+
+
+** GapCost: A first heuristic
+- First in [cite/t:@ukkonen85], and see also [cite/t:@spouge89].
+- We can sharpen \eqref{doubling} by also bounding the indel cost (gapcost) from $u$ to
+  the end:
+  \begin{equation}
+  \gap(s, u)+\gap(u, t) \leq \fm,\label{doubling-gap}
+  \end{equation}
+- Assuming both input sequences are the same length ($m=n$), this halves the runtime.
+- This can also be used on top of Dijkstra to give a first A* variant where
+  states are ordered by $f(u) := g(u) + \gap(u, t)$.
+- It is possible to transform the insertion and deletion costs in a way that
+  already accounts for the gapcost, see [[../alignment-scores-transform][this post]].
+
+#+begin_src sh :var F="nw-doubling-gapcost" :file nw-doubling-gapcost.png
+astarpa $INPUT $VIS \
+    -a nw --exp-search --gap-cost -H none \
+    --save last \
+    --save-path $F.bmp
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-doubling-gapcost
+#+caption: NW + doubling + gapcost
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-doubling-gapcost.png]]
+
+** Computational volumes: an even smaller search
+- Introduced in [cite/t:@spouge89]
+- Equations \eqref{doubling} and \eqref{doubling-gap} determine the area to be
+  computed up-front. But we can make a simple improvement and take into account
+  the current distance $g(u) \geq \gap(s, u)$:
+  \begin{equation}
+  g(u)+\gap(u, t) \leq \fm.\label{volume-gap}
+  \end{equation}
+  An even simpler option is $g(u) \leq \fm$, which corresponds directly to
+  computing increasing portions of Dijkstra.
+- This still relies on repeated doubling of $\fm$.
+
+#+begin_src sh :var F="nw-doubling-gapcost-g" :file nw-doubling-gapcost-g.png
+astarpa $INPUT $VIS \
+    -a nw --exp-search -H gap \
+    --save last \
+    --save-path $F.bmp
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-doubling-gapcost-g
+#+caption: NW + doubling + g + gapcost
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-doubling-gapcost-g.png]]
+
+
+** Cheating: an oracle gave us $g^*$
+- If we already know the target distance $\g$, we can skip the exponential
+  search over $\fm$ and directly use $\fm = \g$. This will speed up all of the
+  band doubling algorithms above up to $4$ times:
+  - no need to try smaller $\fm<\g$ => $2x$ faster,
+  - no more unlucky cases where $\fm=2\g-\epsilon$.
+- More generally, we can make an initial guess for $\fm$ if we roughly know the
+  distance distribution of the input.
+
+** A*: Better heuristics
+- Instead of visiting states by column $i$ or distance $g$, we can order by
+  \begin{equation}
+  f(u) := g(u)+h(u) \leq \g,\label{astar}
+  \end{equation}
+  where $h$ is any heuristic function satisfying $h(u) \leq d(u, t)$.
+- Drawback: Again, A* is slow because of the priority queue and many
+  computations of $h$.
+
+#+begin_src sh :var F="nw-astar" :file nw-astar.png
+astarpa $INPUT $VIS \
+    -a astar -H csh --gap-cost \
+    --save last \
+    --save-path $F.bmp \
+    --no-prune
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-astar
+#+caption: A* + CSH + gapcost
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-astar.png]]
+
+** Broken idea: A* and computational volumes
+- Just like band doubling speeds up Dijkstra, can we use it to speed up A*?
+  - Start with $\fm = h(s)$.
+  - Compute all states with $f(u) \leq \fm$ in column-order.
+  - Double $\fm$ after each try.
+- BROKEN: If we start with $\fm = h(s) = \g-1$ and we double to $\fm = 2\g-2$
+  the number of expanded states goes from $O(n)$ to $O(n^2)$.
+
+#+begin_src sh :var F="nw-astar-doubling" :file nw-astar-doubling.png
+astarpa $INPUT $VIS \
+    -a nw -H csh --gap-cost \
+    --save last \
+    --save-path $F.bmp \
+    --no-prune --exp-search
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-astar-doubling
+#+caption: NW + CSH + gapcost + Doubling
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-astar-doubling.png]]
+
+** Local doubling
+
+*** Without heuristic
+
+#+begin_src sh :var F="nw-local-doubling" :file nw-local-doubling.gif
+astarpa $INPUT $VIS \
+    -a nw -H zero \
+    --save layers --each 30 \
+    --save-path $F \
+    --no-prune --local-doubling
+ffmpeg -y -framerate 8 -i $F/%d.bmp $FILTER $F.gif
+#mogrify -format png $F.
+#+end_src
+
+#+name: nw-local-doubling
+#+caption: NW + Local-Doubling
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-local-doubling.gif]]
+
+*** With heuristic
+
+#+begin_src sh :var F="nw-astar-local-doubling" :file nw-astar-local-doubling.png
+astarpa $INPUT $VIS \
+    -a nw -H csh --gap-cost \
+    --save last \
+    --save-path $F \
+    --no-prune --local-doubling
+#ffmpeg -y -framerate 8 -i $F/%d.bmp $FILTER $F.gif
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: nw-astar-local-doubling
+#+caption: NW + CSH + gapcost + Local-Doubling
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:nw-astar-local-doubling.png]]
+
+** Diagonal Transition
+
+#+begin_src sh :var F="dt-" :file dt-.png
+astarpa $INPUT $VIS \
+    -a dt -H none \
+    --save last \
+    --save-path $F.bmp
+# ffmpeg -y -framerate 5 -i $F/%d.bmp $FILTER $F.gif
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: dt-astar-pruning
+#+caption: DT
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:dt-.png]]
+
+** A* with Diagonal Transition and pruning: doing less work
+
+#+begin_src sh :var F="dt-astar-pruning" :file dt-astar-pruning.png
+astarpa $INPUT $VIS \
+    -a astar --dt -H csh --gap-cost \
+    --save last \
+    --save-path $F.bmp
+# ffmpeg -y -framerate 5 -i $F/%d.bmp $FILTER $F.gif
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: dt-astar-pruning
+#+caption: Astar + DT
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:dt-astar-pruning.png]]
+
+
+** Goal: Diagonal Transition + pruning + local doubling
+
+#+begin_src sh :var F="dt-astar-local-doubling" :file dt-astar-local-doubling.png
+astarpa $INPUT $VIS \
+    -a dt -H csh --gap-cost \
+    --save last \
+    --save-path $F \
+    --no-prune --local-doubling
+# ffmpeg -y -framerate 5 -i $F/%d.bmp $FILTER $F.gif
+mogrify -format png $F.bmp
+#+end_src
+
+#+name: dt-astar-local-doubling
+#+caption: DT + CSH + gapcost + Local-Doubling
+#+attr_html: :class inset large
+#+RESULTS:
+[[file:dt-astar-local-doubling.png]]
+
+** Pruning: Improving A* heuristics on the go
+-
+
+** Cheating more: an oracle gave us the optimal path
+- Pruning brings a challenge to the local
+** References
+#+print_bibliography:
