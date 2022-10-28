@@ -42,6 +42,7 @@
 
 (setq straight-use-package-by-default t)
 (straight-use-package 'use-package)
+(straight-use-package 'org)
 
 ;;;
 ;;; Setup packages
@@ -62,9 +63,10 @@
 
 ; Auto-prefix type (figure/table) of links.
 ; https://ox-hugo.scripter.co/doc/linking-numbered-elements/#fnref:1
-(with-eval-after-load 'ox-hugo
-  (setq org-hugo-link-desc-insert-type t))
+(setq org-hugo-link-desc-insert-type t)
 
+; Use CSL by default
+(setq org-cite-export-processors '((t csl)))
 
 ;;;
 ;;; Public functions
