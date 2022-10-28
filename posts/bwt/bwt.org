@@ -10,9 +10,9 @@
 #+date: <2022-10-18>
 #+author: Ragnar Groot Koerkamp
 
-These are some notes about the [[https://en.wikipedia.org/wiki/Burrows%E2%80%93Wheeler_transform][Burrows-Wheeler Transform]] (BWT) and [[https://en.wikipedia.org/wiki/FM-index][FM-index]].
+These are some notes about the [[https://en.wikipedia.org/wiki/Burrows%E2%80%93Wheeler_transform][Burrows-Wheeler Transform]] (BWT), [[https://en.wikipedia.org/wiki/FM-index][FM-index]], and variants.
 
-See also my post on the [[../suffix-array-construction/][linear time suffix array construction algorithm]] for
+See my post on the [[../suffix-array-construction/][linear time suffix array construction algorithm]] for
 notation and terminology.
 
 Source code for visualizations is [[https://github.com/RagnarGrootKoerkamp/suffix-array-construction][this GitHub repo]].
@@ -128,3 +128,43 @@ at your own pace.
 #+caption: Visualization of the construction of the BWT, FM-index, and how they can be used to query a string.
 #+attr_html: :class full-width inset large
 [[file:bwt.gif]]
+
+* Bi-directional BWT
+Using the method above we can find the SA-range after prepending characters to a query.
+It would be cool if we could also extend the query on the right.
+
+Since the strings starting with $Qc$ all start with $Q$, the SA-range
+$[s', t')$ for $Qc$ is a subset of the range $[s, t)$ for $Q$.
+To find the exact range, we must determine the number $a$ of times a character $<c$
+occurs after $Q$. This will give $s' = s+a$. The end of the interval is
+given by the number of times $b$ a characters $\leq c$ occurs right after $Q$:
+$t' = t + b$.
+
+TODO: figure
+
+Using an $Occ$ array for each column it would be easy to answer
+these queries, but this requires quadratic memory.
+Instead, observe that the $Occ$ array we already have allows us to count the
+numbers we need for the last column, i.e. the column /before/ $Q$. The crucial
+idea is to use the suffix array of the /reverse/ string $\overline S$ and
+track the interval of prefixes $Q$ in the forward SA and interval of suffixes
+$Q$ in the reverse SA in lockstep.
+
+*Updating the state*:
+Let $\overline A$ be the suffix array of the reverse string $\overline S$ and $\overline{Occ}$ be the
+corresponding occurrences counts. The character counts $\overline C = C$ remain the same.
+The /state/ of a query is $([s, t), [\overline
+s, \overline t))$, an interval of $A$ and $\overline A$. This is initialized to
+$([0, n), [0, n))$ for the empty query. When /appending/ $c$, the update for
+the forward interval becomes
+\begin{align}
+s' =& s + (\overline{Occ}[c-1][t'] - \overline{Occ}[c-1][s'])\\
+t' =& s + (\overline{Occ}[c][t'] - \overline{Occ}[c][s']),
+\end{align}
+while the reverse range is updated as before:
+\begin{align}
+\overline s' =& C[c] +\overline{Occ}[c][\overline s] \\
+\overline t' =& C[c] +\overline{Occ}[c][\overline t].
+\end{align}
+Prepending a character $c$ is the same with the roles of the forward and
+reverse SA swapped.
