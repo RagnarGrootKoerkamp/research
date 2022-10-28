@@ -1,0 +1,1119 @@
+@article {astarix-1,
+	author = {Ivanov, Pesho and Bichsel, Benjamin and Mustafa, Harun and Kahles, Andr{\'e} and R{\"a}tsch, Gunnar and Vechev, Martin},
+	title = {AStarix: Fast and Optimal Sequence-to-Graph Alignment},
+	elocation-id = {2020.01.22.915496},
+	year = 2020,
+	doi = {10.1101/2020.01.22.915496},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {We present an algorithm for the optimal alignment of sequences to genome graphs. It works by phrasing the edit distance minimization task as finding a shortest path on an implicit alignment graph. To find a shortest path, we instantiate the A* paradigm with a novel domain-specific heuristic function that accounts for the upcoming subsequence in the query to be aligned, resulting in a provably optimal alignment algorithm called AStarix.Experimental evaluation of AStarix shows that it is 1{\textendash}2 orders of magnitude faster than state-of-the-art optimal algorithms on the task of aligning Illumina reads to reference genome graphs. Implementations and evaluations are available at https://github.com/eth-sri/astarix.Competing Interest StatementThe authors have declared no competing interest.},
+	URL = {https://www.biorxiv.org/content/early/2020/06/11/2020.01.22.915496},
+	eprint = {https://www.biorxiv.org/content/early/2020/06/11/2020.01.22.915496.full.pdf},
+	journal = {bioRxiv}
+}
+
+
+@article {astarix-2,
+	author = {Ivanov, Pesho and Bichsel, Benjamin and Vechev, Martin},
+	title = {Fast and Optimal Sequence-to-Graph Alignment Guided by Seeds},
+	elocation-id = {2021.11.05.467453},
+	year = 2021,
+	doi = {10.1101/2021.11.05.467453},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {We present a novel A* seed heuristic enabling fast and optimal sequence-to-graph alignment, guaranteed to minimize the edit distance of the alignment assuming non-negative edit costs. We phrase optimal alignment as a shortest path problem and solve it by instantiating the A* algorithm with our novel seed heuristic. The key idea of the seed heuristic is to extract seeds from the read, locate them in the reference, mark preceding reference positions by crumbs, and use the crumbs to direct the A* search. We prove admissibility of the seed heuristic, thus guaranteeing alignment optimality. Our implementation extends the free and open source AStarix aligner and demonstrates that the seed heuristic outperforms all state-of-the-art optimal aligners including Graphaligner, Vargas, PaSGAL, and the prefix heuristic previously employed by AStarix. Specifically, we achieve a consistent speedup of \&gt;60{\texttimes} on both short Illumina reads and long HiFi reads (up to 25kbp), on both the E. coli linear reference genome (lMbp) and the MHC variant graph (5Mbp). Our speedup is enabled by the seed heuristic consistently skipping \&gt;99.99\% of the table cells that optimal aligners based on dynamic programming compute.Competing Interest StatementThe authors have declared no competing interest.},
+	URL = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.05.467453},
+	eprint = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.05.467453.full.pdf},
+	journal = {bioRxiv}
+}
+
+@article{difference-recurrence-relations,
+  doi = {10.1186/s12859-018-2014-8},
+  url = {https://doi.org/10.1186/s12859-018-2014-8},
+  year = {2018},
+  month = feb,
+  publisher = {Springer Science and Business Media {LLC}},
+  volume = {19},
+  number = {S1},
+  author = {Hajime Suzuki and Masahiro Kasahara},
+  title = {Introducing difference recurrence relations for faster semi-global alignment of long sequences},
+  journal = {{BMC} Bioinformatics}
+}
+
+@article{wfa,
+    author = {Marco-Sola, Santiago and Moure, Juan Carlos and Moreto, Miquel and Espinosa, Antonio},
+    title = "{Fast gap-affine pairwise alignment using the wavefront algorithm}",
+    journal = {Bioinformatics},
+    volume = {37},
+    number = {4},
+    pages = {456-463},
+    year = {2020},
+    month = {09},
+    abstract = "{Pairwise alignment of sequences is a fundamental method in modern molecular biology, implemented within multiple bioinformatics tools and libraries. Current advances in sequencing technologies press for the development of faster pairwise alignment algorithms that can scale with increasing read lengths and production yields.In this article, we present the wavefront alignment algorithm (WFA), an exact gap-affine algorithm that takes advantage of homologous regions between the sequences to accelerate the alignment process. As opposed to traditional dynamic programming algorithms that run in quadratic time, the WFA runs in time O(ns), proportional to the read length n and the alignment score s, using O(s2) memory. Furthermore, our algorithm exhibits simple data dependencies that can be easily vectorized, even by the automatic features of modern compilers, for different architectures, without the need to adapt the code. We evaluate the performance of our algorithm, together with other state-of-the-art implementations. As a result, we demonstrate that the WFA runs 20–300× faster than other methods aligning short Illumina-like sequences, and 10–100× faster using long noisy reads like those produced by Oxford Nanopore Technologies.The WFA algorithm is implemented within the wavefront-aligner library, and it is publicly available at https://github.com/smarco/WFA.}",
+    issn = {1367-4803},
+    doi = {10.1093/bioinformatics/btaa777},
+    url = {https://doi.org/10.1093/bioinformatics/btaa777},
+    eprint = {https://academic.oup.com/bioinformatics/article-pdf/37/4/456/39629847/btaa777.pdf},
+}
+
+
+@article{block-aligner,
+	author = {Liu, Daniel and Steinegger, Martin},
+	title = {Block aligner: fast and flexible pairwise sequence alignment with SIMD-accelerated adaptive blocks},
+	elocation-id = {2021.11.08.467651},
+	year = {2021},
+	doi = {10.1101/2021.11.08.467651},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {Background The Smith-Waterman-Gotoh alignment algorithm is the most popular method for comparing biological sequences. Recently, Single Instruction Multiple Data methods have been used to speed up alignment. However, these algorithms have limitations like being optimized for specific scoring schemes, cannot handle large gaps, or require quadratic time computation.Results We propose a new algorithm called block aligner for aligning nucleotide and protein sequences. It greedily shifts and grows a block of computed scores to span large gaps within the aligned sequences. This greedy approach is able to only compute a fraction of the DP matrix. In exchange for these features, there is no guarantee that the computed scores are accurate compared to full DP. However, in our experiments, we show that block aligner performs accurately on various realistic datasets, and it is up to 9 times faster than the popular Farrar{\textquoteright}s algorithm for protein global alignments.Conclusions Our algorithm has applications in computing global alignments and X-drop alignments on proteins and long reads. It is available as a Rust library at https://github.com/Daniel-Liu-c0deb0t/block-aligner.Competing Interest StatementThe authors have declared no competing interest.AVXAdvanced Vector ExtensionsDPDynamic ProgrammingSIMDSingle Instruction Multiple Data},
+	URL = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.08.467651},
+	eprint = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.08.467651.full.pdf},
+	journal = {bioRxiv}
+}
+
+@article{ultra-long-reads,
+  doi = {10.1038/nbt.4060},
+  url = {https://doi.org/10.1038/nbt.4060},
+  year = {2018},
+  month = jan,
+  publisher = {Springer Science and Business Media {LLC}},
+  volume = {36},
+  number = {4},
+  pages = {338--345},
+  author = {Miten Jain and Sergey Koren and Karen H Miga and Josh Quick and Arthur C Rand and Thomas A Sasani and John R Tyson and Andrew D Beggs and Alexander T Dilthey and Ian T Fiddes and Sunir Malla and Hannah Marriott and Tom Nieto and Justin O{\textquotesingle}Grady and Hugh E Olsen and Brent S Pedersen and Arang Rhie and Hollian Richardson and Aaron R Quinlan and Terrance P Snutch and Louise Tee and Benedict Paten and Adam M Phillippy and Jared T Simpson and Nicholas J Loman and Matthew Loose},
+  title = {Nanopore sequencing and assembly of a human genome with ultra-long reads},
+  journal = {Nature Biotechnology}
+}
+
+
+@article{four-russians-ed,
+title = {A faster algorithm computing string edit distances},
+journal = {Journal of Computer and System Sciences},
+volume = {20},
+number = {1},
+pages = {18-31},
+year = {1980},
+issn = {0022-0000},
+doi = {10.1016/0022-0000(80)90002-1},
+url = {https://www.sciencedirect.com/science/article/pii/0022000080900021},
+author = {William J. Masek and Michael S. Paterson},
+abstract = {The edit distance between two character strings can be defined as the minimum cost of a sequence of editing operations which transforms one string into the other. The operations we admit are deleting, inserting and replacing one symbol at a time, with possibly different costs for each of these operations. The problem of finding the longest common subsequence of two strings is a special case of the problem of computing edit distances. We describe an algorithm for computing the edit distance between two strings of length n and m, n ⪖ m, which requires O(n · max(1, mlog n)) steps whenever the costs of edit operations are integral multiples of a single positive real number and the alphabet for the strings is finite. These conditions are necessary for the algorithm to achieve the time bound.}
+}
+
+@Article{no-subquadratic-ed,
+  author          = {Backurs, Arturs and Indyk, Piotr},
+  title           = {Edit Distance Cannot Be Computed in Strongly Subquadratic
+                  Time (Unless SETH is False)},
+  journal         = {SIAM Journal on Computing},
+  year            = 2018,
+  volume          = 47,
+  number          = 3,
+  month           = {Jan},
+  pages           = {1087–1097},
+  issn            = {1095-7111},
+  doi             = {10.1137/15m1053128},
+  url             = {http://dx.doi.org/10.1137/15M1053128},
+  publisher       = {Society for Industrial & Applied Mathematics (SIAM)}
+}
+
+
+@article{nw,
+  author          = {Needleman, Saul B. and Wunsch, Christian D.},
+  title           = {A general method applicable to the search for similarities
+                  in the amino acid sequence of two proteins},
+  journal         = {Journal of Molecular Biology},
+  year            = 1970,
+  volume          = 48,
+  number          = 3,
+  month           = {Mar},
+  pages           = {443–453},
+  issn            = {0022-2836},
+  doi             = {10.1016/0022-2836(70)90057-4},
+  url             = {http://dx.doi.org/10.1016/0022-2836(70)90057-4},
+  publisher       = {Elsevier BV}
+}
+
+@article{sankoff,
+  author          = {Sankoff, David},
+  title           = {Matching Sequences under Deletion/Insertion Constraints},
+  journal         = {Proceedings of the National Academy of Sciences},
+  year            = 1972,
+  volume          = 69,
+  number          = 1,
+  month           = {Jan},
+  pages           = {4–6},
+  issn            = {1091-6490},
+  doi             = {10.1073/pnas.69.1.4},
+  url             = {http://dx.doi.org/10.1073/pnas.69.1.4},
+  publisher       = {Proceedings of the National Academy of Sciences}
+}
+
+@article{sw,
+  author          = {Smith, T.F. and Waterman, M.S.},
+  title           = {Identification of common molecular subsequences},
+  journal         = {Journal of Molecular Biology},
+  year            = 1981,
+  volume          = 147,
+  number          = 1,
+  month           = {Mar},
+  pages           = {195–197},
+  issn            = {0022-2836},
+  doi             = {10.1016/0022-2836(81)90087-5},
+  url             = {http://dx.doi.org/10.1016/0022-2836(81)90087-5},
+  publisher       = {Elsevier BV}
+}
+
+@article{gotoh,
+  author          = {Gotoh, Osamu},
+  title           = {An improved algorithm for matching biological sequences},
+  journal         = {Journal of Molecular Biology},
+  year            = 1982,
+  volume          = 162,
+  number          = 3,
+  month           = {Dec},
+  pages           = {705–708},
+  issn            = {0022-2836},
+  doi             = {10.1016/0022-2836(82)90398-9},
+  url             = {http://dx.doi.org/10.1016/0022-2836(82)90398-9},
+  publisher       = {Elsevier BV}
+}
+
+@article{waterman,
+  author          = {Waterman, M.S and Smith, T.F and Beyer, W.A},
+  title           = {Some biological sequence metrics},
+  journal         = {Advances in Mathematics},
+  year            = 1976,
+  volume          = 20,
+  number          = 3,
+  month           = {Jun},
+  pages           = {367–387},
+  issn            = {0001-8708},
+  doi             = {10.1016/0001-8708(76)90202-4},
+  url             = {http://dx.doi.org/10.1016/0001-8708(76)90202-4},
+  publisher       = {Elsevier BV}
+}
+
+@article{sellers,
+  author          = {Sellers, Peter H.},
+  title           = {On the Theory and Computation of Evolutionary Distances},
+  journal         = {SIAM Journal on Applied Mathematics},
+  year            = 1974,
+  volume          = 26,
+  number          = 4,
+  month           = {Jun},
+  pages           = {787–793},
+  issn            = {1095-712X},
+  doi             = {10.1137/0126070},
+  url             = {http://dx.doi.org/10.1137/0126070},
+  publisher       = {Society for Industrial & Applied Mathematics (SIAM)}
+}
+
+@Article{altschul,
+  author          = {Altschul, Stephen F. and Erickson, Bruce W.},
+  title           = {Optimal sequence alignment using affine gap costs},
+  journal         = {Bulletin of Mathematical Biology},
+  year            = 1986,
+  volume          = 48,
+  number          = {5–6},
+  month           = {Sep},
+  pages           = {603–616},
+  issn            = {1522-9602},
+  doi             = {10.1007/bf02462326},
+  url             = {http://dx.doi.org/10.1007/BF02462326},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{hirschberg75,
+  author          = {Hirschberg, D. S.},
+  title           = {A linear space algorithm for computing maximal common
+                  subsequences},
+  journal         = {Communications of the ACM},
+  year            = 1975,
+  volume          = 18,
+  number          = 6,
+  month           = {Jun},
+  pages           = {341–343},
+  issn            = {1557-7317},
+  doi             = {10.1145/360825.360861},
+  url             = {http://dx.doi.org/10.1145/360825.360861},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{ukkonen83,
+  author          = {Ukkonen, Esko},
+  title           = {On approximate string matching},
+  journal         = {Lecture Notes in Computer Science},
+  year            = 1983,
+  pages           = {487–495},
+  issn            = {1611-3349},
+  doi             = {10.1007/3-540-12689-9_129},
+  url             = {http://dx.doi.org/10.1007/3-540-12689-9_129},
+  ISBN            = 9783540386827,
+  publisher       = {Springer Berlin Heidelberg}
+}
+
+@Article{ukkonen85,
+  author          = {Ukkonen, Esko},
+  title           = {Algorithms for approximate string matching},
+  journal         = {Information and Control},
+  year            = 1985,
+  volume          = 64,
+  number          = {1–3},
+  month           = {Jan},
+  pages           = {100–118},
+  issn            = {0019-9958},
+  doi             = {10.1016/s0019-9958(85)80046-2},
+  url             = {http://dx.doi.org/10.1016/S0019-9958(85)80046-2},
+  publisher       = {Elsevier BV}
+}
+
+@Article{myers88,
+  author          = {Myers, Eugene W. and Miller, Webb},
+  title           = {Optimal alignments in linear space},
+  journal         = {Bioinformatics},
+  year            = 1988,
+  volume          = 4,
+  number          = 1,
+  pages           = {11–17},
+  issn            = {1460-2059},
+  doi             = {10.1093/bioinformatics/4.1.11},
+  url             = {http://dx.doi.org/10.1093/bioinformatics/4.1.11},
+  publisher       = {Oxford University Press (OUP)}
+}
+
+@Article{smith81,
+  author          = {Smith, T. F. and Waterman, M. S. and Fitch, W. M.},
+  title           = {Comparative biosequence metrics},
+  journal         = {Journal of Molecular Evolution},
+  year            = 1981,
+  volume          = 18,
+  number          = 1,
+  month           = {Jan},
+  pages           = {38–46},
+  issn            = {1432-1432},
+  doi             = {10.1007/bf01733210},
+  url             = {http://dx.doi.org/10.1007/BF01733210},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{lv89,
+  author          = {Landau, Gad M and Vishkin, Uzi},
+  title           = {Fast parallel and serial approximate string matching},
+  journal         = {Journal of Algorithms},
+  year            = 1989,
+  volume          = 10,
+  number          = 2,
+  month           = {Jun},
+  pages           = {157–169},
+  issn            = {0196-6774},
+  doi             = {10.1016/0196-6774(89)90010-2},
+  url             = {http://dx.doi.org/10.1016/0196-6774(89)90010-2},
+  publisher       = {Elsevier BV}
+}
+
+@Article{myers86,
+  author          = {Myers, Eugene W.},
+  title           = {An {$O(ND)$} difference algorithm and its variations},
+  journal         = {Algorithmica},
+  year            = 1986,
+  volume          = 1,
+  number          = {1–4},
+  month           = {Nov},
+  pages           = {251–266},
+  issn            = {1432-0541},
+  doi             = {10.1007/bf01840446},
+  url             = {http://dx.doi.org/10.1007/BF01840446},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{wagner74,
+  author          = {Wagner, Robert A. and Fischer, Michael J.},
+  title           = {The String-to-String Correction Problem},
+  journal         = {Journal of the ACM},
+  year            = 1974,
+  volume          = 21,
+  number          = 1,
+  month           = {Jan},
+  pages           = {168–173},
+  issn            = {1557-735X},
+  doi             = {10.1145/321796.321811},
+  url             = {http://dx.doi.org/10.1145/321796.321811},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{nakatsu82,
+  author          = {Nakatsu, Narao and Kambayashi, Yahiko and Yajima, Shuzo},
+  title           = {A longest common subsequence algorithm suitable for similar
+                  text strings},
+  journal         = {Acta Informatica},
+  year            = 1982,
+  volume          = 18,
+  number          = 2,
+  issn            = {1432-0525},
+  doi             = {10.1007/bf00264437},
+  url             = {http://dx.doi.org/10.1007/BF00264437},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{hunt77,
+  author          = {Hunt, James W. and Szymanski, Thomas G.},
+  title           = {A fast algorithm for computing longest common subsequences},
+  journal         = {Communications of the ACM},
+  year            = 1977,
+  volume          = 20,
+  number          = 5,
+  month           = {May},
+  pages           = {350–353},
+  issn            = {1557-7317},
+  doi             = {10.1145/359581.359603},
+  url             = {http://dx.doi.org/10.1145/359581.359603},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{hirschberg77,
+  author          = {Hirschberg, Daniel S.},
+  title           = {Algorithms for the Longest Common Subsequence Problem},
+  journal         = {Journal of the ACM},
+  year            = 1977,
+  volume          = 24,
+  number          = 4,
+  month           = {Oct},
+  pages           = {664–675},
+  issn            = {1557-735X},
+  doi             = {10.1145/322033.322044},
+  url             = {http://dx.doi.org/10.1145/322033.322044},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{wfalm,
+  author          = {Eizenga, Jordan M. and Paten, Benedict},
+  title           = {Improving the time and space complexity of the WFA
+                  algorithm and generalizing its scoring},
+  year            = 2022,
+  month           = {Jan},
+  doi             = {10.1101/2022.01.12.476087},
+  url             = {http://dx.doi.org/10.1101/2022.01.12.476087},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+@Article{myers99,
+  author          = {Myers, Gene},
+  title           = {A fast bit-vector algorithm for approximate string matching
+                  based on dynamic programming},
+  journal         = {Journal of the ACM},
+  year            = 1999,
+  volume          = 46,
+  number          = 3,
+  month           = {May},
+  pages           = {395–415},
+  issn            = {1557-735X},
+  doi             = {10.1145/316542.316550},
+  url             = {http://dx.doi.org/10.1145/316542.316550},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{edlib,
+  author          = {Šošić, Martin and Šikić, Mile},
+  title           = {Edlib: a C/C ++ library for fast, exact sequence alignment
+                  using edit distance},
+  journal         = {Bioinformatics},
+  year            = 2017,
+  editor          = {Hancock, John},
+  volume          = 33,
+  number          = 9,
+  month           = {Jan},
+  pages           = {1394–1395},
+  issn            = {1460-2059},
+  doi             = {10.1093/bioinformatics/btw753},
+  url             = {http://dx.doi.org/10.1093/bioinformatics/btw753},
+  publisher       = {Oxford University Press (OUP)}
+}
+
+@Article{wu96,
+  author          = {Wu, Sun and Manber, U. and Myers, G.},
+  title           = {A subquadratic algorithm for approximate limited expression
+                  matching},
+  journal         = {Algorithmica},
+  year            = 1996,
+  volume          = 15,
+  number          = 1,
+  month           = {Jan},
+  pages           = {50–67},
+  issn            = {1432-0541},
+  doi             = {10.1007/bf01942606},
+  url             = {http://dx.doi.org/10.1007/BF01942606},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{chang92,
+  author          = {Chang, William I. and Lampe, Jordan},
+  title           = {Theoretical and empirical comparisons of approximate string
+                  matching algorithms},
+  journal         = {Lecture Notes in Computer Science},
+  year            = 1992,
+  pages           = {175–184},
+  issn            = {1611-3349},
+  doi             = {10.1007/3-540-56024-6_14},
+  url             = {http://dx.doi.org/10.1007/3-540-56024-6_14},
+  ISBN            = 9783540473572,
+  publisher       = {Springer Berlin Heidelberg}
+}
+
+@Article{navarro01,
+  author          = {Navarro, Gonzalo},
+  title           = {A guided tour to approximate string matching},
+  journal         = {ACM Computing Surveys},
+  year            = 2001,
+  volume          = 33,
+  number          = 1,
+  month           = {Mar},
+  pages           = {31–88},
+  issn            = {1557-7341},
+  doi             = {10.1145/375360.375365},
+  url             = {http://dx.doi.org/10.1145/375360.375365},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{apostolico86,
+  author          = {Apostolico, Alberto},
+  title           = {Improving the worst-case performance of the Hunt-Szymanski
+                  strategy for the longest common subsequence of two strings},
+  journal         = {Information Processing Letters},
+  year            = 1986,
+  volume          = 23,
+  number          = 2,
+  month           = {Aug},
+  pages           = {63–69},
+  issn            = {0020-0190},
+  doi             = {10.1016/0020-0190(86)90044-x},
+  url             = {http://dx.doi.org/10.1016/0020-0190(86)90044-X},
+  publisher       = {Elsevier BV}
+}
+
+@Article{daligner,
+  author          = {Myers, Gene},
+  title           = {Efficient Local Alignment Discovery amongst Noisy Long
+                  Reads},
+  journal         = {Algorithms in Bioinformatics},
+  year            = 2014,
+  pages           = {52–67},
+  issn            = {1611-3349},
+  doi             = {10.1007/978-3-662-44753-6_5},
+  url             = {http://dx.doi.org/10.1007/978-3-662-44753-6_5},
+  ISBN            = 9783662447536,
+  publisher       = {Springer Berlin Heidelberg}
+}
+
+@Article{fickett84,
+  author          = {Fickett, James W.},
+  title           = {Fast optimal alignment},
+  journal         = {Nucleic Acids Research},
+  year            = 1984,
+  volume          = 12,
+  number          = {1Part1},
+  pages           = {175–179},
+  issn            = {1362-4962},
+  doi             = {10.1093/nar/12.1part1.175},
+  url             = {http://dx.doi.org/10.1093/nar/12.1part1.175},
+  publisher       = {Oxford University Press (OUP)}
+}
+
+@Article{gusfield96,
+  author          = {Gusfield, D. and Stelling, P.},
+  title           = {[28] Parametric and inverse-parametric sequence alignment
+                  with XPARAL},
+  journal         = {Computer Methods for Macromolecular Sequence Analysis},
+  year            = 1996,
+  pages           = {481–494},
+  issn            = {0076-6879},
+  doi             = {10.1016/s0076-6879(96)66030-3},
+  url             = {http://dx.doi.org/10.1016/S0076-6879(96)66030-3},
+  publisher       = {Elsevier}
+}
+
+@Article{kruskal83,
+  author          = {Kruskal, Joseph B.},
+  title           = {An Overview of Sequence Comparison: Time Warps, String
+                  Edits, and Macromolecules},
+  journal         = {SIAM Review},
+  year            = 1983,
+  volume          = 25,
+  number          = 2,
+  month           = {Apr},
+  pages           = {201–237},
+  issn            = {1095-7200},
+  doi             = {10.1137/1025045},
+  url             = {http://dx.doi.org/10.1137/1025045},
+  publisher       = {Society for Industrial & Applied Mathematics (SIAM)}
+}
+
+
+@Misc{lcsk,
+  author          = {Benson, Gary and Levy, Avivit and Shalom, Riva},
+  title           = {Longest Common Subsequence in k-length substrings},
+  year            = 2014,
+  doi             = {10.48550/ARXIV.1402.2097},
+  url             = {https://arxiv.org/abs/1402.2097},
+  keywords        = {Data Structures and Algorithms (cs.DS), FOS: Computer and
+                  information sciences, FOS: Computer and information sciences},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
+
+@Article{lcsk++,
+  author          = {Pavetić, Filip and Žužić, Goran and Šikić, Mile},
+  title           = {$LCSk$++: Practical similarity metric for long strings},
+  year            = 2014,
+  doi             = {10.48550/ARXIV.1407.2407},
+  url             = {https://arxiv.org/abs/1407.2407},
+  keywords        = {Data Structures and Algorithms (cs.DS), FOS: Computer and
+                  information sciences, FOS: Computer and information sciences},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
+
+@Misc{lcsk-overview,
+  author          = {Deorowicz, Sebastian and Grabowski, Szymon},
+  title           = {Efficient algorithms for the longest common subsequence in
+                  $k$-length substrings},
+  year            = 2013,
+  doi             = {10.48550/ARXIV.1311.4552},
+  url             = {https://arxiv.org/abs/1311.4552},
+  keywords        = {Data Structures and Algorithms (cs.DS), FOS: Computer and
+                  information sciences, FOS: Computer and information sciences,
+                  F.2.2, 68W32},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
+
+@Misc{lcsk-fast,
+  author          = {Pavetić, Filip and Katanić, Ivan and Matula, Gustav and
+                  Žužić, Goran and Šikić, Mile},
+  title           = {Fast and simple algorithms for computing both $LCS_{k}$ and
+                  {$LCS_{k+}$}},
+  year            = 2017,
+  doi             = {10.48550/ARXIV.1705.07279},
+  url             = {https://arxiv.org/abs/1705.07279},
+  keywords        = {Data Structures and Algorithms (cs.DS), FOS: Computer and
+                  information sciences, FOS: Computer and information sciences},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
+
+@Article{vintsyuk68,
+  author          = {Vintsyuk, T. K.},
+  title           = {Speech discrimination by dynamic programming},
+  journal         = {Cybernetics},
+  OLDyear         = 1972,
+  year            = 1968,
+  volume          = 4,
+  number          = 1,
+  pages           = {52–57},
+  issn            = {1573-8337},
+  doi             = {10.1007/bf01074755},
+  url             = {http://dx.doi.org/10.1007/BF01074755},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@article{four-russians,
+  author          = {Arlazarov, V. L. and Dinitz, Y. A. and Kronrod, M. A. and Faradzhev, I. A.},
+  title           = {On economical construction of the transitive closure of an oriented graph},
+  journal         = {Dokl. Akad. Nauk SSSR},
+  year            = 1970,
+  volume          = 194,
+  number          = 3,
+  pages           = {487--488},
+  url             = {http://www.ams.org/mathscinet-getitem?mr=0269546},
+}
+
+@Article{artint,
+  author          = {Poole, David L. and Mackworth, Alan K.},
+  title           = {Artificial Intelligence},
+  year            = 2017,
+  month           = {Sep},
+  doi             = {10.1017/9781108164085},
+  url             = {http://dx.doi.org/10.1017/9781108164085},
+  ISBN            = 9781108164085,
+  publisher       = {Cambridge University Press}
+}
+
+@article{grootkoerkamp2019,
+  TITLE = {{Stable gonality is computable}},
+  AUTHOR = {Groot Koerkamp, Ragnar and Marieke van der Wegen},
+  URL = {https://dmtcs.episciences.org/5557},
+  DOI = {10.23638/DMTCS-21-1-10},
+  JOURNAL = {{Discrete Mathematics \& Theoretical Computer Science}},
+  VOLUME = {{vol. 21 no. 1, ICGT 2018}},
+  YEAR = {2019},
+  MONTH = Jun,
+  KEYWORDS = {Computer Science - Discrete Mathematics ; Computer Science - Data Structures and Algorithms ; Mathematics - Combinatorics ; Mathematics - Number Theory},
+}
+
+@Article{grootkoerkamp2021,
+  author          = {Groot Koerkamp, Ragnar and Živný, Stanislav},
+  title           = {On rainbow-free colourings of uniform hypergraphs},
+  journal         = {Theoretical Computer Science},
+  year            = 2021,
+  volume          = 885,
+  month           = {Sep},
+  pages           = {69–76},
+  issn            = {0304-3975},
+  doi             = {10.1016/j.tcs.2021.06.022},
+  url             = {http://dx.doi.org/10.1016/j.tcs.2021.06.022},
+  publisher       = {Elsevier BV}
+}
+
+@Article{biwfa,
+  author          = {Marco-Sola, Santiago and Eizenga, Jordan M and Guarracino,
+                  Andrea and Paten, Benedict and Garrison, Erik and Moreto,
+                  Miquel},
+  title           = {Optimal gap-affine alignment in O(s) space},
+  year            = 2022,
+  month           = {Apr},
+  doi             = {10.1101/2022.04.14.488380},
+  url             = {http://dx.doi.org/10.1101/2022.04.14.488380},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+@Article{astar-optimality-gelperin,
+  author          = {Gelperin, David},
+  title           = {On the optimality of A∗},
+  journal         = {Artificial Intelligence},
+  year            = 1977,
+  volume          = 8,
+  number          = 1,
+  month           = {Feb},
+  pages           = {69–76},
+  issn            = {0004-3702},
+  doi             = {10.1016/0004-3702(77)90005-4},
+  url             = {http://dx.doi.org/10.1016/0004-3702(77)90005-4},
+  publisher       = {Elsevier BV}
+}
+
+@Article{astar-hart67,
+  author          = {Hart, Peter and Nilsson, Nils and Raphael, Bertram},
+  title           = {A Formal Basis for the Heuristic Determination of Minimum
+                  Cost Paths},
+  journal         = {IEEE Transactions on Systems Science and Cybernetics},
+  year            = 1968,
+  volume          = 4,
+  number          = 2,
+  pages           = {100–107},
+  issn            = {0536-1567},
+  doi             = {10.1109/tssc.1968.300136},
+  url             = {http://dx.doi.org/10.1109/TSSC.1968.300136},
+  publisher       = {Institute of Electrical and Electronics Engineers (IEEE)}
+}
+
+@inproceedings{astar-misconceptions,
+  author    = {Robert C. Holte},
+  editor    = {Ariel Felner and
+               Nathan R. Sturtevant},
+  title     = {Common Misconceptions Concerning Heuristic Search},
+  booktitle = {Proceedings of the Third Annual Symposium on Combinatorial Search,
+               {SOCS} 2010, Stone Mountain, Atlanta, Georgia, USA, July 8-10, 2010},
+  publisher = {{AAAI} Press},
+  year      = {2010},
+  url       = {http://aaai.org/ocs/index.php/SOCS/SOCS10/paper/view/2073},
+  timestamp = {Wed, 10 Feb 2021 08:42:35 +0100},
+  biburl    = {https://dblp.org/rec/conf/socs/Holte10.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@Article{astar-correction-hart72,
+  author          = {Hart, Peter E. and Nilsson, Nils J. and Raphael, Bertram},
+  title           = {Correction to “A Formal Basis for the
+                  Heuristic Determination of Minimum Cost Paths”},
+  journal         = {ACM SIGART Bulletin},
+  year            = 1972,
+  number          = 37,
+  month           = {Dec},
+  pages           = {28–29},
+  issn            = {0163-5719},
+  doi             = {10.1145/1056777.1056779},
+  url             = {http://dx.doi.org/10.1145/1056777.1056779},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@inproceedings{asar-optimality-revisited-dechter83,
+  title={The Optimality of A* Revisited.},
+  author={Dechter, Rina and Pearl, Judea},
+  booktitle={AAAI},
+  volume={83},
+  pages={95--99},
+  year={1983}
+}
+@Article{dstar,
+  author          = {Stentz, Anthony},
+  title           = {Optimal and Efficient Path Planning for Partially Known
+                  Environments},
+  journal         = {Intelligent Unmanned Ground Vehicles},
+  year            = 1997,
+  pages           = {203–220},
+  doi             = {10.1007/978-1-4615-6325-9_11},
+  url             = {http://dx.doi.org/10.1007/978-1-4615-6325-9_11},
+  ISBN            = 9781461563259,
+  publisher       = {Springer US}
+}
+@inproceedings{dstar-focussed,
+author = {Stentz, Anthony},
+title = {The Focussed D* Algorithm for Real-Time Replanning},
+year = {1995},
+isbn = {1558603638},
+publisher = {Morgan Kaufmann Publishers Inc.},
+address = {San Francisco, CA, USA},
+abstract = {Finding the lowest-cost path through a graph is central to many problems including route planning for a mobile robot If arc costs change during the traverse then the remainder of the path may need to be replanned. This is the case for a sensor-equipped mobile robot with imperfect information about its environment. As the robot acquires additional information via its sensors it can revise its plan to reduce the total cost of the traverse. If the prior information is grossly incomplete the robot may discover useful information in every piece of sensor data. During replanning, the robot must either wait for the new path to be computed or move in the wrong direction therefore rapid replanning is essential The D* algorithm (Dynamic A*) plans optimal traverses ID real-time by incrementally repairing paths to the robots state as new information is discovered. This paper describes an extension to D* that focusses the repairs to significantly reduce the total time required for the initial path calculation and subsequent replanning operations. This extension completes the development of the D* algorithm as a full generalizatin of A* for dynamic environments where arc costs can change during the traverse of the solution path.},
+booktitle = {Proceedings of the 14th International Joint Conference on Artificial Intelligence - Volume 2},
+pages = {1652–1659},
+numpages = {8},
+location = {Montreal, Quebec, Canada},
+series = {IJCAI'95}
+}
+@Article{adaptive-astar,
+  author          = {Koenig, Sven and Likhachev, Maxim},
+  title           = {Adaptive A},
+  journal         = {Proceedings of the fourth international joint conference on
+                  Autonomous agents and multiagent systems - AAMAS ’05},
+  year            = 2005,
+  doi             = {10.1145/1082473.1082748},
+  url             = {http://dx.doi.org/10.1145/1082473.1082748},
+  publisher       = {ACM Press}
+}
+@Article{real-time-adaptive-astar,
+  author          = {Koenig, Sven and Likhachev, Maxim},
+  title           = {Real-time adaptive A*},
+  journal         = {Proceedings of the fifth international joint conference on
+                  Autonomous agents and multiagent systems - AAMAS ’06},
+  year            = 2006,
+  doi             = {10.1145/1160633.1160682},
+  url             = {http://dx.doi.org/10.1145/1160633.1160682},
+  publisher       = {ACM Press}
+}
+
+@inproceedings{generalized-adaptive-astar,
+author = {Sun, Xiaoxun and Koenig, Sven and Yeoh, William},
+title = {Generalized Adaptive A*},
+year = {2008},
+isbn = {9780981738109},
+publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+address = {Richland, SC},
+abstract = {Agents often have to solve series of similar search problems. Adaptive A* is a recent incremental heuristic search algorithm that solves series of similar search problems faster than A* because it updates the h-values using information from previous searches. It basically transforms consistent h-values into more informed consistent h-values. This allows it to find shortest paths in state spaces where the action costs can increase over time since consistent h-values remain consistent after action cost increases. However, it is not guaranteed to find shortest paths in state spaces where the action costs can decrease over time because consistent h-values do not necessarily remain consistent after action cost decreases. Thus, the h-values need to get corrected after action cost decreases. In this paper, we show how to do that, resulting in Generalized Adaptive A* (GAA*) that finds shortest paths in state spaces where the action costs can increase or decrease over time. Our experiments demonstrate that Generalized Adaptive A* outperforms breadth-first search, A* and D* Lite for moving-target search, where D* Lite is an alternative state-of-the-art incremental heuristic search algorithm that finds shortest paths in state spaces where the action costs can increase or decrease over time.},
+booktitle = {Proceedings of the 7th International Joint Conference on Autonomous Agents and Multiagent Systems - Volume 1},
+pages = {469–476},
+numpages = {8},
+keywords = {D* Lite, heuristic search, shortest paths, A*, incremental search, moving-target search},
+location = {Estoril, Portugal},
+series = {AAMAS '08}
+}
+
+@inproceedings{dstar-lite,
+author = {Koenig, Sven and Likhachev, Maxim},
+title = {D*lite},
+year = {2002},
+isbn = {0262511290},
+publisher = {American Association for Artificial Intelligence},
+address = {USA},
+abstract = {Incremental heuristic search methods use heuristics to focus their search and reuse information from previous searches to find solutions to series of similar search tasks much faster than is possible by solving each search task from scratch. In this paper, we apply Lifelong Planning A* to robot navigation in unknown terrain, including goal-directed navigation in unknown terrain and mapping of unknown terrain. The resulting D* Lite algorithm is easy to understand and analyze. It implements the same behavior as Stentz' Focussed Dynamic A* but is algorithmically different. We prove properties about D* Lite and demonstrate experimentally the advantages of combining incremental and heuristic search for the applications studied. We believe that these results provide a strong foundation for further research on fast replanning methods in artificial intelligence and robotics.},
+booktitle = {Eighteenth National Conference on Artificial Intelligence},
+pages = {476–483},
+numpages = {8},
+location = {Edmonton, Alberta, Canada}
+}
+
+@Article{hicanu-nurk2020,
+  author          = {Nurk, Sergey and Walenz, Brian P. and Rhie, Arang and
+                  Vollger, Mitchell R. and Logsdon, Glennis A. and Grothe,
+                  Robert and Miga, Karen H. and Eichler, Evan E. and Phillippy,
+                  Adam M. and Koren, Sergey},
+  title           = {HiCanu: accurate assembly of segmental duplications,
+                  satellites, and allelic variants from high-fidelity long
+                  reads},
+  journal         = {Genome Research},
+  year            = 2020,
+  volume          = 30,
+  number          = 9,
+  month           = {Aug},
+  pages           = {1291–1305},
+  issn            = {1549-5469},
+  doi             = {10.1101/gr.263566.120},
+  url             = {http://dx.doi.org/10.1101/gr.263566.120},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+@Article{ont-reads-delahaye2021,
+  author          = {Delahaye, Clara and Nicolas, Jacques},
+  title           = {Sequencing DNA with nanopores: Troubles and biases},
+  journal         = {PLOS ONE},
+  year            = 2021,
+  editor          = {Andrés-León, Eduardo},
+  volume          = 16,
+  number          = 10,
+  month           = {Oct},
+  pages           = {e0257521},
+  issn            = {1932-6203},
+  doi             = {10.1371/journal.pone.0257521},
+  url             = {http://dx.doi.org/10.1371/journal.pone.0257521},
+  publisher       = {Public Library of Science (PLoS)}
+}
+
+@Article{johnson,
+  author          = {Johnson, Donald B.},
+  title           = {Efficient Algorithms for Shortest Paths in Sparse Networks},
+  journal         = {Journal of the ACM},
+  year            = 1977,
+  volume          = 24,
+  number          = 1,
+  month           = {Jan},
+  pages           = {1–13},
+  issn            = {1557-735X},
+  doi             = {10.1145/321992.321993},
+  url             = {http://dx.doi.org/10.1145/321992.321993},
+  publisher       = {Association for Computing Machinery (ACM)}
+}
+
+@Article{optimal-sampling-frith,
+  author          = {Frith, Martin C. and Shaw, Jim and Spouge, John L.},
+  title           = {How to optimally sample a sequence for rapid analysis},
+  year            = 2022,
+  month           = {Aug},
+  doi             = {10.1101/2022.08.18.504476},
+  url             = {http://dx.doi.org/10.1101/2022.08.18.504476},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+
+@Article{bowden2019,
+  author          = {Bowden, Rory and Davies, Robert W. and Heger, Andreas and
+                  Pagnamenta, Alistair T. and de Cesare, Mariateresa and
+                  Oikkonen, Laura E. and Parkes, Duncan and Freeman, Colin and
+                  Dhalla, Fatima and Patel, Smita Y. and Popitsch, Niko and Ip,
+                  Camilla L. C. and Roberts, Hannah E. and Salatino, Silvia and
+                  Lockstone, Helen and Lunter, Gerton and Taylor, Jenny C. and
+                  Buck, David and Simpson, Michael A. and Donnelly, Peter},
+  title           = {Sequencing of human genomes with nanopore technology},
+  journal         = {Nature Communications},
+  year            = 2019,
+  volume          = 10,
+  number          = 1,
+  month           = {Apr},
+  issn            = {2041-1723},
+  doi             = {10.1038/s41467-019-09637-5},
+  url             = {http://dx.doi.org/10.1038/s41467-019-09637-5},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{nurk2022,
+  author          = {Nurk, Sergey and Koren, Sergey and Rhie, Arang and
+                  Rautiainen, Mikko and Bzikadze, Andrey V. and Mikheenko, Alla
+                  and Vollger, Mitchell R. and Altemose, Nicolas and Uralsky,
+                  Lev and Gershman, Ariel and Aganezov, Sergey and Hoyt,
+                  Savannah J. and Diekhans, Mark and Logsdon, Glennis A. and
+                  Alonge, Michael and Antonarakis, Stylianos E. and Borchers,
+                  Matthew and Bouffard, Gerard G. and Brooks, Shelise Y. and
+                  Caldas, Gina V. and Chen, Nae-Chyun and Cheng, Haoyu and Chin,
+                  Chen-Shan and Chow, William and de Lima, Leonardo G. and
+                  Dishuck, Philip C. and Durbin, Richard and Dvorkina, Tatiana
+                  and Fiddes, Ian T. and Formenti, Giulio and Fulton, Robert S.
+                  and Fungtammasan, Arkarachai and Garrison, Erik and Grady,
+                  Patrick G. S. and Graves-Lindsay, Tina A. and Hall, Ira M. and
+                  Hansen, Nancy F. and Hartley, Gabrielle A. and Haukness,
+                  Marina and Howe, Kerstin and Hunkapiller, Michael W. and Jain,
+                  Chirag and Jain, Miten and Jarvis, Erich D. and Kerpedjiev,
+                  Peter and Kirsche, Melanie and Kolmogorov, Mikhail and
+                  Korlach, Jonas and Kremitzki, Milinn and Li, Heng and Maduro,
+                  Valerie V. and Marschall, Tobias and McCartney, Ann M. and
+                  McDaniel, Jennifer and Miller, Danny E. and Mullikin, James C.
+                  and Myers, Eugene W. and Olson, Nathan D. and Paten, Benedict
+                  and Peluso, Paul and Pevzner, Pavel A. and Porubsky, David and
+                  Potapova, Tamara and Rogaev, Evgeny I. and Rosenfeld, Jeffrey
+                  A. and Salzberg, Steven L. and Schneider, Valerie A. and
+                  Sedlazeck, Fritz J. and Shafin, Kishwar and Shew, Colin J. and
+                  Shumate, Alaina and Sims, Ying and Smit, Arian F. A. and Soto,
+                  Daniela C. and Sović, Ivan and Storer, Jessica M. and Streets,
+                  Aaron and Sullivan, Beth A. and Thibaud-Nissen, Françoise and
+                  Torrance, James and Wagner, Justin and Walenz, Brian P. and
+                  Wenger, Aaron and Wood, Jonathan M. D. and Xiao, Chunlin and
+                  Yan, Stephanie M. and Young, Alice C. and Zarate, Samantha and
+                  Surti, Urvashi and McCoy, Rajiv C. and Dennis, Megan Y. and
+                  Alexandrov, Ivan A. and Gerton, Jennifer L. and O’Neill,
+                  Rachel J. and Timp, Winston and Zook, Justin M. and Schatz,
+                  Michael C. and Eichler, Evan E. and Miga, Karen H. and
+                  Phillippy, Adam M.},
+  title           = {The complete sequence of a human genome},
+  journal         = {Science},
+  year            = 2022,
+  volume          = 376,
+  number          = 6588,
+  month           = {Apr},
+  pages           = {44–53},
+  issn            = {1095-9203},
+  doi             = {10.1126/science.abj6987},
+  url             = {http://dx.doi.org/10.1126/science.abj6987},
+  publisher       = {American Association for the Advancement of Science (AAAS)}
+}
+
+@Article{papamichail2009,
+  author          = {Papamichail, Dimitris and Papamichail, Georgios},
+  title           = {Improved algorithms for approximate string matching
+                  (extended abstract)},
+  journal         = {BMC Bioinformatics},
+  year            = 2009,
+  volume          = 10,
+  number          = {S1},
+  month           = {Jan},
+  issn            = {1471-2105},
+  doi             = {10.1186/1471-2105-10-s1-s10},
+  url             = {http://dx.doi.org/10.1186/1471-2105-10-S1-S10},
+  publisher       = {Springer Science and Business Media LLC}
+}
+
+@Article{minimap2,
+  author          = {Wu, Sun and Manber, Udi and Myers, Gene and Miller, Webb},
+  title           = {An O(NP) sequence comparison algorithm},
+  journal         = {Information Processing Letters},
+  year            = 1990,
+  volume          = 35,
+  number          = 6,
+  month           = {Sep},
+  pages           = {317–323},
+  issn            = {0020-0190},
+  doi             = {10.1016/0020-0190(90)90035-v},
+  url             = {http://dx.doi.org/10.1016/0020-0190(90)90035-V},
+  publisher       = {Elsevier BV}
+}
+
+@Article{astarpa,
+  author          = {Groot Koerkamp, Ragnar and Ivanov, Pesho},
+  title           = {Exact global alignment using A* with seed heuristic and
+                  match pruning},
+  year            = 2022,
+  month           = {Sep},
+  doi             = {10.1101/2022.09.19.508631},
+  url             = {http://dx.doi.org/10.1101/2022.09.19.508631},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+@Article{spouge89,
+  author          = {Spouge, John L.},
+  title           = {Speeding up Dynamic Programming Algorithms for Finding
+                  Optimal Lattice Paths},
+  journal         = {SIAM Journal on Applied Mathematics},
+  year            = 1989,
+  volume          = 49,
+  number          = 5,
+  month           = {Oct},
+  pages           = {1552–1566},
+  issn            = {1095-712X},
+  doi             = {10.1137/0149094},
+  url             = {http://dx.doi.org/10.1137/0149094},
+  publisher       = {Society for Industrial & Applied Mathematics (SIAM)}
+}
+
+@Article{harris74,
+  author          = {Harris, Larry R.},
+  title           = {The heuristic search under conditions of error},
+  journal         = {Artificial Intelligence},
+  year            = 1974,
+  volume          = 5,
+  number          = 3,
+  pages           = {217–234},
+  issn            = {0004-3702},
+  doi             = {10.1016/0004-3702(74)90014-9},
+  url             = {http://dx.doi.org/10.1016/0004-3702(74)90014-9},
+  publisher       = {Elsevier BV}
+}
+
+@Misc{ganesh20,
+  author          = {Ganesh, Arun and Sy, Aaron},
+  title           = {Near-Linear Time Edit Distance for Indel Channels},
+  year            = 2020,
+  doi             = {10.48550/ARXIV.2007.03040},
+  url             = {https://arxiv.org/abs/2007.03040},
+  keywords        = {Data Structures and Algorithms (cs.DS), Quantitative
+                  Methods (q-bio.QM), FOS: Computer and information sciences,
+                  FOS: Computer and information sciences, FOS: Biological
+                  sciences, FOS: Biological sciences},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
+
+@Article{saca-ko-aluru05,
+  author          = {Ko, Pang and Aluru, Srinivas},
+  title           = {Space efficient linear time construction of suffix arrays},
+  journal         = {Journal of Discrete Algorithms},
+  year            = 2005,
+  volume          = 3,
+  number          = {2–4},
+  month           = {Jun},
+  pages           = {143–156},
+  issn            = {1570-8667},
+  doi             = {10.1016/j.jda.2004.08.002},
+  url             = {http://dx.doi.org/10.1016/j.jda.2004.08.002},
+  publisher       = {Elsevier BV}
+}
+
+@Article{saca-nong09,
+  author          = {Nong, Ge and Zhang, Sen and Chan, Wai Hong},
+  title           = {Linear Suffix Array Construction by Almost Pure
+                  Induced-Sorting},
+  journal         = {2009 Data Compression Conference},
+  year            = 2009,
+  month           = {Mar},
+  doi             = {10.1109/dcc.2009.42},
+  url             = {http://dx.doi.org/10.1109/DCC.2009.42},
+  publisher       = {IEEE}
+}
+
+@Article{saca-manber-myers90,
+  author          = {Manber, Udi and Myers, Gene},
+  title           = {Suffix Arrays: A New Method for On-Line String Searches},
+  journal         = {SIAM Journal on Computing},
+  year            = 1993,
+  volume          = 22,
+  number          = 5,
+  month           = {Oct},
+  pages           = {935–948},
+  issn            = {1095-7111},
+  doi             = {10.1137/0222058},
+  url             = {http://dx.doi.org/10.1137/0222058},
+  publisher       = {Society for Industrial & Applied Mathematics (SIAM)}
+}
+
+@Article{tensorssketch-joudaki20,
+  author          = {Joudaki, Amir and Rätsch, Gunnar and Kahles, André},
+  title           = {Fast Alignment-Free Similarity Estimation By Tensor
+                  Sketching},
+  year            = 2020,
+  month           = {Nov},
+  doi             = {10.1101/2020.11.13.381814},
+  url             = {http://dx.doi.org/10.1101/2020.11.13.381814},
+  publisher       = {Cold Spring Harbor Laboratory}
+}
+
+@Article{jensen1902,
+  author          = {Jensen, J. L. W. V.},
+  title           = {Sur une identité d’Abel et sur d’autres formules analogues},
+  journal         = {Acta Mathematica},
+  year            = 1902,
+  volume          = 26,
+  number          = 0,
+  pages           = {307–318},
+  issn            = {0001-5962},
+  doi             = {10.1007/bf02415499},
+  url             = {http://dx.doi.org/10.1007/BF02415499},
+  publisher       = {International Press of Boston}
+}
+
+@book{chu1303,
+  title     = "Jade Mirror of the Four Unknowns",
+  author    = "Zhu Shijie",
+  year      = 1303,
+}
+
+@Article{combinatorial-identity-duarte12,
+  author          = {Duarte, Rui and de Oliveira, António Guedes},
+  title           = {New developments of an old identity},
+  year            = 2012,
+  doi             = {10.48550/ARXIV.1203.5424},
+  url             = {https://arxiv.org/abs/1203.5424},
+  keywords        = {Combinatorics (math.CO), FOS: Mathematics, FOS:
+                  Mathematics, 05A19, 05A15},
+  publisher       = {arXiv},
+  copyright       = {arXiv.org perpetual, non-exclusive license}
+}
