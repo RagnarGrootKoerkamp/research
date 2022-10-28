@@ -16,7 +16,7 @@ for the affine version of the diagonal transition algorithm.
 In particular, we will go over a /gap-close/ variant, and look into some more symmetric
 formulations.
 
-** Gap open
+* Gap open
 WFA [cite:@wfa] introduces the affine cost variant of the classic diagonal
 transition method.
 Let us call it a *gap-open* variant, because the gap-open cost $o$ is payed when
@@ -60,7 +60,7 @@ M_{s,k} &= X_{s,k} + LCP\big(A[X_{s,k}-k \dots], B[X_{x,k}\dots]\big)
 where $LCP$ is the length of the longest common prefix of the two strings. This
 recursion is shown in Figure [[gap-open]].
 
-** Gap close
+* Gap close
 It is possible to change the /gap-open/ affine cost model to a *gap-close*
 affine cost model so that they are mirrored versions of each other. This way, the
 meet-in-the-middle can be stopped as soon as the two fronts reach the same state.
@@ -120,7 +120,7 @@ Using this formula for the reverse part of BiWFA, the forward and reverse costs
 to each (affine) state sum exactly to the total cost of the corresponding path
 through that state, simplifying the meeting conditions.
 
-** Symmetric alternatives
+* Symmetric alternatives
 
 #+name: symmetric-1
 #+caption: Symmetric version 1, using half costs and half furthest reaching increments.
@@ -190,7 +190,7 @@ practically relevant for now. Maintaining a separate forward and backward
 implementation seems simpler than the overhead of having fractional costs or
 doubling all costs.
 
-** Another symmetry
+* Another symmetry
 
 All the formulas so far have an asymmetry between the two sequences: when
 extending an insertion, we increase the furthest reaching point ($f$) by $1$,
@@ -216,7 +216,7 @@ it easier to understand, and less bug-prone to implement.
 The only remaining difference (anti-symmetry) between $I$ and $D$ is whether we shift a diagonal up or down
 ($k\pm1$), which will always be needed.
 
-** Conclusions
+* Conclusions
 
 - To prevent having overlap $o$ in the forward and backward DP runs, a
   /gap-close/ variant of the recursion may be used.

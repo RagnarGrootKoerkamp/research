@@ -30,7 +30,7 @@ See also my [[../pairwise-alignment][review post on pairwise alignment]], compar
 runtime/memory trade-offs. This post aims to be visual and intuitive, while
 that one (as for now) is more formal/technical.
 
-** Notation
+* Notation
 - Input: sequences of length $n$ and $m$. For complexity analysis, we assume that $m=n$.
 - States of the alignment graph:
   - states $u = \st ij$,
@@ -42,7 +42,7 @@ that one (as for now) is more formal/technical.
   - gapcost: $\gap(u, v) = \gap(\st ij, \st {i'}{j'}) = |(i'-i) - (j'-j)|$.
 
 
-** Needleman-Wunsch: where it all begins
+* Needleman-Wunsch: where it all begins
 - Invented by [cite:@nw] and others. See the [[../pairwise-alignment][review post.]]
 - Visits all states $\st ij$ of the DP table ordered by column $i$.
 - In fact, any topological sort (total order) of the states of the underlying dependency graph
@@ -68,7 +68,7 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:nw.png]]
 
-** Dijkstra/BFS: visiting fewer states
+* Dijkstra/BFS: visiting fewer states
 - Mentioned in [cite/t:@ukkonen85]
 - Visit states ordered by the distance from start $s$: $g(u) := d(s, u)$.
 - Visits exactly those states with
@@ -98,7 +98,7 @@ mogrify -format png $F.bmp
 [[file:dijkstra.png]]
 
 
-** Band doubling: Dijkstra, but more efficient
+* Band doubling: Dijkstra, but more efficient
 - Introduced in [cite/t:@ukkonen85]
 - Idea: use NW's efficient column-order to compute only the states with $g(u) \leq \g$.
 - We don't know $\g$, but we can find it using /exponential search/ or /band
@@ -133,7 +133,7 @@ mogrify -format png $F.bmp
 [[file:nw-doubling.png]]
 
 
-** GapCost: A first heuristic
+* GapCost: A first heuristic
 - First in [cite/t:@ukkonen85], and see also [cite/t:@spouge89].
 - We can sharpen \eqref{doubling} by also bounding the indel cost (gapcost) from $u$ to
   the end:
@@ -160,7 +160,7 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:nw-doubling-gapcost.png]]
 
-** Computational volumes: an even smaller search
+* Computational volumes: an even smaller search
 - Introduced in [cite/t:@spouge89]
 - Equations \eqref{doubling} and \eqref{doubling-gap} determine the area to be
   computed up-front. But we can make a simple improvement and take into account
@@ -187,7 +187,7 @@ mogrify -format png $F.bmp
 [[file:nw-doubling-gapcost-g.png]]
 
 
-** Cheating: an oracle gave us $g^*$
+* Cheating: an oracle gave us $g^*$
 - If we already know the target distance $\g$, we can skip the exponential
   search over $\fm$ and directly use $\fm = \g$. This will speed up all of the
   band doubling algorithms above up to $4$ times:
@@ -196,7 +196,7 @@ mogrify -format png $F.bmp
 - More generally, we can make an initial guess for $\fm$ if we roughly know the
   distance distribution of the input.
 
-** A*: Better heuristics
+* A*: Better heuristics
 - Instead of visiting states by column $i$ or distance $g$, we can order by
   \begin{equation}
   f(u) := g(u)+h(u) \leq \g,\label{astar}
@@ -220,7 +220,7 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:nw-astar.png]]
 
-** Broken idea: A* and computational volumes
+* Broken idea: A* and computational volumes
 - Just like band doubling speeds up Dijkstra, can we use it to speed up A*?
   - Start with $\fm = h(s)$.
   - Compute all states with $f(u) \leq \fm$ in column-order.
@@ -243,9 +243,9 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:nw-astar-doubling.png]]
 
-** Local doubling
+* Local doubling
 
-*** Without heuristic
+** Without heuristic
 
 #+begin_src sh :var F="nw-local-doubling" :file nw-local-doubling.gif
 astarpa $INPUT $VIS \
@@ -263,7 +263,7 @@ ffmpeg -y -framerate 8 -i $F/%d.bmp $FILTER $F.gif
 #+RESULTS:
 [[file:nw-local-doubling.gif]]
 
-*** With heuristic
+** With heuristic
 
 #+begin_src sh :var F="nw-astar-local-doubling" :file nw-astar-local-doubling.png
 astarpa $INPUT $VIS \
@@ -281,7 +281,7 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:nw-astar-local-doubling.png]]
 
-** Diagonal Transition
+* Diagonal Transition
 
 #+begin_src sh :var F="dt-" :file dt-.png
 astarpa $INPUT $VIS \
@@ -298,7 +298,7 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:dt-.png]]
 
-** A* with Diagonal Transition and pruning: doing less work
+* A* with Diagonal Transition and pruning: doing less work
 
 #+begin_src sh :var F="dt-astar-pruning" :file dt-astar-pruning.png
 astarpa $INPUT $VIS \
@@ -316,7 +316,7 @@ mogrify -format png $F.bmp
 [[file:dt-astar-pruning.png]]
 
 
-** Goal: Diagonal Transition + pruning + local doubling
+* Goal: Diagonal Transition + pruning + local doubling
 
 #+begin_src sh :var F="dt-astar-local-doubling" :file dt-astar-local-doubling.png
 astarpa $INPUT $VIS \
@@ -334,13 +334,13 @@ mogrify -format png $F.bmp
 #+RESULTS:
 [[file:dt-astar-local-doubling.png]]
 
-** Pruning: Improving A* heuristics on the go
+* Pruning: Improving A* heuristics on the go
 -
 
-** Cheating more: an oracle gave us the optimal path
+* Cheating more: an oracle gave us the optimal path
 - Pruning brings a challenge to the local
 
-** TODO
+* TODO
 In chess engines (ie alpha beta search/pruning) there is the concept of
 /aspiration window/ which is similar to exponential search. Maybe we can reuse
 some concepts.
