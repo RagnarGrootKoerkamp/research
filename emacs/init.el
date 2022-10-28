@@ -69,8 +69,8 @@
 ; Use CSL by default
 (setq org-cite-export-processors '((t csl)))
 
-(setq references-file (expand-file-name "references.bib"))
-(setq org-cite-global-bibliography (list references-file))
+(setq org-cite-global-bibliography (list (expand-file-name "references.bib")))
+(setq org-hugo-base-dir (expand-file-name "."))
 
 ;;;
 ;;; Public functions
