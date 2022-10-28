@@ -58,8 +58,9 @@
 
 ; Disable auto-inserting References section heading.
 ; https://ox-hugo.scripter.co/doc/org-cite-citations/#org-radio--CSL-formatted-exports
-(with-eval-after-load 'ox-hugo
-  (plist-put org-hugo-citations-plist :bibliography-section-heading ""))
+; https://github.com/kaushalmodi/ox-hugo/issues/679
+;; (with-eval-after-load 'ox-hugo
+;;   (plist-put org-hugo-citations-plist :bibliography-section-heading ""))
 
 ; Auto-prefix type (figure/table) of links.
 ; https://ox-hugo.scripter.co/doc/linking-numbered-elements/#fnref:1
