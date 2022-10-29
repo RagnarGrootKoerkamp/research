@@ -1,0 +1,170 @@
+#+title: Emacs Doom
+#+hugo_section: linux
+#+HUGO_TAGS: emacs
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/06/30/emacs/
+#+toc: headlines 3
+#+date: <2021-06-30>
+#+author: Ragnar Groot Koerkamp
+
+Install Doom Emacs as explained in the
+[[https://github.com/hlissner/doom-emacs#install][readme]].
+
+Alongside it, you'll want to install =ripgrep= and =fd= for better
+search integration, and possibly =ttf-font-awesome= for better icons.
+
+* Configuration
+:PROPERTIES:
+    :CUSTOM_ID: configuration
+    :END:
+Instead of the default =~/emacs.d/= and =~/doom.d/= config directories,
+you can also use =~/.config/emacs/= and =~/.config/doom/=.
+
+** init.el
+     :PROPERTIES:
+     :CUSTOM_ID: init.el
+     :END:
+My =init.el= is mostly default, and enables the languages I regularly
+use, with LSP support where possible:
+
+#+begin_example
+...
+       :editor
+       (format +onsave)  ; automated prettiness
+
+       :tools
+       lsp
+
+       :lang
+       (cc +lsp)         ; C > C++ == 1
+       markdown          ; writing docs for people to ignore
+       (python +lsp)     ; beautiful is better than ugly
+       sh                ; she sells {ba,z,fi}sh shells on the C xor
+       (yaml +lsp)       ; JSON, but readable
+...
+#+end_example
+
+Note that some of these need additional programs to be installed, like
+=clangd= for C++, =black= for Python formatting, and =prettier= for more
+formatting.
+
+I use the =treemacs= project drawer, and =(ivy +icons +prescient)= for
+searching. Add =+fuzzy= for fuzzy searching. (I found it too fuzzy for
+my taste.)
+
+For git integration, =magit= is great.
+
+To install additional packages from MELPA, add them to =packages.el=:
+
+#+begin_example
+(package! pkgbuild-mode)
+(package! bazel)
+#+end_example
+
+** config.el
+     :PROPERTIES:
+     :CUSTOM_ID: config.el
+     :END:
+Some highlights from my =config.el=. (Remember, =SPC f p= quickly opens
+files in your emacs config directory.)
+
+- Always keep 10 lines of buffer above/below the cursor:
+  =(setq scroll-margin 10)=
+
+- Save buffer and exit insert mode on focus loss
+
+  #+begin_example
+  ;; Auto save buffers on focus lost
+  (add-function :after after-focus-change-function (lambda () (save-some-buffers t)))
+  ;; Exit insert mode on focus loss
+  (add-function :after after-focus-change-function (lambda () (evil-normal-state)))
+  #+end_example
+
+- Improve default C++ indenting to be more in line with the
+  LSP/clang-format auto formatting
+
+  #+begin_example
+  ; Better default indent style
+  (setq c-default-style "user")
+  ; disable indenting namespaces
+  ; https://brrian.tumblr.com/post/9018043954/emacs-fu-dont-indent-inside-of-c-namespaces
+  (c-set-offset 'innamespace 0)
+  #+end_example
+
+- There is a [[https://github.com/hlissner/doom-emacs/issues/1652][bug]]
+  currently where LSP provided formatting does not work. This is the
+  workaround.
+
+  #+begin_example
+  ; Use clang-format instead of the lsp provided formatter, which doesn't appear to work.
+  ; https://github.com/hlissner/doom-emacs/issues/1652
+  (setq +format-with-lsp nil)
+  #+end_example
+
+- Unlike Vim, Emacs treats =_= as a word separator. To still be able to
+  quickly jump over them, we can rebind the word-based motions to be
+  symbol-based motions instead:
+
+  #+begin_example
+  ; https://github.com/syl20bnr/spacemacs/issues/9740
+  (with-eval-after-load 'evil (defalias #'forward-evil-word #'forward-evil-symbol))
+  #+end_example
+
+* Running as server and client
+    :PROPERTIES:
+    :CUSTOM_ID: running-as-server-and-client
+    :END:
+Emacs can run in server client mode by using a systemd unit. The
+ArchWiki
+[[https://wiki.archlinux.org/title/Emacs#As_a_systemd_unit][explains
+how]].
+
+Note that when changing the configuration, =doom/reload= is not always
+sufficient. Restarting the server using =systemctl --user restart emacs=
+is usually necessary.
+
+* Wayland
+    :PROPERTIES:
+    :CUSTOM_ID: wayland
+    :END:
+I'm using the
+[[https://aur.archlinux.org/packages/emacs-gcc-wayland-devel-bin/][=emacs-gcc-wayland-devel-bin=]]
+AUR package, based on
+[[https://github.com/mpsq/emacs-gcc-wayland-devel-builder][this git
+repo]]. After installing this, set the =GDK_BACKEND=wayland= environment
+variable and you should be good to go.
+
+* Useful commands
+    :PROPERTIES:
+    :CUSTOM_ID: useful-commands
+    :END:
+- =SPC p p= to switch project
+- =SPC SPC= to switch file within project
+- =SPC := search and execute a command (alternative for =M-x=) Whenever
+  you are looking for some functionality, this is a great way to
+  discover it. It also shows which keys are already bound to the
+  command, if any.
+- =SPC f p= open emacs config file
+- =SPC g g= to open Magit
+  - =?= show keybindings
+  - =s= stage files
+  - =c c= commit
+  - =C-c C-c= confirm commit
+  - =C-c C-k= abort commit
+- =SPC TAB 1-9= switch workspace
+- =SPC TAB .= switch workspace by name
+- =SPC o p= toggle treemacs
+  - =?= show keybindings
+  - =C-?= show more keybindings
+  - create file/dir: =c f= =c d=
+  - rename: =R=
+
+* Emacs as mail client
+    :PROPERTIES:
+    :CUSTOM_ID: emacs-as-mail-client
+    :END:
+- notmuch + lieer
+- https://sqrtminusone.xyz/posts/2021-02-27-gmail/
+- https://github.com/gauteh/lieer

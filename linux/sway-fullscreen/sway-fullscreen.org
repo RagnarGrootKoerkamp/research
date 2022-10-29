@@ -1,0 +1,77 @@
+#+title: Detached fullscreen in Sway
+#+hugo_section: linux
+#+HUGO_TAGS: linux wayland
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/07/02/sway-fullscreen/
+#+toc: headlines 0
+#+date: <2021-07-02>
+#+author: Ragnar Groot Koerkamp
+
+*Xrefs*: [[https://github.com/swaywm/sway/pull/4255][PR for Sway]] |
+[[https://aur.archlinux.org/packages/sway-inhibit-fullscreen-git/][AUR
+package]] =sway-inhibit-fullscreen-git=
+
+Once upon a time, Chromium had a bug where using =$mod+f= in i3 to
+fullscreen the Chromium window changed the window to occupy the entire
+screen, but didn't actually make Chromium enter full screen mode.
+According to some, those[fn:1] were[fn:2] the[fn:3] good[fn:4]
+days[fn:5][fn:6]. Watching 4 YouTube streams in parallel was still
+possibly, back in those days:
+
+#+attr_html: :class inset
+[[file:fullscreen.png]]
+
+Without patches, the best we can do nowadays[fn:7] is the following
+
+#+attr_html: :class inset
+[[file:windowed.png]]
+
+Luckily, there is a [[https://github.com/swaywm/sway/pull/4255][pull
+request]] to fix this for Sway! Use the
+=sway-inhibit-fullscreen-git=[[https://aur.archlinux.org/packages/sway-inhibit-fullscreen-git/][AUR
+package]] to install this branch.
+
+Using this branch, you can add the following to your Sway config:
+
+#+begin_example
+bindsym $mod+f fullscreen
+bindsym $mod+Shift+f inhibit_fullscreen toggle
+#+end_example
+
+The first of these commands, =fullscreen= is still the usual command you
+will be used to: this toggles the size of a window to occupy the full
+screen. Usually, this will also change chromium to its full screen mode.
+
+When executing the second command while the chromium window is focused,
+the chromium full screen state will be completely detached from the the
+Sway full screen state. Thus, after toggling the =inhibit_fullscreen=
+state, we can now independently use =$mod+f= to change the size of the
+chromium window, and =F11= to change whether or not e.g. the tab bar is
+visible. Simply do =$mod+Shift+f= while the window is focused to merge
+the states again.
+
+This gives two new possibilities:
+
+- Make chromium fill the entire screen, but still show the tab bar.
+- Make chromium fill only part of the screen, but don't show the tab
+  bar. Especially useful for watching videos on only part of the screen.
+
+[fn:1] [[https://www.reddit.com/r/i3wm/comments/ejgwhf/google_chrome_fullscreen_issue/][u/Lightframe109 on reddit]]
+
+[fn:2] [[https://www.reddit.com/r/i3wm/comments/erhurh/chrome_in_windowed_fullscreen/][u/nnaoam on reddit]]
+
+[fn:3] [[https://www.reddit.com/r/i3wm/comments/egvj3k/chrome_tabs_not_visible_in_full_screen_mode/][u/pdtpatrick on reddit]]
+
+[fn:4] [[https://www.reddit.com/r/i3wm/comments/ed5qmw/full_screen_on_chrome_no_url_bar/fcv3azc/][u/ehdaud on reddit]]
+
+[fn:5] [[https://www.reddit.com/r/chrome/comments/23t8cd/full_screen_chrome_within_a_window/][u/TheRealBigLou on reddit]]
+
+[fn:6] [[https://www.reddit.com/r/i3wm/comments/ecjldg/chromium_remove_search_bar_tabs_in_full_screen/][u/newppcdude on reddit]]
+
+[fn:7] Actually, in Sway 1.6 you can still get this behavior by making
+       the parent container fullscreen, since that used to also set all
+       child containers to full screen mode. However, this is
+       [[https://github.com/swaywm/sway/pull/6152][fixed]] for the next
+       release.

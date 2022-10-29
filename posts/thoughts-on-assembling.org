@@ -1,0 +1,120 @@
+#+title: Ideas for assembling [long] reads
+#+hugo_section: posts
+#+HUGO_TAGS: assembly
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 0
+#+date: <2021-07-09>
+#+author: Ragnar Groot Koerkamp
+\[
+\newcommand{\vp}{\varphi}
+\newcommand{\A}{\mathcal A}
+\newcommand{\O}{\mathcal O}
+\newcommand{\N}{\mathbb N}
+\newcommand{\Z}{\mathbb Z}
+\newcommand{\ed}{\mathrm{ed}}
+\newcommand{\mh}{\mathrm{mh}}
+\newcommand{\hash}{\mathrm{hash}}
+\]
+
+Here is an idea for an algorithm to assemble long reads.
+
+1. Go over all sequences and sketch their windows using the Hamming
+   distance preserving sketch method described [[../hamming-similarity-search][here]].
+   This method may need some tweaking to also work with an indel rate of
+   around 10%.
+
+2. Let's say we find a pair of matching windows between reads \(A\) and
+   \(B\) starting at positions \(i\) and \(j\). This indicates that
+   \(A\) and \(B\) may be related with an offset of \(j-i\).
+
+3. For each pair of reads, keep track of all potential offsets. We don't
+   need to keep the list of exact offsets. Instead, we can bucket them
+   into buckets of size \(\O(\sqrt{|A|})\).
+
+   In particular, for two reads \(A\) and \(B\) that overlap on \(n\)
+   basepairs where each of them has an indel rate of \(p=0.1\), we can
+   crudely model the deviation of the offset as a random walk on \(\Z\),
+   where for each pair of nucleotides there is a \(0.1\) chance of
+   moving from \(n\) to \(n+1\) and \(0.1\) change of moving to \(n-1\).
+
+   One property of such a random walk is that the expected deviation
+   from \(0\) is of order \(\sqrt n\). Thus, when we bucket all
+   candidate overlaps into buckets of size \(\sqrt n\) we expect one (or
+   possibly two adjacent) bucket(s) to contain all the true positive
+   pairs of matching windows.
+
+4. For each pair of reads, find the buckets with count significantly
+   higher than the expected noise coming from false positives.
+
+5. A true positive offset gives rise to an alignment of the two reads.
+   We only know the start of the alignment with precision \(\sqrt n\),
+   but this is sufficient to quickly (after processing \(\O(\sqrt n)\)
+   basepairs) converge to the actual offset.
+
+6. Build the overlay graph.
+
+7. Assemble using the overlay graph. This could be done using existing
+   methods.
+
+   (Dealing with long repeats is the tricky part here, where sequences
+   may overlap but not actually match in practice. Also, there are two
+   copies of all DNA because of duplicate chromosomes, which need to be
+   taken into account.)
+
+Some further thoughts:
+
+- The ideal goal would be to make a memory efficient algorithm that can
+  assemble the human genome (3GB assembled, 180GB gzipped reads) on
+  consumer hardware (64GB ram, 12 cores, possibly a midrange video card
+  if needed).
+
+- The algorithm could do multiple passes over the data: the entire human
+  genome is only 3GB so this easily fits in memory, even with additional
+  metadata. Building a crude reference genome on the first pass and
+  aligning/improving this in consecutive passes could make it work with
+  limited RAM.
+
+- There seem to be multiple ways of dealing with potentially matching
+  windows:
+
+  1. Try a seeded alignment of the entire reads starting at the two
+     windows.
+
+     This may(?) need higher precision window pairs (i.e. fewer false
+     positives) because running an alignment is slow. On the other hand,
+     it shouldn't be too slow given that we know where to start the
+     alignment.
+
+     Repeats may make this method infeasible: the reads may match for
+     half of their overlap, but not on the remainder. Testing the
+     matching windows would take relatively a lot of time.
+
+  2. Do not process the matching windows, but directly add their offset
+     to the set of candidate offsets between the two sequences.
+
+     This is similar to what is described above. The benefit is that
+     each pair of sequences is only attempted to be aligned once, at the
+     cost of having to store all potential offsets.
+
+  3. Do a quick computation to see if the matching windows indeed have a
+     low edit/hamming distance, and if so, add the corresponding offset
+     to the list of found offsets between the two reads.
+
+     This may or may not be a good tradeoff between the previous two
+     methods.
+
+  One potential problem with processing windows on the fly (as in the
+  first and third option) instead of afterwards only is that both
+  sequences involved need to be loaded in memory, which isn't feasible
+  (or fast) if the size of the dataset is =O(100GB)=.
+
+- Another way to work around memory restrictions is to process the data
+  in batches. If a batch is significantly larger than the size of the
+  target genome, you can still guarantee plenty of matches.
+
+- In case that storing offsets needs too much memory, the size can be
+  reduced by further reducing the number of windows considered.
+  Alternatively each pair of matching windows could be stored only with
+  a fixed probability, but that feels less efficient.

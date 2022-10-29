@@ -1,0 +1,142 @@
+#+title: Spaced k-mer and assembler methods
+#+hugo_section: notes
+#+HUGO_TAGS: assembly spaced-kmers
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2021-07-14>
+#+author: Ragnar Groot Koerkamp
+Concepts:
+
+- *Mapping* Map a sequence onto a reference genome/dataset
+- *Assembly* Build a genome from a set of reads
+  - /de novo/ (implied): without using a reference genome
+  - Otherwise just called /mapping/
+
+Typical complicating factors:
+
+- read errors
+- non-uniform coverage
+- insert size variation
+- chimeric reads (?)
+- bireads
+- non-uniform read coverage (as in metagenomics, i.e. multi cell
+  assembly)
+
+** Spaced \(k\)-mers
+   :PROPERTIES:
+   :CUSTOM_ID: spaced-k-mers
+   :END:
+Also called
+
+- [gapped] \(q\)-grams
+- /shapes/
+- patterns (patternhunter)
+
+** Minimap
+   :PROPERTIES:
+   :CUSTOM_ID: minimap
+   :END:
+- minimap 1
+- minimap 2
+  - Suzuki Kasahara algorithm to stop aligning early
+- minigraph
+  - GAF format
+- minimasm
+  - table of tools for stages of assembly
+  - pack sequence id, position, and strand into one 64-bit integer
+  - instead of a hash table =hash->vector<position>=, use a sorted
+    vector of positions and make each entry in the hash table point to a
+    range of positions.
+  - OLC: Overlap-Layout-Concensus
+    1. build overlap graph
+    2. extract sequence
+    3. make consensus to reduce error rate from reads
+  - bulge/tip removal heuristic: clean up small components of the
+    overlap graph
+
+** SPAdes
+   :PROPERTIES:
+   :CUSTOM_ID: spades
+   :END:
+Uses bi-reads and average insert size between them for better long-range
+information when assembling short reads.
+
+Bi-reads: short reads are usually read of length 100-200 at the start
+and end of a 400-600 long sequence. Thus, we get 2 reads with an 'known'
+distance between them.
+
+- multisized De Bruijn Graph
+  - low k for low coverage regions, to not miss potential matches
+  - large k for high coverage regions, for high precision
+
+MetaSPAdes
+
+- metagenome (single/multicell sample) assembly
+- Some graph simplifications for better coverage
+- To extend the current edge, do a BFS and skip low-coverage edges.
+- To fix (close) repeats, project 'bulges' onto each other and
+  reconstruct the consensus later.
+
+** MUMmer4
+   :PROPERTIES:
+   :CUSTOM_ID: mummer4
+   :END:
+- based on suffix trees (3) / suffix arrays (4)
+
+** BLASR
+   :PROPERTIES:
+   :CUSTOM_ID: blasr
+   :END:
+- aligning for long high error rate (15-20%) to a reference genome
+
+** Bowtie 2
+   :PROPERTIES:
+   :CUSTOM_ID: bowtie-2
+   :END:
+- n^2 aligning
+- simbd accelerated DP
+- 'ful-text minute index'
+
+other aligners:
+
+- BWA: Burrows-Wheeler Aligner
+- BWA-SW: Smith-Waterman
+
+** Patternhunter
+   :PROPERTIES:
+   :CUSTOM_ID: patternhunter
+   :END:
+- uses spaced kmers / 'patterns'
+- Uses a fixed optimal sensitivity pattern 111010010100110111 of weight
+  11, which only has at most 5 overlap for any shift.
+
+*Patternhunter 2*
+
+- Multiple seed patterns for increased sensitivity
+- greedy method for near optimal multiple seeds
+- one hashtable per seed pattern
+
+** Spaced seeds improve \(k\)-mer-based metagenomic classification
+   :PROPERTIES:
+   :CUSTOM_ID: spaced-seeds-improve-k-mer-based-metagenomic-classification
+   :END:
+- Modified KRAKEN to use spaces kmers and reports that it works better.
+
+** LoMeX
+   :PROPERTIES:
+   :CUSTOM_ID: lomex
+   :END:
+- For counting k-mer spectrum/frequencies
+- Find occurences of a spaced kmer, and fill gaps by consensus of
+  matches.
+- memory efficient because it writes intermediate results to disk
+
+** Meeting notes
+   :PROPERTIES:
+   :CUSTOM_ID: meeting-notes
+   :END:
+- use read count to infer duplicate regions
+- lohman lab for long reads of smaller reference
+  https://lomanlab.github.io/mockcommunity/

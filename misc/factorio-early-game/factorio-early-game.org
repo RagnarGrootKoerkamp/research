@@ -1,0 +1,269 @@
+#+title: SE Endurance: Early game
+#+hugo_categories: factorio
+#+hugo_section: misc
+#+HUGO_TAGS: factorio
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /factorio/2021/04/26/early-game/
+#+toc: headlines 0
+#+date: <2021-04-26>
+#+author: Ragnar Groot Koerkamp
+#+author: Winston Yin
+
+*Xrefs*: [[https://www.reddit.com/r/factorio/comments/myt05k/se_endurance_early_game/][Reddit]]
+
+This is the start of a series of posts on our (=philae=, =winston=) play
+through Factorio with the Space Exploration mod.
+
+After lots of struggling, we recently finished our first SE world after
+624 in-game hours. Since this was also our first/second Factorio world,
+the start was very inefficient and we learned a lot of things along the
+way. In this new map, which we call /Endurance/ (after the
+interplanetary spaceship in /Interstellar/), we will apply what we
+learned, and share it with the world :)
+
+Like the first map, /Endurance/ will be using a 100x100 city block based
+approach, but more on that later. Unlike last time, we completely
+disabled biters and pollution this time, for a few reasons. First, we
+really want to focus on designing a nice, scalable, and clean factory.
+We spent lots of time fighting biters previously. This always
+interrupted our design and building process, sometimes even causing us
+to lose all our inventory items. The fighting felt repetitive, and
+neither of us enjoyed this, so not having them just makes the game more
+fun. Lastly, disabling pollution and biter pathing will hopefully save
+some compute resources and make the game run at 60UPS for a while
+longer. While our last world has 624 in-game hours, the game was running
+at ~25UPS instead of the usual 60UPS towards the end, so we likely
+exceeded 1000 real-world hours.
+
+* Looking back
+   :PROPERTIES:
+   :CUSTOM_ID: looking-back
+   :END:
+The goal is for /Endurance/ to be an improved version of our previous
+base:
+
+*Overview*
+
+#+caption: Early base. Click to enlarge.
+#+attr_html: :class inset
+[[file:old_overview.png][file:old_overview.jpg]]
+
+On the left of the map is the old starter base, which contains small
+production lines for vanilla science packs and robots, as well as the
+main mall. The science pack production lines there were sufficient even
+for end game, but the robot production was frequently struggling to keep
+up with the rate of robot crashing in Nauvis orbit. The mall was far
+away from most of the base and was entirely supported by robots, which
+we plan to improve on in /Endurance/.
+
+*City blocks*
+
+#+caption: Detail 1
+#+attr_html: :class inset
+[[file:old_detail_1.png][file:old_detail_1.jpg]]
+
+City blocks are 100x100, built upon Nilaus' classic design. Stations are
+in the adjacent rail blocks, and we usually fit 4 double rows of
+factories inside each block, often rounded up/down to produce a full
+number of blue belts. After some time, the four roboports in the middle
+of the cityblocks became rather annoying to work around. Halfway through
+the game, we changed to having 8 roboports along the /Sacred Path/ and
+one in the centre of each block, forming a 3x3 grid. (Side note: the
+Sacred Path isn't actually that /Sacred/ in SE, because jet packs are
+the usual way of travelling.)
+
+We initially used a decentralised storage system, with a few yellow
+chests in every city block. This soon became a problem, as robots often
+flew across the map to store or retrieve a simple item in an
+unpredictable way. This will be fixed by making one central storage,
+close to the mall and the center of the map.
+
+*Trains*
+
+#+caption: Detail 2
+#+attr_html: :class inset
+[[file:old_detail_2.png][file:old_detail_2.jpg]]
+
+Trains ran along a 4-lane RHD rail system (2 lanes in each direction)
+that had their own dedicated city blocks. We started with 2-4 trains (2
+locomotives and 4 cargo/fluid wagons) but switched to 2-2-2 trains (2
+wagons, 2 locomotives, 2 wagons) halfway through the game. The
+incompatibility of the two designs complicated the factory building
+process. We plan to stick to 2-2-2 trains from the beginning this time.
+
+We made a single big depot, but this created lots of contention on a
+small part of the rail network, so the plan is to make more smaller
+dedicated depots next time.
+
+*Symmetric City Blocks*
+
+A typical late-game city block is the one producing red chips:
+
+#+caption: Red chip cityblock
+#+attr_html: :class inset
+[[file:old_cityblock.png][file:old_cityblock.jpg]]
+
+This one in particular is much cleaner than the early game blocks. As
+you can see, this one has perfect symmetry. Using the late game SE wide
+area beacons, this factory is rather compact and uses belt weaving to
+keep the space needed for belts to a minimum. This is important because
+the beacons only cover a limited area and the modules to fill them are
+expensive.
+
+The stations also show our (un)loading /API/: the 2-2-2 trains provide
+12 rows in the middle, where each of the left 3 stations can unload to 4
+of those 12 lanes. The unloading has integrated lane balancers. These
+balancers aren't perfect 4-to-4, but they are all-to-all and sufficient
+for out needs: smoothing out small irregularities that occasionally
+happen because a non-full train comes in. One slight annoyance is that
+the train actually has odd total length, so there are unused /buffer/
+rows just above the top locomotive, and just below the bottom wagon.
+
+*Rail layout*
+
+The rail layout we ended with looks as follows:
+
+#+caption: Rail layout
+#+attr_html: :class inset
+[[file:old_rail.png][file:old_rail.jpg]]
+
+This layout supports 1 to 4 stations per side, or even more when growing
+into the neighbouring blocks. Each station has exits to each of the 4
+central lanes, and trains can U-turn in each block. The central 4 lanes
+/exactly/ fit a 6-wagon train in the middle, so there are 4 rail signals
+to mark these as such.
+
+One addition on top are the extra fifth/sixth lanes connecting stations
+in adjacent blocks. This allows trains to drive to the next block
+without blocking the other traffic. In practice we didn't use this much,
+but since it's using otherwise dead space, /why not/.
+
+*SE Sciences*
+
+Our SE sciences factory on Nauvis orbit was somewhat chaotic:
+
+#+caption: Space platform
+#+attr_html: :class inset
+[[file:old_space.png][file:old_space.jpg]]
+
+This base is based on a main belt design, with one row/main belt per
+series of space sciences. Fluid throughput and balancing became a
+problem, and so did the transport of bulk items by robot (crashed robots
+were slow to replenish). These will also be improved in /Endurance/.
+
+Some attempts were made at a city block design on the top left, but the
+complexity of SE space science recipes made it easier to just extend
+each main belt.
+
+To salvage what we could, we ended up adding a few dedicated rockets
+carrying all the materials needed for some sciences. In particular you
+can see the dedicated rockets on the left of the orange material science
+line, and the bottom left rocket carrying naquium for the deep space
+science line.
+
+We are not entirely sure yet of how to make a cleaner variant of this,
+but it will likely involve some space trains and a few more dedicated
+rockets from the start.
+
+*Planet outposts*
+
+A typical output is the one we made for vitamelange.
+
+#+caption: Remote base
+#+attr_html: :class inset
+[[file:old_remote_base.png][file:old_remote_base.jpg]]
+
+Most basic resources (except oil and uranium) are mined on other planets
+or the asteroid belt. The SE resources (e.g. vulcanite) are first
+crushed at the source and then shipped to Nauvis to be further processed
+with production and speed modules. All these outposts as well as Nauvis
+orbit are supplied by about two dozen cargo rocket silos in two city
+blocks. Unlike what some other folks seem to do, our outposts are very
+minimalistic: we have a single 100x100 blueprint containing a landing
+and launch pad. Fuel and other resources are always flown in from
+Nauvis. For each resource we picked the planet with the highest yield
+and started mining the largest ore patches (10M-100M). It turned out
+that for most resources (except iron, copper, and vulcanite) this may
+have been unnecessary as they never ran out.
+
+At some point we had too many remote planets, so we needed a second
+field of rocket launch pads to keep all sites stocked on solid rocket
+fuel.
+
+*Energy* We have mostly been using solar panels only. The SE solar panel
+upgrades make it convenient to replace the vanilla panels by much better
+ones, and it's just much simpler to copy paste fields of solar panels
+than to design nuclear power plants and get all the water flowing.
+
+* Mods
+   :PROPERTIES:
+   :CUSTOM_ID: mods
+   :END:
+Apart from Space Exploration itself and its dependencies, we are using
+the following /QoL/ (Quality of Life) mods: - Todo List: keep track of
+what needs to be done. - Auto Deconstruct: mark miners without resources
+for deconstruction. - Helmod: factory planning. - Max Rate Calculator:
+factory planning in hindsight, useful to measure actual throughput. -
+What is it really used for?: find out in which recipes an item is used.
+Useful to know whether or not to put items on the main belt or not. -
+Module inserter: remotely insert modules using robots. - Upgrade Builder
+and Planner: upgrade normal rail to space rail and back, which cannot be
+done using the vanilla upgrade planner.
+
+* /Endurance/
+   :PROPERTIES:
+   :CUSTOM_ID: endurance
+   :END:
+Now that we have given an overview of the previous base, let's move on
+to /Endurance/ itself!
+
+** Red & Green sciences
+    :PROPERTIES:
+    :CUSTOM_ID: red-green-sciences
+    :END:
+Let's have a look at the initial red and green science factory. For the
+very early game, We decided to go with a simple assembler grid setup.
+This isn't very flexible, but very easy to build.
+
+#+caption: The core of our base after ~2h. Click to enlarge.
+#+attr_html: :class inset
+[[file:base.png][file:base.jpg]]
+
+As you can see, it also makes for simple upgrading to speed up
+production when the better assemblers and inserters are researched. To
+keep things simple, I didn't want to belt any items other than plates.
+Because of this, inserters and belts have to be manually moved to the
+green science assemblers every once in a while. It's not optimal, but
+good enough for as long as it lasts since we will soon migrate the green
+and red science production to larger factories.
+
+** City Block Planning
+    :PROPERTIES:
+    :CUSTOM_ID: city-block-planning
+    :END:
+It's never too early to start thinking about city blocks! One lesson we
+learned from last time is to make sure that roboports are aligned with
+the origin, so that rotating blueprints doesn't cause issues. We made a
+50x50 blueprint with a roboport at one of the corners.
+
+#+caption: Roboport blueprint
+#+attr_html: :class inset
+[[file:roboport.png][file:roboport.jpg]]
+
+Next, we can already put down the edges of the first city blocks, so we
+can design everything with these in mind. Following Nilaus, we put down
+criss-crossing "Sacred Paths" to mark the boundaries of blocks. We
+decided to keep the crash site as a historical monument, so a central
+100x100 square was cut out and dedicated to this. This slightly
+complicates things, but it's nice to keep this central area a bit
+special.
+
+#+caption: The map after 8 hours.
+#+attr_html: :class inset large
+[[file:cityblocks.png][file:cityblocks.jpg]]
+
+Next time, we'll migrate red and green science to dedicated belt systems
+(which can already be seen in the lower left of the map), and add black
+and blue science packs into the mix!

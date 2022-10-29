@@ -1,0 +1,103 @@
+#+title: Powersearch with Vimium
+#+hugo_section: linux
+#+HUGO_TAGS: linux
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/07/02/vimium/
+#+toc: headlines 0
+#+date: <2021-07-02>
+#+author: Ragnar Groot Koerkamp
+
+*Related posts*: [[../dark-mode][Dark mode with Vimium]]
+
+Vimium ([[https://github.com/philc/vimium][Github]], [[https://chrome.google.com/webstore/detail/vimium/dbepggeogbaibhgnhhndojpepiihcmeb][Chromium extension]]) is not only a great way to navigate webpages; it's also a
+great help to quickly search many webpages.
+
+I am using it many times a day to search for just the documentation I
+need. Some of the search engines I have configured:
+
+#+begin_src yaml
+# Documentation
+archwiki: https://wiki.archlinux.org/index.php?search=%s ArchWiki
+aur: https://aur.archlinux.org/packages/?K=%s AUR
+cpp: https://en.cppreference.com/mwiki/index.php?search=%s CppReference
+github: https://github.com/search?q=%s GitHub
+hoogle: https://www.haskell.org/hoogle/?hoogle=%s Hoogle
+oeis: https://oeis.org/search?q=%s OEIS
+python: https://docs.python.org/3.7/search.html?q=%s Python
+wiki: https://en.wikipedia.org/w/index.php?title=Special:Search&search=%s Wikipedia
+
+# Translation
+nlen: https://translate.google.nl/#nl/en/%s Dutch -> English
+ennl: https://translate.google.nl/#en/nl/%s English -> Dutch
+deen: https://translate.google.nl/#de/en/%s German -> English
+ende: https://translate.google.nl/#en/de/%s English -> German
+
+# Other
+imdb: https://www.imdb.com/find?q=%s IMDB
+# `pe 123` to jump straight to problem 123.
+pe: https://projecteuler.net/problem=%s Project Euler
+kattis: https://open.kattis.com/search?q=%s Kattis
+#+end_src
+
+Any of these can now be activated by typing their shorthand in the
+omnibar (which is usually activated by pressing =o= or =O=). Vimium even
+has live preview support for Wikipedia and Google search, as well as
+some others.
+
+#+attr_html: :class inset
+[[file:wikipedia-search.png]]
+
+Note that you can select one of the live preview items using =ctrl-j=
+and =ctrl-k=, as well as the down and up arrow keys.
+
+If, like me, you are searching for documentation many times a day, you
+will probably want to bind custom keys to the most frequently used
+search engines:
+
+#+begin_src fish
+# searching is always in a new tab
+map a Vomnibar.activateInNewTab keyword=archwiki
+map U Vomnibar.activateInNewTab keyword=aur
+map c Vomnibar.activateInNewTab keyword=cpp
+map p Vomnibar.activateInNewTab keyword=python
+map w Vomnibar.activateInNewTab keyword=wiki
+# yes, multi-letter-commands work!
+map gh Vomnibar.activateInNewTab keyword=github
+#+end_src
+
+On top of this, I have some more keybindings
+
+#+begin_src fish
+# The usual to activate the omnibar.
+map o Vomnibar.activate
+map O Vomnibar.activateInNewTab
+# Coming from Doom emacs, I really need this.
+map <space> Vomnibar.activateInNewTab
+
+# Tapping right shift produces $ here. Nice to quickly switch tabs.
+map $ visitPreviousTab
+
+# Capital F to open multiple links at once.
+unmap F
+map F LinkHints.activateModeWithQueue
+
+# Search and switch to an open tab.
+map t Vomnibar.activateTabSelection
+map D moveTabToNewWindow
+# Move to left/right tab.
+map H previousTab
+map L nextTab
+# Move backward/forward in history.
+map J goBack
+map K goForward
+
+map <c-]> passNextKey normal
+
+# Un/pin a tab.
+map gP togglePinTab
+#+end_src
+
+And lastly, I recommend enabling the
+=Don't let pages steal the focus on load= setting.

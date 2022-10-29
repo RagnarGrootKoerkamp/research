@@ -1,0 +1,127 @@
+#+title: Window switching in Sway
+#+hugo_section: linux
+#+HUGO_TAGS: linux wayland
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/07/01/sway-window-switching/
+#+toc: headlines 0
+#+date: <2021-07-01>
+#+author: Ragnar Groot Koerkamp
+
+Sway has many commands for switching the active workspace and focused
+window. However, I find that most of my window switching comes down to a
+few simple commands that focus a specific application, or open it first
+when it has no open windows yet. E.g.:
+
+- =$mod+s=: open and/or focus slack
+- =$mod+i=: open and/or focus signal
+- =$mod+m=: open and/or focus emacs
+- =$mod+c=: open and/or focus chromium
+
+In addition to this, some apps like emacs have a separate =$mod+Shift+m=
+command that always opens a new window/instance.
+
+The configuration for this is the following:
+
+#+begin_example
+# Each app has its own dedicated workspace
+assign [app_id="Slack"] 9
+assign [app_id="Signal"] 10
+
+# Bind commands to quickly switch to the app
+bindsym $mod+s exec ~/bin/launch/slack
+bindsym $mod+i exec ~/bin/launch/signal
+
+# Exec the app on startup
+exec slack
+exec signal-desktop
+#+end_example
+
+Then, for each of these applications, there is a script that tries to
+focus the application. If the application is not running yet it is
+started, and if it is running in the background only, a new window is
+opened.
+
+#+begin_src sh
+#!/bin/bash
+# ~/bin/launch/slack
+
+BINARY='slack'
+FOCUS='[app_id="Slack"]'
+
+focus() {
+    swaymsg "$FOCUS focus" >/dev/null
+}
+open_or_run() {
+    if pgrep -fa "/usr/.*/$BINARY" >/dev/null; then
+        # When the application is already running in the background, starting it
+        # again will typically open the window and exit.
+        $BINARY
+    else
+        # If the application is not running, start it but do not wait for it.
+        $BINARY >/dev/null 2>/dev/null &
+    fi
+}
+focus_wait() {
+    # For applications that are slow to start, we try every 0.1s until their
+    # window is open.
+    for i in {1..30}; do
+        if focus; then
+            break
+        fi
+        sleep 0.1
+    done
+}
+
+focus || (
+    open_or_run
+    focus_wait
+)
+#+end_src
+
+For Signal, the script is the same but with variables
+
+#+begin_src sh
+BINARY='signal-desktop'
+FOCUS='[app_id="Signal"]'
+#+end_src
+
+This can also be extended to focus one specific instance of an
+application by filtering on =title= as well as =app_id=.
+
+* Back and forth
+   :PROPERTIES:
+   :CUSTOM_ID: back-and-forth
+   :END:
+In addition to the above, it can be nice to quickly switch to the
+previously active workspace or window.
+
+For workspaces, Sway has the command
+
+#+begin_example
+workspace back_and_forth
+#+end_example
+
+which can be bound to any shortcut.
+
+For switching to previously active windows, I'm using
+[[https://github.com/lbonn/i3-focus-last][=i3-focus-last=]]
+([[https://aur.archlinux.org/packages/i3-focus-last-git/][AUR
+package]]), a window switcher using Rofi that also works with Sway. This
+needs =exec_always i3-focus-last server= in your Sway config. When
+invoked as =i3-focus-last menu=, it opens a rofi menu listing all
+windows, sorted by most recently focused first.
+
+#+caption: Window switching with rofi.
+#+attr_html: :class inset
+[[file:rofi.png]]
+
+** Previous browser tab using Vimium
+    :PROPERTIES:
+    :CUSTOM_ID: previous-browser-tab-using-vimium
+    :END:
+With Vimium, you can also switch back to the most recently active tab,
+by doing =map <key> visitPreviousTab=. You can find some more of my
+Vimium config
+[[file:%7B%%20post_url%20/linux/vimium/2021-07-02-vimium%20%%7D][here]].

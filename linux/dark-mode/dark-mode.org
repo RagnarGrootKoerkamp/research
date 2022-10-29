@@ -1,0 +1,80 @@
+#+title: Browsing in the dark with Vimium and Dark Reader
+#+hugo_section: linux
+#+HUGO_TAGS: linux chromium vimium darkreader
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/07/01/dark-browsing/
+#+toc: headlines 3
+#+date: <2021-07-01>
+#+author: Ragnar Groot Koerkamp
+
+Let's quickly go over some settings you can change for a better dark
+mode experience in Chromium.
+
+* Chromium theme
+     :PROPERTIES:
+     :CUSTOM_ID: chromium-theme
+     :END:
+First of all, you can make Chromium itself use a dark theme. This will
+ensure both a dark tab bar and nice dark settings pages. As explained
+[[https://askubuntu.com/questions/1159741/enable-dark-mode-on-chromes-internal-pages][here]],
+you'll need to change the following:
+
+- Run =chromium= with the flags
+
+  #+begin_example
+  chromium --enable-features=WebUIDarkMode --force-dark-mode
+  #+end_example
+
+  If you are already using other feature flags, they can be comma
+  separated:
+
+  #+begin_example
+  --enable-features=UseOzonePlatform,WebUIDarkMode
+  #+end_example
+
+- In the browser settings, make sure the Theme (under Appearance) is set
+  to Classic.
+
+* Dark Reader
+     :PROPERTIES:
+     :CUSTOM_ID: dark-reader
+     :END:
+[[https://chrome.google.com/webstore/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh][Dark
+Reader]] is the extension of choice for inverting web pages. I'm
+currently using the =Dynamic= theme.
+
+You can bind keyboard shortcuts to toggle the extension and to
+enable/disable the extension on specific sites.
+
+* Vimium
+
+#+caption: Dark vimium on top of an inverted webpage.
+[[file:simply-dark.png]]
+
+[[https://github.com/philc/vimium][Vimium]] adds Vim-like bindings to
+Chromium.
+
+Currently there is [[https://github.com/philc/vimium/issues/3797][an
+issue]] where it shows a big bright white box when using the dark theme
+on GitHub. As indicated in
+[[https://github.com/philc/vimium/issues/3732#issuecomment-749997600][this
+comment]], the fix is to clone the vimium repo and edit the file
+=content_scripts/vimium.css= by adding the following at the end:
+
+#+begin_src css
+.vimiumUIComponentVisible {
+  color-scheme: light;
+}
+#+end_src
+
+Then install Vimium from source using the instructions
+[[https://github.com/philc/vimium/blob/master/CONTRIBUTING.md#installing-from-source][here]].
+
+To algo get rid of the white omnibar, I'm using the
+[[https://github.com/ysjn/vimium-simply-dark][Simply Dark]] theme.
+Simply copy the contents of the =css= file into the =CSS for Vimium UI=
+field in the advanced vimium options. To get rid of the animations,
+delete the =animation:= in the =#vomnibar= block and the
+=@keyframes show= block right below.

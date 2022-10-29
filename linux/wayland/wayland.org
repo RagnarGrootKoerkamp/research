@@ -1,0 +1,480 @@
+#+title: Wayland utilities
+#+hugo_section: linux
+#+HUGO_TAGS: linux wayland
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/07/02/wayland/
+#+toc: headlines 0
+#+date: <2021-07-02>
+#+author: Ragnar Groot Koerkamp
+
+This post goes over some useful utilities I have been using on my
+Wayland system.
+
+* Screen brightness: =light=
+    :PROPERTIES:
+    :CUSTOM_ID: screen-brightness-light
+    :END:
+[[https://github.com/haikarainen/light][Light]] is a nice tool to manage
+screen and keyboard brightness.
+
+- Install =light=
+- Add your user to the =video= group: =usermod -aG video <user>=
+
+I really like the =light -T= flag, which multiplies the current
+brightness by some value. This way you can have fine grained control
+both for very low and very high brightness values. To prevent yourself
+from decreasing the brightness all the way to =0=, you can run
+e.g. =light -N 0.2= to set a minimium screen brightness of =0.2=. This
+value will be stored in your config directory under =~/.config/light/=.
+
+In my Sway config, I use these settings to change screen and keyboard
+brightness. You can find the right path using =light -L=.
+
+#+begin_src sh
+# Media buttons
+bindsym XF86MonBrightnessDown exec light -T 0.9
+bindsym XF86MonBrightnessUp exec light -T 1.1
+
+# keyboard brightness
+bindsym Shift+XF86MonBrightnessDown exec light -s sysfs/leds/tpacpi::kbd_backlight -U 50
+bindsym Shift+XF86MonBrightnessUp exec light -s sysfs/leds/tpacpi::kbd_backlight -A 50
+#+end_src
+
+In my Waybar config, scrolling on the backlight module also changes the
+brightness:
+
+#+begin_src json
+    ...
+    "backlight": {
+        "format": "{percent}% {icon}",
+        "format-icons": ["", ""],
+        "on-scroll-up": "light -T 1.1",
+        "on-scroll-down": "light -T 0.9"
+    },
+    ...
+#+end_src
+
+* Night mode: =gammastep=
+    :PROPERTIES:
+    :CUSTOM_ID: night-mode-gammastep
+    :END:
+[[https://gitlab.com/chinstrap/gammastep][Gammastep]] is a fork of
+[[https://github.com/jonls/redshift][redshift]] that works on Wayland.
+
+- Install =gammastep=, and for the tray bar idicator, additionally
+  install =python-xdg=, =python-gobject=, and =gtk3=.
+
+- Copy the sample config from
+  [[https://gitlab.com/chinstrap/gammastep/-/blob/master/gammastep.conf.sample][here]]
+  to =~/.config/gammastep/config.ini=.
+
+- Set a manual location (or configure geoclue).
+
+- Set =adjustement-method=wayland=.
+
+- Change =temp-day=, =temp-night=, =gamma-day=, and =gamma-night= to
+  your liking.
+
+- Launch from from the Sway config:
+
+  #+begin_src
+  exec gammastep-indicator &
+  #+end_src
+
+* Notifications daemon: =mako=
+    :PROPERTIES:
+    :CUSTOM_ID: notifications-daemon-mako
+    :END:
+[[https://github.com/emersion/mako][Mako]] is a notification daemon for
+Wayland similar to Dunst. I'm using it with an orange-black colour
+scheme.
+
+#+attr_html: :class inset
+[[file:mako.png]]
+
+=~/.config/mako/config=:
+
+#+begin_src toml
+font=DejaVu Sans Mono 10
+background-color=#292929
+text-color=#cccccc
+margin=10
+padding=4
+border-size=1
+border-radius=0
+icons=1
+icon-location=right
+sort=+time
+
+[urgency=low]
+border-color=#cccccc
+default-timeout=5000
+
+[urgency=normal]
+border-color=#ed8712
+default-timeout=5000
+
+[urgency=high]
+border-color=#e53714
+default-timeout=0
+
+[category=mail]
+border-color=#37e514
+default-timeout=60000
+group-by=category
+#+end_src
+
+My Sway Keybindings to dismiss notifications are:
+
+#+begin_src sh
+# Notifications
+bindsym Control+Space       exec makoctl dismiss
+bindsym Control+Shift+Space exec makoctl dismiss --all
+#+end_src
+
+* Program launcher: =Rofi=
+    :PROPERTIES:
+    :CUSTOM_ID: program-launcher-rofi
+    :END:
+For Wayland, I'm using the =rofi-lbonn-wayland-git=
+[[https://aur.archlinux.org/packages/rofi-lbonn-wayland-git/][AUR
+package]], based on [[https://github.com/lbonn/rofi][this branch]] of
+Rofi.
+
+There is also =wofi=, but =rofi= feels more responsive and does not have
+a GTK3 UI like =wofi=.
+
+My config =~/.config/rofi/config.rasi=:
+
+#+begin_src json
+configuration {
+    modi: "combi,drun,run";
+    width: 60;
+    lines: 18;
+    columns: 2;
+    font: "sans bold 17";
+    terminal: "foot";
+    sidebar-mode: true;
+    combi-modi: "drun,run";
+    matching: "fuzzy";
+    window-format: "{w:2} {c} {t}";
+    theme: "~/.config/rofi/themes/flat-orange.rasi";
+    combi-hide-mode-prefix: true;
+}
+#+end_src
+
+My theme is a slightly modified version of
+[[https://github.com/davatorium/rofi-themes/blob/master/User%20Themes/flat-orange.rasi][flat-orange.rasi]] and can be found [[file:flat-orange.rasi][here]].
+
+Some plugins I use:
+
+- [[https://github.com/svenstaro/rofi-calc][=rofi-calc=]]: use =qalc= as
+  calculator directly inside rofi, with a live preview.
+  #+begin_src sh
+  bindsym $mod+q exec rofi -show calc -modi calc -no-show-match -no-sort -no-bold > /dev/null
+  #+end_src
+
+  #+attr_html: :class inset
+  [[file:rofi-calc.png]]
+
+- [[https://github.com/carnager/rofi-pass/pull/205][=rofi-pass-git=]]
+  for integration with =pass=.
+
+  #+begin_src
+  bindsym $mod2+p exec rofi-pass
+  #+end_src
+
+  #+attr_html: :class inset
+  [[file:rofi-pass.png]]
+
+   Add the following to the config
+  (=~/.config/rofi-pass/config=) to fix =copyPass= mode and make it the
+  default.
+
+  #+begin_src sh
+  _clip_in_primary() {
+      wl-copy -p
+  }
+
+  _clip_in_clipboard() {
+      wl-copy
+  }
+
+  _clip_out_primary() {
+      wl-paste -p
+  }
+
+  _clip_out_clipboard() {
+      wl-paste
+  }
+
+  default_do='copyPass'
+  clip=primary
+  #+end_src
+
+  There is also =rofi-pass-ydotool-git=, but since I do not use autotype
+  functionality I have not needed this yet.
+
+- For window switching, I use
+  [[https://github.com/lbonn/i3-focus-last#menu-mode][i3-focus-last]]. See [[../sway-window-switching][this post]] for more.
+
+* Clipboard: =clipman=, =wl-copy=, =wl-paste=
+    :PROPERTIES:
+    :CUSTOM_ID: clipboard-clipman-wl-copy-wl-paste
+    :END:
+- =wl-copy [-p] <args>= copies the arguments to the clipboard.
+- =wl-paste [-p]= prints the current [primary] clipboard contents.
+- =clipman= keeps a history of copied text which can be selected via
+  Rofi.
+
+
+#+attr_html: :class inset
+[[file:rofi-clipman.png]]
+
+Sway config:
+
+#+begin_src sh
+# Start the clipboard manager in the background
+exec wl-paste -t text --watch clipman store
+# Select a clipboard entry using rofi
+bindsym $mod+Shift+p exec clipman pick -t rofi
+#+end_src
+
+* Screenshots: =grimshot=
+    :PROPERTIES:
+    :CUSTOM_ID: screenshots-grimshot
+    :END:
+I'm using a [[https://github.com/swaywm/sway/pull/6286][fork]] of [[https://github.com/swaywm/sway/blob/master/contrib/grimshot][grimshot]]
+with a custom =selection= argument, together with a small wrapper script
+that automatically uploads my screenshots to my server. Whenever I make
+a screenshot the following happens:
+
+- The screenshot is saved to =~/data/screenshots/<timestamp>.png=.
+- The screenshot is uploaded to my server, and the URL is copied to the
+  primary clipboard.
+- The screenshot is copied to the regular clipboard.
+
+Now I can either share the image itself or just the URL to it.
+
+The wrapper looks like this:
+
+#+begin_src sh
+#!/bin/bash
+# ~/bin/scrot
+set -e
+
+FILE=~/data/screenshots/$(date -Is).png
+grimshot --notify save selection $FILE >/dev/null
+upload $FILE >/dev/null
+cat $FILE | wl-copy --type image/png
+#+end_src
+
+In Sway, I can just bind the printscreen key to this script:
+
+#+begin_src
+bindsym Print exec scrot
+#+end_src
+
+There is also Snappy for screenshot editing, but I am not using this at
+the moment.
+
+* Terminal emulator: =foot=
+    :PROPERTIES:
+    :CUSTOM_ID: terminal-emulator-foot
+    :END:
+[[file:TODO][Foot]] is the default terminal emulator in Sway and has
+native Wayland support. It supports a server/client setup by running
+=exec foot -s= in the Sway config, and launching new terminals with
+=footclient=. My config is mostly defaults, with only a few changes:
+
+#+begin_src toml
+font=Source Code Pro:size=10
+# I had some issues with the font on my external monitor being too small.
+dpi-aware=no
+pad=0x0
+
+[colors]
+# I'm not particularly fond of the color scheme yet.
+regular0=010101
+regular1=EE0000
+regular2=6EBA0C
+regular3=FFA600
+regular4=3465A4
+regular5=BB00BB
+regular6=09B0B0
+regular7=EEEEEE
+bright0=333333
+bright1=EF2929
+bright2=8AE234
+bright3=FCE94F
+bright4=729FCF
+bright5=AD7FA8
+bright6=34E2E2
+bright7=FFFFFF
+
+[key-bindings]
+scrollback-up-page=Page_Up
+scrollback-down-page=Page_Down
+#+end_src
+
+* Shell: =fish=
+    :PROPERTIES:
+    :CUSTOM_ID: shell-fish
+    :END:
+Instead of cleaning up 500 lines of =.zshrc=, I decided to give Fish a
+try. Fish seems to have better defaults, although there are a few small
+drawbacks: tab completion is slightly less intuitive, and autocompletion
+is less reliable.
+
+I'm using the Vim keybindings with a few small changes.
+
+#+begin_src fish
+fish_vi_key_bindings
+
+function fish_user_key_bindings
+         # Bind CTRL-k to accept the suggestion and run the command
+         bind -M insert \ck accept-autosuggestion execute
+         bind -M default \ck accept-autosuggestion execute
+
+         # Bind CTRL-F to accept the suggestion in normal and insert mode
+         bind -M default \cf end-of-line accept-autosuggestion
+         bind -M insert \cf end-of-line accept-autosuggestion
+
+         # Use CTRL-p and CTRL-n instead of arrows
+         bind -M insert \cp history-token-search-backward
+         bind -M default \cp history-token-search-backward
+         bind -M insert \cn history-token-search-forward
+         bind -M default \cn history-token-search-forward
+
+         # Undo
+         bind -M default \cz undo
+         bind -M insert \cz undo
+
+         # recover CTRL-R reverse search in insert mode
+         bind -M insert \cr history-search-backward
+
+         # CTRL-S to prepend sudo
+         bind -M default \cs __fish_prepend_sudo
+         bind -M insert \cs __fish_prepend_sudo
+end
+#+end_src
+
+- Instead of the =alias -d ~g=~/git/= hashes I am used to from Zsh, I'm
+  now using =set -U g ~/git/= for a similar effect, although this now
+  requires =cd $g= instead of =cd ~g= previously.
+- The background color for the active tab completion item was invisible
+  for me. To fix it: =set -U fish_color_search_match --background=blue=
+- To start fish in the most recent directory:
+  [[https://github.com/kfkonrad/last-working-dir-fish-pkg][=last-working-dir=]] from =oh-my-fish=.
+
+* Browser: =chromium=
+    :PROPERTIES:
+    :CUSTOM_ID: browser-chromium
+    :END:
+Chromium supports native Wayland via some flags:
+
+#+begin_src sh
+/usr/bin/chromium --enable-features=UseOzonePlatform --ozone-platform=wayland
+#+end_src
+
+You should also add these flags to the desktop file to make sure they
+also apply when opening a file with chromium. This is best done by
+copying =/usr/share/applications/chromium.desktop= to
+=~/.local/share/applications= and adding them to the =exec= line. Or
+alternatively point the =exec= line to a wrapper script.
+
+I have disabled the password manager, since I'm using =pass= instead.
+
+[[https://wiki.archlinux.org/title/Profile-sync-daemon][Profile-sync-daemon]]
+can be used to put the browserprofile in tmpfs and reduce the amount of
+data written to disk by chromium.
+
+See [[../sway-fullscreen][this post]] for a fork of Sway that allows detaching the chromium full screen
+mode from the sway full screen mode. This allows for watching youtube
+videos filling an entire window, and using chromium with tab bar filling
+the entire screen.
+
+Some nice extensions:
+
+- [[https://chrome.google.com/webstore/detail/minimal-scrollbar/ekopmclclddpoipchmcbhifohhbmjafd/related?hl=en][Minimal scrollbar]] hides scrollbars.
+- [[https://chrome.google.com/webstore/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh][Dark Reader]] to make all websites dark.
+  [[../dark-mode][This post on dark mode]] has some more tips for configuring dark mode in
+  both Dark Reader and Vimium.
+- [[https://chrome.google.com/webstore/detail/vimium/dbepggeogbaibhgnhhndojpepiihcmeb][Vimium]]
+  for vim-like browsing. My config is [[file:%7B%%20post_url%20/linux/vimium/2021-07-02-vimium%20%%7D][here]].
+
+* Image viewer: =sxiv= and =feh=
+    :PROPERTIES:
+    :CUSTOM_ID: image-viewer-sxiv-and-feh
+    :END:
+I am using these two image viewers for slightly different purposes.
+=sxiv= is great because of its thumnail mode. Together with the =ranger=
+integration this is great for quickly browsing through a large (remote)
+directory of photos because it only loads the small thumbnails. On the
+other hand, the =feh-preload-next-image-git=
+package/branch of =feh= is nice because it can load the next image while
+the current image is being displayed, saving time waiting for the
+network overhead. Also, =feh= supports deleting images, which is nice
+for sorting through photos.
+
+Note that both of these image viewers run under XWayland.
+
+* Bar: =waybar=
+    :PROPERTIES:
+    :CUSTOM_ID: bar-waybar
+    :END:
+[[https://github.com/Alexays/Waybar][Waybar]] is a common bar for Sway.
+I'm not using anything special here, apart from some custom =on-click=
+actions:
+
+=~/.config/sway.conf=
+
+#+begin_src json
+bar {
+    swaybar_command waybar
+}
+#+end_src
+
+=~/.config/waybar/config=
+
+#+begin_src json
+...
+"cpu": {
+    ...
+    "on-click": "foot htop"
+},
+"pulseaudio": {
+    ...
+    "on-click": "pavucontrol"
+},
+#+end_src
+
+* Font: =ttf-dejavu=
+    :PROPERTIES:
+    :CUSTOM_ID: font-ttf-dejavu
+    :END:
+I am using =ttf-dejavu= fonts. Some discussion on Reddit is
+[[https://www.reddit.com/r/archlinux/comments/2l2cr7/what_fonts_do_you_install_for_most_coverage_with/][here]].
+
+I am still in doubt between DejaVu Sans Mono and Source Code Pro.
+
+* File browser: =ranger=
+   :PROPERTIES:
+   :CUSTOM_ID: file-browser-ranger
+   :END:
+[[https://github.com/ranger/ranger][ranger]] is a terminal based file
+browser. I am using =ranger-git=, since the official Arch =ranger=
+package is relatively old and the git version has some unreleased
+bugfixes.
+
+- TODO: make fish cd to last dir:
+  https://codeyarns.com/tech/2014-09-28-how-to-change-directory-in-shell-using-ranger.html
+
+* Graphic drivers: Todo
+    :PROPERTIES:
+    :CUSTOM_ID: graphic-drivers-todo
+    :END:
+My laptop does have an NVidia card, but I do not have any drivers
+installed yet.

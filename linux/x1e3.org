@@ -1,0 +1,214 @@
+#+title: X1 Extreme Gen 3 - Migrating to Wayland
+#+hugo_section: linux
+#+HUGO_TAGS: linux wayland emacs hardware sway
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_aliases: /2021/05/16/x1e3/
+#+toc: headlines 0
+#+date: <2021-05-16>
+#+author: Ragnar Groot Koerkamp
+
+I got a new laptop, so this felt like the right time to migrate to
+Wayland.
+
+* Delta
+  :PROPERTIES:
+  :CUSTOM_ID: delta
+  :END:
+
+|-----------------------+---------------------------+----------------------------------------------|
+| what                  | before                    | after                                        |
+|-----------------------+---------------------------+----------------------------------------------|
+| **hardware**          |                           |                                              |
+| laptop                | Asus UX501V               | Lenovo X1 Extreme Gen 3                      |
+| CPU                   | i7-6700HQ                 | i7-10750H                                    |
+| GPU                   | GTX 960M                  | GTX 1650                                     |
+| RAM                   | 16GB                      | 64GB                                         |
+| **OS**                |                           |                                              |
+| bootloader            | Grub                      | EFISTUB                                      |
+| OS                    | Windows + Arch dualboot   | Windows + Arch dualboot                      |
+| networking            | netctl                    | systemd-networkd                             |
+| dns/dhcp              | dhcpcd                    | systemd-resolved                             |
+| wifi                  | wpa_supplicant            | iwd                                          |
+| **Wayland**           |                           |                                              |
+| display/login manager | -                         | -                                            |
+| display server        | X                         | Wayland                                      |
+| window manager        | i3                        | Sway                                         |
+| bar                   | i3blocks                  | waybar                                       |
+| backlight             | xbacklight                | light                                        |
+| night mode            | redshift                  | gammastep                                    |
+| clipboard             | -                         | wl-clipboard, clipman                        |
+| program launcher      | rofi                      | rofi [wayland]                               |
+| password finder       | rofi-pass                 | rofi-pass-git                                |
+| key remapping         | setxkbmap, xcape, xmodmap | interception-tools                           |
+| **Tools**             |                           |                                              |
+| terminal emulator     | urxvt                     | foot                                         |
+| shell                 | zsh                       | fish                                         |
+| shell highlighting    | zsh-syntax-highlight      | -                                            |
+| environment variables | .zshrc                    | environment.d                                |
+| text editor           | vim                       | emacs doom                                   |
+| aur helper            | packer                    | yay                                          |
+| directory usage       | du                        | dust                                         |
+| password manager      | pass                      | pass                                         |
+| search tool           | ag [silver searcher]      | ag + ripgrep + fd                            |
+| file browser          | terminal                  | terminal + ranger                            |
+| calculator            | qalc                      | qalc, rofi-calc                              |
+| notification deamon   | dunst                     | mako                                         |
+| image viewer          | feh                       | feh + sxiv                                   |
+| music                 | -                         | spotifyd + spotify-tui + waybar custom/media |
+| screenshot            | teiler+scrot              | grimshot (from sway) + custom upload wrapper |
+| wallpaper             | feh                       | sway                                         |
+| messenger             | slack, signal-desktop     | slack, signal-desktop [wayland]              |
+| system monitor        | htop                      | htop                                         |
+| remote shell          | ssh                       | ssh                                          |
+| browser               | chromium                  | chromium                                     |
+| pdf viewer            | zathura                   | zathura                                      |
+| vpn                   | -                         | openconnect                                  |
+|-----------------------+---------------------------+----------------------------------------------|
+
+see also the i3 -> sway [[https://github.com/swaywm/sway/wiki/i3-Migration-Guide][migration guide]].
+
+  :PROPERTIES:
+  :CUSTOM_ID: hardware
+  :END:
+* BIOS
+   :PROPERTIES:
+   :CUSTOM_ID: bios
+   :END:
+I made the following BIOS changes for the X1 Extreme Gen 3 (X1E3):
+- swap Fn and Ctrl -> on
+- Make F1-F12 primary function
+- Set sleep mode to linux preference
+- keyboard beep -> off
+- turn off security->secure boot; otherwise arch installation usb wont
+  boot
+  https://forums.lenovo.com/t5/ThinkPad-X-Series-Laptops/X1-6gen-won-t-boot-from-USB/m-p/4230171?page=1#4230185
+- [optional] move usb up in the bios->startup->boot order menu
+
+* windows
+   :PROPERTIES:
+   :CUSTOM_ID: windows
+   :END:
+In order to keep the existing Windows installation with dual boot, we
+need to finish its installation and shrink the partition.
+
+- Use airplane mode (F8) to skip signing in to a microsoft account.
+- Install chromium and delete Edge.
+- Disable hibernation.
+- Disable virtual memory (i.e. swap) to save some disk space.
+- Shrink the C volume in device memory.
+- Update drivers/bios using lenovo vantage.
+* Install Arch
+- Download the ISO: https://archlinux.org/download/
+- Create a flash USB:
+  https://wiki.archlinux.org/title/USB_flash_installation_medium
+- Follow the installation guide:
+  https://wiki.archlinux.org/title/installation_guide
+- I'm using a single ext4 partition for the entire OS
+- Using =noatime= and =lazytime= options in =fstab=.
+- Disable =systemd-udev-settle= to potentially save on boot time (check
+  =systemd-analyze critical-chain= first):
+  =systemctl mask systemd-udev-settle=
+- https://wiki.archlinux.org/title/Lenovo_ThinkPad_X1_Extreme_(Gen_3)
+  and gen2 and carbon 6/7/8 are also usefull
+- =fwupd= for firmware updates
+- =tlp= for battery stats
+- =cpupower= for setting cpu governor
+  - powersave is a bit slow/unresponsive at times
+  - performance gets hot and always has fans on
+
+* efistub
+   :PROPERTIES:
+   :CUSTOM_ID: efistub
+   :END:
+https://wiki.archlinux.org/title/EFISTUB
+
+- Mount existing efi partition to =/boot=
+- May have to (re)install the kernel to make sure =vmlinuz-linux= is
+  written to the mounted efi partition at =/boot=
+- install =intel-ucode=
+- https://wiki.archlinux.org/title/Microcode
+- run =efibootmgr= command as explained, but add in the microcode part
+
+* Network
+   :PROPERTIES:
+   :CUSTOM_ID: network
+   :END:
+- =systemd-networkd=
+- =systemd-resolved=
+- =iwd= for adding/changing wireless connections using =iwctl=.
+
+* Bluetooth
+   :PROPERTIES:
+   :CUSTOM_ID: bluetooth
+   :END:
+- start =blueman-applet= from sway
+- enable =bluetooth.service=
+
+* Spotify
+   :PROPERTIES:
+   :CUSTOM_ID: spotify
+   :END:
+- =spotifyd-full-git=, =spotify-tui=
+
+  - Note: spotifyd itself doesn't currently support playerctl, needed
+    for waybar module updates:
+    https://www.reddit.com/r/archlinux/comments/dp9czu/spotifyd_with_playerctl/
+
+- =password_cmd = "pass spotify.com | head -1"=
+
+- TODO: fix waybar module coredumping every minute
+
+** Audio: =pipewire=
+    :PROPERTIES:
+    :CUSTOM_ID: audio-pipewire
+    :END:
+I have been using
+[[https://wiki.archlinux.org/title/PipeWire][=pipewire=]] as my audio
+backend, and so far it has been working without problems. Installing it
+together with =pipewire-alsa=, =pipewire-jack=, =pipewire-pulse= and
+=pavucontrol= gives everything I need.
+
+* Wayland
+   :PROPERTIES:
+   :CUSTOM_ID: wayland
+   :END:
+See [[../wayland][this post]].
+
+* SWAY
+   :PROPERTIES:
+   :CUSTOM_ID: sway
+   :END:
+See [[../sway-window-switching][this post]].
+
+* Environment variables: =environment.d=
+   :PROPERTIES:
+   :CUSTOM_ID: environment-variables-environment.d
+   :END:
+I'm using =environment.d= to set my environment variables.
+[[../environment-variables][This post]] has the details.
+
+#+begin_src sh
+# Color schemes
+GTK_THEME=Adwaita:dark
+
+# Editor
+EDITOR="emacsclient -c"
+VISUAL="emacsclient -c"
+
+# Make weeks start on Monday
+LC_TIME="en_GB.UTF-8"
+#+end_src
+
+** Homedir cleanup
+    :PROPERTIES:
+    :CUSTOM_ID: homedir-cleanup
+    :END:
+Have a look at [[../xdg-base-dir][XDG Base directory]] to keep your homedir tidy.
+
+* Emacs
+   :PROPERTIES:
+   :CUSTOM_ID: emacs
+   :END:
+See [[../emacs][this post]].
