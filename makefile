@@ -2,7 +2,7 @@
 
 BASE_DIR := $(shell pwd)
 EMACS_BUILD_SRC := $(BASE_DIR)/emacs
-BASE_URL := https://research.curiouscoding.nl
+BASE_URL := https://curiouscoding.nl
 
 all: clean build-content open serve
 
