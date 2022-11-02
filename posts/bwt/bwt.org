@@ -138,11 +138,17 @@ occurs after $Q$. This will give $s' = s+a$. The end of the interval is
 given by the number of times $b$ a characters $\leq c$ occurs right after $Q$:
 $t' = t + b$.
 
-TODO: figure
+#+name: y
+#+caption: The red boxes indicate that the set of characters following matches (cyan) of Q in the
+#+caption: forward suffix array (left) is the same as the set following the
+#+caption: matches of Q in the reverse suffix array (right).
+#+caption: To count the number of highlighted characters less than c, we can use the occurrences array of the reverse suffix array.
+#+attr_html: :class full-width inset large
+[[file:reversal.png]]
 
 Using an $Occ$ array for each column it would be easy to answer
 these queries, but this requires quadratic memory.
-Instead, observe that the $Occ$ array we already have allows us to count the
+Instead, note that the $Occ$ array we already have allows us to count the
 numbers we need for the last column, i.e. the column /before/ $Q$. The crucial
 idea is to use the suffix array of the /reverse/ string $\overline S$ and
 track the interval of prefixes $Q$ in the forward SA and interval of suffixes
@@ -156,8 +162,8 @@ s, \overline t))$, an interval of $A$ and $\overline A$. This is initialized to
 $([0, n), [0, n))$ for the empty query. When /appending/ $c$, the update for
 the forward interval becomes
 \begin{align}
-s' =& s + (\overline{Occ}[c-1][t'] - \overline{Occ}[c-1][s'])\\
-t' =& s + (\overline{Occ}[c][t'] - \overline{Occ}[c][s']),
+s' =& s + \sum_{c' < c}  \left(\overline{Occ}[c'][t'] - \overline{Occ}[c'][s']\right)\\
+t' =& s + \sum_{c'\leq c}\left(\overline{Occ}[c'][t'] - \overline{Occ}[c'][s']\right),
 \end{align}
 while the reverse range is updated as before:
 \begin{align}
@@ -166,3 +172,8 @@ while the reverse range is updated as before:
 \end{align}
 Prepending a character $c$ is the same with the roles of the forward and
 reverse SA swapped.
+
+#+name: x
+#+caption: Visualization of the bidirectional BWT and how it can be used to extend queries in two directions.
+#+attr_html: :class full-width inset large
+[[file:bibwt.gif]]
