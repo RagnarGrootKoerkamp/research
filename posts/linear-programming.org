@@ -1,0 +1,72 @@
+#+title: Thoughts on linear programming
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: linear-programming
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2022-11-04>
+#+author: Ragnar Groot Koerkamp
+
+This note contains some ideas about linear programming and /most-perpendicular
+faces/. They're mostly on an intuitive level and not very formal.
+
+* Linear programming
+
+#+attr_html: :style display: none
+#+begin_div
+\begin{equation*}
+\newcommand{\v}[1]{\textbf{#1}}
+\newcommand{\x}{\v x}
+\newcommand{\t}{\v t}
+\newcommand{\b}{\v b}
+\end{equation*}
+#+end_div
+
+Maximize $\t\x$ subject to $A\x \leq \b$.
+
+- $\x$ is a vector of $n$ variables $x_i$.
+- $A$ is a $m\times n$ matrix: there are $m$ constraints $A_j \x \leq b_j$.
+
+
+
+* Assumptions
+We make the following assumptions:
+- The system $A\x\leq \b$ has a solution.
+- None of the $m$ constraints is /redundant/: for each constraint there is a
+  solution such that equality holds in $A_j\x \leq b_j$.
+- All of the constraints satisfy $\t A_j > 0$, meaning that the point at
+  $-\infty \cdot \t$ is a solution.
+  - This actually feels quite limiting, but I'll keep it to keep things simple.
+  - Without this constraint, the most-orthogonal face could be on the wrong/opposite
+    side of the polygon.
+
+* Idea for an algorithm
+Suppose $n=2$, and we are given the polytope, which is an unbounded convex polygon
+in this case. The boundary of this polygon is given by a series of segments of
+increasing slope. The optimal solution happens around the segment that is /most
+perpendicular/ to $\t$, exactly where the slope of transitions from /less/ than
+the slope of the perpendicular to $\t$ to /more/ than the slope of the
+perpendicular to $\t$.
+
+For general $n$, we first find the face $j_1$ that minimizes the angle between
+$A_j$ and $t$. If $A_j$ is exactly orthogonal to $t$, we found an optimal
+solution and we are done.
+Otherwise, we must find the 'next most-orthogonal' face $j_2$, with the restriction
+that it must not be 'behind' the previous face: In the $2$ dimensional cases it
+could be that there are many lines very close to orthogonal to $\t$ on one side
+of the optimal solution, and none on the other side. Those should be excluded.
+
+To filter out near-orthogonal faces that are behind $j_1$, I see a few
+options: (I am not sure how to formalize them at this point.)
+1. Only consider the part of the angle orthogonal to the angle between $t$ and $A_{j_1}$.
+   - This removes a bit too much information, since in the same plane there
+     could be faces with a small angle in the opposite direction.
+2. Remove from the angle any component in the same direction as the angle
+   between $t$ and $A_{j_1}$.
+3. Do some change of basis so that face $j_1$ is not nearly orthogonal
+   anymore (maybe by making $\t$ and $A_{j_1}$ basis vectors?) and find the most-orthogonal face after the transformation.
+
+Then ideally we can repeatedly find the most-orthogonal face and once we
+find $n$ of them (or once $\t$ is a linear combination of $A_{j_1}$ to
+$A_{j_k}$) we know that the optimal solution is at the intersection of those $n$ faces.
