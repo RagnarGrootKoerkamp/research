@@ -17,7 +17,9 @@ History of suffix array construction algorithms:
 
 [[http://web.stanford.edu/class/archive/cs/cs166/cs166.1196/lectures/04/Small04.pdf][These slides]] from Stanford are a nice reference for the last algorithm.
 
-** Notation
+At [[*Interactive demo][the bottom]] you can find an interactive demo to see the algorithm progress!
+
+* Notation
 
 - String $S = s_0\dots s_{n-1}s_n$.
 - $s_n=\$$ is the sentinel, smaller than all other characters.
@@ -28,7 +30,7 @@ History of suffix array construction algorithms:
   - $A_{P_i} = i$ and $P_{A_j}=j$ by definition.
 - The /previous-suffix/ and /next-suffix/ of $S_i$ are $S_{i-1}$ and $S_{i+1}$ respectively.
 
-** Small and Large suffixes
+* Small and Large suffixes
 - Suffix $S_i$ is /small/ (S-suffix) when $S_i < S_{i+1}$. $S_n$ is small by definition.
 - Suffix $S_i$ is /large/ (L-suffix) when $S_i > S_{i+1}$.
 - Equality isn't possible because of the sentinel.
@@ -45,7 +47,7 @@ L-suffix comes before the S-suffix in the suffix array.
 - The L-suffix is of the form $c^y b ...$, with $b<c$ and $y>0$.
 - Since $b<c<d$, no matter what $x$ and $y$ are, the L-suffix is less than the S-suffix.
 
-** Building the suffix array from a smaller one
+* Building the suffix array from a smaller one
 
 It turns out we can build the SA of $S$ once we know the SA-order of all small
 suffixes.
@@ -83,7 +85,7 @@ partial suffix array of small suffixes:
 Once $j$ reaches $n$, this algorithm has completely filled in $A$.
 Note that it can never run into empty slots.[fn::Proof omitted.]
 
-** Visualization
+* Visualization
 
 I wrote a small visualizer for the algorithm above, see
 [[https://github.com/RagnarGrootKoerkamp/suffix-array-construction][this repo]]. You can use it to visualize the algorithm for any input string.
@@ -91,6 +93,23 @@ I wrote a small visualizer for the algorithm above, see
 #+caption: Constructing the complete suffix array starting after step 2 above, with the small suffixes already filled at the ends of their buckets.
 #+attr_html: :class full-width inset large
 [[file:suffix-array.gif]]
+
+
+* Interactive demo
+
+- Use left/right arrows or the buttons to move a step forward/backward.
+- Run on a different input string by putting that in the box and pressing =enter=.
+  - An empty string resets to the sample.
+
+#+begin_export html
+<script defer src="/js/suffixarray.js" type="module"></script></head>
+<div class="controls">
+<input type="string" name="string" id="string"/>
+<button class="button-primary" id="prev">prev</button>
+<button class="button-primary" id="next">next</button>
+</div>
+<canvas id="drawing" width="800" height="800"></canvas>
+#+end_export
 
 **  References
 
