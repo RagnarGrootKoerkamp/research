@@ -8,23 +8,17 @@ init()
     var delay = document.getElementById("delay");
 
     var timer = null;
-    var play = false;
+    var play = true;
 
     document.getElementById("string").addEventListener("change", (event) => {
-      window.clearTimeout(timer);
-      timer = null;
       wasm.reset();
     });
 
     document.getElementById("query").addEventListener("change", (event) => {
-      window.clearTimeout(timer);
-      timer = null;
       wasm.reset();
     });
 
     document.getElementById("algorithm").addEventListener("change", (event) => {
-      window.clearTimeout(timer);
-      timer = null;
       wasm.reset();
     });
 
@@ -67,6 +61,8 @@ init()
     document.getElementById("pauseplay").addEventListener("click", pauseplay);
 
     wasm.reset();
+
+    maketimer();
 
     canvas.addEventListener("keydown", function (e) {
       switch (e.keyCode) {
