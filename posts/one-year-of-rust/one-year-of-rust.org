@@ -1,0 +1,87 @@
+#+title: One Year Of Rust
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: rust
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2022-10-17>
+#+author: Ragnar Groot Koerkamp
+
+
+These are some draft notes that should turn into a post on my opinions on Rust
+after one year of using it.
+
+* Thoughts and remarks
+These pros and cons are mostly relative to C++, the language I used for the past
+~10 years.
+
+** Good
+- Sum types!
+  - ~Option~ and ~enum~ are so much nicer than ~optional~ and in particular ~variant~.
+- Build system
+  - Never used 3rd party code/libs in personal C++ projects.
+  - Use random crates all the time now!
+- Rust Analyzer
+  - C++ had YouCompleteMe in Vim, but Rust Analyzer worked out of the box and
+    man coding is so nice now.
+- No more need for ~!=nullptr~
+  - If you want to use an optional, you are forced to check it's existence.
+  - with ~if let Some(value) = optional~, you can do the check and unpacking in
+    one go, saving bugs.
+- C++ move semantics are an afterthought -- don't forget to ~move()~ when
+  needed! In Rust, this comes naturally.
+- Lifetimes save bugs. It's tedious, but as long as you're doing nothing crazy
+  you just keep applying suggestions until it works.
+- Turn your linux app into a webapp in 1 simple step!
+- I don't actually believe Rust is hard to learn. Maybe if you're used to C, but
+  coming from C++11, Rust simply better corresponds to my mental model of code
+  than C++ does. Sure it takes time, but what is the last time you learned a new
+  language? After 1 year, I think I know/understand a larger percentage of Rust than I knew
+  C++ after 10 years.
+- This is the right time to start! Lots of new cool features recently!
+  - =let-chaing=: ~if let Some(val) = val && val > 0 { .. }~
+  - =let-else=: ~let Some(val) = val else { return; };~
+  - =GATs=
+- ~ranges~ done right. (Well, at least more sane than C++-20/23 ranges)
+- Traits: tell the compiler that every type with ~.begin()~ and ~.end()~ is indeed
+  a container.
+- No header/implementation split, and no header mess. Sane modules that map to directories!
+- Single source for all documentation!
+
+** Bad
+- No equivalent of template-templates.
+- Using global/static convenience variables in simple programs is pain.
+- yes, fighting the borrow checker can be annoying, especially if you don't know
+  what you're doing. Just remember: don't try to make a struct that contains
+  references into itself.
+- Using generic types has some [[https://stackoverflow.com/questions/70531785/constraint-associated-type-of-a-generic-associated-type][rough edges]]
+- Haven't used it yet for standalone files. In competitive programming/Project
+  Euler, it's too much overhead to create a new project for each problem.
+- Casting between ~usize~, ~u32~, and ~i32~ all the time when using graphics libraries gets
+  boring fast.
+
+* Story time -- my programming language journey
+** Lego mindstorms
+- Age 11-13
+** LabVIEW
+- Age 13-15
+** C++
+- Age 15-26
+- Oh my god, it's so nice to just type what you want instead of
+  dragging/dropping boxes and wires
+- Started at C++11, solving Project Euler problems mostly
+- Only learned about references after a few years of using C++.
+- Never really used pointers in my own projects.
+- I couldn't tell you how to declare and initialize a native array.
+- Also, I still can't write ~new~
+- Big fanboy; watched ~half the CppCon videos after each edition.
+- Always excited for the next edition.
+** Python
+- Age 21-
+- BAPCtools, a 5kloc python project
+** Rust
+- Age 26-
+- Started summer 2021 with a small hobby project
+- Now used in AstarPA, a 14kloc pairwise alignment project
+- Read all the blogs on r/rust.
