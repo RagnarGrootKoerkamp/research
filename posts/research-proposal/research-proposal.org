@@ -1,0 +1,70 @@
+#+title: Research Proposal
+#+HUGO_SECTION: notes
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2022-12-12>
+#+author: Ragnar Groot Koerkamp
+
+* Research Proposal: understanding and speeding up pairwise alignment
+
+** Abstract
+/Pairwise alignment/ and /edit distance/ specifically is a problem that was
+first stated around 1968 [cite:@nw;@vintsyuk68].
+For sequences of length $n$, the original algorithm takes $O(n^2)$ quadratic time.
+In 1983, this was improved to $O(ns)$ for sequences with low edit distance $s$
+using Band-Doubling. At the same time, a further improvement to
+$O(n+s^2)$ expected runtime was presented using the diagonal-transition method [cite:@ukkonen83;@ukkonen85;@myers86].
+
+Since then, the focus has shifted away from improving the algorithmic complexity
+and towards more efficient implementations of the algorithms, using e.g.
+bit-packing, delta-encoding, and SIMD
+[cite:@myers99;@edlib;@difference-recurrence-relations].
+
+Meanwhile, the edit distance problem was also generalized to /affine costs/
+[cite:@gotoh]. It appears that the $O(n+s^2)$ diagonal transition algorithm was
+mostly forgotten, until recently it was generalized to also handle affine costs
+and implemented efficiently in WFA and BiWFA [cite:@wfa;@biwfa].
+This has sparked new interest in the field, and makes it possible to align
+significantly longer sequences when the error rate is low.
+
+In this PhD, my plan is twofold: First, I want to thoroughly understand existing
+algorithms, their implementations, and their performance on various types of datasets.
+Secondly, I want to design faster pairwise alignment algorithms by building on
+the A* framework first introduced in Astarix [cite:@astarix-1;@astarix-2].
+
+** Introduction and current state of research in the field
+** Goals of the thesis
+** Progress to date
+** Detailed work plan
+
+*** WP 1
+*** WP 2
+*** WP 3
+** Publication plan
+- A*PA: Pairwise alignment using A* ::
+   [cite/t:@astarpa]
+- A*PA v2: local doubling ::
+  See [[../../posts/local-doubling/local-doubling.org][this post on local doubling]]. This could give 10x speedup by using
+  an efficient implementation using bitpacking and SIMD on top of the low
+  complexity of the A* alignment algorithm.
+- A*PA v3: affine cost alignments ::
+  No work on this yet.
+- Pairwise Alignment benchmarking ::
+  See [[https://github.com/pairwise-alignment]].
+- Pairwise Alignment review paper ::
+  Convert [[../../posts/pairwise-alignment/][this post]] into a review paper.
+
+** Time schedule
+
+* Teaching
+- half a day a week
+- creating visualizations for the course ~Algorithms for Population Scale
+  Genomics~, see [[../alg-viz.org][here]].
+* Other duties
+- Unofficial: BAPC and NWERC jury member, ~1 day/week.
+* Study plan
+- TODO
+
+#+print_bibliography:
