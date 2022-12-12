@@ -11,7 +11,9 @@
 
 ** Abstract
 /Pairwise alignment/ and /edit distance/ specifically is a problem that was
-first stated around 1968 [cite:@nw;@vintsyuk68].
+first stated around 1968 [cite:@nw;@vintsyuk68]. It involves finding the minimal
+number of edits (substitutions, insertions, deletions) to transform one string/sequence
+into another.
 For sequences of length $n$, the original algorithm takes $O(n^2)$ quadratic time.
 In 1983, this was improved to $O(ns)$ for sequences with low edit distance $s$
 using Band-Doubling. At the same time, a further improvement to
@@ -23,38 +25,74 @@ bit-packing, delta-encoding, and SIMD
 [cite:@myers99;@edlib;@difference-recurrence-relations].
 
 Meanwhile, the edit distance problem was also generalized to /affine costs/
-[cite:@gotoh]. It appears that the $O(n+s^2)$ diagonal transition algorithm was
+[cite:@gotoh], which is a biologically more relevant distance metric when
+computing the /distance/ between DNA sequences.
+It appears that the $O(n+s^2)$ diagonal transition algorithm was
 mostly forgotten, until recently it was generalized to also handle affine costs
 and implemented efficiently in WFA and BiWFA [cite:@wfa;@biwfa].
-This has sparked new interest in the field, and makes it possible to align
-significantly longer sequences when the error rate is low.
+This has sparked new interest in pairwise alignment from the field of
+computational biology, and makes it possible to align significantly longer
+sequences provided they have a sufficiently low error rate.
 
-In this PhD, my plan is twofold: First, I want to thoroughly understand existing
-algorithms, their implementations, and their performance on various types of datasets.
+In this PhD, my plan is twofold:
+First, I want to thoroughly understand existing
+algorithms, their implementations, and their performance characteristics on
+various types of data.
 Secondly, I want to design faster pairwise alignment algorithms by building on
 the A* framework first introduced in Astarix [cite:@astarix-1;@astarix-2].
 
 ** Introduction and current state of research in the field
 ** Goals of the thesis
 ** Progress to date
-** Detailed work plan
+- A*PA preprint
+- Many blogs on this site. E.g.:
+  - Review post
+  - Local doubling
+  - Low memory WFA
+  - Remarks on WFA evaluations
 
-*** WP 1
-*** WP 2
-*** WP 3
-** Publication plan
-- A*PA: Pairwise alignment using A* ::
-   [cite/t:@astarpa]
+** Publication and work plan
+Work packages correspond to papers.
+
+- A*PA v1: Pairwise alignment using A* ::
+  - Goal: near-linear alignment of long sequences with low uniform error rate.
+  - Concepts introduced:
+    - A* for pairwise alignment
+    - /Seed heuristic/, building on [cite:@astarix-2]
+    - /Chaining/ seed heuristic
+    - /Gap/-chaining seed heuristic
+    - /Pruning/ heuristic
+    - Efficient implementation of (gap-)chaining seed heuristic using /contours/
+  - Preprint: [cite/t:@astarpa]
+  - Journal: To be submitted to BioInformatics and presented at RECOMB 2023.
+  - Time: 1y
 - A*PA v2: local doubling ::
-  See [[../../posts/local-doubling/local-doubling.org][this post on local doubling]]. This could give 10x speedup by using
-  an efficient implementation using bitpacking and SIMD on top of the low
-  complexity of the A* alignment algorithm.
+  - Goal: a 10x faster implementation of A*PA v1.
+  - Idea: See [[../../posts/local-doubling/local-doubling.org][this post on local doubling]]. This could give 10x speedup by using
+    an efficient implementation using bitpacking and SIMD on top of the low
+    complexity of the A* alignment algorithm.
+  - Status: the basic idea is implemented but needs further refining.
+  - Journal: BioInformatics
+  - Time: 6 months
 - A*PA v3: affine cost alignments ::
-  No work on this yet.
+  - Goal: Generalize the A* heuristics to affine-cost alignments.
+  - Status: No work on this yet. It seems doable but needs a time investment to
+    figure out the details. Likely the implementation will need 3 /layers/ of
+    contours datastructures, similar to how other affine-cost alignment
+    algorithms use 3 layers.
+  - Journal: BioInformatics
+  - Time: 6 months
 - Pairwise Alignment benchmarking ::
-  See [[https://github.com/pairwise-alignment]].
+  - Goal: Fill in the gaps in benchmarks in existing papers.
+  - Status: Work in progress at [[https://github.com/pairwise-alignment]].
+  - Journal: ?
+  - Time: 3 months
 - Pairwise Alignment review paper ::
-  Convert [[../../posts/pairwise-alignment/][this post]] into a review paper.
+  - Goal: A thorough review of existing algorithms that form the basis of A*PA
+    and its variants.
+  - Status: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
+  - Journal: Theoretical Computer Science?
+  - Time: 3 months
 
 ** Time schedule
 
