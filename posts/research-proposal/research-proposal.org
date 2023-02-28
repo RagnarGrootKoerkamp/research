@@ -16,12 +16,15 @@
 
 # LATEX OPTIONS
 {{{if-latex(#+options: title:nil toc:nil)}}}
+{{{if-latex(#+cite_export: biblatex authoryear)}}}
 #+latex_class: article
 #+latex_class_options: [11pt,english,a4paper]
 #+latex_header: \usepackage[left=1in,right=1in,top=0.75in,bottom=0.75in]{geometry}
+#+latex_header: \usepackage[capitalize,noabbrev]{cleveref}
 #+latex_engraved_theme:
 #+latex_compiler: pdflatex
 #+begin_export latex
+\renewcommand{\ref}{\cref}
 \begin{titlepage}
 \center % Center everything on the page
 \textsc{\LARGE Ph.D. Doctoral plan}\\[1.5cm]
@@ -171,15 +174,7 @@ The main goals of this thesis fall into two categories:
 
     Secondly, a thorough benchmark comparing these algorithms and implementations
     does currently not exist, but is needed to understand the trade-offs between
-    techniques and improve on the state-of-the-art.
-
-    For example, Edlib [cite:@edlib] lacks a
-    comparison on non-random data, whereas the $O(n+s^2)$ WFA [cite:@wfa] is only
-    benchmarked against $O(n^2)$ algorithms for exact affine-cost alignment, and not
-    against $O(ns)$ algorithms. Furthermore, unit-cost alignment and affine-cost
-    alignment are usually considered as distinct problems, and no comparison was
-    made about the performance penalty of switching from simpler unit-cost
-    alignments to more advanced affine costs.
+    techniques and alignment parameters and improve on the state-of-the-art.
   - Visualization :: /Visualize new and existing algorithms./
 
     Visualizations make algorithms much easier to understand, explain, and teach, and
@@ -281,19 +276,20 @@ other aligners for sequences of length $10^7$ bp ([[scaling]]).
 
 #+label: scaling
 #+attr_html: :class inset large
+#+ATTR_LATEX: :width 0.5\textwidth
 #+caption: Runtime scaling of A*PA with seed heuristic (SH) and chaining seed heuristic (CSH) on random sequence-pairs of given length with constant uniform error rate $5\%$.
 [[file:scaling.png]]
 
 ** Detailed work plan
-The work is split over the following $5$ (TODO) concrete projects, ordered by
+The work is split over the following $9$ concrete projects, ordered by
 estimated order of completion.
 
 *** WP1: A*PA v1: initial version
-A*PA introduces the seed heuristic [cite:@astarix-2] ([[astarpa]] (a)) that provides a lower bound
-on the edit distance between (the suffixes of) two sequences by counting the
-number of /seeds/ without /matches/: for each seed (disjoint substring of
-sequence $A$) that does not occur in sequence $B$, there must be at least $1$
-edit to turn $A$ into $B$.
+A*PA [cite:@astarpa] introduces the seed heuristic of [cite/t:@astarix-2]
+([[astarpa]] a) that provides a lower bound on the edit distance between (the
+suffixes of) two sequences by counting the number of /seeds/ without /matches/:
+for each seed (disjoint substring of sequence $A$) that does not occur in
+sequence $B$, there must be at least $1$ edit to turn $A$ into $B$.
 
 #+label: astarpa
 #+attr_html: :class inset large
@@ -318,68 +314,184 @@ A*PA extends this in a few ways. See the preprint for more details.
 This results in near-linear scaling ([[scaling]]) on aligning long sequences with low constant uniform error
 rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
 *** WP2: Visualizing aligners
+There are many existing algorithms for pairwise alignment, many of which are
+more than 30 years old. Some papers [cite:@ukkonen85;@block-aligner] contain
+manual figures depicting the working of an algorithm, but other papers do not
+[cite:@edlib;@wfa]. This limits the quick intuitive understanding of such
+algorithms. Since pairwise alignment happens on a 2D DP grid it allows for
+easy-to-understand visualizations where fewer coloured pixels (visited states)
+usually imply faster algorithms. This not only makes it easier to teach these algorithms
+to students but also helps with debugging and improving performance: an
+image makes it easy to understand the structure of an alignment and to spot
+bottlenecks in algorithms.
 
 *** WP3: Benchmarking aligners
- - Motivation :: Fill in the gaps in benchmarks in existing papers.
-   None of the popular existing aligners is thoroughly benchmarked: Edlib only
-   contains a table for long sequences; WFA and BiWFA do not compare against a $O(ns)$
-   algorithms for affine-cost alignments (see
-   [[../wfa-edlib-perf/wfa-edlib-perf.org][this post]]); KSW2 only implements the $O(n^2)$
-   algorithm even though the $O(ns)$ algorithm is a trivial modification.
- - Risk :: Very low. Mostly engineering.
+A good understanding of the performance trade-offs of existing aligners is
+needed in order to improve on them.
+While all recent papers presenting aligners
+contain benchmarks comparing them in some specific setting,
+there is no thorough recent overview of tools that compares runtime and accuracy on all of the
+following properties:
+- input data, which can be either random or human, and both can have different
+  types of errors,
+- error rate,
+- sequence length,
+- cost model: unit costs, linear costs, or affine costs,
+- algorithm parameters,
+- heuristics for approximate results.
+
+For example, Edlib [cite:@edlib] lacks a comparison on non-random data, whereas
+the $O(n+s^2)$ expected runtime WFA [cite:@wfa] is only benchmarked against
+$O(n^2)$ algorithms for exact affine-cost alignment, and not against $O(ns)$
+algorithms. In fact, no efficient $O(ns)$ affine-cost aligner had been
+implemented until Daniel Liu and I recently improved KSW2. Furthermore,
+unit-cost alignment and affine-cost alignment are usually considered as distinct
+problems, and no comparison has been made about the performance penalty of
+switching from the simpler unit-cost alignments to more advanced affine costs.
 *** WP4: Theory review
- - Motivation :: The most recent review of pairwise alignment algorithms is
-   [cite/t:@navarro01]. Since computer hardware has improved significantly
-   since then, the time is right for a new review summarizing both the
-   various algorithms and implementation strategies used in modern pairwise
-   aligners.
- - Status :: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
- - Risk :: Very low. Most of the insight is already gathered -- it just needs
-   to be written down.
+There is no review paper of exact global alignment methods.
+[cite/t:@navarro01] seems to be the most relevant,
+but focuses on semi-global alignment (/approximate string matching/) instead.
+Either way, there has been a lot of progress since
+that paper was published:
+- computer hardware has improved, allowing for SIMD based methods,
+- new recurrence relations have been found [cite:@difference-recurrence-relations],
+- new algorithms have been implemented (KSW2, WFA, Edlib, block aligner).
+Thus, the time is right for a new review summarizing both the
+various algorithms and implementation strategies used in modern pairwise
+aligners.
+This would also include a discussion of implicit previous uses of A* and
+heuristics, and how changing to an equivalent cost model can have an equivalent
+effect to using a heuristic.
 *** WP5: A*PA v2: efficient implementation
-One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
-band-doubling technique used by Edlib [cite:@edlib], it is possible to
-efficiently process states column-by-column and revisit previous columns when
-it turns out more states need to be computed. Using this it should be possible
-to compute not too many more states than those visited by A*, but using a much
-more efficient computation for each state.
+The biggest bottleneck of the current A*-based implementation is the need to
+store information for each visited state in a hashmap and priority queue.
+Each visited state has to go through the following process:
+1. Check if it was already expanded before in the hashmap.
+2. Evaluate the heuristic.
+3. Push it on the priority queue.
+4. Pop it from the priority queue.
+5. Evaluate $h$ again.
+6. Update the hashmap.
 
-I have written about multiple ideas to speed up the current algorithm:
- - The concept of /computational volumes/ [cite:@spouge89] seems generally
-   useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
-   heuristic based on a guess for an optimal alignment which can then be used
-   to implement A* more efficiently. This could be used as a second step after a
-   faster approximate alignment algorithm to prove the correctness of the
-   alignment found.
- - One of the drawbacks of the A* algorithm is that is explores DP states in an
-   unpredictable order. The Needleman-Wunsch algorithm processes states
-   column by column which is very efficient for bit-packing and SIMD approaches.
-   A* on the other hand pushes each state on a priority queue and pops them in
-   order of distance. Together with the evaluation of the heuristic for every
-   state this significantly slows down the implementation.
+It turns out that this is up to $100$ times slower per state than Edlib, which
+only stored $2$ bits per state and can compute $32$ states at a time using
+bit-packing.
 
- - Goal :: a 10x faster implementation of A*PA v1 exploiting bit-packing and/or SIMD.
- - Motivation :: Also see the previous section on current progress. While A* has a
-   great complexity, like Dijkstra's the implementation of the algorithm is not very efficient
-   due to priority queues and unpredictable memory access patterns. Similar to
-   how band-doubling improves Dijkstra's algorithm, [[../local-doubling/local-doubling.org][local doubling]] should allow
-   for an up to 10x more efficient implementation while keeping the complexity of A*PA.
- - Status :: The basic idea is implemented but it needs further refinement.
- - Risk :: Medium.
+To speed up A*PA, it will be needed to compute multiple states at once so that
+SIMD can be used.
+One way this could work is /local doubling/.
+Similar to the band-doubling technique introduced by Ukkonen and used by Edlib
+[cite:@ukkonen85;@edlib], it is possible to efficiently process states
+column-by-column and revisit previous columns when it turns out more states need
+to be computed.
+
+It works by choosing some threshold $f$ and computing all states $u$ with $f(u)
+:= g(u) + h(u) \leq f$ from left to right (column by column). When a column has
+no states with $f(u) \leq f$, this means that the distance between the two
+strings is more than $f$, and the band must grow. Ignoring pruning, this would
+work roughly as follows:
+1. For each column $i$ store the last value of $f_i$, which starts at the value
+   of the heuristic in $0$, and
+   the last /increment/ $\Delta_i$ which starts at $1$.
+2. For increasing $i$ starting at $0$, find the range of
+   column $i$ with $f(u) \leq f_i$ and compute it efficiently using SIMD.
+3. As soon as the range is empty for some column, /backtrack/ and double the band for
+   previous columns:
+   1. For $j$ going down from $i-1$, add $\Delta_{j}$ to $f_{j}$ and double $\Delta_{j}$.
+   2. When $f_{j} \leq f_{j-1}$, stop decreasing $j$.
+   3. Now continue with step 2, increasing $i$ starting at $i=j$.
+
+The result of this process can be seen in [[local-doubling]]. Note that this does
+not yet account for pruning, where some difficulties remain to be solved. In
+particular, the algorithm relies on the fact that doubling $\Delta_i$ roughly
+doubles the computed band. Since pruning changes the value of the heuristic,
+this is not true anymore, and the band often grows only slightly. This breaks
+the exponential doubling and hence causes unnecessarily large runtimes. A
+possible way to improve this could be enforce at least a doubling of
+the computed band.
+
+In the current implementation, computing the heuristic at the top and bottom of
+each band (to find the range where $f(u) \leq f_i$) and storing the computed
+values for each column still require a lot of overhead. Using /blocks of
+columns/ as in block aligner [cite:@block-aligner] could significantly reduce
+this, since then the bookkeeping is only needed every $8$ or $32$ columns.
+
+#+label: local-doubling
+#+attr_html: :class inset
+#+ATTR_LATEX: :width 0.4\textwidth
+#+caption: Expanded states with local doubling.
+[[file:local-doubling.png]]
+
+It is still an open problem to find an efficient doubling strategy when pruning
+is enabled, but even without that or other optimizations this method has already
+shown up to $5\times$ speedups, and I expect that a solution to the pruning will
+be found.
+
 *** WP6: Affine costs
- - Goal :: Generalize the A* heuristics to affine-cost alignments.
- - Motivation :: Similar to how WFA [cite:@wfa] generalized the
-   diagonal-transition method [cite:@ukkonen85;@myers86] to affine gap-costs,
-   it would be nice to generalize A*PA to affine gap-costs as well. This makes
-   it more applicable for aligning biological sequences.
- - Status :: No work on this yet. It seems doable but needs a time investment to
-   figure out the details. Likely the implementation will need 3 /layers/ of
-   contours datastructures, similar to how other affine-cost alignment
-   algorithms use 3 layers.
- - Risk :: Medium. I will need to come up with an efficient implementation.
+Similar to how WFA [cite:@wfa] generalized the diagonal-transition method
+[cite:@ukkonen85;@myers86] to affine gap-costs, it would increase the
+applicability of A*PA can be generalized to affine gap-costs as well.
+
+There are two parts to this. First, the underlying alignment graph needs to be
+changed to include multiple /layers/, as introduced by [cite:@gotoh] and used by
+[cite:@wfa]. This is straightforward and can be reused from the re-implementation
+of Needleman-Wunsch for affine-cost alignments.
+
+Secondly, and more challenging, the heuristic needs to be updated to account for
+the gap-open costs. One option would be to simply omit the gap-open costs from
+the heuristic and reuse the existing implementation for unit-costs, but this
+limits the accuracy. In particular when the gap-open cost is large, at least $4$
+in case of substitution and extend cost $1$, the heuristic can become much
+stronger and can correctly predict the long indels. This will make aligning
+sequences with such long indels much faster.
+
+The main hurdle to be taken is to efficiently implement the updated computation.
+Having $3$ (or more) layers increases the number of cases that must be handled,
+and changes the specific structure of the chaining seed heuristic (CSH) and gap-cost
+chaining seed heuristic (GCSH) that we currently exploit for their relatively
+simple and efficient computation.
+
+Despite these complications, I expect that it will be possible efficiently
+compute the affine heuristics. It will probably require new, more complicated
+algorithms, but first experiments show that there is still a lot of structure in
+the /layers/ (see [cite/t:@astarpa]) of the heuristic.
+
 *** WP7: Ends-free alignment and mapping
+Besides global alignment, another very relevant problem is /semi-global
+alignment/, where one sequence is aligned to a subsequence of another sequence.
+This is particularly relevant in the context of /mapping/, where multiple
+/reads/ are semi-globally aligned to a single /reference/. This is particularly
+relevant in /genome assembly/, where a genome is being assembled from a set of
+overlapping reads.
+
+There are many tools that solve this in an approximate (inexact) way, with
+Minimap [cite:@minimap;@minimap2] being one popular approach that merges
+multiple ideas such as hashing, as used in BLAST [cite:@blast], and MinHash
+sketching [cite:@minhash]. Exact methods such as [cite/t:@lv89] are not used,
+because they are much slower.
+
+Supporting semi-global and more generally end-free alignment in A*PA should be
+relatively straightforward by adjusting the heuristic to allow the alignment to
+end anywhere on the bottom and/or right border of the alignment grid, instead of
+only in the exact bottom-right corner.
+
+For mapping, the goal is to align multiple short reads (length $n$) to a single
+much longer reference (length $m\gg n$) in time near-linear in $n$, as opposed
+to time near-linear in $n+m$.  This will require new ways to find seeds and
+matches, as the reference can only be indexed once up-front, and having $O(m)$
+matches must be prevented. Furthermore this will require ways to ensure that
+aligning the read is only attempted around matches. In a way, the building of
+the heuristic and the underlying alignment graph must be /lazy/ to ensure that
+no redundant work is done.
+
+This will likely require significant updates to the A*PA infrastructure that
+cannot be foreseen right now.
+
 *** WP8: Further extension and open ended research
+When above things don't work out, here's more options.
 This open ended research could be on various topics:
+
  - Further exploration of existing ideas ::
    I wrote a number of blog posts around ideas that could be explored more:
    - [[../alignment-scores-transform/alignment-scores-transform.org][A more efficient match-bonus transformation for WFA]] for a potential
@@ -388,6 +500,13 @@ This open ended research could be on various topics:
      A* to use less memory as well, where BiWFA is not possible.
    - [[../speeding-up-astar/speeding-up-astar.org][Faster A* using /pre-pruning/]]: guessing a near-optimal alignment can
      improve the heuristic and possibly speed up the exact A* alignment.
+   - The concept of /computational volumes/ [cite:@spouge89] seems generally
+     useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
+     heuristic based on a guess for an optimal alignment which can then be used
+     to implement A* more efficiently. This could be used as a second step after a
+     faster approximate alignment algorithm to prove the correctness of the
+     alignment found.
+
  - Approximate alignment using A* ::
    So far all research has been into exact alignment methods. In practice, many
    people use heuristic methods instead. Giving up on the exactness may lead to
@@ -419,8 +538,6 @@ This open ended research could be on various topics:
 *** WP9: Thesis writing
 I will end my PhD by writing a thesis that covers all results from the work
 packages above.
-
-*** TODO Assess risks and make backup plans
 
 ** Publication plan
 I plan to write the following papers, to be submitted to BioInformatics or
