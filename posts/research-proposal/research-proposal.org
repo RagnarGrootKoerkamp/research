@@ -1,13 +1,67 @@
-#+title: [WIP] Doctoral Plan
+#+title: Doctoral plan
+#+subtitle: Near-linear exact pairwise alignment
 #+HUGO_SECTION: notes
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
 #+hugo_front_matter_key_replace: author>authors
-#+toc: headlines 3
 #+date: <2022-12-12>
 #+author: Ragnar Groot Koerkamp
 
-* Doctoral Plan: Near-linear exact global pairwise alignment
+#+MACRO: if-latex (eval (if (org-export-derived-backend-p org-export-current-backend 'latex) $1 ""))
+#+MACRO: if-html (eval (if (org-export-derived-backend-p org-export-current-backend 'html) $1 ""))
+
+
+# HTML OPTIONS
+{{{if-html(#+toc: headlines 3)}}}
+
+# LATEX OPTIONS
+{{{if-latex(#+options: title:nil toc:nil)}}}
+#+latex_class: article
+#+latex_class_options: [11pt,english,a4paper]
+#+latex_header: \usepackage[left=1in,right=1in,top=0.75in,bottom=0.75in]{geometry}
+#+latex_engraved_theme:
+#+latex_compiler: pdflatex
+#+begin_export latex
+\begin{titlepage}
+\center % Center everything on the page
+\textsc{\LARGE Ph.D. Doctoral plan}\\[1.5cm]
+\setlength{\baselineskip}{25pt}
+{ \huge \bfseries Near-linear exact pairwise alignment}
+
+\vspace{1.5cm}
+
+\begin{minipage}{0.35\textwidth}
+\begin{flushleft} \large
+\emph{Ph.D. Candidate:}\\
+Ragnar \textsc{Groot Koerkamp} \\
+\emph{21-961-677}
+\end{flushleft}
+\end{minipage}
+~
+\begin{minipage}{0.34\textwidth}
+\begin{center} \large
+\emph{Supervisor:} \\
+Prof. Dr. Gunnar  \textsc{R\"{a}tsch} \\
+\phantom{}
+\end{center}
+\end{minipage}
+~
+\begin{minipage}{0.25\textwidth}
+\begin{flushright} \large
+\emph{Second advisor:} \\
+Dr. Erik  \textsc{Garrison} \\
+\phantom{}
+\end{flushright}
+\end{minipage}\\[4cm]
+\textsc{ETH Z\"{u}rich} \\
+Department of Computer Science\\
+Biomedical Informatics Group\\
+\emph{Started:} October 2021\\
+\vfill
+\end{titlepage}
+#+end_export
+
+* Research Proposal: Near-linear exact pairwise alignment
 
 ** Abstract
 /Pairwise alignment/ and /edit distance/ specifically is a problem that was
@@ -35,14 +89,20 @@ This has sparked new interest in pairwise alignment from the field of
 computational biology, and makes it possible to align significantly longer
 sequences provided they have a sufficiently low error rate.
 
-In this PhD, my plan is twofold:
-First, I want to thoroughly understand existing
+In this PhD, I first want to thoroughly understand existing
 algorithms, their implementations, and their performance characteristics on
 various types of data.
-Secondly, I want to design efficient near-linear exact global pairwise alignment
+Then, the goal is to design efficient near-linear exact global pairwise alignment
 algorithms by building on the A* framework first introduced in Astarix
-[cite:@astarix-1;@astarix-2] and combining this with the implementations of e.g.
+[cite:@astarix-1;@astarix-2] and combining this with the implementation efficiency of
 WFA and Edlib.
+
+A*PA has already shown over $200\times$ speedup over these tools on $10^7$ bp
+long sequences with uniform errors. However, on alignments with long indels or
+too high error rate A*PA is currently slower because it needs $\sim 100\times$
+more time per visited state than SIMD-based approaches. Future iterations are
+expected to decrease this gap and lead to an aligner that outperforms
+state-of-the-art methods by a factor $10\times$ on various types of data.
 
 ** Introduction and current state of research in the field
 
@@ -57,7 +117,7 @@ biological applications have always been a motivation to develop faster
 algorithms to solve this problem:
 - the original $O(n^2)$ Needleman-Wunsch algorithm [cite:@nw;@sellers] that is
   quadratic in the sequence length $n$;
-- the $O(ns)$ Dijkstra's algorithm that is faster the edit distance $s$ is small;
+- the $O(ns)$ Dijkstra's algorithm that is faster when the edit distance $s$ is small;
 - the $O(ns)$ band-doubling algorithm [cite:@ukkonen85] that allows a much more
   efficient implementation;
 - the even faster $O(n+s^2)$ expected runtime diagonal-transition algorithm [cite:@ukkonen85;@myers86].
@@ -69,98 +129,167 @@ biological mutations.
 
 In recent years DNA sequencing has advanced rapidly and increasingly
 longer DNA sequences are being sequenced and analysed. Now that so called
-/long reads/ are reaching lengths well over $10k$ base pairs (bp), even up to $100k$
+/long reads/ are reaching lengths well over $10k$ base pairs, even up to $100k$
 bp for some sequencing techniques, the classical quadratic algorithms do not
 suffice anymore. This has caused a few lines of research:
 1. The Needleman-Wunsch and band-doubling algorithms have been improved using
    /bit-packing/ and /delta encoding/, where multiple DP states are stored and
-   computed in a single computer word [cite:@edlib;@difference-recurrence-relations].
+   computed in a single computer word
+   [cite:@myers99;@difference-recurrence-relations], as implemented by Edlib [cite:@edlib].
 2. Advances in hardware have further enabled more efficient
-   implementations of the existing algorithms, using better data layouts and
-   SIMD [cite:@parasail;@wfa] and GPUs [cite:@wfa-gpu].
+   implementations of the existing algorithms using better data layouts and
+   SIMD, as used by Parasail [cite:@parasail], WFA [cite:@wfa], WFA-GPU
+   [cite:@wfa-gpu], and block aligner [cite:@block-aligner].
 3. Many inexact (heuristic) methods have been proposed to speed up alignment
    significantly, at the cost of not having a guarantee that the returned
    alignment is optimal.
 
 Despite these advances, the fastest exact pairwise alignment algorithms still
 scale quadratically with sequence length on data with a constant error rate.
-Furthermore, there is no benchmark comparing all the recently developed tools
-and algorithms on varying types of data. For example, Edlib [cite:@edlib] lacks a
-comparison on non-random data, whereas the $O(n+s^2)$ WFA [cite:@wfa] is only
-benchmarked against $O(n^2)$ algorithms for exact affine-cost alignment, and not
-against $O(ns)$ algorithms (see also [[../wfa-edlib-perf/wfa-edlib-perf.org][this blog post]]).
 
 My research starts with the recent introduction of A* to sequence-to-graph
 alignment [cite:@astarix-2; @astarix-1]. We applied similar ideas to pairwise
-alignment, and it turns out A* is able to lower the runtime complexity to
-near-linear on sequences with a low uniform error rate [cite:@astarpa].
-
+alignment, and it turns out that A* with some additional techniques is able to
+lower the runtime complexity from quadratic to near-linear on sequences with a
+low uniform error rate [cite:@astarpa].
 
 ** Goals of the thesis
+Here I list the main goals of this thesis. They are discussed in more detail in
+[[*Detailed work plan]].
 
-The goal of this thesis is twofold.
+The main goals of this thesis fall into two categories:
+- Comparing existing methods :: Understand, analyse, and compare existing
+  alignment algorithms, implementation techniques, and tools.
+  - Theory :: /Conceptually understand existing algorithms and techniques./
 
-First, I want to obtain a thorough understanding of all existing algorithms and
-implementations, both on a conceptual and practical level. Many different
-algorithms and implementation techniques are
-used, and it is not a priory clear what the benefits of each method are. As an
-example, the trade-off between the very efficient $O(ns)$ band-doubling
-algorithm and slightly less efficient $O(n+s^2)$ diagonal transition algorithm
-is currently not clear. Further, a good overview of existing methods will be
-needed to develop new algorithms with a competitive performance.
+    First, I want to obtain a thorough understanding of all existing algorithms and
+    implementations on a conceptual level.
+    As listed in the introduction, there are multiple different existing algorithms
+    (DP, Dijkstra, band-doubling, diagonal-transition), and each come with their own
+    possible optimizations (SIMD, difference-recurrences, bit-packing).
+  - Practice :: /Benchmark existing tools/implementations on various types of data./
 
-The goals of this first part are to 1) write a review paper of existing algorithms
-and methods, and 2) to develop a framework to benchmark existing and new
-aligners and write a paper on the results of these benchmarks.
+    Secondly, a thorough benchmark comparing these algorithms and implementations
+    does currently not exist, but is needed to understand the trade-offs between
+    techniques and improve on the state-of-the-art.
 
-Secondly, I want to develop new faster algorithms for pairwise alignment by
-using A* and merging it with existing techniques. This will allow for aligning
-longer and more divergent sequences in limited time.
+    For example, Edlib [cite:@edlib] lacks a
+    comparison on non-random data, whereas the $O(n+s^2)$ WFA [cite:@wfa] is only
+    benchmarked against $O(n^2)$ algorithms for exact affine-cost alignment, and not
+    against $O(ns)$ algorithms. Furthermore, unit-cost alignment and affine-cost
+    alignment are usually considered as distinct problems, and no comparison was
+    made about the performance penalty of switching from simpler unit-cost
+    alignments to more advanced affine costs.
+  - Visualization :: /Visualize new and existing algorithms./
 
-Concretely, this part consists of a first paper [cite/t:@astarpa] introducing A*
-for pairwise alignment, and will consist of a number of additional papers
-improving the efficiency of the implementation and increasing the scope to
-affine-cost alignments.
+    Visualizations make algorithms much easier to understand, explain, and teach, and
+    can even help with comparing performance of difference methods and debugging.
 
 
-** Progress in first year of PhD
-Reading the existing literature has lead to multiple blogs posts, including
-[[../posts/pairwise-alignment][a summary]] of many relevant papers and algorithms on pairwise alignment and
-multiple ideas to improve WFA
-(e.g. [[../linear-memory-wfa/linear-memory-wfa.org][Linear memory WFA?]], [[../wfa-variations/wfa-variations.org][Variations on the WFA recursion]], [[../diamond-optimization/diamond-optimization.org][Diamond optimization]],
-[[../alignment-scores-transform/alignment-scores-transform.org][Transforming match bonus into cost]], [[../biwfa-meeting-condition/biwfa-meeting-condition.org][The BiWFA meeting condition]], and [[https://github.com/smarco/WFA2-lib/issues/8][suggesting
-BiWFA]]).
+- New methods :: Develop A*PA, a new near-linear algorithm and implementation for exact
+  pairwise alignment that is $10\times$ faster than other methods on most types
+  of input data.
+  - A*PA v1: initial version :: Apply the seed heuristic of Astarix
+    [cite:@astarix-2] to exact global pairwise alignment and extend it with
+    chaining, gap-costs, pruning, and diagonal-transition.
+  - A*PA v2: efficient implementation :: Speed up the implementation using
+    SIMD. This merges ideas from block aligner [cite:@block-aligner] and
+    /global/ band-doubling [cite:@ukkonen85] into /local/ column- or block-based doubling.
+  - Scope: affine costs :: Generalize the scope to affine-cost alignments.
+    This will require new ways to efficiently compute the heuristic due to the
+    more complex cost-model.
+  - Scope: ends-free alignment and mapping :: Support semi-global and extension
+    alignment, and support efficiently aligning multiple reads against a single
+    reference.
+  - Further extensions :: A non-admissible heuristic could lead to faster
+    approximate algorithms. Alternatively, a guessed inexact alignment could
+    speed up finding a correct alignment or proving it is correct.
 
-The [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][A*PA]] project has already shown promising results with linear runtime scaling
+Lastly, there are many other interesting problems such as assembly, RNA folding,
+and possibly applying pruning to real-world route planning, which fall in a
+category of *open ended research*, if time permits.
+
+*** Impact
+# Citations?
+Many types of pairwise alignment are used in computational biology. Many
+inexact (heuristic) approaches have been developed to keep alignments
+sufficiently fast given the increasing size of sequences that are being aligned and
+the increasing amount of biological data available. A faster exact algorithm
+reduces the need to fall back to inexact methods, and reduces the need to accept
+the possibility of suboptimal alignments.
+
+** Progress to date
+*Theory:* Reading the existing literature has lead to multiple blogs posts collecting
+information and ideas. This includes
+[[https://curiouscoding.nl/posts/pairwise-alignment/][a systematic overview]] of over 20 algorithms and papers on pairwise alignment,
+including a table comparing them and illustrations of the parameters and algorithms.
+
+The literature also sparked multiple ideas and smaller observations regarding WFA:
+- I [[https://github.com/smarco/WFA2-lib/issues/8][suggested]] using divide and conquer [cite:@hirschberg75] for WFA, which
+  turned out to be already in development as BiWFA, and found a [[https://github.com/smarco/BiWFA-paper/issues/8][related bug]] in
+  the preprint [cite:@biwfa].
+- [[https://curiouscoding.nl/posts/linear-memory-wfa/][Ideas]] to reduce the memory usage by WFA and other algorithms needed for tracebacks.
+  In essence, the tree of paths to the last front is very sparse, and typically
+  requires much less memory to store than the full set of wavefronts.
+- Some further notes regarding [[https://curiouscoding.nl/posts/wfa-variations/][variants of the recursion]], [[https://curiouscoding.nl/posts/diamond-optimization/][reducing the number of
+  visited states]], and [[https://curiouscoding.nl/posts/alignment-scores-transform/][an improved way to handle match bonus]].
+
+*Benchmarking:* Together with Daniel Liu, I developed PaBench
+([[https://github.com/pairwise-alignment/pa-bench][github.com/pairwise-alignment/pa-bench]]), a tool to help benchmarking pairwise
+aligners. It provides a uniform interface to many existing aligners as part of
+the /runner/ binary, and contains an /orchestrator/ that can run a large number
+of alignment jobs as specified via a YAML configuration file. Possible
+configuration options are selecting the datasets to run on (files, directories,
+generated data, or downloaded data), which cost-model to use, and which aligners
+to run and their parameters. This makes it very quick and easy to generate plots
+such as [[gap_open_scaling]], showing that when aligning unrelated/independent
+sequences Edlib for unit-cost alignments is around $30\times$ faster than any
+affine alignment that includes a gap-open cost.
+
+#+label: gap_open_scaling
+#+attr_html: :class inset large
+#+caption: Runtime comparison between different aligners when aligning two complete independent random sequences, for various gap-open costs. The substitution and gap-extend cost are fixed to 1. Edlib only supports a gap-open cost of $0$.
+[[file:./gap_open_scaling_Independent.png]]
+
+*Visualization:*
+I wrote a visualizer to show the inner workings of A*PA and to help with
+debugging. The existing Needleman-Wunsch, band-doubling, and diagonal-transition
+algorithms were re-implemented to understand their inner workings and to make
+for easy visual comparisons, as shown in [[vis]].
+
+#+label: vis
+#+attr_html: :class inset large
+#+caption: Visualizations of (a) band-doubling (Edlib), (b) Dijkstra, (c) diagonal-transiton (WFA), (d) diagonal-transition with divide-and-conquer (BiWFA), and (e) A*PA.
+[[file:./vis.png]]
+
+*A*PA:*
+The first version of [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][A*PA]] has been implemented at
+[[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]] and is evaluated
+in a preprint [cite:@astarpa].
+The current codebase implements the following techniques:
+- /seed heuristic/ [cite:@astarix-2], the basis for the A* search,
+- /match-chaining/ to handle multiple matches,
+- /gap-costs/, to account for gaps between consecutive matches (not yet in preprint),
+- /inexact matches/, to handle larger error rates,
+- /match-pruning/, penalizing searching states that lag behind the tip of the search,
+- /diagonal-transition/, speeding up the search by skipping over states that are
+  not /farthest-reaching/ (not yet in preprint).
+
+Together this has already shown promising results with linear runtime scaling
 on sequences with a low uniform error rate, resulting in up to $250\times$ speedup over
-other aligners for sequences of length $10^6$ bp [cite:@astarpa].
-I have written about multiple ideas to speed up the current algorithm:
-- The concept of /computational volumes/ [cite:@spouge89] seems generally
-  useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
-  heuristic based on a guess for an optimal alignment which can then be used
-  to implement A* more efficiently. This could be used as a second step after a
-  faster approximate alignment algorithm to prove the correctness of the
-  alignment found.
-- One of the drawbacks of the A* algorithm is that is explores DP states in an
-  unpredictable order. The Needleman-Wunsch algorithm processes states
-  column by column which is very efficient for bit-packing and SIMD approaches.
-  A* on the other hand pushes each state on a priority queue and pops them in
-  order of distance. Together with the evaluation of the heuristic for every
-  state this significantly slows down the implementation.
+other aligners for sequences of length $10^7$ bp ([[scaling]]).
 
-  One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
-  band-doubling technique used by Edlib [cite:@edlib], it is possible to
-  efficiently process states column-by-column and revisit previous columns when
-  it turns out more states need to be computed. Using this it should be possible
-  to compute not too many more states than those visited by A*, but using a much
-  more efficient computation for each state.
+#+label: scaling
+#+attr_html: :class inset large
+#+caption: Runtime scaling of A*PA with seed heuristic (SH) and chaining seed heuristic (CSH) on random sequence-pairs of given length with constant uniform error rate $5\%$.
+[[file:scaling.png]]
 
-** Work plan
+** Detailed work plan
 The work is split over the following $5$ concrete projects, each corresponding to one paper.
 Projects are ordered by predicted order of completion. Following this are listed
 more uncertain and open ended projects.
 
-- A*PA v1: Pairwise alignment using A* ::
+- WP 1: A*PA v1: Pairwise alignment using A* ::
   - Result :: near-linear scaling on aligning $10^6$ long sequences with $5\%$ uniform error
     rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
   - Concepts introduced:
@@ -173,7 +302,8 @@ more uncertain and open ended projects.
   - Preprint :: [cite/t:@astarpa]
   - Journal :: To be submitted to BioInformatics and presented at RECOMB 2023.
   - Time :: 1 year
-- Pairwise Alignment benchmarking ::
+- WP 2: Pairwise Alignment benchmarking ::
+
   - Goal :: Exhaustive benchmarking of existing global pairwise aligners.
   - Motivation :: Fill in the gaps in benchmarks in existing papers.
     None of the popular existing aligners is thoroughly benchmarked: Edlib only
@@ -186,7 +316,29 @@ more uncertain and open ended projects.
   - Risk :: Very low. Mostly engineering.
   - Journal :: BioInformatics?
   - Time :: 4 months
-- A*PA v2: /local doubling/ ::
+- WP 3: A*PA v2: /local doubling/ ::
+
+  One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
+  band-doubling technique used by Edlib [cite:@edlib], it is possible to
+  efficiently process states column-by-column and revisit previous columns when
+  it turns out more states need to be computed. Using this it should be possible
+  to compute not too many more states than those visited by A*, but using a much
+  more efficient computation for each state.
+
+  I have written about multiple ideas to speed up the current algorithm:
+  - The concept of /computational volumes/ [cite:@spouge89] seems generally
+    useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
+    heuristic based on a guess for an optimal alignment which can then be used
+    to implement A* more efficiently. This could be used as a second step after a
+    faster approximate alignment algorithm to prove the correctness of the
+    alignment found.
+  - One of the drawbacks of the A* algorithm is that is explores DP states in an
+    unpredictable order. The Needleman-Wunsch algorithm processes states
+    column by column which is very efficient for bit-packing and SIMD approaches.
+    A* on the other hand pushes each state on a priority queue and pops them in
+    order of distance. Together with the evaluation of the heuristic for every
+    state this significantly slows down the implementation.
+
   - Goal :: a 10x faster implementation of A*PA v1 exploiting bit-packing and/or SIMD.
   - Motivation :: Also see the previous section on current progress. While A* has a
     great complexity, like Dijkstra's the implementation of the algorithm is not very efficient
@@ -197,7 +349,7 @@ more uncertain and open ended projects.
   - Risk :: Medium.
   - Journal :: BioInformatics
   - Time :: 6 months
-- Pairwise Alignment review paper ::
+- WP 4: Pairwise Alignment review paper ::
   - Goal :: A thorough review of existing algorithms that form the basis of A*PA
     and its variants.
   - Motivation :: The most recent review of pairwise alignment algorithms is
@@ -210,7 +362,7 @@ more uncertain and open ended projects.
     to be written down.
   - Journal :: Theoretical Computer Science?
   - Time :: 4 months
-- A*PA v3: affine cost alignments ::
+- WP 5: A*PA v3: affine cost alignments ::
   - Goal :: Generalize the A* heuristics to affine-cost alignments.
   - Motivation :: Similar to how WFA [cite:@wfa] generalized the
     diagonal-transition method [cite:@ukkonen85;@myers86] to affine gap-costs,
@@ -226,7 +378,7 @@ more uncertain and open ended projects.
 
 Together the projects above fill just below 3 years. The remaining time will be
 spent on open ended research and thesis writing.
-- Open ended research ::
+- WP 6: Open ended research ::
   This open ended research could be on various topics:
   - Further exploration of existing ideas ::
     I wrote a number of blog posts around ideas that could be explored more:
@@ -265,20 +417,68 @@ spent on open ended research and thesis writing.
   - Goal :: Read and think about various problems and see whether new ideas come up.
   - Risk :: High. It is unclear at this point what kind of results are to be expected.
   - Time :: 1 year
-- Thesis writing ::
+- WP 7: Thesis writing ::
   - Time :: 4 months
 
-* Teaching
-- ~0.5 day/week on average.
-- Created [[../alg-viz.org][visualizations]] and explanations ([[../suffix-array-construction/suffix-array-construction.org][suffix array construction]],
-  [[../bwt/bwt.org][Burrows-Wheeler transform]]) for the course ~Algorithms for Population Scale
-  Genomics~.
-* Other duties
-- Unofficial: BAPC and NWERC jury member, ~0.5 day/week.
-* Study plan
-Courses I plan to take:
-- SS23: Advanced Graph Algorithms and Optimization, 10ECTS
-- later: Academic paper writing
-- possibly: Randomized (graph) algorithms
+*** TODO Assess risks and make backup plans
+*** TODO WP for semi-global alignment and mapping
+
+** Publication plan
+*** TODO List publications per WP
+
+** Time schedule
+The planned time for each work package is listed in the figure below.
+
+# https://plantuml.com/gantt-diagram
+#+begin_src plantuml :file time-schedule.png
+@startgantt
+hide footbox
+projectscale quarterly
+Project starts 2021-10-01
+[PhD] starts 2021-10-01 and ends 2025-10-01
+[WP1: A*PA] starts 2021-10-01 and ends 2023-04-01
+[WP2: Benchmarking] starts 2022-11-01 and ends 2023-07-01
+[WP3: Local doubling] starts 2021-10-01 and ends 2023-04-01
+[WP4: A*PA v2] starts 2021-10-01 and ends 2023-04-01
+[WP5: A*PA v2] starts 2021-10-01 and ends 2023-04-01
+[WP6: A*PA v3] starts 2021-10-01 and ends 2023-04-01
+[WP7: Thesis] starts 2025-01-01 and ends 2025-10-01
+2023-04-01 to 2023-04-10 is colored black
+@endgantt
+#+end_src
+
+#+attr_html: :class inset
+#+RESULTS:
+[[file:time-schedule.png]]
 
 #+print_bibliography:
+
+* Teaching responsibilities
+Teaching will take half a day to a full day a week. So far I have been a TA for
+/Datastructures for Population Scale Genomics/ twice, and I plan to do this
+again in upcoming fall semesters. I have made multiple (interactive)
+[[../alg-viz.org][visualizations]] ([[../suffix-array-construction/suffix-array-construction.org][suffix array construction]], [[../bwt/bwt.org][Burrows-Wheeler transform]]) for this
+course that can be reused in next years.
+Currently I am helping with our groups seminar.
+
+* Other duties
+Outside my PhD time, I am involved in the BAPC and NWERC programming contests as
+a jury member.
+
+* Study plan
+I plan to take the following courses:
+
+| Course                                     | EC | Status             |
+|--------------------------------------------+----+--------------------|
+| Advanced Graph Algorithms and Optimization | 10 | Currently enrolled |
+| Academic paper writing                     |  2 | Later              |
+| Graph theory                               | 10 | Optionally         |
+
+* Signatures
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
+- Supervisor:
+- Second advisor:
+- Doctoral student:
+- Date: March 2 2023
