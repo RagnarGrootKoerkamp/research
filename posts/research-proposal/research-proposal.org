@@ -221,7 +221,7 @@ the possibility of suboptimal alignments.
 ** Progress to date
 *Theory:* Reading the existing literature has lead to multiple blogs posts collecting
 information and ideas. This includes
-[[https://curiouscoding.nl/posts/pairwise-alignment/][a systematic overview]] of over 20 algorithms and papers on pairwise alignment,
+[[https://curiouscoding.nl/posts/pairwise-alignment/][a systematic overview]] ([[https://curiouscoding.nl/posts/pairwise-alignment][curiouscoding.nl/posts/pairwise-alignment]]) of over 20 algorithms and papers on pairwise alignment,
 including a table comparing them and illustrations of the parameters and algorithms.
 
 The literature also sparked multiple ideas and smaller observations regarding WFA:
@@ -262,7 +262,7 @@ for easy visual comparisons, as shown in [[vis]].
 #+caption: Visualizations of (a) band-doubling (Edlib), (b) Dijkstra, (c) diagonal-transiton (WFA), (d) diagonal-transition with divide-and-conquer (BiWFA), and (e) A*PA.
 [[file:./vis.png]]
 
-*A*PA:*
+*A*PA v1:*
 The first version of [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][A*PA]] has been implemented at
 [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]] and is evaluated
 in a preprint [cite:@astarpa].
@@ -285,11 +285,10 @@ other aligners for sequences of length $10^7$ bp ([[scaling]]).
 [[file:scaling.png]]
 
 ** Detailed work plan
-The work is split over the following $5$ concrete projects, each corresponding to one paper.
-Projects are ordered by predicted order of completion. Following this are listed
-more uncertain and open ended projects.
+The work is split over the following $5$ (TODO) concrete projects, ordered by
+estimated order of completion.
 
-- WP 1: A*PA v1: Pairwise alignment using A* ::
+*** WP1: A*PA v1: initial version
   - Result :: near-linear scaling on aligning $10^6$ long sequences with $5\%$ uniform error
     rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
   - Concepts introduced:
@@ -302,8 +301,8 @@ more uncertain and open ended projects.
   - Preprint :: [cite/t:@astarpa]
   - Journal :: To be submitted to BioInformatics and presented at RECOMB 2023.
   - Time :: 1 year
-- WP 2: Pairwise Alignment benchmarking ::
-
+*** WP2: Visualizing aligners
+*** WP3: Benchmarking aligners
   - Goal :: Exhaustive benchmarking of existing global pairwise aligners.
   - Motivation :: Fill in the gaps in benchmarks in existing papers.
     None of the popular existing aligners is thoroughly benchmarked: Edlib only
@@ -316,8 +315,20 @@ more uncertain and open ended projects.
   - Risk :: Very low. Mostly engineering.
   - Journal :: BioInformatics?
   - Time :: 4 months
-- WP 3: A*PA v2: /local doubling/ ::
-
+*** WP4: Theory review
+  - Goal :: A thorough review of existing algorithms that form the basis of A*PA
+    and its variants.
+  - Motivation :: The most recent review of pairwise alignment algorithms is
+    [cite/t:@navarro01]. Since computer hardware has improved significantly
+    since then, the time is right for a new review summarizing both the
+    various algorithms and implementation strategies used in modern pairwise
+    aligners.
+  - Status :: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
+  - Risk :: Very low. Most of the insight is already gathered -- it just needs
+    to be written down.
+  - Journal :: Theoretical Computer Science?
+  - Time :: 4 months
+*** WP5: A*PA v2: efficient implementation
   One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
   band-doubling technique used by Edlib [cite:@edlib], it is possible to
   efficiently process states column-by-column and revisit previous columns when
@@ -349,20 +360,7 @@ more uncertain and open ended projects.
   - Risk :: Medium.
   - Journal :: BioInformatics
   - Time :: 6 months
-- WP 4: Pairwise Alignment review paper ::
-  - Goal :: A thorough review of existing algorithms that form the basis of A*PA
-    and its variants.
-  - Motivation :: The most recent review of pairwise alignment algorithms is
-    [cite/t:@navarro01]. Since computer hardware has improved significantly
-    since then, the time is right for a new review summarizing both the
-    various algorithms and implementation strategies used in modern pairwise
-    aligners.
-  - Status :: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
-  - Risk :: Very low. Most of the insight is already gathered -- it just needs
-    to be written down.
-  - Journal :: Theoretical Computer Science?
-  - Time :: 4 months
-- WP 5: A*PA v3: affine cost alignments ::
+*** WP6: Affine costs
   - Goal :: Generalize the A* heuristics to affine-cost alignments.
   - Motivation :: Similar to how WFA [cite:@wfa] generalized the
     diagonal-transition method [cite:@ukkonen85;@myers86] to affine gap-costs,
@@ -375,7 +373,8 @@ more uncertain and open ended projects.
   - Risk :: Medium. I will need to come up with an efficient implementation.
   - Journal :: BioInformatics
   - Time :: 6 months
-
+*** WP7: Ends-free alignment and mapping
+*** WP8: Further extension and open ended research
 Together the projects above fill just below 3 years. The remaining time will be
 spent on open ended research and thesis writing.
 - WP 6: Open ended research ::
@@ -417,14 +416,35 @@ spent on open ended research and thesis writing.
   - Goal :: Read and think about various problems and see whether new ideas come up.
   - Risk :: High. It is unclear at this point what kind of results are to be expected.
   - Time :: 1 year
-- WP 7: Thesis writing ::
+*** WP9: Thesis writing
   - Time :: 4 months
 
 *** TODO Assess risks and make backup plans
-*** TODO WP for semi-global alignment and mapping
 
 ** Publication plan
-*** TODO List publications per WP
+I plan to write the following papers, to be submitted to BioInformatics unless
+stated otherwise.
+- WP1: A*PA v1 :: This is work in progress and already available as preprint [cite:@astarpa], together with Pesho Ivanov
+- WP2: Visualization :: This will not be a standalone paper, but will be used to
+  create figures for other papers such as the A*PA paper and the theoretical
+  review of algorithms.
+- WP3: Benchmarking :: This will be a publication together with Daniel Liu
+  benchmarking existing and new aligners on various datasets. It will compare
+  both runtime and accuracy (for inexact methods).
+- WP4: Theory review :: This will be a publication that discusses algorithms and
+  optimizations used by the various tools, including theoretical
+  complexity analyses and methods for more efficient implementations. This may
+  be submitted to Theoretical Computer Science instead of BioInformatics, and
+  will be in collaboration with Pesho Ivanov.
+- WP5: A*PA v2: efficient implementation :: This will be a shorter paper that
+  builds on the v1 paper and speeds up A*PA significantly.
+- WP6: affine costs :: The results of this WP will likely be presented jointly
+  with either WP5 or WP7.
+- WP7: semi-global alignment :: This will be an incremental paper that compares
+  A*PA to other aligners for mapping and semi-global alignment.
+- WP8: extensions :: In case I find further optimizations and extensions for
+  A*PA, they will be collected into an additional paper, or possibly presented
+  together with the previous WPs.
 
 ** Time schedule
 The planned time for each work package is listed in the figure below.
@@ -436,14 +456,16 @@ hide footbox
 projectscale quarterly
 Project starts 2021-10-01
 [PhD] starts 2021-10-01 and ends 2025-10-01
-[WP1: A*PA] starts 2021-10-01 and ends 2023-04-01
-[WP2: Benchmarking] starts 2022-11-01 and ends 2023-07-01
-[WP3: Local doubling] starts 2021-10-01 and ends 2023-04-01
-[WP4: A*PA v2] starts 2021-10-01 and ends 2023-04-01
-[WP5: A*PA v2] starts 2021-10-01 and ends 2023-04-01
-[WP6: A*PA v3] starts 2021-10-01 and ends 2023-04-01
-[WP7: Thesis] starts 2025-01-01 and ends 2025-10-01
-2023-04-01 to 2023-04-10 is colored black
+[WP1: A*PA v1] starts 2021-10-01 and ends 2023-04-01
+[WP2: Visualization] starts 2022-07-01 and ends 2023-01-01
+[WP3: Benchmarking] starts 2022-11-01 and ends 2023-07-01
+[WP4: Theory review] starts 2022-01-01 and ends 2023-07-01
+[WP5: v2: efficient implementation] starts 2023-04-01 and ends 2023-10-01
+[WP6: affine costs] starts 2023-07-01 and ends 2024-01-01
+[WP7: semi-global alignment] starts 2023-10-01 and ends 2024-04-01
+[WP8: Extensions] starts 2024-01-01 and ends 2025-01-01
+[WP9: Thesis] starts 2025-01-01 and ends 2025-10-01
+2023-04-01 to 2023-04-07 is colored gray
 @endgantt
 #+end_src
 
