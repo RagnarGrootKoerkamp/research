@@ -289,141 +289,142 @@ The work is split over the following $5$ (TODO) concrete projects, ordered by
 estimated order of completion.
 
 *** WP1: A*PA v1: initial version
-  - Result :: near-linear scaling on aligning $10^6$ long sequences with $5\%$ uniform error
-    rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
-  - Concepts introduced:
-    - A* for pairwise alignment
-    - /Seed heuristic/, building on [cite/t:@astarix-2]
-    - /Chaining/ seed heuristic
-    - /Gap/-chaining seed heuristic
-    - /Pruning/ heuristic
-    - Efficient implementation of (gap-)chaining seed heuristic using /contours/
-  - Preprint :: [cite/t:@astarpa]
-  - Journal :: To be submitted to BioInformatics and presented at RECOMB 2023.
-  - Time :: 1 year
+A*PA introduces the seed heuristic [cite:@astarix-2] ([[astarpa]] (a)) that provides a lower bound
+on the edit distance between (the suffixes of) two sequences by counting the
+number of /seeds/ without /matches/: for each seed (disjoint substring of
+sequence $A$) that does not occur in sequence $B$, there must be at least $1$
+edit to turn $A$ into $B$.
+
+#+label: astarpa
+#+attr_html: :class inset large
+#+caption: The different heuristics and techniques introduced by A*PA.
+[[file:astarpa.png]]
+
+A*PA extends this in a few ways. See the preprint for more details.
+- First, it introduces /inexact matches/, where a /match/ is considered to be
+  any substring of $B$ that less than distance $r$ away from the seed. This
+  allows the A* to efficiently handle larger error rates.
+- The /chaining seed-heuristic/ (b) requires seed-matches to be in the same
+  order in $B$ as in $A$.
+- The /gap-cost chaining seed heuristic/ (c) additionally penalizes the
+  cost that must be made for indels between matches that are on different diagonals.
+- /Pruning/ is an additional technique that penalizes searching behind the /tip/
+  of the search. As soon as the start of a match is expanded, the match is not
+  needed anymore and can be removed. This makes the heuristic inconsistent, but
+  we prove that A* is still guaranteed to find an optimal path.
+- Lastly, we use an optimization similar to diagonal-transition so that only
+  /farthest-reaching states/ are expanded by the A*.
+
+This results in near-linear scaling ([[scaling]]) on aligning long sequences with low constant uniform error
+rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
 *** WP2: Visualizing aligners
+
 *** WP3: Benchmarking aligners
-  - Goal :: Exhaustive benchmarking of existing global pairwise aligners.
-  - Motivation :: Fill in the gaps in benchmarks in existing papers.
-    None of the popular existing aligners is thoroughly benchmarked: Edlib only
-    contains a table for long sequences; WFA and BiWFA do not compare against a $O(ns)$
-    algorithms for affine-cost alignments (see
-    [[../wfa-edlib-perf/wfa-edlib-perf.org][this post]]); KSW2 only implements the $O(n^2)$
-    algorithm even though the $O(ns)$ algorithm is a trivial modification.
-  - Status :: Work in progress at [[https://github.com/pairwise-alignment]], joint
-    work with Daniel Liu on the implementation and others for additional input.
-  - Risk :: Very low. Mostly engineering.
-  - Journal :: BioInformatics?
-  - Time :: 4 months
+ - Motivation :: Fill in the gaps in benchmarks in existing papers.
+   None of the popular existing aligners is thoroughly benchmarked: Edlib only
+   contains a table for long sequences; WFA and BiWFA do not compare against a $O(ns)$
+   algorithms for affine-cost alignments (see
+   [[../wfa-edlib-perf/wfa-edlib-perf.org][this post]]); KSW2 only implements the $O(n^2)$
+   algorithm even though the $O(ns)$ algorithm is a trivial modification.
+ - Risk :: Very low. Mostly engineering.
 *** WP4: Theory review
-  - Goal :: A thorough review of existing algorithms that form the basis of A*PA
-    and its variants.
-  - Motivation :: The most recent review of pairwise alignment algorithms is
-    [cite/t:@navarro01]. Since computer hardware has improved significantly
-    since then, the time is right for a new review summarizing both the
-    various algorithms and implementation strategies used in modern pairwise
-    aligners.
-  - Status :: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
-  - Risk :: Very low. Most of the insight is already gathered -- it just needs
-    to be written down.
-  - Journal :: Theoretical Computer Science?
-  - Time :: 4 months
+ - Motivation :: The most recent review of pairwise alignment algorithms is
+   [cite/t:@navarro01]. Since computer hardware has improved significantly
+   since then, the time is right for a new review summarizing both the
+   various algorithms and implementation strategies used in modern pairwise
+   aligners.
+ - Status :: Preliminary work done in [[../../posts/pairwise-alignment/][this review post]].
+ - Risk :: Very low. Most of the insight is already gathered -- it just needs
+   to be written down.
 *** WP5: A*PA v2: efficient implementation
-  One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
-  band-doubling technique used by Edlib [cite:@edlib], it is possible to
-  efficiently process states column-by-column and revisit previous columns when
-  it turns out more states need to be computed. Using this it should be possible
-  to compute not too many more states than those visited by A*, but using a much
-  more efficient computation for each state.
+One way to improve this may be [[../local-doubling/local-doubling.org][/local doubling/]]: similar to the
+band-doubling technique used by Edlib [cite:@edlib], it is possible to
+efficiently process states column-by-column and revisit previous columns when
+it turns out more states need to be computed. Using this it should be possible
+to compute not too many more states than those visited by A*, but using a much
+more efficient computation for each state.
 
-  I have written about multiple ideas to speed up the current algorithm:
-  - The concept of /computational volumes/ [cite:@spouge89] seems generally
-    useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
-    heuristic based on a guess for an optimal alignment which can then be used
-    to implement A* more efficiently. This could be used as a second step after a
-    faster approximate alignment algorithm to prove the correctness of the
-    alignment found.
-  - One of the drawbacks of the A* algorithm is that is explores DP states in an
-    unpredictable order. The Needleman-Wunsch algorithm processes states
-    column by column which is very efficient for bit-packing and SIMD approaches.
-    A* on the other hand pushes each state on a priority queue and pops them in
-    order of distance. Together with the evaluation of the heuristic for every
-    state this significantly slows down the implementation.
+I have written about multiple ideas to speed up the current algorithm:
+ - The concept of /computational volumes/ [cite:@spouge89] seems generally
+   useful, and suggested [[../speeding-up-astar/speeding-up-astar.org][/pre-pruning/]]: It may be possible to improve the
+   heuristic based on a guess for an optimal alignment which can then be used
+   to implement A* more efficiently. This could be used as a second step after a
+   faster approximate alignment algorithm to prove the correctness of the
+   alignment found.
+ - One of the drawbacks of the A* algorithm is that is explores DP states in an
+   unpredictable order. The Needleman-Wunsch algorithm processes states
+   column by column which is very efficient for bit-packing and SIMD approaches.
+   A* on the other hand pushes each state on a priority queue and pops them in
+   order of distance. Together with the evaluation of the heuristic for every
+   state this significantly slows down the implementation.
 
-  - Goal :: a 10x faster implementation of A*PA v1 exploiting bit-packing and/or SIMD.
-  - Motivation :: Also see the previous section on current progress. While A* has a
-    great complexity, like Dijkstra's the implementation of the algorithm is not very efficient
-    due to priority queues and unpredictable memory access patterns. Similar to
-    how band-doubling improves Dijkstra's algorithm, [[../local-doubling/local-doubling.org][local doubling]] should allow
-    for an up to 10x more efficient implementation while keeping the complexity of A*PA.
-  - Status :: The basic idea is implemented but it needs further refinement.
-  - Risk :: Medium.
-  - Journal :: BioInformatics
-  - Time :: 6 months
+ - Goal :: a 10x faster implementation of A*PA v1 exploiting bit-packing and/or SIMD.
+ - Motivation :: Also see the previous section on current progress. While A* has a
+   great complexity, like Dijkstra's the implementation of the algorithm is not very efficient
+   due to priority queues and unpredictable memory access patterns. Similar to
+   how band-doubling improves Dijkstra's algorithm, [[../local-doubling/local-doubling.org][local doubling]] should allow
+   for an up to 10x more efficient implementation while keeping the complexity of A*PA.
+ - Status :: The basic idea is implemented but it needs further refinement.
+ - Risk :: Medium.
 *** WP6: Affine costs
-  - Goal :: Generalize the A* heuristics to affine-cost alignments.
-  - Motivation :: Similar to how WFA [cite:@wfa] generalized the
-    diagonal-transition method [cite:@ukkonen85;@myers86] to affine gap-costs,
-    it would be nice to generalize A*PA to affine gap-costs as well. This makes
-    it more applicable for aligning biological sequences.
-  - Status :: No work on this yet. It seems doable but needs a time investment to
-    figure out the details. Likely the implementation will need 3 /layers/ of
-    contours datastructures, similar to how other affine-cost alignment
-    algorithms use 3 layers.
-  - Risk :: Medium. I will need to come up with an efficient implementation.
-  - Journal :: BioInformatics
-  - Time :: 6 months
+ - Goal :: Generalize the A* heuristics to affine-cost alignments.
+ - Motivation :: Similar to how WFA [cite:@wfa] generalized the
+   diagonal-transition method [cite:@ukkonen85;@myers86] to affine gap-costs,
+   it would be nice to generalize A*PA to affine gap-costs as well. This makes
+   it more applicable for aligning biological sequences.
+ - Status :: No work on this yet. It seems doable but needs a time investment to
+   figure out the details. Likely the implementation will need 3 /layers/ of
+   contours datastructures, similar to how other affine-cost alignment
+   algorithms use 3 layers.
+ - Risk :: Medium. I will need to come up with an efficient implementation.
 *** WP7: Ends-free alignment and mapping
 *** WP8: Further extension and open ended research
-Together the projects above fill just below 3 years. The remaining time will be
-spent on open ended research and thesis writing.
-- WP 6: Open ended research ::
-  This open ended research could be on various topics:
-  - Further exploration of existing ideas ::
-    I wrote a number of blog posts around ideas that could be explored more:
-    - [[../alignment-scores-transform/alignment-scores-transform.org][A more efficient match-bonus transformation for WFA]] for a potential
-      $2\times$ speedup in certain cases.
-    - [[../linear-memory-wfa/linear-memory-wfa.org][Reducing WFA memory usage]], possibly allowing diagonal-transition based
-      A* to use less memory as well, where BiWFA is not possible.
-    - [[../speeding-up-astar/speeding-up-astar.org][Faster A* using /pre-pruning/]]: guessing a near-optimal alignment can
-      improve the heuristic and possibly speed up the exact A* alignment.
-  - Approximate alignment using A* ::
-    So far all research has been into exact alignment methods. In practice, many
-    people use heuristic methods instead. Giving up on the exactness may lead to
-    a significant speedup.
-  - A* for RNA folding ::
-    This is a classical DP task that may be possible
-    to speed up. A week of exploring this didn't give easy results.
-  - Pruning A* heuristic for real-world route planning ::
-    The pruning technique seems to be new and may be useful in other domains
-    where A* and heuristics are used. Not all heuristics will benefit from
-    pruning, but some may.
-  - Genome assembly using A* ::
-    Genome assembly is a big problem in bioinformatics with many recent
-    advances. Various algorithms and data structures are being used (string
-    graphs, De Bruijn graphs), but many pipelines involve ad-hoc steps.
-    I would like to better understand these algorithms and see if a more
-    formal mathematical approach is possible, possibly using A* methods as well.
+This open ended research could be on various topics:
+ - Further exploration of existing ideas ::
+   I wrote a number of blog posts around ideas that could be explored more:
+   - [[../alignment-scores-transform/alignment-scores-transform.org][A more efficient match-bonus transformation for WFA]] for a potential
+     $2\times$ speedup in certain cases.
+   - [[../linear-memory-wfa/linear-memory-wfa.org][Reducing WFA memory usage]], possibly allowing diagonal-transition based
+     A* to use less memory as well, where BiWFA is not possible.
+   - [[../speeding-up-astar/speeding-up-astar.org][Faster A* using /pre-pruning/]]: guessing a near-optimal alignment can
+     improve the heuristic and possibly speed up the exact A* alignment.
+ - Approximate alignment using A* ::
+   So far all research has been into exact alignment methods. In practice, many
+   people use heuristic methods instead. Giving up on the exactness may lead to
+   a significant speedup.
+ - A* for RNA folding ::
+   This is a classical DP task that may be possible
+   to speed up. A week of exploring this didn't give easy results.
+ - Pruning A* heuristic for real-world route planning ::
+   The pruning technique seems to be new and may be useful in other domains
+   where A* and heuristics are used. Not all heuristics will benefit from
+   pruning, but some may.
+ - Genome assembly using A* ::
+   Genome assembly is a big problem in bioinformatics with many recent
+   advances. Various algorithms and data structures are being used (string
+   graphs, De Bruijn graphs), but many pipelines involve ad-hoc steps.
+   I would like to better understand these algorithms and see if a more
+   formal mathematical approach is possible, possibly using A* methods as well.
 
-    Some preliminary ideas are written in [[../thoughts-on-assembling.org][this post]].
-  - An opinion piece on the utility of further research into kmer-based compression methods ::
-    Kmer-based compression methods deterministically select a subset of kmers
-    of a sequence. The goal is to select a fixed number of them such that they are
-    spread out as much as possible. Randomized algorithms have expected
-    density only $2\times$ higher than the optimal, and many methods have been
-    proposed to save ${\ll}50\%$ of memory by using much more complicated kmer
-    selection methods.
-  - Goal :: Read and think about various problems and see whether new ideas come up.
-  - Risk :: High. It is unclear at this point what kind of results are to be expected.
-  - Time :: 1 year
+   Some preliminary ideas are written in [[../thoughts-on-assembling.org][this post]].
+ - An opinion piece on the utility of further research into kmer-based compression methods ::
+   Kmer-based compression methods deterministically select a subset of kmers
+   of a sequence. The goal is to select a fixed number of them such that they are
+   spread out as much as possible. Randomized algorithms have expected
+   density only $2\times$ higher than the optimal, and many methods have been
+   proposed to save ${\ll}50\%$ of memory by using much more complicated kmer
+   selection methods.
+ - Goal :: Read and think about various problems and see whether new ideas come up.
+ - Risk :: High. It is unclear at this point what kind of results are to be expected.
 *** WP9: Thesis writing
-  - Time :: 4 months
+I will end my PhD by writing a thesis that covers all results from the work
+packages above.
 
 *** TODO Assess risks and make backup plans
 
 ** Publication plan
-I plan to write the following papers, to be submitted to BioInformatics unless
-stated otherwise.
+I plan to write the following papers, to be submitted to BioInformatics or
+RECOMB unless stated otherwise.
 - WP1: A*PA v1 :: This is work in progress and already available as preprint [cite:@astarpa], together with Pesho Ivanov
 - WP2: Visualization :: This will not be a standalone paper, but will be used to
   create figures for other papers such as the A*PA paper and the theoretical
@@ -450,7 +451,7 @@ stated otherwise.
 The planned time for each work package is listed in the figure below.
 
 # https://plantuml.com/gantt-diagram
-#+begin_src plantuml :file time-schedule.png :exports no-export
+#+begin_src plantuml :file time-schedule.png :eval no-export
 @startgantt
 hide footbox
 projectscale quarterly
