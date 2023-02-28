@@ -105,7 +105,7 @@ long sequences with uniform errors. However, on alignments with long indels or
 too high error rate A*PA is currently slower because it needs $\sim 100\times$
 more time per visited state than SIMD-based approaches. Future iterations are
 expected to decrease this gap and lead to an aligner that outperforms
-state-of-the-art methods by a factor $10\times$ on various types of data.
+state-of-the-art methods by at least $10\times$ on various types of data.
 
 ** Introduction and current state of research in the field
 
@@ -182,7 +182,7 @@ The main goals of this thesis fall into two categories:
 
 
 - New methods :: Develop A*PA, a new near-linear algorithm and implementation for exact
-  pairwise alignment that is $10\times$ faster than other methods on most types
+  pairwise alignment that is at least $10\times$ faster than other methods on most types
   of input data.
   - A*PA v1: initial version :: Apply the seed heuristic of Astarix
     [cite:@astarix-2] to exact global pairwise alignment and extend it with
@@ -284,6 +284,8 @@ other aligners for sequences of length $10^7$ bp ([[scaling]]).
 The work is split over the following $9$ concrete projects, ordered by
 estimated order of completion.
 
+# TODO: Make sure that text is understandable without context
+
 *** WP1: A*PA v1: initial version
 A*PA [cite:@astarpa] introduces the seed heuristic of [cite/t:@astarix-2]
 ([[astarpa]] a) that provides a lower bound on the edit distance between (the
@@ -313,6 +315,10 @@ A*PA extends this in a few ways. See the preprint for more details.
 
 This results in near-linear scaling ([[scaling]]) on aligning long sequences with low constant uniform error
 rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
+
+*Status:* This work package is almost done and will be submitted to
+ BioInformatics soon.
+
 *** WP2: Visualizing aligners
 There are many existing algorithms for pairwise alignment, many of which are
 more than 30 years old. Some papers [cite:@ukkonen85;@block-aligner] contain
@@ -324,6 +330,9 @@ usually imply faster algorithms. This not only makes it easier to teach these al
 to students but also helps with debugging and improving performance: an
 image makes it easy to understand the structure of an alignment and to spot
 bottlenecks in algorithms.
+
+*Status:* This work package is done and used for e.g. [[vis]]. Visualizations will be updated
+as new methods are developed.
 
 *** WP3: Benchmarking aligners
 A good understanding of the performance trade-offs of existing aligners is
@@ -348,6 +357,10 @@ implemented until Daniel Liu and I recently improved KSW2. Furthermore,
 unit-cost alignment and affine-cost alignment are usually considered as distinct
 problems, and no comparison has been made about the performance penalty of
 switching from the simpler unit-cost alignments to more advanced affine costs.
+
+*Status:* The implementation part of this work package is done and used to
+benchmark A*PA. The comparison of tools is still pending.
+
 *** WP4: Theory review
 There is no review paper of exact global alignment methods.
 [cite/t:@navarro01] seems to be the most relevant,
@@ -363,6 +376,10 @@ aligners.
 This would also include a discussion of implicit previous uses of A* and
 heuristics, and how changing to an equivalent cost model can have an equivalent
 effect to using a heuristic.
+
+*Status:* Most of the literature has been summarized in a blog post as part of
+the background research for A*PA. A dedicated paper has not yet been started.
+
 *** WP5: A*PA v2: efficient implementation
 The biggest bottleneck of the current A*-based implementation is the need to
 store information for each visited state in a hashmap and priority queue.
@@ -371,11 +388,11 @@ Each visited state has to go through the following process:
 2. Evaluate the heuristic.
 3. Push it on the priority queue.
 4. Pop it from the priority queue.
-5. Evaluate $h$ again.
+5. Evaluate the heuristic again.
 6. Update the hashmap.
 
 It turns out that this is up to $100$ times slower per state than Edlib, which
-only stored $2$ bits per state and can compute $32$ states at a time using
+only stores $2$ bits per state and can compute $32$ states at a time using
 bit-packing.
 
 To speed up A*PA, it will be needed to compute multiple states at once so that
@@ -428,6 +445,10 @@ is enabled, but even without that or other optimizations this method has already
 shown up to $5\times$ speedups, and I expect that a solution to the pruning will
 be found.
 
+*Status:* The local-doubling idea as explained above has been implemented with
+some first results. Moving to a block-based approach and switching to a
+SIMD-based implementation is pending.
+
 *** WP6: Affine costs
 Similar to how WFA [cite:@wfa] generalized the diagonal-transition method
 [cite:@ukkonen85;@myers86] to affine gap-costs, it would increase the
@@ -456,6 +477,9 @@ Despite these complications, I expect that it will be possible efficiently
 compute the affine heuristics. It will probably require new, more complicated
 algorithms, but first experiments show that there is still a lot of structure in
 the /layers/ (see [cite/t:@astarpa]) of the heuristic.
+
+*Status:* Some thought has been given to the efficient computation of affine
+heuristics, but without concrete results so far.
 
 *** WP7: Ends-free alignment and mapping
 Besides global alignment, another very relevant problem is /semi-global
@@ -487,6 +511,9 @@ no redundant work is done.
 
 This will likely require significant updates to the A*PA infrastructure that
 cannot be foreseen right now.
+
+*Status:* Semi-global alignment should be straightforward, but mapping will
+require further research that has not been started yet.
 
 *** WP8: Further extension and open ended research
 When above things don't work out, here's more options.
@@ -566,6 +593,8 @@ RECOMB unless stated otherwise.
 
 ** Time schedule
 The planned time for each work package is listed in the figure below.
+
+# TODO: Add publications into this
 
 # https://plantuml.com/gantt-diagram
 #+begin_src plantuml :file time-schedule.png :eval no-export
