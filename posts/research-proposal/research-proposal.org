@@ -303,17 +303,18 @@ A*PA extends this in a few ways. See the preprint for more details.
   any substring of $B$ that less than distance $r$ away from the seed. This
   allows the A* to efficiently handle larger error rates.
 - The /chaining seed-heuristic/ (b) requires seed-matches to be in the same
-  order in $B$ as in $A$.
+  order in $B$ as in $A$. This way, spurious matches have less negative effects
+  on the value of the heuristic.
 - The /gap-cost chaining seed heuristic/ (c) additionally penalizes the
   cost that must be made for indels between matches that are on different diagonals.
-- /Pruning/ is an additional technique that penalizes searching behind the /tip/
+- /Pruning/ (d) is an additional technique that penalizes searching behind the /tip/
   of the search. As soon as the start of a match is expanded, the match is not
-  needed anymore and can be removed. This makes the heuristic inconsistent, but
+  needed anymore and can be removed. This makes the heuristic inadmissible, but
   we prove that A* is still guaranteed to find an optimal path.
 - Lastly, we use an optimization similar to diagonal-transition so that only
   /farthest-reaching states/ are expanded by the A*.
 
-This results in near-linear scaling ([[scaling]]) on aligning long sequences with low constant uniform error
+This results in near-linear scaling ([[scaling]]) when aligning long sequences with low constant uniform error
 rate, leading to $250\times$ speedup over state-of-the-art aligners WFA and Edlib.
 
 *Status:* This work package is almost done and will be submitted to
@@ -331,8 +332,8 @@ to students but also helps with debugging and improving performance: an
 image makes it easy to understand the structure of an alignment and to spot
 bottlenecks in algorithms.
 
-*Status:* This work package is done and used for e.g. [[vis]]. Visualizations will be updated
-as new methods are developed.
+*Status:* This work package is done and used for e.g. [[vis]]. Visualizations will
+be added as new methods are developed.
 
 *** WP3: Benchmarking aligners
 A good understanding of the performance trade-offs of existing aligners is
@@ -341,8 +342,8 @@ While all recent papers presenting aligners
 contain benchmarks comparing them in some specific setting,
 there is no thorough recent overview of tools that compares runtime and accuracy on all of the
 following properties:
-- input data, which can be either random or human, and both can have different
-  types of errors,
+- input type: either random or human,
+- error type: uniform or long indels,
 - error rate,
 - sequence length,
 - cost model: unit costs, linear costs, or affine costs,
@@ -359,7 +360,8 @@ problems, and no comparison has been made about the performance penalty of
 switching from the simpler unit-cost alignments to more advanced affine costs.
 
 *Status:* The implementation part of this work package is done and used to
-benchmark A*PA. The comparison of tools is still pending.
+benchmark A*PA and make figure [[gap_open_scaling]]. A thorough comparison of tools
+is still pending.
 
 *** WP4: Theory review
 There is no review paper of exact global alignment methods.
@@ -374,8 +376,8 @@ Thus, the time is right for a new review summarizing both the
 various algorithms and implementation strategies used in modern pairwise
 aligners.
 This would also include a discussion of implicit previous uses of A* and
-heuristics, and how changing to an equivalent cost model can have an equivalent
-effect to using a heuristic.
+heuristics, and how changing to an equivalent cost model can have an effect equivalent
+to using a heuristic.
 
 *Status:* Most of the literature has been summarized in a blog post as part of
 the background research for A*PA. A dedicated paper has not yet been started.
@@ -396,7 +398,7 @@ only stores $2$ bits per state and can compute $32$ states at a time using
 bit-packing.
 
 To speed up A*PA, it will be needed to compute multiple states at once so that
-SIMD can be used.
+bit-packing or SIMD can be used.
 One way this could work is /local doubling/.
 Similar to the band-doubling technique introduced by Ukkonen and used by Edlib
 [cite:@ukkonen85;@edlib], it is possible to efficiently process states
@@ -406,17 +408,17 @@ to be computed.
 It works by choosing some threshold $f$ and computing all states $u$ with $f(u)
 := g(u) + h(u) \leq f$ from left to right (column by column). When a column has
 no states with $f(u) \leq f$, this means that the distance between the two
-strings is more than $f$, and the band must grow. Ignoring pruning, this would
+strings is more than $f$, and the threshold must grow. Ignoring pruning, this would
 work roughly as follows:
 1. For each column $i$ store the last value of $f_i$, which starts at the value
    of the heuristic in $0$, and
-   the last /increment/ $\Delta_i$ which starts at $1$.
+   store the last /increment/ per column $\Delta_i$ which starts at $1$.
 2. For increasing $i$ starting at $0$, find the range of
-   column $i$ with $f(u) \leq f_i$ and compute it efficiently using SIMD.
+   column $i$ with $f(u) \leq f_i$ and compute the distance to these cells.
 3. As soon as the range is empty for some column, /backtrack/ and double the band for
    previous columns:
    1. For $j$ going down from $i-1$, add $\Delta_{j}$ to $f_{j}$ and double $\Delta_{j}$.
-   2. When $f_{j} \leq f_{j-1}$, stop decreasing $j$.
+   2. When $f_{j-1} \geq f_{j}$, stop decreasing $j$ further.
    3. Now continue with step 2, increasing $i$ starting at $i=j$.
 
 The result of this process can be seen in [[local-doubling]]. Note that this does
@@ -430,9 +432,9 @@ the computed band.
 
 In the current implementation, computing the heuristic at the top and bottom of
 each band (to find the range where $f(u) \leq f_i$) and storing the computed
-values for each column still require a lot of overhead. Using /blocks of
+values for each column require a lot of overhead. Using /blocks of
 columns/ as in block aligner [cite:@block-aligner] could significantly reduce
-this, since then the bookkeeping is only needed every $8$ or $32$ columns.
+this, since then the bookkeeping would only be needed once every $8$ to $32$ columns.
 
 #+label: local-doubling
 #+attr_html: :class inset
@@ -452,11 +454,11 @@ SIMD-based implementation is pending.
 *** WP6: Affine costs
 Similar to how WFA [cite:@wfa] generalized the diagonal-transition method
 [cite:@ukkonen85;@myers86] to affine gap-costs, it would increase the
-applicability of A*PA can be generalized to affine gap-costs as well.
+applicability of A*PA if it is generalized to affine gap-costs as well.
 
 There are two parts to this. First, the underlying alignment graph needs to be
-changed to include multiple /layers/, as introduced by [cite:@gotoh] and used by
-[cite:@wfa]. This is straightforward and can be reused from the re-implementation
+changed to include multiple /layers/, as introduced by [cite/t:@gotoh] and used by
+[cite/t:@wfa]. This is straightforward and can be reused from the re-implementation
 of Needleman-Wunsch for affine-cost alignments.
 
 Secondly, and more challenging, the heuristic needs to be updated to account for
@@ -464,19 +466,20 @@ the gap-open costs. One option would be to simply omit the gap-open costs from
 the heuristic and reuse the existing implementation for unit-costs, but this
 limits the accuracy. In particular when the gap-open cost is large, at least $4$
 in case of substitution and extend cost $1$, the heuristic can become much
-stronger and can correctly predict the long indels. This will make aligning
+stronger and could correctly predict the long indels. This will make aligning
 sequences with such long indels much faster.
 
 The main hurdle to be taken is to efficiently implement the updated computation.
 Having $3$ (or more) layers increases the number of cases that must be handled,
-and changes the specific structure of the chaining seed heuristic (CSH) and gap-cost
-chaining seed heuristic (GCSH) that we currently exploit for their relatively
-simple and efficient computation.
+and changes the specific structure of the gap-cost chaining seed heuristic
+(GCSH) that we currently exploit for its relatively simple and efficient
+computation.
 
 Despite these complications, I expect that it will be possible efficiently
 compute the affine heuristics. It will probably require new, more complicated
 algorithms, but first experiments show that there is still a lot of structure in
-the /layers/ (see [cite/t:@astarpa]) of the heuristic.
+the /layers/ (see [cite/t:@astarpa]) of the heuristic that can likely be used to
+efficiently compute it.
 
 *Status:* Some thought has been given to the efficient computation of affine
 heuristics, but without concrete results so far.
@@ -530,6 +533,7 @@ This open ended research could be on various topics.
      losing the exactness guarantee.
 
      *Status:* Not started.
+
    - *Using a candidate alignment:* The local-doubling technique described
      in WP5 could be optimized further by using a candidate alignment.
      The algorithm can then prove that the candidate alignment is indeed correct
@@ -551,8 +555,9 @@ This open ended research could be on various topics.
 
    RNA folding is a classical cubic DP task that seeks to find the folding of an
    RNA sequence that minimizes the free energy, or equivalently, maximizes the
-   number of bonds between complementary bases. Current exact methods tend to be
-   slow and cannot efficiently handle sequences much longer than $10000$ bp.
+   number of bonds between complementary bases. Exact methods such as
+   RNAfold tend to be slow and cannot efficiently handle sequences longer
+   than $10000$ bp [cite:@rnafold].
 
    It may be possible to use A* on this problem by creating a heuristic that can
    penalize bad potential fold candidates.
@@ -587,12 +592,13 @@ This open ended research could be on various topics.
    highways decreases it may be possible to dynamically update this heuristic
    and penalize states lagging behind the tip.
 
-   *Status:* Nothing more than the high level ideas described above.
+   *Status:* Not started apart from the high level ideas described above.
 
  - Genome assembly using A* ::
    # TODO: Cite?
 
-   Genome assembly is a big problem in bioinformatics with many recent advances.
+   Genome assembly is a big problem in bioinformatics with many recent advances
+   (e.g. [cite/t:@verkko]).
    Various algorithms and data structures are being used, but many pipelines
    involve ad-hoc steps.
 
@@ -601,7 +607,7 @@ This open ended research could be on various topics.
    the goal of minimizing some cost. Then, it may be possible to solve this
    exactly by using an A* based mapping algorithm (WP7).
 
-   *Status:* Nothing.
+   *Status:* Not started.
 
 *** WP9: Thesis writing
 I will end my PhD by writing a thesis that covers all results from the work
@@ -625,7 +631,7 @@ RECOMB unless stated otherwise.
 - WP5: A*PA v2: efficient implementation :: This will be a shorter paper that
   builds on the v1 paper and speeds up A*PA significantly.
 - WP6: affine costs :: The results of this WP will likely be presented jointly
-  with either WP5 or WP7.
+  with WP7.
 - WP7: semi-global alignment :: This will be an incremental paper that compares
   A*PA to other aligners for mapping and semi-global alignment.
 - WP8: extensions :: In case I find further optimizations and extensions for
@@ -633,9 +639,8 @@ RECOMB unless stated otherwise.
   together with the previous WPs.
 
 ** Time schedule
-The planned time for each work package is listed in the figure below.
-
-# TODO: Add publications into this
+The planned time for each work package is listed in the figure below. Diamonds
+mark planned papers.
 
 # https://plantuml.com/gantt-diagram
 #+begin_src plantuml :file time-schedule.png :eval no-export :exports none
@@ -645,20 +650,27 @@ projectscale quarterly
 Project starts 2021-10-01
 [PhD] starts 2021-10-01 and ends 2025-10-01
 [WP1: A*PA v1] starts 2021-10-01 and ends 2023-04-01
+[A*PA paper] happens at [WP1: A*PA v1]'s end
 [WP2: Visualization] starts 2022-07-01 and ends 2023-01-01
 [WP3: Benchmarking] starts 2022-11-01 and ends 2023-07-01
-[WP4: Theory review] starts 2022-01-01 and ends 2023-07-01
-[WP5: v2: efficient implementation] starts 2023-04-01 and ends 2023-10-01
-[WP6: affine costs] starts 2023-07-01 and ends 2024-01-01
-[WP7: semi-global alignment] starts 2023-10-01 and ends 2024-04-01
-[WP8: Extensions] starts 2024-01-01 and ends 2025-01-01
-[WP9: Thesis] starts 2025-01-01 and ends 2025-10-01
+[Benchmarking paper] happens at [WP3: Benchmarking]'s end
+[WP4: Theory review] starts 2022-01-01 and ends 2023-10-01
+[Theory paper] happens at [WP4: Theory review]'s end
+[WP5: v2: efficient implementation] starts 2023-07-01 and ends 2024-01-01
+[A*PA v2 paper] happens at [WP5: v2: efficient implementation]'s end
+[WP6: affine costs] starts 2023-10-01 and ends 2024-04-01
+[WP7: semi-global alignment] starts 2024-01-01 and ends 2024-07-01
+[Extended scope paper] happens at [WP7: semi-global alignment]'s end
+[WP8: Extensions] starts 2024-04-01 and ends 2025-04-01
+[WP9: Thesis] starts 2025-04-01 and ends 2026-01-01
+[Thesis] happens at [WP9: Thesis]'s end
 2023-04-01 to 2023-04-07 is colored gray
 @endgantt
 #+end_src
 
 #+attr_html: :class inset
 [[file:time-schedule.png]]
+
 
 #+print_bibliography:
 
