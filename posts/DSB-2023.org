@@ -1,36 +1,201 @@
-#+TITLE: DSB 2023
+#
+
+
++TITLE: DSB 2023
 #+hugo_section: notes
 #+hugo_level_offset: 1
 #+date:  <2023-03-20>
 
-These are notes for [[https://dsb-meeting.github.io/DSB2023/][DSB 2023]].
+These are notes for [[https://dsb-meeting.github.io/DSB2023/][DSB 2023]]. They're not very structured though. I usually find
+methods more interesting than results.
+
 
 * Day 1, Tuesday
 
 ** Practical data structures for longest common extensions, Alexander Herlez
-notes go here
+- LCE: longest common extension: given $i$, $j$, the max $k$ s.t. $A[i, i+k) = A[j, j+k)$.
+- alg:
+  - compare first k
+  - if same: sample a subset and use black-box datastructure.
+  - similar idea to minhash/mash kmer selection methods, same(?) as syncmers
+- string synchronizing sets (SSS):
+  - rolling hash. sample a position when it has minimal hash in it's window
+- [[https://github.com/herlaz/alx]]
+- useful for constant time LCE when extensions are length 1000 or longer. Not
+  faster for shorter LCEs.
+- note: WFA uses this *a lot* and it's actually the bottleneck, but really only
+  for short extensions.
 ** Pan-genome de Bruijn graph using the bidirectional FM-index, Lore Depuydt
+- Goal: graph of pangenome with correspondences to reads
+- Implicit graph by Beller and Ohlebusch: build on top of FM-index of concatenation
+- New in Nexus:
+  - Bidirectional FM-index for bidirectional traversal
+    - down/upstream neighbourhoods can be visualized efficiently using traversal
+  - Search schemes for lossless approximate pattern matching (separate talk)
+    - query -> candidate matches -> graph paths -> read paths
+    - Lossless aligner; reports many more occurrences than PuffAligner, although
+      this does make it slower for >0 edit distance
+  - checkpoints k-mers inside long nodes
+    - this way, to find the start of a long (compressed) node goes down significantly.
+- Memory usage: Bidirectional FM-index is >80%.
+  - Bidir FM is linear in total size of pangenome.
+- Future: r index, which uses less memory.
 ** Indexing large metagenomics projects with abundances, Pierre Peterlongo
+- Indexing read sets with abundance in <100GB with fast querying with low ram.
+- Uses counting bloom filters
+- =fimpera= decreases the overestimation, allowing less memory usage.
+- Once k-mers are sorted, all processes are sequential! 1000x speedup
+- instead of querying k-mers, store all slightly smaller s-mers and query all of
+  them for much better false positive rates
 ** µ-PBWT: Enabling the Storage and Use of UK Biobank Data on a Commodity Laptop, Davide Cozzi
+- r-index equivalent of PBWT, using run-length encoding
+- 10-100x less memory than PBWT.
+- [[https://github.com/dlcgold/muPBWT]]
+
 ** Genome-on-Diet: Taming Large-Scale Genomic Analyses via Sparsified Genomics, Mohammed Alser
+- Building an index on spaced kmers/patterns
+- Only some positions are sampled. i.e.: sample every other basepair and build
+  kmers on those.
+- Index is built on the fly; not preprocessed
+- to 2x faster and 2x less memory than minimap2.
+- to 50x faster and 700x less memory than other tools.
+- summary: subsample 1 in m bits and run minimap on top of that.
+- similar to spaced seeds, but additionally subsamples the number of kmers.
+- Faster and better accuracy than spaced seeds.
 ** Spectrum preserving tilings enable sparse and modular reference indexing, Giulio Ermanno Pibiri
+- Spectrum preserving tiling: Given a set of reads and their DBG, we can for
+  each read store location information per unitig in this larger graph
+- Use =SSHash= to store all unitigs.
+- Sample a subset of unitigs to store location information for. Non-sampled
+  unitigs can still be recovered by querying adjacent unitig locations instead.
+- Main contribution: reducing space usage of the reverse index: mapping kmers to locations.
+- [[https://github.com/COMBINE-lab/pufferfish2]]
 ** Towards a lower-memory chunked graph data structure inspired by Minecraft, Fawaz Dabbaghie
+- Chunk big graphs as in minecraft chunks.
+- First approach: split human genome graph in 1000 parts using BFS's from random positions
+- Already big speedup!
+- *TODO: simple idea and super effective. Maybe play around with this at some point*
 ** Optimal Worst-Case Design of Gapped k-mer Masks, Sven Rahmann
+- Gapped kmers are better in the worst case than normal kmers:
+  - If you can make $x$ substitutions in a length $n$ strings, gapped kmers need
+    a higher $x$ to mutate (break) all of them.
+- Second optimization goal: count number of recovered positions, instead of
+  number of kmers.
+- #########_#########_######### (27,29)-mer: in a $n=100$ window, lack of such
+  matches implies at least 4 errors. Normal 27-mers imply at least 3 errors.
+- boundary effects (changing $n$) are not super strong.
+- *TODO: read old papers and see if this could be used for A*PA*
+  - How about inexact spaced matches?
 ** Locality-Preserving Hashing of k-mers, Yoshihiro Shibuya
+- Mapping of kmers to $[0, 4^n)$ such that kmers with same minimizer are close.
+- Split mapping based on whether the minimizer is /left-maximal/ and/or
+  /right-maximal/ inside its super-k-mer.
+- [[https://github.com/jermp/lphash]]
+- Less than 1.44 bits/element for large k (which is the generic lower bound).
 ** Space-efficient k-mer counting using an implicit sequence representation, Miika Leinonen
+- Map kmers into a hashtable storing at each index:
+  - count of kmers mapping here
+  - the last character of the kmer
+  - the index of the preceding kmer
+- Memory usage: 25%-50% of normal hash table
+- saves more memory for larger k.
 ** VeChat: correcting errors in long reads using variation graphs, Alexander Schönhuth
+- Error correction using graph cleaning
+- Clean using repeated steps of:
+  - remove edges with low coverage
+  - clean edges with low /confidence/: the relative weight this edge has with
+    respect to total weight of edges going out of predecessor or going into successor
+  - clean isolated nodes and leaf edges
+- Up to 10x less remaining errors than other tools.
 ** Fixing homopolymer errors in HiFi reads using dictionary compression, Diego Diaz-Dominguez
+- Encode sequence recursively using grammer based
+- Grammar compression is good on its own
+- *TODO: read paper*
 ** Orthanq: orthogonal evidence based haplotype quantification, Hamdiye Uzuner
+- Variant calling pipeline
+- [[https://github.com/orthanq]]
 * Day 2, Wednesday
 ** Random Wheeler graphs, Riccardo Maso
+missed it :(
 ** The Graph Wheelerization Problem, Davide Tonetto
+- problem: Given a directed graph, color the edges so that it becomes a wheeler
+  graph, with smallest possible alphabet size.
+- Properties of the bipartite graph:
+  - All incoming edges in each vertex are of the same color
+  - Edges of the same color do not cross
+  - target-vertices are sorted by color.
+- Translate to bipartite graph variant.
+- applications:
+  - Graph can be compressed into $O(|E| \ln \sigma)$ bits.
+  - Can help with adjacency queries.
+- Greedy linear algorithm can solve assuming total order is know
+- ILP formulation for general case.
+- Local search heuristic:
+  - given an order, swap any pair
+- *TODO:* Wheeler graphs seem interesting from theoretical point of view.
 ** Sorting Wheeler NFA’s using relational partition refinement, Bojana Kodric
+- Problem: Given an input- consistent NFA, compute an ordered partition of
+  states that is consistent with some Wheeler graph, assuming the input is Wheeler.
+- Define /forward stable/ condition, and then itaratively refine the condition.
+- Existing algo: Alanko et al. (2021), runtime: $n^2m$.
+- Reusing partition refinement (Paige and Tarjan '87). => $O(m\lg n)$.
 ** Prefix-sorting strings on deterministic finite automata, Sung-Hwan Kim
+- Basically: A suffix array for DFA's.
+- Algorithm: Use prefix doubling on the graph for min and max suffixes in each vertex.
+- Then, obtain interval for each point and use the implicit partial order on
+  these intervals.
 ** MARIA: Multiple alignment r-index with aggregation, Adrián Goga
+- Buils on MONI
+- lossless compression of dataset
+- finds maximal exact matches.
 ** Approximate pattern matching using search schemes and in-text verification, Luca Renders
+- Finding all matches with up to some edit distance, ie to align 100-long reads.
+- tool: Columba
+- Uses search schemes: set of k searches
+- Reduce cache misses of Occurrences table by interleaving them per char.
+- In-text verification: once number of candidate matching is small, compare them
+  in the text instead of the index.
+- Takeaway: Exact aligment can be as fast as approximate alignment using an
+  efficient implementation
+- [[https://github.com/biointec/columba]]
+- *TODO: Follow up on this and search schemes in general -- very similar to all the things we considered for A*PA*
 ** Chaining of maximal exact matches in graphs, Nicola Rizzo
+- Algorithm for near-linear co-linear chaining.
+- Problem: symmetrick co-linear chaining with overlaps
+  - Given a set of anchors between query and graph, find the longest chain.
+- Base paper: minimum path cover in parameterized linear time in $O(k^2 |V| + |E|)$,
+  used as bases for co-linear chaining algorithm.
+- New paper on arxiv
 ** RecGraph: recombination-aware alignment of sequences to variation graphs, Jorge Avila Cartes
+- Sequence to graph alignment that allows recombinations
+- Defines displacement as measure for how large the jump is
+- Add new term to DP that uses the displacement
+- Finds recombination position within 5bp 98% of time.
+- >1 recombination is not implemented
+- [[https://github.com/algolab/recgraph]]
 ** Exact string alignments to (E)D-texts, Nadia Pisanti
+- problem: aligning a string to an (elastic) degenerate string
+  - algo: align to DS in O(Nd) using WFA with affine costs
+  - algo: align to EDS in O(NW), W=|P|
+- non-elastic: all variants have the same length. WFA applies almost directly.
+- elastic: variants can have different lengths. Diagonal tracking as in WFA
+  becomes more complicated.
+- MSA corresponds to elastic degenerate string
+- *IDEA: How about banded alignment in elastic case?*
+- *TODO: WFA for partial elastic string alignment*
 ** Periodicity of degenerate strings, Pengfei Wang
+- Degenerate string here has only 1 char per set
+- Define strong/medium/weak periodiciy of degenerate strings
+- Some simple necessary conditions ensure that each $P_s\subseteq P_m\subseteq
+  P_w$ occurs in practice.
 ** Deriving polygenic risk score using non-negative matrix factorization, Vu Lam Dang
+- Matrix factorization over positive numbers using ML
+- Can 'extract' 20-40 features
 ** Identifying antimicrobial resistance gene transfer between plasmids, Marco Teixeira
+- method to detect transfer of genes between different plasmids based of graph similarity
+
+* Ideas from discussions
+- inexact spaced kmers
+- search schemes for finding inexact matches by querying multiple exact matches
+- Banded alignment for elastic-degenerate string alignment.
+- WFA for partial elastic string alignment
