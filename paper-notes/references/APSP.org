@@ -1,0 +1,177 @@
+:PROPERTIES:
+:ID:       407799f8-618b-4b4c-b429-325cc30c797c
+:ROAM_REFS: @APSP
+:END:
+#+title: Loukides, Pissis, Thankachan, Zuba :: Suffix-Prefix Queries on a Dictionary
+#+hugo_section: notes
+#+date:  <2023-07-07>
+#+HUGO_LEVEL_OFFSET: 1
+#+hugo_front_matter_key_replace: author>authors
+#+OPTIONS: ^:{}
+#+toc: headlines 3
+
+
+$$\newcommand{\dol}{\$}$$
+
+These are some comments and new ideas on the paper by [cite/text/cf:@APSP].
+
+* Comments
+Apart from the geometry, everything seems quite elementary.
+
+Well written; the separation into Main Idea, Theorem, Construction, and Querying
+works well.
+
+- It's a bit hard to distill what is the state of the art for each query type
+  before this paper, and what is the main new result.
+
+** Prelims
+- Fig 2: Failure transitions are omitted on the left but shown on the right.
+** One-to-One
+The tricky part here is the rank-select to find the closest preceding $S_i$
+suffix before $S_j$. Would be cool if it could be replaced with something
+simpler.
+
+- Fig 4a: $\dol_i < \texttt{a}$, so really there should be another edge above the
+  $\dol_i$ to $r_i$.
+- Fig 4b: Where is $w$? Should be $u$?
+- Missed opportunity to have $l_i$ on the left or $r_i$.
+- ~Hence this is equal to $O(1+\log \log k)$~ rather ~is bounded by~.
+** One-to-All
+- reference 2 looks weird?
+- neither [2] nor [10] mention /$\tau$-micro-macro decomposition/ by name exactly.
+  - Called /topology tree/ in [2]? But those components do not have bounded size.
+- The relation between the $\tau$-micro-macro tree and the original tree is not
+  explained. Nor its relevant algorithmic properties. Lemma 13 only talks about
+  construction time.
+
+  How can a completely binary tree of large depth be converted into a
+  $\tau$-micro-macro tree preserving all edges? The root component can only have
+  a single outgoing edge from a specific leaf, but all other leafs inside the
+  root component are not leafs in the original tree.
+- Turns out the details of this tree are kinda skipped over completely, but also
+  the only important part is that we store $\Theta(k)$ information for at most
+  $O(n/k)$ nodes, and that we can walk up from any node and find such a node in
+  at most $O(k)$ steps.
+** Report and Count
+- Some heavy lifting with geometry theorems here :D
+- It's not completely clear to me whether this was especially invoked to get the
+  slightly better $O(\log n / \log \log n)$ instead of $O(\log n)$. To me a
+  $O(\log n)$ non-black-box approach seems preferable, and anyway you don't
+  give the construction time of the $O(\log n / \log \log n)$ method, so this
+  seems kinda useless.
+- This looks complicated initially but seems quite straightforward conceptually.
+  The fix for double counting is also intuitive.
+- Maybe some non-geometric algorithms can be used instead that simplify
+  construction and total conceptual complexity. (See below.)
+
+** Top-$K$
+It's basically a binary search over ~Count~, followed by some tricks for edge cases.
+
+* Ideas for simplification
+** Replace $\tau$-micro-macro tree
+How about something simpler like:
+1. Sort all nodes by decreasing depth. ($O(n)$ using bucket/radix sort)
+2. Going from deep to not-deep: Walk up $k-1$ steps, marking each visited
+   vertex as SKIP.
+   1. If reaching a vertex already marked SKIP: stop.
+   2. If reaching a vertex marked SAVE, stop.
+   3. Otherwise, mark the $k$th parent as SAVE.
+** Heavy-Light-Decomposition (HLD) for $Count$ queries in $O(\log n)$ time
+This is a simpler (more elementary/classical) approach that has $O(n)$ memory,
+$O(n)$ construction time, and $O(\log n)$ query time (as opposed to the
+$O(\log n)$ or $O(\log n/\log \log n)$ time of Theorem 19/20).
+
+1. A Count query $Count(i, l)$ is equivalent to: find the number of outgoing
+   $\dol_j$ edges on the path $P$ starting in the node $v$ of $S_i$ in $ST_R$ and
+   going up to depth $l$. (Possibly only counting multiple $\dol_j$ edges once.)
+2. For each node $u$ in $ST_R$, store the total number of outgoing $\dol_\cdot$
+   edges as $t_u$.
+   - If there is a $\dol_j$ edge going out of both $u$ some node $w$ strictly below $u$,
+     subtract $1$ from $t_{c(u,w)}$, where $c(u, w)$ is the unique child of $u$ that is
+     an ancestor of $w$.
+
+     Care must be taken when $c(u,w)$ is the start of $P$, in which case we must
+     not subtract the $1$. To avoid this, one solution is to insert an
+     additional node on the edge where the $-1$ is stored, instead of
+     accumulating it into the child directly. Or the $-1$ can simply be stored
+     in $c(u,w)$, but independently of the count $t_{c(u,w)}$.
+
+   - Alternatively, we could add $1$ to all /other/ (non-$c(u,w)$) children of
+     $u$. As long as the alphabet is constant that over head is OK. This is
+     similar to cutting the rectangles with vertical cuts (bottom of Fig 6b), while
+     the previous method is rather similar to horizontal cutting of rectangles
+     (top of Fib 6b).
+3. We want to compute $Count(i,l) = \sum_{u\in P} t_u$.
+4. Consider the heavy-light-decomposition $HLD_R$ of $ST_R$.
+5. Each path from a node $v$ uf $ST_R$ to the root intersects at most $\lg n$
+   components of $HLD_R$. In particular this holds for $P$.
+6. Apart from the /top/ component containing $v$, each such component
+   intersection covers exactly a prefix of the component.
+
+   We can precompute and store prefix sums in each component in $O(n)$ total time.
+7. The top intersection is a (non-prefix) interval of some component. This sum
+   is simply the difference of two prefix sums.
+8. Construction time is
+   - $O(n)$ for the HLD (using DFS)
+   - $O(n)$ for the prefix sums
+9. Query time is $\log n$: We process $\log n$ HLD components in $\log n$ time each.
+
+** Finding the largest $l$ with $Count(i, l) \geq K$ in $O(\log n)$ time
+This is similar to $Top(i,K)$, but does not report the actual strings.
+
+The problem is now to find the largest $l$ such that $\sum_{u\in P} t_u \geq K$.
+A naive approach is to walk up the tree $ST_R$, starting at the node of $S_i$,
+and going up until the accumulated sum of $t_u$ is $\geq K$.
+
+Using the above HLD, we can again split the path into HLD-components and walk up
+one component at a time, until the sum to the start of the component is large
+enough. To find the precise start, we can do a binary search inside the
+HLD-component. This takes $O(\log n)$ time for walking up the HLD-components,
+and $O(\log n)$ time to binary search inside that component, for $O(\log n)$
+total query time.
+
+** Reporting matching strings
+
+To add reporting to both $Count$ and $Top$ queries, we can do the following:
+1. For each node $u$ of $ST_R$, store a list/set $T_u := \{(j, d(u)) : u\dol_j \in E_{ST_R}\}$.
+2. Instead of $\sum_{u\in P} t_u$, we are now interested in $\bigcup_{u\in P}
+   T_u$
+   - the union can be either concatenation of lists of tuples $(j, d(u))$,
+   - or only taking the maximum $d(u)$ for each $j$,
+   - or only merging sets of $\{j\}$.
+3. We can't store prefix-unions within HLD-components, because that could take
+   too much space.
+4. Instead, we can store for each node a pointer to the closest ancestor $u$ that
+   contains a non-empty $T_u$. Then we can simply follow these pointers up until
+   the start of $P$ is reached, in total $O(output)$ time.
+   - To prevent double-counting, we can instead store a pointer to closest
+     ancestor that contains a $(j, d)$ that is not already present in the
+     current subtree.
+
+   - One possible issue here is when many parents contain one new unseen $j$,
+     but also many $j$ that were already seen before. In that case we keep
+     iterating over these and discarding them. This could give total runtime
+     $O(\log n + K^2)$ in the worst case.
+
+     This can be fixed by using the alternative method of pushing the $(j,d)$
+     marker to all children that don't have $j$ yet (ie the vertical slicing in
+     the bottom of Fig 6b). Since there could be many children, this could
+     increase memory usage by a factor $\sigma$. Instead, we can insert
+     intermediate nodes for all children left of $c(u,w)$ and all children right
+     of $c(u,w)$ and add $(j,d)$ to these intermediate nodes. Similar to how
+     there will only be at most $2n$ rectangles, there will also be at most
+     $O(n)$ added nodes for this, and still each node contains at least one new
+     element when walking up paths, so that the overall complexity remains
+     $O(\log n + K)$.
+   Both of these types of pointers can be computed in $O(n)$ time and $O(n+k)$
+   space using DFS.
+For the $Report$ queries, this gives $O(\log n + output)$ runtime.
+
+For $Top(i, K)$ queries, we can first determine the correct level $l$, and then
+report (a size $K$ subset of) $Report(i, l)$ in $O(K)$ time. There is no
+overhead if $Count(i, l)>>K$, since we can just stop merging elements as soon as
+the output set reaches size $K$.
+
+
+
+#+print_bibliography:
