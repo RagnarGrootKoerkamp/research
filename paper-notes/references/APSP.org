@@ -13,7 +13,7 @@
 
 $$\newcommand{\dol}{\$}$$
 
-These are some comments and new ideas on the paper by [cite/text/cf:@APSP].
+These are some comments and new ideas on the paper by [cite/text/cf:@suffix-prefix-queries].
 
 * Comments
 Apart from the geometry, everything seems quite elementary.
@@ -25,7 +25,8 @@ works well.
   before this paper.
 
 ** Prelims
-- Fig 2: Failure transitions are omitted on the left but shown on the right.
+- Fig 2: slight inconsistency that failure transitions to the root are omitted
+  on the left but shown on the right.
 ** One-to-One
 The tricky part here is the rank-select to find the closest preceding $S_i$
 suffix before $S_j$. Would be cool if it could be replaced with something
@@ -40,18 +41,20 @@ simpler.
 - reference 2 looks weird?
 - neither [2] nor [10] mention /$\tau$-micro-macro decomposition/ by name exactly.
   - Called /topology tree/ in [2]? But those components do not have bounded size.
+  - Originally called /restricted partitions/.
 - The relation between the $\tau$-micro-macro tree and the original tree is not
   explained. Nor its relevant algorithmic properties. Lemma 13 only talks about
   construction time.
-
-  How can a completely binary tree of large depth be converted into a
-  $\tau$-micro-macro tree preserving all edges? The root component can only have
-  a single outgoing edge from a specific leaf, but all other leafs inside the
-  root component are not leafs in the original tree.
 - Turns out the details of this tree are kinda skipped over completely, but also
   the only important part is that we store $\Theta(k)$ information for at most
   $O(n/k)$ nodes, and that we can walk up from any node and find such a node in
   at most $O(k)$ steps.
+- Proof that they can be constructed:
+
+  1. Start with each node in an independent component.
+  2. Keep merging as long as components are $<z$ and at most $2$ boundary nodes
+     after merging.
+  3. Leafs can
 ** Report and Count
 - Some heavy lifting with geometry theorems here :D
 - It's not completely clear to me whether this was especially invoked to get the
@@ -65,7 +68,66 @@ simpler.
   construction and total conceptual complexity. (See below.)
 
 ** Top-$K$
-It's basically a binary search over ~Count~, followed by some tricks for edge cases.
+It's basically a binary search over ~Count~, followed by some tricks for edge
+cases.
+
+* A small rant on $\tau$-micro-macro trees
+I spent some time digging into citations to figure out how micro-macro trees are
+constructed, so let me persist it here.
+- [cite/t:@suffix-prefix-queries] uses /$\tau$-micro-macro decomposition/. It is not clear about
+  node or edge partition. (The [[https://en.wikipedia.org/wiki/Graph_partition][wikipedia lemma on graph partition]] assumes
+  node-disjoint clusters, as did I.)
+- [cite/t:@binary-jumbled-pattern-matching] uses /micro-macro decomposition/ and
+  includes /exactly/ the same figure as [cite/t:@suffix-prefix-queries], but does not explain the
+  construction. It is not clear about vertex or edge partition of the graph. In
+  fact, the paragraphs in these two papers are *extremely similar*. It cites:
+- [cite/t:@decremental-connectivity] (Lemma 2) uses /micro trees/ and /macro trees/
+  specifically for components of size at most $\log n$. For the proof, it refers to:
+- [cite/t:@ambivalent-datastructures-preprint] introduces the /restricted partition of
+  order $z$/, which partitions the vertices such into clusters of size at most
+  $2z-2$, and states
+  #+begin_quote
+  It is not hard to show that the number of clusters in a restricted partition
+  of order $z$ is $\Theta(m/z)$.
+  #+end_quote
+  which seems to be the first introduction of this concept, but does not
+  provide an explicit construction, and in fact, this does not seem so obvious.
+- [cite/t:@ambivalent-datastructures] is a second published version of the same
+  paper as above. (Things where slow: /Received Feb. 1992; Accepted June 1995; Published April 1997/.)
+  Sadly google prefers the previous paper, since this one has changed to
+  #+begin_quote
+  It is not hard to show that the number of clusters in a restricted partition
+  of order $z$ is $\Theta(m/z)$. We do this after the proof of the upcoming
+  Lemma 2.2.
+  #+end_quote
+  And indeed a paragraph with proof has been inserted, but it depends on
+  properties of the /multilevel partitions/ that are also introduced but not
+  relevant here.
+- [cite/t:@minimizing-diameters-of-dynamic-trees] is cited by
+  [cite/t:@suffix-prefix-queries] and introduces /topology trees/ which are
+  trees of nested clusters of unbounded size, where each cluster has a boundary of size at
+  most $2$. I don't yet see how this relates to /micro-macro trees/.
+- [cite/t:@tree-inclusion] is also cited by [cite/t:@suffix-prefix-queries], and
+  actually explains the construction algorithm in Lemma 5.1. It creates an
+  *edge-disjoint* partition. It seems the proof that the number of partitions is
+  $O(n/s)$ is not super straightforward and requires some careful bounding of
+  different types of clusters.
+
+  It refers back to [cite/t:@ambivalent-datastructures], and
+  [cite/t:@minimizing-diameters-of-dynamic-trees], stating that the construction
+  is effectively the same, but this doesn't seem super obvious to me. (But on
+  the other hand, there really is only one sort of construction one can do here,
+  so they all must be closely related.)
+
+Anyway, the recursive algorithm $cluster(v)$ presented in this last paper is
+(approximately) as follows:
+1. Consider each child $u$ of $v$ separately.
+2. If the subtree $T(u)$ below $u$ has at most $\tau$ vertices, make a component out of
+   $\{v\}\cup V(T(u))$.
+3. Otherwise, choose a node $w$ of maximum depth below $u$ with at most $\tau$
+   vertices between $w$ and $u$. Make an internal cluster out of these vertices,
+   together with $u$ and $w$, and recurse on $cluster(w)$.
+
 
 * Ideas for simplification
 ** Replace $\tau$-micro-macro tree
@@ -186,5 +248,15 @@ All are $O(n)$ memory.
 | Count(i,l)      | $n \log n$        | $\log n$                    | geometry                 | $\log n$               | HLD                      |
 | Report(i,l)     | $n \log n$        | $\log n +out$               | geometry                 | $\log n + out$         | HLD                      |
 | Top(i,K)        | $n\log n$         | $\log^2 n +K$               | geometry                 | $\log n + K$           | HLD                      |
+
+* Closing thoughts
+- Why do we use Aho-Corasick automaton for One-to-All queries, but Suffix Tree
+  for all other queries?
+- Can we use ST for One-to-All queries?
+- Can we use AC for the other queries?
+- Can we get rid of the rank-select for One-to-One queries to improve
+  construction time? We only do one specific kind of query on them?
+  (Rank-Select is kinda complicated.)
+
 
 #+print_bibliography:
