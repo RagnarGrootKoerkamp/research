@@ -21,8 +21,8 @@ Apart from the geometry, everything seems quite elementary.
 Well written; the separation into Main Idea, Theorem, Construction, and Querying
 works well.
 
-- It's a bit hard to distill what is the state of the art for each query type
-  before this paper, and what is the main new result.
+- It's a bit hard to distil what is the state of the art for each query type
+  before this paper.
 
 ** Prelims
 - Fig 2: Failure transitions are omitted on the left but shown on the right.
@@ -173,5 +173,18 @@ overhead if $Count(i, l)>>K$, since we can just stop merging elements as soon as
 the output set reaches size $K$.
 
 
+** Comparison
+All are $O(n)$ memory.
+|-----------------+-------------------+-----------------------------+-------------+------------------------+--------------|
+| query           | construction time | query time (paper)          | note        | query time (suggested) | note         |
+|-----------------+-------------------+-----------------------------+-------------+------------------------+--------------|
+| One-to-One(i,j) | $n \log \log k$   | $\log \log k$               | rank-select | -                      |              |
+| One-to-All(i)   | $n\log\log k$     | $k$                         | rank-select | $k$                    | simpler tree |
+| Count(i,l)      | ?                 | $\log n /\log \log n$       | black box   | -                      |              |
+| Report(i,l)     | ?                 | $\log n /\log \log n + out$ | black box   | -                      |              |
+| Top(i,K)        | ?                 | $\log^2 n /\log \log n + K$ | black box   | -                      |              |
+| Count(i,l)      | $n \log n$        | $\log n$                    | geometry    | $\log n$               | HLD          |
+| Report(i,l)     | $n \log n$        | $\log n +out$               | geometry    | $\log n + out$         | HLD          |
+| Top(i,K)        | $n\log n$         | $\log^2 n +K$               | geometry    | $\log n + K$           | HLD          |
 
 #+print_bibliography:
