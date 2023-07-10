@@ -237,17 +237,17 @@ the output set reaches size $K$.
 
 ** Comparison
 All are $O(n)$ memory.
-|-----------------+-------------------+-----------------------------+--------------------------+------------------------+--------------------------|
-| query           | construction | query time (paper)          | note                     | new query time  | note                     |
-|-----------------+-------------------+-----------------------------+--------------------------+------------------------+--------------------------|
-| One-to-One(i,j) | $n \log \log k$   | $\log \log k$               | SuffixTree + Rank-Select | -                      |                          |
-| One-to-All(i)   | $n$               | $k$                         | Aho-Corasick             | $k$                    | replace $\tau$ tree |
-| Count(i,l)      | ?                 | $\log n /\log \log n$       | black box                | -                      |                          |
-| Report(i,l)     | ?                 | $\log n /\log \log n + out$ | black box                | -                      |                          |
-| Top(i,K)        | ?                 | $\log^2 n /\log \log n + K$ | black box                | -                      |                          |
-| Count(i,l)      | $n \log n$        | $\log n$                    | geometry                 | $\log n$               | HLD                      |
-| Report(i,l)     | $n \log n$        | $\log n +out$               | geometry                 | $\log n + out$         | HLD                      |
-| Top(i,K)        | $n\log n$         | $\log^2 n +K$               | geometry                 | $\log n + K$           | HLD                      |
+|-----------------+-----------------+-----------------------------+--------------------------+-------------------------------+---------------------|
+| query           | construction    | query time (paper)          | note                     | new cons. + query time | note                |
+|-----------------+-----------------+-----------------------------+--------------------------+-------------------------------+---------------------|
+| One-to-One(i,j) | $n \log \log k$ | $\log \log k$               | ST + Rank-Select | -                             |                     |
+| One-to-All(i)   | $n$             | $k$                         | Aho-Corasick             | $k$                           | simpler tree |
+| Count(i,l)      | ?               | $\log n /\log \log n$       | black box                | -                             |                     |
+| Report(i,l)     | ?               | $\log n /\log \log n + out$ | black box                | -                             |                     |
+| Top(i,K)        | ?               | $\log^2 n /\log \log n + K$ | black box                | -                             |                     |
+| Count(i,l)      | $n\log n$       | $\log n$                    | geometry                 | $n$, $\log n$                 | HLD                 |
+| Report(i,l)     | $n\log n$       | $\log n +out$               | geometry                 | $n$, $\log n + out$           | HLD                 |
+| Top(i,K)        | $n\log n$       | $\log^2 n +K$               | geometry                 | $n$, $\log n + K$             | HLD                 |
 
 * Closing thoughts
 - Why do we use Aho-Corasick automaton for One-to-All queries, but Suffix Tree
@@ -263,8 +263,10 @@ All are $O(n)$ memory.
 - Can we extend to fuzzy matching, allowing some errors?
 - Can we A* to efficiently construct a fuzzy string-graph, by only considering
   sufficiently good candidates?
-- [cite:@assembly-graph-fm] computes the string overlap graph in $O(n)$ and
-  skips overlaps induced by the transitive closure.
+- [cite:@assembly-graph-fm] computes $One-to-All(i)$ in $O(n)$ using FM-index,
+  but can be modified to only report irreducible edges. It skip overlaps induced
+  by the transitive closure. Can we do something similar for $One-to-All$ or $Top$?
+
 
 
 #+print_bibliography:
