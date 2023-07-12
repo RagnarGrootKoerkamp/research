@@ -1,0 +1,66 @@
+#+title: Research proposal: subquadratic string graph construction
+#+hugo_section: posts
+#+date:  <2023-07-10>
+#+HUGO_LEVEL_OFFSET: 1
+#+hugo_front_matter_key_replace: author>authors
+#+OPTIONS: ^:{}
+#+toc: headlines 3
+#+author: Ragnar Groot Koerkamp
+
+This is a research proposal for a 5 month internship at CWI during autumn/winter 2023-2024.
+
+* Introduction
+
+An important problem in bioinformatics is /genome assembly/:
+DNA sequencing machines read substrings of a full DNA genome, and these pieces
+must be /assembled/ together to recover the entire genome.
+
+Let $k$ be the number of reads and let $R = \{S_1, \dots, S_k\}$ be the set of
+reads with total length $n:= |S_1| + \dots + |S_k|$.
+An important part of the assembly process is to construct an /assembly graph/ of
+all the reads (after first /cleaning/ the reads).
+Three approaches to this, ignoring details regarding reverse complements, are [cite:@assembly-challenges]:
+1. The /overlap graph/, where each read $S_i$ is a node, and nodes $S_i$
+   and $S_j$ are connected by a directed edge $S_i\rightarrow S_j$ with length
+   $|S_i| - \ell$ if there is a (sufficiently long) length $\ell$ suffix of $S_i$ that
+   equals a prefix of $S_j$.
+2. The /string graph/ [cite:@string-graph] is a simplified graph
+   containing only the /irreducible/ edges of the overlap graph. I.e. it is the
+   smallest graph whose transitive closure is the overlap graph. Also, reads
+   contained in other reads are removed.
+3. The /De Bruijn/ graph of the reads, which
+   contains a node for each /$k$-mer/ present in the set of reads, and
+   for each $(k+1)$-mer it adds an edge from its prefix $k$-mer to the suffix
+   $k$-mer. Velvet and SPAdes use this approach [cite:@velvet;@spades;@spades-recomb].
+After additional cleaning of the graph, the assembled genome is found as a set of paths/walks
+through it covering all nodes (for string graphs) or edges (depending on the
+exact type of De Bruijn graph used).
+
+In the overlap graph and string graph approach, an important step is to find the longest
+suffix-prefix overlap between all pairs of reads $(S_i, S_j)$. Since a full
+alignment per pair is slow, this is often sped up using an (approximate) /filter/
+[cite:@minimap]:
+1. BLAST stores $k$-mers per read in a hashmap [cite:@blast] and counts matching
+   $k$-mers.
+2. DAligner efficiently finds matching $k$-mers between two (sets of) reads by
+   merge-sorting the $k$-mers of the two (sets of) reads [cite:@daligner;@efficient-qgram-filters].
+3. MHAP sketches the $k$-mers in a sequence using MinHash [cite:@mhap].
+4. Minimap sketches the /minimizers/ in a sequence using MinHash [cite:@minimap].
+
+Alternatively, efficient datastructures can be used to compute all exact maximal
+pairwise suffix-prefix overlaps in $O(n + k^2)$ time.
+- SGA [cite:@sga] uses the FM-index for $O(n)$ [TODO: Confirm] time construction of all
+  irreducible edges [cite:@assembly-graph-fm].
+- Hifiasm [cite:@hifiasm] is unclear but also seems to only use exact
+  sufix-prefix matches, given that hifi reads have sufficient quality for exact overlaps.
+- [WIP]
+
+As a starting point, we take the paper [cite/t:@suffix-prefix-queries].
+Let $R$ be a set of strings $\{S_1, \dots, S_k\}$ with total length $n:= |S_1| +
+\dots + |S_k|$. A /suffix-prefix/ query asks for the longest exact overlap between a
+suffix of $S_i$ and a prefix of $S_j$.
+
+* Plan
+WIP; see [[../paper-notes/references/APSP.org][here]] for some ideas.
+
+#+print_bibliography:
