@@ -36,10 +36,10 @@ After additional cleaning of the graph, the assembled genome is found as a set o
 through it covering all nodes (for string graphs) or edges (depending on the
 exact type of De Bruijn graph used).
 
-In the overlap graph and string graph approach, an important step is to find the longest
-suffix-prefix overlap between all pairs of reads $(S_i, S_j)$. Since a full
-alignment per pair is slow, this is often sped up using an (approximate) /filter/
-[cite:@minimap]:
+In the overlap graph and string graph approach, an important step is to find the
+longest suffix-prefix overlap between all pairs of reads $(S_i, S_j)$. Since a
+full alignment per pair is slow and long reads are often noisy, this is usually
+sped up using an (approximate) /filter/ [cite:@minimap]:
 1. BLAST stores $k$-mers per read in a hashmap [cite:@blast] and counts matching
    $k$-mers.
 2. DAligner efficiently finds matching $k$-mers between two (sets of) reads by
@@ -48,19 +48,30 @@ alignment per pair is slow, this is often sped up using an (approximate) /filter
 4. Minimap sketches the /minimizers/ in a sequence using MinHash [cite:@minimap].
 
 Alternatively, efficient datastructures can be used to compute all exact maximal
-pairwise suffix-prefix overlaps in $O(n + k^2)$ time.
-- SGA [cite:@sga] uses the FM-index for $O(n)$ [TODO: Confirm] time construction of all
+pairwise suffix-prefix overlaps:
+- Gusfield [cite:@gusfield] gives an $O(n+k^2)$ suffix-tree based algorithm.
+- SGA [cite:@sga] uses the FM-index for $O(n)$ time construction of all
   irreducible edges [cite:@assembly-graph-fm].
 - Hifiasm [cite:@hifiasm] is unclear but also seems to only use exact
   sufix-prefix matches, given that hifi reads have sufficient quality for exact overlaps.
-- [WIP]
-
-As a starting point, we take the paper [cite/t:@suffix-prefix-queries].
-Let $R$ be a set of strings $\{S_1, \dots, S_k\}$ with total length $n:= |S_1| +
-\dots + |S_k|$. A /suffix-prefix/ query asks for the longest exact overlap between a
-suffix of $S_i$ and a prefix of $S_j$.
+- [cite/t:@suffix-prefix-queries] takes a different approach and instead of
+  computing all (irreducible) pairwise overlaps up-front, it introduces multiple queries:
+  - $OneToOne(i,j)$ computes the longest overlap between $S_i$ and $S_j$ in
+    $O(\log \log k)$.
+  - $OneToAll(i)$: computes the longest overlap between $S_i$ and each other
+    $S_j$ in $O(k)$.
+  - $Report(i,l)$ reports all overlaps longer than $l$ in $O(\log n +
+    output)$[fn::This and the methods below can also be done with $\log n / \log
+    \log n$ complexity instead of $\log n$ using more advances geometric algorithms.].
+  - $Count(i,l)$ counts the overlaps longer than $l$ in $O(\log n)$.
+  - $Top(i,K)$ returns the top $K$ longest overlaps of $S_i$ in $O(\log^2 n + K)$.
 
 * Plan
-WIP; see [[../paper-notes/references/APSP.org][here]] for some ideas.
+The plan for this internship is to improve and extend the results of this last
+paper, [cite/t:@suffix-prefix-queries]:
+1. Improve the complexity of the $Top(i,K)$ to $O(n)$ construction time and
+   $O(\log n+K)$ query time.
+2. Extend $Top(i,K)$ to the $AllToAll$ setting, to return the top $K$ overlaps
+   for each $S_i$.
 
 #+print_bibliography:
