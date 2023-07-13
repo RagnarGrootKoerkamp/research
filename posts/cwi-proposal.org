@@ -67,8 +67,13 @@ pairwise suffix-prefix overlaps:
   - $Top(i,K)$ returns the top $K$ longest overlaps of $S_i$ in $O(\log^2 n + K)$.
 
 * Plan
-The plan for this internship is to improve and extend the results of this last
-paper, [cite/t:@suffix-prefix-queries]:
+The plan for this internship is to improve, extend, and apply the results of this last
+paper, [cite/t:@suffix-prefix-queries].
+
+[TODO to improve text]
+
+** Improve query performance using Heavy-Light Decomposition
+
 - Improve the complexity of the $Count(i,l)$ and $Top(i,K)$ to $O(n)$ construction time and
   $O(\log n)$ resp. $O(\log n+K)$ query time:
 
@@ -81,10 +86,22 @@ paper, [cite/t:@suffix-prefix-queries]:
 - Extend $Top(i,K)$ (and other methods) to only return irreducible edges,
   ideally reducing the $output$ component of the query complexity.
 
-Furthermore, I would like to implement a fast algorithm to build the string
-graph, based on the queries provided about and/or existing $O(n+k^2)$ or
-$O(n+output)$ methods. Also, I would like to investigate extensions of these
-exact algorithms to allow fuzzy matching in case reads are erroneous with a
-small (e.g. $2\%$) error rate.
+** Extend to non-exact suffix-prefix-overlap that allows for read errors
+I would like to investigate extensions of these exact algorithms to allow fuzzy
+matching in case reads are erroneous with a small (e.g. $2\%$) error rate.
+
+- Short reads are very exact, so exact suffix-overlap detection was sufficient
+- Long reads are very noisy (up to $10\%$), so up to $20\%$ read-read overlap
+  can be present. This has typically been worked around by using
+  $k$-mer/minimizer based filters rather than using datastructure based approaches.
+- New hifi reads are up to $10kbp$ long with error rates as low as $0.1\%$ after
+  cleaning. This makes datastructure based algorithms useful again. (TODO:
+  Investigate exactly what hifiasm does here.)
+
+** Implement an algorithm to build string graphs, and possibly a full assembler
+
+I would like to implement a fast algorithm to build the string graph, based on
+the queries provided about and/or existing $O(n+k^2)$ or $O(n+output)$ methods.
+
 
 #+print_bibliography:
