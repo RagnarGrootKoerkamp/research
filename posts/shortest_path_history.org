@@ -1,0 +1,116 @@
+#+title: Shortest paths, bucket queues, and A* on the edit graph
+#+hugo_section: notes
+#+date:  <2023-07-29>
+#+hugo_level_offset: 1
+#+hugo_front_matter_key_replace: author>authors
+#+options: ^:{}
+#+author: Ragnar Groot Koerkamp
+#+filetags: review
+#+toc: headlines 3
+
+This note summarizes some papers I was reading while investigating the history
+of A* for pairwise alignment, and related to that the first usage of a /bucket
+queue/. [cite/t:@schrijver12] provides a nice overview of general shortest path methods.
+
+* Shortest path algorithms ..
+** .. in general
+- [cite/t:@moore59] was already presented in 1957. I did not find a PDF of
+  this paper but [cite/t:@schrijver12] summarizes it well: For unit-cost graphs
+  it presents an $O(m)$ BFS algorithm, and for general weighted graphs an
+  $O(mn)$ algorithm.
+- [cite/t:@dijkstra59] introduces the classic $O(n^2)$ algorithm of repeatedly
+  /expanding/ the /open/ vertex with shortest distance from the start (using
+  more modern terminology), and recommends storing the shortest distance to each
+  node together with the node.
+
+  This was later improved to $O(n\lg n)$ using e.g. a priority queue.
+** .. for circuit design
+- [cite/t:@lee61] introduces an algorithm for layout our electrical wires on a
+  chip. It is very similar to Dijkstra's classical algorithm [cite:@dijkstra59],
+  but stores distances together with the queue/set of open states, rather than a
+  separate dictionary. It's also slightly more general by using a /vector/ of
+  cost functions $(f_1, \dots, f_r)$, and allowing path-dependent costs.
+- [cite/t:@astar-hart67;@astar-hart67-correction] introduces A*.
+- [cite/t:@rubin74;@rubin74-correction] builds on [cite/t:@lee61], and among others:
+  - It notes that Dijkstra's algorithm (storing costs in states) can be used to
+    speed up of Lee's algorithm.
+  - It uses A* with Manhattan distance heuristic.
+  - It uses DFS on states with the same $f$-value.
+  - Somewhat confusingly, this paper lists [cite/t:@hitchner68] in its references, but doesn't
+    actually mention it in the text.
+* Bucket queues
+- [cite/t:@dial69] is listed as the first introduction of a bucket queue on
+  [[https://en.wikipedia.org/wiki/Bucket_queue][Wikipedia]] and uses linked lists of nodes with
+  the same distance, again wrapping around at the maximum arc length.
+- [cite/t:@hitchner68] writes about storing open states keyed by distance (aka a
+  /bucket queue/), and
+  attributes it to Peter S. Loubal:
+  #+begin_quote
+  Rather than storing temporary label values in the storage locations for each
+  node number, it stores node numbers in a table in which the row number of the
+  table is the value of the label.
+  #+end_quote
+  Further, he writes
+  #+begin_quote
+  Also, it is possible to save space by using a "wrap-around" table which has as
+  many rows as the number of units in the longest arc length plus 1.
+  #+end_quote
+  I tried finding some paper by Loubal that explains it, but unsuccessfully.
+- [cite/t:@hoel76] applies the bucket queue of [cite/t:@hitchner68] to [cite/t:@lee61]:
+  #+begin_quote
+  by storing frontier cells in an array of stacks rather than a single list,
+  costly searching operations can be eliminated without significantly increasing
+  storage requirements.
+  #+end_quote
+  It uses an array of stacks, again wrapping around at the maximum arc length.
+  It also discusses using linked lists instead of arrays for the stacks.
+* Shortest path algorithms by Hadlock
+It was only this week that I became aware of Hadlock's papers, apparently having
+missed citations to his work in [cite:@spouge89;@spouge91].
+Sadly, some of his papers are hard to find online.
+
+** Grid graphs
+- [cite/t:@hadlock77] introduces a /detour/ based algorithm that is essentially
+  equivalent to A*. He uses the Manhattan distance as a heuristic, and defines
+  the detour of an edge as the detour cost[fn::I'm leaving out a factor $2$ here.] $d(u, v) = f(v) - f(u) = edgecost(u,v) + h(v) - h(u)$.
+  Like normal A*, this is equivalent to using the heuristic as a /potential/ and
+  updating edge costs accordingly.
+
+  On grid graphs, the detour cost of any path is integral, and it suffices to do
+  a BFS, starting with vertices with $0$ detour, than $1$ detour, and so on.
+  This is easily implemented using two stacks.
+- [cite/t:@hadlock79] extends the /Minimum Detour Algorithm/ to non-unit costs.
+  As an application, it introduces a heuristic for paths with a minimal number
+  of turns.
+
+** Strings
+- [cite/t:@hadlock88detour]: This was presented at a conference.
+  I have not found in online, but requested the ETH library to scan the physical proceedings.
+
+  According to papers that cite it, this seems to be the first application of A*
+  to the alignment graph. The heuristics used are the /gap-cost/ and a heuristic
+  based on character frequencies.
+- [cite/t:@hadlock89detour]: This is a preprint/submitted paper cited by
+  [cite/t:@hadlock88pattern] and [cite/t:@spouge89], but I have not been able to
+  find any mention of it elsewhere at all.
+- [cite/t:@hadlock88pattern] uses different substitution costs $s(a,b) = |ord(a)-ord(b)|$
+  on the edit graph, where the cost of substituting a character depends on the
+  distance between the letters. It again presents the minimum detour algorithm,
+  this time with an upper bound $\tau$ on the cost of paths searched.
+  It then introduces a specific new heuristic based on character frequencies for
+  the new setting of substitution costs.
+
+* Spouge's computational volumes
+- [cite/t:@spouge89] introduces /computational volumes/: a subset of states of
+  the edit graph that is guaranteed to contain all shortest paths.
+  The main observation is that A* is slow because of bookkeeping (both the
+  distance to each explored state and the frontier) and maintaining of a queue.
+  Computing the states of a computational volume can be done much faster, since
+  there is a natural order to expand the vertices (by row, column, or
+  anti-diagonal).
+- [cite/t:@spouge91] provides a detailed algorithm implementation of the
+  computational volume method and benchmark it.
+
+
+
+#+print_bibliography:
