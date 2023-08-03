@@ -56,16 +56,17 @@
 
 
 @article{block-aligner,
-	author = {Liu, Daniel and Steinegger, Martin},
-	title = {Block aligner: fast and flexible pairwise sequence alignment with SIMD-accelerated adaptive blocks},
-	elocation-id = {2021.11.08.467651},
-	year = {2021},
-	doi = {10.1101/2021.11.08.467651},
-	publisher = {Cold Spring Harbor Laboratory},
-	abstract = {Background The Smith-Waterman-Gotoh alignment algorithm is the most popular method for comparing biological sequences. Recently, Single Instruction Multiple Data methods have been used to speed up alignment. However, these algorithms have limitations like being optimized for specific scoring schemes, cannot handle large gaps, or require quadratic time computation.Results We propose a new algorithm called block aligner for aligning nucleotide and protein sequences. It greedily shifts and grows a block of computed scores to span large gaps within the aligned sequences. This greedy approach is able to only compute a fraction of the DP matrix. In exchange for these features, there is no guarantee that the computed scores are accurate compared to full DP. However, in our experiments, we show that block aligner performs accurately on various realistic datasets, and it is up to 9 times faster than the popular Farrar{\textquoteright}s algorithm for protein global alignments.Conclusions Our algorithm has applications in computing global alignments and X-drop alignments on proteins and long reads. It is available as a Rust library at https://github.com/Daniel-Liu-c0deb0t/block-aligner.Competing Interest StatementThe authors have declared no competing interest.AVXAdvanced Vector ExtensionsDPDynamic ProgrammingSIMDSingle Instruction Multiple Data},
-	URL = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.08.467651},
-	eprint = {https://www.biorxiv.org/content/early/2021/11/08/2021.11.08.467651.full.pdf},
-	journal = {bioRxiv}
+    author = {Liu, Daniel and Steinegger, Martin},
+    title = "{Block Aligner: an adaptive SIMD-accelerated aligner for sequences and position-specific scoring matrices}",
+    journal = {Bioinformatics},
+    pages = {btad487},
+    year = {2023},
+    month = {08},
+    abstract = "{Efficiently aligning sequences is a fundamental problem in bioinformatics. Many recent algorithms for computing alignments through Smith-Waterman-Gotoh dynamic programming exploit Single Instruction Multiple Data operations on modern CPUs for speed. However, these advances have largely ignored difficulties associated with efficiently handling complex scoring matrices or large gaps (insertions or deletions).We propose a new SIMD-accelerated algorithm called Block Aligner for aligning nucleotide and protein sequences against other sequences or position-specific scoring matrices. We introduce a new paradigm that uses blocks in the dynamic programming matrix that greedily shift, grow, and shrink. This approach allows regions of the dynamic programming matrix to be adaptively computed. Our algorithm reaches over 5-10 times faster than some previous methods while incurring an error rate of less than 3\\% on protein and long read datasets, despite large gaps and low sequence identities.Our algorithm is implemented for global, local, and X-drop alignments. It is available as a Rust library (with C bindings) at https://github.com/Daniel-Liu-c0deb0t/block-aligner.}",
+    issn = {1367-4811},
+    doi = {10.1093/bioinformatics/btad487},
+    url = {https://doi.org/10.1093/bioinformatics/btad487},
+    eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btad487/51032249/btad487.pdf},
 }
 
 @article{ultra-long-reads,
