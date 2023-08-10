@@ -22,6 +22,14 @@ into a second string $B$ [cite:@nw;@vintsyuk68], where the number of such
 operations is called the /Levenshtein distance/ or /edit distance/
 [cite:@levenshtein;@wagner74].
 
+Per tradition, as [cite/t:@rognes00] write:
+#+begin_quote
+The rapidly increasing amounts of genetic-sequence
+information available represent a constant challenge to
+developers of hardware and software database searching
+and handling.
+#+end_quote
+
 In this work we introduce a new exact algorithm for global pairwise alignment
 building on the recently introduced A* heuristics of A*PA [cite:@astarpa], but
 instead of running A* we use a much more efficient DP-based algorithm. Thus, as
@@ -33,9 +41,9 @@ alignment. In this paper we narrow the gap between these choices by showing how
 to get the optimal alignment much more quickly than before.
 #+end_quote
 
-In the following, we give a brief overview of developments that form the
-foundation of this work, in chronological order per approach.
-See also e.g. the reviews by [cite/t:@kruskal83] and [cite/t:@navarro01].
+In the following, we give a brief recap of developments that this work builds
+on, in chronological order per approach.  See also e.g. the reviews by
+[cite/t:@kruskal83] and [cite/t:@navarro01].
 
 *Needleman-Wunsch.* This problem has classically been approached as a dynamic
 programming (DP) problem. For string lengths $n$ and $m$, [cite/t:@nw]
@@ -65,7 +73,9 @@ used /gap cost/ heuristic $h(u)=\cgap(u, v_t)$
 [cite:@ukkonen85;@hadlock88detour;@wu90-O-np;@spouge89;@spouge91;@papamichail2009;]
 that simply uses the difference between the lengths of the suffixes as lower
 bound, and a new improved heuristic based on character frequencies in the two
-suffixes.  Nevertheless, as [cite/t:@spouge91] states:
+suffixes. A*PA [cite:@astarpa] applies the /gap-chaining seed heuristic/ with /pruning/
+[cite:@astarix-2] to obtain near-linear runtime when errors are uniform random.
+Nevertheless, as [cite/t:@spouge91] states:
 #+begin_quote
 Many algorithms for finding optimal paths in non-lattice graphs also exist
 [cite:@dijkstra59; @astar-hart67; @rubin74], but algorithms exploiting the
@@ -75,7 +85,7 @@ biology, speed is important, ...
 and further [cite:@spouge89]:
 #+begin_quote
 This suggests a radical approach to A* search complexities: dispense with the
-lists if there is a natural order for vertex expansion.
+lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
 Indeed, a lot of work has gone into speeding up DP-based algorithms.
 
@@ -131,40 +141,100 @@ computational volumes are:
 1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph.
 2. $\{u: \g(u) + \h(u)=s\}$, the vertices on a shortest paths.
 3. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$ [cite:@fickett84].
-4. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the states possibly on a path
+4. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
    of length $\leq t$ [cite:@ukkonen85].
 5. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$ [cite:@spouge91].
-6. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
+6. $\{u: \g(u) + h(u) \leq t\}$, for an admissible heuristic $h$.
 
-As [cite:@spouge89] notes:
+As [cite/t:@spouge89] notes:
 #+begin_quote
 The order of computation (row major, column major or antidiagonal) is just a
 minor detail in most algorithms.
 #+end_quote
-But this is exactly what was investigated a lot to speed up implementations.
+But this is exactly what was investigated a lot in the search for faster implementations.
 
-*Implementations.* More recently, the focus shifted from reducing the number of
-computed states to computing states faster through advancements in
-implementation (bitpacking), CPU parallelism (threading, SIMD), and GPUs.
-- [cite:@wozniak97]
-- [cite:@myers99] Bitpacking: word-based computations
-- [cite:@rognes00]
-- [cite:@farrar] Farrar's striped
-- [cite:@seqan] SeqAn
-- [cite:@swps3] SWPS3
-- [cite:@snap] snap
-- [cite:@rognes11] swipe https://github.com/RonnySoak/libssa
-- [cite:@ssw-library] SSW Library https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library
-- [cite:@korpar15] opal (Swimd)
-- [cite:@parasail] Parasail
-- libssa https://github.com/RonnySoak/libssa
-- [cite:@edlib] Edlib
-- [cite:@suzuki-kasahara] libgaba
-- [cite:@minimap2] KSW2
-- [cite:@wfa] WFA
-- [cite:@biwfa] BiWFA
-- [cite:@ewfa-gpu] eWFA-GPU
+*Implementation and parallelism.* Since roughly $1995$, the focus shifted from
+reducing the number of computed states to computing states faster through
+advancements in implementation and hardware (SIMD, GPUs).  These speedups are
+often applied to the Smith-Waterman-(Gotoh) [cite:@sw;@gotoh] algorithm for
+(affine-cost) local alignment, where algorithmic improvements beyond
+$\Theta(nm)$ are unknown.
+
+The first technique in this direction is /microparallelism/ [cite:@alpern95],
+where each (64 bit) computer word is divided into multiple (e.g. 16 bit) parts,
+and word-size operations modifying all (4) parts in parallel.
+[cite/t:@alpern95] applied this with /inter-sequence parallelism/ to align a
+given query to $4$ reference sequences in parallel (see also
+[cite/t:@rognes11]).  [cite/t:@hughey96] was the first to note that
+/antidiagonals/ of the DP matrix can be computed in parallel, and
+[cite/t:@wozniak97] applied SIMD for this purpose.
+
+[cite/t:@rognes00] splits 64bit words into 8 8-bit values, capping all
+computations at $255$ but doubling the speed.  Further, it uses /vertical/
+instead of antidiagonal vectors.
+#+begin_quote
+The advantage of this approach is the much-simplified and faster loading of the
+vector of substitution scores from memory. The disadvantage is that data
+dependencies within the vector must be handled.
+#+end_quote
+In particular, [cite/t:@rognes00] introduce the /query profile/: Instead of
+looking up the substitution score $S[A[i]][B[j]]$ for the $i$'th and $j$'th
+character of $A$ and $B$ respectively, it is more efficient to precompute the
+/profile/ $P[c][j] := S[c][B[j]]$ for each character $c$ in the alphabet. Then,
+adjacent scores are simply found as adjacent values $P[A[i]][j \dots j']$.
+
+Similarly, [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
+for edit distance that stores the differences between adjacent DP-states
+bit-encoded in two 64-words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
+the $i$'th difference is $+1$ resp. $-1$.  It then gives an efficient algorithm
+using bitwise operations on these words.
+
+- TODO [cite:@farrar] Farrar's striped; uses query profile; conditional prefix scan
+  is moved outside inner loop. $2-8\times$ faster than Wozniak and Rognes.
+
+*Tools.*
+There are multiple semi-global aligners that implement $O(nm)$ global
+alignment using numerous of the aforementioned implementation
+techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], Opal
+(https://github.com/martinsos/opal), libssa
+(https://github.com/RonnySoak/libssa), SWIPE [cite:@rognes11], SWPS3
+[cite:@swps3], SSW library [cite:@ssw-library] ([[https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library][link]]), and KSW2 [cite:@minimap2].
+
+Dedicated global alignment implementations are much rarer.
+Edlib [cite:@edlib] implements the band doubling of [cite/t:@ukkonen85] using
+the $\g(u)+\cgap(u, v_t)\leq t$ computational volume of [cite/t:@spouge91] and
+the bitpacking of [cite/t:@myers99].
+WFA and BiWFA [cite:@wfa;@biwfa] implement the $O(n+s^2)$ expected time /diagonal transition/
+algorithm [cite:@ukkonen85;@myers86].
+Lastly, A*PA [cite:@astarpa] directly implements A* with the gap-chaining seed heuristic.
+
+
+---
+WIP below here.
+
+todo citations:
+
+Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
+of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
+Sosic.pdf.
+
+libssa: Frielingsdorf JT. Improving optimal sequence alignments through a
+simd-accelerated library: Thesis, University of Oslo; 2015. http://urn.nb.no/
+URN:NBN:no-49935. Accessed 10 Dec 2015.
+
+---
+
+- [cite:@suzuki-kasahara] libgaba: SIMD with difference recurrence relation for
+  affine cost alignment
 - [cite:@block-aligner] block aligner
+- [cite:@bitpal] BitPAl
+- TODO: bit-parallel:
+  - Wu Manber 1992
+  - Baeza-Yates Gonnet 1992
+  - Hyyro and Navarro, 2005; Hyyro et al., 2005
+  - Benson 2013
+  - navarro 2004
+  - bergeron hamel 2002
 
 
 *Further related work.*
@@ -177,7 +247,7 @@ directly required for the rest of this work, but relevant nevertheless.
 - Affine-cost alignment :: In parallel, much work has been done to extend
   algorithms to /affine cost/ alignments [cite:@gotoh;@altschul;@wfa;@biwfa].
 - Semi-global alignment :: [cite:@edlib;@wfa]
-- Approximate alignment :: using heuristic methods to quickly find alignments
+- Approximate mehhtods :: using heuristic methods to quickly find alignments
   without guarantee they are of minimal cost [cite:@block-aligner].
 - Meet in the middle :: [cite:@hirschberg75]
 - Diagonal transition :: A second DP-like algorithm that [cite/t:@ukkonen85]
@@ -186,7 +256,7 @@ directly required for the rest of this work, but relevant nevertheless.
   independently and in parallel by [cite/t:@myers86]. This method has the same
   $O(ns)$ worst-case runtime, but is $O(n+s^2)$ in expectation. [cite/t:@wfalm]
   have since shown that $O(n+s^2)$ worst-case runtime is also possible.
-- Approximate methods :: Too much to even get started.
+- GPU methods :: [cite:@korpar15] [cite:@ewfa-gpu]
 
 
 ** Contributions
@@ -285,5 +355,8 @@ Important:
 - Show sensitivity to parameter tuning
 
 * Acknowledgements
+
+I am grateful to Daniel Liu for regular discussions, and suggesting additional
+papers that have been added to the introduction.
 
 #+print_bibliography:
