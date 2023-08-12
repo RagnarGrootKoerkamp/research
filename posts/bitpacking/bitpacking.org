@@ -1,0 +1,152 @@
+#+title: [WIP] Bitpacking
+#+hugo_section: notes
+#+date:  <2023-08-11>
+#+hugo_level_offset: 1
+#+hugo_front_matter_key_replace: author>authors
+#+options: ^:{}
+#+author: Ragnar Groot Koerkamp
+#+filetags: review
+#+toc: headlines 3
+
+$$
+\newcommand{\ceil}[1]{\lceil#1\rceil}
+$$
+
+This note summarizes some papers I was reading while investigating this history
+of bitpacking methods such as [cite/t:@myers99]. Most of the research is done in the context of string
+searching (semi-global alignment). This post was sparked by [cite/t:@bitpal],
+which cites many works of Hyyrö. I then discovered that in fact Hyyrö wrote *many*
+papers on bitpacking methods. This post covers those papers, and papers they cite.
+
+Note that PDFs of some papers listed here are hard to find. I can share them on request.
+
+* LCS
+
+** [cite/t:@allison86]
+#+caption: Formula of [cite/t:@allison86], as shown by [cite/t:@hyyro04-revisited].
+#+name: allison86
+[[file:allison86.png]]
+- First bit-parallel LCS; well written
+- $O(n\ceil{m/w})$ LCS
+- Contours
+- Bit-profile, called /Alphabet strings/
+- Encoding: bits of $row_i$ store horizontal differences (in $\{0,1\}$) within rows.
+- $6$ operations per word: $$row_i = x\land ((x-((row_{i-1}\ll 1)|1))) \neq x),$$
+  where $x=row_{i-1} \lor b_i$.
+- equivalently [cite:@hyyro04-revisited] $$row_i = x\land (\sim(x-((row_{i-1}\ll 1)|1))).$$
+- The $-$ and $\ll$ have to be carried through the entire row if it consists
+  of multiple words.
+- The $|1$ can be absorbed into the carry-through instructions [cite:@hyyro04-revisited].
+** [cite/t:@crochemore01]
+#+caption: [cite/t:@crochemore01] LCS contours
+#+name: crochemore01
+[[file:crochemore01.png]]
+#+caption: Formula of [cite/t:@crochemore01], as shown by [cite/t:@hyyro04-revisited].
+#+name: crochemore01-2
+[[file:crochemore01-2.png]]
+- $O(n\ceil{m/w})$ LCS, like [cite/t:@allison86]
+- $4$ instead of $5$ bit-wise operations.
+- Contours
+- Bit-profile $M[y_j]$ for $j$th char of $y$, and $M'[y_j]$ is its negation.
+- Encoding: $\Delta L'_j$ is the negation of the differences in a column, i.e.
+  $1$ when two consecutive values are the same.
+- $4$ operations, but $2$ table accesses: $$\Delta L'_{j+1} = (\Delta L'_j + (\Delta L'_j \land
+  M[y_j])) \lor (\Delta L'_j \land M'[y_j])$$
+- In practice computing $M'[y_j] = \sim M[y_j]$ on the fly is faster [cite:@hyyro04-revisited].
+- Only the $+$ has to be carried through the entire row if it consists
+  of multiple words.
+** [cite/t:@hyyro04-revisited]
+#+caption: Formula of [cite/t:@hyyro04-revisited].
+#+name: hyyro04-revisited
+[[file:hyyro04-revisited.png]]
+#+caption: Tiling the restricted grid of [cite/t:@hyyro04-revisited].
+#+name: hyyro04-revisited-tiling
+[[file:hyyro04-revisited-tiling.png]]
+- Reviews [cite/t:@allison86] and [cite/t:@crochemore01]; very well written.
+- $O(n \ceil{m/w})$ LCS, or $O(n\ceil{d/w})$ LCS based on Ukkonen's band doubling for /simple edit
+  distance/, i.e. edit distance without substitutions.
+- Bit-profile $PM_\lambda$ called /pattern matching bit-vectors/ for
+  $\lambda\in \Sigma$.
+- Uses same encoding as [cite/t:@crochemore01], but calls it $V'$.
+- One less operation/table lookup less than [cite/t:@crochemore01]:
+  \begin{align*}
+  U &= V' \& PM_{B_j}\\
+  V' &= (V' + U) | (V' - U)
+  \end{align*}
+- Two carry-through operations between words.
+- Implementation is column-wise.
+- $11$ operations overhead in the loop to do carry and looping and such.
+- Measured runtime differences between implementations are small ($<20\%$) and
+  likely depend mostly on how well the compiler optimizes each version.
+- [[hyyro04-revisited-tiling]] shows the tiling when given a lower bound on LCS (resp. upper bound on simple edit distance).
+* Edit distance
+** [cite/t:@myers99]
+#+caption: [cite/t:@myers99] bitpacking algorithm when $m\leq w$.
+#+name: myers99
+[[file:myers99.png]]
+#+caption: [cite/t:@myers99] bitpacking algorithm modification for $m>w$.
+#+name: myers99-2
+#+attr_html: :class large
+[[file:myers99-2.png]]
+- $O(n\ceil{m/w})$ Edit distance
+- Semi-global alignment. For long patterns, the technique of [cite/t:@wu96] is used for $O(n \ceil{k/w})$ expected time.
+- Bit-profile $Peq$
+- Bitpacking; $15$ operations assuming horizontal input deltas are $0$ and no
+  horizontal output deltas are needed.
+- Encoding: ~Ph, Mh, Pv, Mv~ indicators store whether Horizontal/Vertical
+  differences are Plus $1$ or Minus $1$. Horizontal deltas are standalone
+  bits, and vertical deltas are packed.
+- Core observation: there is a /carry/ effect when there are specific long
+  runs of ones. This is similar to the carry of addition.
+- Core component are $Xv = Eq | (\Delta v_{in} = M)$ and $Xh = Eq | (\Delta h_{in} = M)$
+- Between blocks in a column, $h_{out}$ is computed and carried over, instead of
+  carrying the addition and two shift operations individually.
+#+caption: [cite/t:@myers99] block based algorithm for semi-global alignment.
+#+name: myers99-blocks
+#+attr_html: :class inset
+[[file:myers99-blocks.png]]
+** [cite/t:@hyyro01]
+#+caption: [cite/t:@hyyro01] bitpacking algorithm when $m\leq w$.
+#+name: hyyro01
+#+attr_html: :class large
+[[file:hyyro01.png]]
+- $O(n\ceil{m/w})$ edit distance, or $O(n \ceil{k/w})$ expected time semi-global alignment.
+- Equivalent but slightly different bit algorithm than [cite/t:@myers99]; core
+  component is $D0 = Xv | Xh$.
+- Also shows how to do transpositions [cite:@damerau64].
+- Good introduction and exposition.
+- Uses $15$ operations ($HP_j\ll 1$ can be reused); same as [cite/t:@myers99] $15$ operations.
+
+* TODO
+
+- [cite/t:@wu92] TODO
+  - $O(nkm/w)$ $k$-differences
+- [cite/t:@baeza-yates-gonnet92] TODO
+  - $O(nm/w)$ exact matching
+  - $O(nm \log k/w)$ for $k$-mismatches.
+- [cite/t:@hyyro02]
+- [cite/t:@hyyro02-superseeded]
+- [cite/t:@baeza-yates92]
+- [cite/t:@baeza-yates04]
+- [cite/t:@navarro02]
+- [cite/t:@wright94]
+- [cite/t:@benson13]
+- [cite/t:@baeza-yates99]
+- [cite/t:@bergeron02]
+- [cite/t:@hyyro04-increased]
+- [cite/t:@fredriksson03]
+- [cite/t:@hyyro04]
+- [cite/t:@hyyro05-indel]
+- [cite/t:@hyyro05-increased]
+- [cite/t:@hyyro05]
+- [cite/t:@hyyro06]
+- [cite/t:@fredriksson05]
+- [cite/t:@hyyro08]
+- [cite/t:@hyyro09]
+- [cite/t:@hyyro10]
+- [cite/t:@hyyro17]
+- [cite/t:@setyorini17]
+- [cite/t:@segalign]
+- [cite/t:@mishin21]
+
+#+print_bibliography:
