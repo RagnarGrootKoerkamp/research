@@ -10,6 +10,7 @@
 
 $$
 \newcommand{\ceil}[1]{\lceil#1\rceil}
+\newcommand{\floor}[1]{\lfloor#1\rfloor}
 $$
 
 This note summarizes some papers I was reading while investigating this history
@@ -20,9 +21,18 @@ papers on bitpacking methods. This post covers those papers, and papers they cit
 
 Note that PDFs of some papers listed here are hard to find. I can share them on request.
 
-* LCS
+* NFA
+** TODO [cite/t:@wu92]
+- $O(nkm/w)$ $k$-differences
+- Shift-And
+** TODO [cite/t:@baeza-yates-gonnet92]
+- $O(nm/w)$ exact matching
+- $O(nm \log k/w)$ for $k$-mismatches.
+- Shift-And
 
+* LCS
 ** [cite/t:@allison86]
+[cite/title/b:@allison86]
 #+caption: Formula of [cite/t:@allison86], as shown by [cite/t:@hyyro04-revisited].
 #+name: allison86
 [[file:allison86.png]]
@@ -38,6 +48,7 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
   of multiple words.
 - The $|1$ can be absorbed into the carry-through instructions [cite:@hyyro04-revisited].
 ** [cite/t:@crochemore01]
+[cite/title/b:@crochemore01]
 #+caption: [cite/t:@crochemore01] LCS contours
 #+name: crochemore01
 [[file:crochemore01.png]]
@@ -56,6 +67,7 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
 - Only the $+$ has to be carried through the entire row if it consists
   of multiple words.
 ** [cite/t:@hyyro04-revisited]
+[cite/title/b:@hyyro04-revisited]
 #+caption: Formula of [cite/t:@hyyro04-revisited].
 #+name: hyyro04-revisited
 [[file:hyyro04-revisited.png]]
@@ -65,8 +77,8 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
 - Reviews [cite/t:@allison86] and [cite/t:@crochemore01]; very well written.
 - $O(n \ceil{m/w})$ LCS, or $O(n\ceil{d/w})$ LCS based on Ukkonen's band doubling for /simple edit
   distance/, i.e. edit distance without substitutions.
-- Bit-profile $PM_\lambda$ called /pattern matching bit-vectors/ for
-  $\lambda\in \Sigma$.
+- Bit-profile $PM_\lambda$ called /pattern matching bit-vectors/ or /match
+  vector/ for $\lambda\in \Sigma$.
 - Uses same encoding as [cite/t:@crochemore01], but calls it $V'$.
 - One less operation/table lookup less than [cite/t:@crochemore01]:
   \begin{align*}
@@ -79,8 +91,18 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
 - Measured runtime differences between implementations are small ($<20\%$) and
   likely depend mostly on how well the compiler optimizes each version.
 - [[hyyro04-revisited-tiling]] shows the tiling when given a lower bound on LCS (resp. upper bound on simple edit distance).
+** [cite/t:@hyyro17]
+[cite/title/b:@hyyro17]
+
+- Using an exhaustive search, it is shown that under reasonable assumptions LCS can not be solved using $3$ binary operations.
+- A total of $5$ algorithms using $4$ operations are found.
+#+caption: The five 4-operation LCS algorithms found by [cite/t:@hyyro17].
+#+name: hyyro17
+#+attr_html: :class inset
+[[file:hyyro17.png]]
 * Edit distance
 ** [cite/t:@myers99]
+[cite/title/b:@myers99]
 #+caption: [cite/t:@myers99] bitpacking algorithm when $m\leq w$.
 #+name: myers99
 [[file:myers99.png]]
@@ -106,47 +128,174 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
 #+attr_html: :class inset
 [[file:myers99-blocks.png]]
 ** [cite/t:@hyyro01]
+[cite/title/b:@hyyro01]
 #+caption: [cite/t:@hyyro01] bitpacking algorithm when $m\leq w$.
 #+name: hyyro01
 #+attr_html: :class large
 [[file:hyyro01.png]]
+
 - $O(n\ceil{m/w})$ edit distance, or $O(n \ceil{k/w})$ expected time semi-global alignment.
 - Equivalent but slightly different bit algorithm than [cite/t:@myers99]; core
   component is $D0 = Xv | Xh$.
 - Also shows how to do transpositions [cite:@damerau64].
 - Good introduction and exposition.
-- Uses $15$ operations ($HP_j\ll 1$ can be reused); same as [cite/t:@myers99] $15$ operations.
+- Uses $15$ operations ($HP_j\ll 1$ can be reused); same as [cite/t:@myers99]
+  $15$ operations.
+** [cite/t:@hyyro02]
+[cite/title/b:@hyyro02]
+#+caption: [cite/t:@hyyro02] tiles bit-vectors diagonally.
+#+name: hyyro02-diag
+[[file:hyyro02-diag.png]]
 
+- $O(\ceil{d/w}m)$ edit distance (optionally with transpositions).
+- Merges bitpacking [cite:@myers99] with band doubling [cite:@ukkonen85].
+- Introduces diagonal tiling, to better match the statically banded region of [cite:@ukkonen85].
+- Diagonal tiling allows the removal of some shifts (i.e. in the last two lines
+  of [[hyyro01]], but adds a shift in the opposite direction for $D0$. This
+  introduces a ''backwards'' dependency on the vector below-left of it that is
+  not present with rectangular tiling.
+- The pattern-match vector $PM_j$ is shifted to correct for the unaligned reads.
+- Includes a comparison with band doubling and bitpacking algorithms of Ukkonen
+  and Myers. Surprisingly, Ukkonen's algorithm that computes values by
+  increasing distance (i.e. Dijkstra) is reported as faster that the band
+  doubling algorithm, even though Dijkstra is usually considered slow. Sadly no
+  code is provided.
+** [cite/t:@hyyro04-increased]
+[cite/title/b:@hyyro04-increased]
+
+- For short patterns, when $m \ll w$, the $O(\ceil{m/w}n)$ runtime wastes many bits of each word.
+- They show how to search for $\floor{w/m}$ patterns simultaneously, by packing
+  multiple patterns in a single word, for $O(\ceil{r/\floor{w/m}}n)$ total time
+  for $r$ patterns.
+- They show how to search for a single pattern in $O(n/\floor{w/m})$.
+- They apply the cut-off techniques to improve this to
+  $O(\ceil{r/\floor{w/k}}n)$ and $O(n/\floor{w/k})$ expected time respectively when at most
+  $k$ errors are allowed.
+- To avoid interference when adding/shifting, the most significant bit of each
+  pattern is set to $0$ beforehand.
+- The score at each position is tracked by packing $m$-bit counters into a
+  single word, together with adding some offset to make detection of $>k$ values easy.
+- To efficiently search a single pattern, the text is split into
+  $r:=\floor{w/m}$ chunks. Then, instead of searching multiple patterns against
+  the same text, one can search the same pattern against different texts by
+  or-ing together the bit-profile of the different text characters.
+
+** [cite/t:@hyyro05-increased]
+[cite/title/b:@hyyro05-increased]
+
+This is the journal version of the conference paper [cite/t:@hyyro04-increased]
+above, and includes a few more results.
+- It applies the ideas to multiple exact string matching, searching $r$ patterns in average
+  time $O(\ceil{r \log_\sigma w/w}n)$, by searching the first
+  $\ceil{\log_\sigma w}$ characters of each pattern in parallel.
+
+- It applies to one-vs-all edit distance, where multiple patterns are packed in
+  a word, and similar for LCS.
+
+** [cite/t:@hyyro02-superseeded]
+[cite/title/b:@hyyro02-superseeded]
+
+This is the conference paper of the journal paper [cite/t:@hyyro04] below.
+** TODO [cite/t:@hyyro04]
+[cite/title/b:@hyyro04]
+
+- This paper seems intimidating so far.
+** [cite/t:@hyyro06]
+[cite/title/b:@hyyro06]
+
+- Solves /local alignment/ using bitpacking in $O(mn \log \min(m,n,w)/w)$ time.
+- Contains a quite nice introduction on global vs semi-global vs local
+  alignment.
+  #+begin_quote
+  Local similarity computation needs a somewhat different arrangement and,
+  curiously, it seems not expressible using the distance model, but just the
+  score model.
+  #+end_quote
+- Score model $+1$ for match, $-1$ for substitution and indel.
+- Difficulties:
+  - Absolute scores must be known to do $\max(0, \cdot)$.
+  - Cells can differ by $2$.
+- Introduces /witnesses/: Every $Q = O(\log \min(m,n))$ rows the absolute value is stored and
+  tracked (using bitpacking). For each column, all absolute values are then
+  compared against $0$ and $k$ by taking the $m/Q$ known values and
+  incrementally shifting these down using the know vertical differences.
+- The resulting algorithm is a beast with $21$ lines of code each containing multiple bit operations.
+
+* Indel distance
+This is problem of finding all matches of a pattern in a string with /indel
+distance/ at most $k$, where only indels (insertions and deletions) are allowed,
+and substitutions are not allowed.  Note that in the semi-global alignment case
+this is not exactly equivalent to LCS.
+** [cite/t:@hyyro05-indel-1]
+[cite/title/b:@hyyro05-indel-1]
+
+Modifies existing algorithms for indel-distance.
+- [cite/t:@myers99] requires modifications, because along diagonals values can now
+  increase by $2$ instead of only $0$ and $1$. Runtime is $O(\ceil{m/w}n)$.
+
+- [cite/t:@wu92] and [cite/t:@baeza-yates99] are modified by simply removing one
+  case from the DP recurrence. Runtimes are $O(k\ceil{m/w}n)$ and
+  $O(\ceil{(k+2)(m-k)/w}n)$ respectively, and are faster than [cite/t:@myers99]
+  for small $k$ and small $m$.
+
+- The recurrence for $D$ in the first paragraph of the introduction (and also
+  later in the introduction) seems to be missing some $+1$ terms for indels. Or
+  maybe I'm missing something?
+** [cite/t:@hyyro05-indel-2]
+[cite/title/b:@hyyro05-indel-2]
+
+- Improves the runtime of the indel-distance variant of [cite/t:@myers99] introduced in
+  [cite:@hyyro05-indel-1] from $26$ operations to $21$ operations.
+- The overall speedup was $24.5\%$, more than the instructions savings of $19\%$.
+- Has a much clearer presentation than the previous paper.
+* Other
+Some more papers that I downloaded as part of this reading session, but that
+turned out somewhat unrelated.
+** [cite/t:@hyyro09]
+[cite/title/b:@hyyro09]
+
+Solves the problem of /consecutive suffix alignment/, where $A$ is aligned to
+prefixes of growing suffixes $B_{j..n}$ for decreasing $j$. Given an
+$O((m+n)n)$ time and $O(m+n)$ space algorithm, which is the first linear space algorithm.
+
+This can be used when the end position of a match in approximate string matching
+is known, and the start position needs to be recovered.
+
+The algorithm description looks very technical, and sadly no high-level overview
+and/or figures are provided, so I did not read this in detail.
+** [cite/t:@hyyro10]
+[cite/title/b:@hyyro10]
+
+This generalizes [cite/t:@hyyro09] to non-unit cost weights.
+
+It has a somewhat intuitive explanation of an earlier algorithm of Kim and Park.
 * TODO
 
-- [cite/t:@wu92] TODO
-  - $O(nkm/w)$ $k$-differences
-- [cite/t:@baeza-yates-gonnet92] TODO
-  - $O(nm/w)$ exact matching
-  - $O(nm \log k/w)$ for $k$-mismatches.
-- [cite/t:@hyyro02]
-- [cite/t:@hyyro02-superseeded]
-- [cite/t:@baeza-yates92]
-- [cite/t:@baeza-yates04]
-- [cite/t:@navarro02]
-- [cite/t:@wright94]
-- [cite/t:@benson13]
-- [cite/t:@baeza-yates99]
-- [cite/t:@bergeron02]
-- [cite/t:@hyyro04-increased]
-- [cite/t:@fredriksson03]
-- [cite/t:@hyyro04]
-- [cite/t:@hyyro05-indel]
-- [cite/t:@hyyro05-increased]
-- [cite/t:@hyyro05]
-- [cite/t:@hyyro06]
-- [cite/t:@fredriksson05]
-- [cite/t:@hyyro08]
-- [cite/t:@hyyro09]
-- [cite/t:@hyyro10]
-- [cite/t:@hyyro17]
-- [cite/t:@setyorini17]
-- [cite/t:@segalign]
-- [cite/t:@mishin21]
+** [cite/t:@baeza-yates92]
+** [cite/t:@baeza-yates04]
+** [cite/t:@baeza-yates99]
+** [cite/t:@navarro02]
+** [cite/t:@wright94]
+** [cite/t:@benson13]
+** [cite/t:@bergeron02]
+- Extends [cite/t:@myers99] bitpacking to arbitrary substitution weights and
+  fixed indel weight $c$, for total $O(mnc\log(c)/w)$ time.
+** [cite/t:@fredriksson03]
+** [cite/t:@fredriksson05]
+TODO Fix citations; add Fredriksson 2004.
+  FREDRIKSSON, K.
+1.
+Row-wise tiling for the Myers’ bit-parallel dynamic programming algo-
+rithm. In Proc. 10th International Symposium on String Processing and Information Retrieval
+(SPIRE ’03). LNCS 2857. Berlin, Germany, Springer, New York. 66–79.
+FREDRIKSSON, K. AND NAVARRO, G.
+1.
+Average-optimal single and multiple approximate string
+matching. ACM Journal of Experimental Algorithmics (JEA). 9, 1.4.
+** [cite/t:@hyyro08]
+bit parallel NFA
+** [cite/t:@setyorini17]
+** [cite/t:@segalign]
+** [cite/t:@mishin21]
 
 #+print_bibliography:
