@@ -13,7 +13,7 @@ let paragraphMenuMap = paragraphs.reduce((acc, p) => {
   let h = previousHeaderId(p);
   p.previousHeader = h;
   if (h) {
-    let entry = submenu.find((a) => a.hash === "#" + h);
+    let entry = submenu.find((a) => decodeURIComponent(a.hash) === "#" + h);
     acc[h] = entry;
   }
   return acc;
@@ -24,14 +24,14 @@ paragraphs.forEach((elem) => observer.observe(elem));
 let selection;
 function handler(updates) {
   selection = (selection || updates).map(
-    (s) => updates.find((e) => e.target === s.target) || s
+    (s) => updates.find((e) => e.target === s.target) || s,
   );
   // Clear all.
   for (s of selection) {
     if (!s.isIntersecting) {
       paragraphMenuMap[s.target.previousHeader]?.parentElement.classList.remove(
         "selected",
-        "parent"
+        "parent",
       );
     }
   }
