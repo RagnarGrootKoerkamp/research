@@ -21,14 +21,11 @@ papers on bitpacking methods. This post covers those papers, and papers they cit
 
 Note that PDFs of some papers listed here are hard to find. I can share them on request.
 
-* NFA
-** TODO [cite/t:@wu92]
-- $O(nkm/w)$ $k$-differences
-- Shift-And
-** TODO [cite/t:@baeza-yates-gonnet92]
-- $O(nm/w)$ exact matching
-- $O(nm \log k/w)$ for $k$-mismatches.
-- Shift-And
+* Intro
+This post mixes global and semi-global algorithms. In the semi-global setting,
+the convention is that the (short) pattern has length $m$ (sometimes assumed to
+be at most the word size $w$), and that the text has length $n\gg m$.
+For global alignment, typically have $m\sim n$.
 
 * LCS
 ** [cite/t:@allison86]
@@ -106,7 +103,51 @@ Note that PDFs of some papers listed here are hard to find. I can share them on 
 #+name: hyyro17
 #+attr_html: :class inset
 [[file:hyyro17.png]]
+* Hamming distance
+** [cite/t:@baeza-yates-gonnet92]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yater-gonnet92
+:END:
+[cite/title/b:@baeza-yates-gonnet92]
+- $O(mn/w)$ string search under Hamming distance; one of the first uses of
+  bitpacking.
+  - /Shift-add/ algorithm works by counting the number of mismatches along diagonals of the $m\times
+    n$ matrix.
+- Already submitted in 1989.
+- Supposedly builds on theory of finite automata, but seems like a pretty direct
+  algorithm to me.
+- Extends to matching with character classes, but still only does Hamming distance.
+- $O(nm \log k/w)$ when counting up to $k$-mismatches (Hamming distance), by storing each count in
+  $\log k$ bits (instead of a single match/mismatch bit).
+- Multiple exact string matching in $O(\ceil{m_{sum}/w}n)$ time.
+
+- side note: 3 column layout is terrible -- too much scrolling up and down.
+
 * Edit distance
+** [cite/t:@wu92]
+:PROPERTIES:
+:CUSTOM_ID: wu92
+:END:
+[cite/title/b:@wu92]
+- Published in same journal issue as [cite/t:@baeza-yates-gonnet92] and extends
+  it to edit distance.
+- $O(nkm/w)$ to find all matches of cost at most $k$.
+  - Introduces indicator bit-vectors $R^d_j[i]$, such that $R^d$ stores whether
+    there is a path of cost $d$ to DP state $(i,j)$.
+- Introduces the /partition approach/: If $k\ll m$ errors are allowed, at least
+  one part must match when the pattern is partitioned into pieces of length $r=\floor{m/(k+1)}$.
+  Thus, one can first do a exact search for multiple patterns, followed by an
+  inexact search around matches.
+
+  (TODO: Cite for A*PA)
+- Solves multiple exact pattern matching by interleaving the (equal length)
+  patterns and shifting left by the number of patterns, instead of by $1$.
+- Extends to character classes and wild cards, like [cite/t:@baeza-yates-gonnet92].
+- Extends to small integer costs for operations.
+- For long patterns and $k>w$, only up to $w$ errors are considered by default
+  and more is only computed when a good candidate is found.
+- For regular expressions, nondeterministic finite automaton are using.
+- ~agrep~: Approximate ~grep~.
 ** [cite/t:@myers99]
 [cite/title/b:@myers99]
 #+caption: [cite/t:@myers99] bitpacking algorithm when $m\leq w$.
@@ -281,6 +322,30 @@ Modifies existing algorithms for indel-distance.
   [cite:@hyyro05-indel-1] from $26$ operations to $21$ operations.
 - The overall speedup was $24.5\%$, more than the instructions savings of $19\%$.
 - Has a much clearer presentation than the previous paper.
+
+* Finite automata
+** TODO [cite/t:@baeza-yates92]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yates92
+:END:
+[cite/title/b:@baeza-yates92]
+- review
+** [cite/t:@bergeron02]
+:PROPERTIES:
+:CUSTOM_ID: bergeron02
+:END:
+[cite/title/b:@bergeron02]
+- Extends [cite:@baeza-yates-gonnet92] and [cite:@myers99] to arbitrary bounded
+  integer weights for edit distance, showing that $O(c \log c)$ bit vector operations are
+  sufficient per column transition, for $O(mnc\log(c)/w)$ total runtime.
+- Very formal paper -- hard to read and understand what is practically going on.
+- Does not give an actual algorithm/implementation, nor experiments.
+** TODO [cite/t:@hyyro08]
+:PROPERTIES:
+:CUSTOM_ID: hyyro08
+:END:
+[cite/title/b:@hyyro08]
+bit parallel NFA
 * Other
 Some more papers that I downloaded as part of this reading session, but that
 turned out somewhat unrelated.
@@ -310,10 +375,6 @@ This generalizes [cite/t:@hyyro09] to non-unit cost weights.
 It has a somewhat intuitive explanation of an earlier algorithm of Kim and Park.
 * TODO
 
-** [cite/t:@baeza-yates92]
-:PROPERTIES:
-:CUSTOM_ID: baeza-yates92
-:END:
 ** [cite/t:@baeza-yates04]
 :PROPERTIES:
 :CUSTOM_ID: baeza-yates04
@@ -334,12 +395,6 @@ It has a somewhat intuitive explanation of an earlier algorithm of Kim and Park.
 :PROPERTIES:
 :CUSTOM_ID: benson13
 :END:
-** [cite/t:@bergeron02]
-:PROPERTIES:
-:CUSTOM_ID: bergeron02
-:END:
-- Extends [cite/t:@myers99] bitpacking to arbitrary substitution weights and
-  fixed indel weight $c$, for total $O(mnc\log(c)/w)$ time.
 ** [cite/t:@fredriksson03]
 :PROPERTIES:
 :CUSTOM_ID: fredriksson03
@@ -358,11 +413,6 @@ FREDRIKSSON, K. AND NAVARRO, G.
 1.
 Average-optimal single and multiple approximate string
 matching. ACM Journal of Experimental Algorithmics (JEA). 9, 1.4.
-** [cite/t:@hyyro08]
-:PROPERTIES:
-:CUSTOM_ID: hyyro08
-:END:
-bit parallel NFA
 ** [cite/t:@setyorini17]
 :PROPERTIES:
 :CUSTOM_ID: setyorini17
@@ -375,5 +425,12 @@ bit parallel NFA
 :PROPERTIES:
 :CUSTOM_ID: mishin21
 :END:
+** [cite/t:@bitpal]
+:PROPERTIES:
+:CUSTOM_ID: bitpal
+:END:
+
+** Landau Vishkin 1986 Efficient string matching with k mismatches
+** Baeza-Yater Perleberg 1992 Fast and practical approximate pattern matching
 
 #+print_bibliography:
