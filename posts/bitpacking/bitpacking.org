@@ -1,4 +1,4 @@
-#+title: [WIP] Bitpacking
+#+title: [WIP] Bitpacking and string searching
 #+hugo_section: notes
 #+date:  <2023-08-11>
 #+hugo_level_offset: 1
@@ -13,22 +13,51 @@ $$
 \newcommand{\floor}[1]{\lfloor#1\rfloor}
 $$
 
-This note summarizes some papers I was reading while investigating this history
-of bitpacking methods such as [cite/t:@myers99]. Most of the research is done in the context of string
-searching (semi-global alignment). This post was sparked by [cite/t:@bitpal],
-which cites many works of Hyyrö. I then discovered that in fact Hyyrö wrote *many*
-papers on bitpacking methods. This post covers those papers, and papers they cite.
-
-Note that PDFs of some papers listed here are hard to find. I can share them on request.
-
 * Intro
-This post mixes global and semi-global algorithms. In the semi-global setting,
-the convention is that the (short) pattern has length $m$ (sometimes assumed to
-be at most the word size $w$), and that the text has length $n\gg m$.
-For global alignment, typically have $m\sim n$.
+This note summarizes some papers I was reading while investigating this history
+of bitpacking methods such as [cite/t:@myers99]. This post was sparked by [cite/t:@bitpal],
+which cites many works of Hyyrö. I then discovered that in fact Hyyrö wrote *many*
+papers on bitpacking methods. Then while reading these, I also found many
+citations to /(approximate) string searching/ algorithms (aka /semi-global
+alignment/, aka /(approximate) pattern matching). In particular Baeza-Yates and
+Navarro wrote many papers on this topic. Some of those use
+bit-packing while others don't. Paper also differ in the distance metric they
+use (/mismatches/ (Hamming distance), /matches/ (LCS distance), /differences/ (edit distance), indel distance), and which
+approach they use (automata or DP); see the corresponding sections.
 
-* LCS
-** [cite/t:@allison86]
+For the classic DP bit-packing methods like [cite/t:@myers99], see [[DP methods]].
+
+
+In the semi-global setting, the convention is that the (short) pattern has
+length $m$ (sometimes assumed to be at most the word size $w$), and that the
+text has length $n\gg m$.  Semi-global alignment is also called /(approximate)
+string matching/. For global alignment, typically $m\sim n$.
+Throughout this post, I assume the alphabet size is constant.
+
+Generally, there is a distinction between /practical/ algorithms and
+/theoretical/ algorithms. The latter often requiring e.g. a suffix array for
+$O(m)$ runtime and hence being slower in practice than a $O(m^2)$ DP-based implementation.
+
+PDFs of some papers listed here are hard to find. I'm happy to share them on request.
+
+* Review papers
+
+
+- [cite/t:@chang92] [cite/title/b:@chang92] :: Very comprehensive 10 page comparison of theory of many early
+  algorithms, and analyses them on random strings. Introduces /diagonal transition/ term.
+
+  TODO: Read this carefully.
+  #+caption: Summary of [cite/t:@chang92]. Such a nice table. *Empirical* runtime should be more widespread.
+  #+name: chang92
+  #+attr_html: :class inset large
+  [[file:chang92.png]]
+- [cite/t:@baeza-yates92] [cite/title/b:@baeza-yates92] :: 15 page review, but focuses on a slightly different topic.
+- [cite/t:@navarro01] [cite/title/b:@navarro01] :: 50 page long review paper. Useful as reference but long to read.
+- [cite/t:@navarro02] [cite/title/b:@navarro02] :: 200 page book. I didn't actually read this; it just appeared as citation.
+* DP methods
+
+** LCS
+*** [cite/t:@allison86]
 [cite/title/b:@allison86]
 #+caption: Formula of [cite/t:@allison86], as shown by [cite/t:@hyyro04-revisited].
 #+name: allison86
@@ -44,7 +73,7 @@ For global alignment, typically have $m\sim n$.
 - The $-$ and $\ll$ have to be carried through the entire row if it consists
   of multiple words.
 - The $|1$ can be absorbed into the carry-through instructions [cite:@hyyro04-revisited].
-** [cite/t:@crochemore01]
+*** [cite/t:@crochemore01]
 [cite/title/b:@crochemore01]
 #+caption: [cite/t:@crochemore01] LCS contours
 #+name: crochemore01
@@ -63,7 +92,7 @@ For global alignment, typically have $m\sim n$.
 - In practice computing $M'[y_j] = \sim M[y_j]$ on the fly is faster [cite:@hyyro04-revisited].
 - Only the $+$ has to be carried through the entire row if it consists
   of multiple words.
-** [cite/t:@hyyro04-revisited]
+*** [cite/t:@hyyro04-revisited]
 :PROPERTIES:
 :CUSTOM_ID: hyyro04-revisited
 :END:
@@ -91,7 +120,7 @@ For global alignment, typically have $m\sim n$.
 - Measured runtime differences between implementations are small ($<20\%$) and
   likely depend mostly on how well the compiler optimizes each version.
 - [[hyyro04-revisited-tiling]] shows the tiling when given a lower bound on LCS (resp. upper bound on simple edit distance).
-** [cite/t:@hyyro17]
+*** [cite/t:@hyyro17]
 :PROPERTIES:
 :CUSTOM_ID: hyyro17
 :END:
@@ -103,52 +132,31 @@ For global alignment, typically have $m\sim n$.
 #+name: hyyro17
 #+attr_html: :class inset
 [[file:hyyro17.png]]
-* Hamming distance
-** [cite/t:@baeza-yates-gonnet92]
+
+** Edit distance
+*** [cite/t:@wright94]
 :PROPERTIES:
-:CUSTOM_ID: baeza-yater-gonnet92
+:CUSTOM_ID: wright94
 :END:
-[cite/title/b:@baeza-yates-gonnet92]
-- $O(mn/w)$ string search under Hamming distance; one of the first uses of
-  bitpacking.
-  - /Shift-add/ algorithm works by counting the number of mismatches along diagonals of the $m\times
-    n$ matrix.
-- Already submitted in 1989.
-- Supposedly builds on theory of finite automata, but seems like a pretty direct
-  algorithm to me.
-- Extends to matching with character classes, but still only does Hamming distance.
-- $O(nm \log k/w)$ when counting up to $k$-mismatches (Hamming distance), by storing each count in
-  $\log k$ bits (instead of a single match/mismatch bit).
-- Multiple exact string matching in $O(\ceil{m_{sum}/w}n)$ time.
+[cite/title/b:@wright94]
 
-- side note: 3 column layout is terrible -- too much scrolling up and down.
+#+caption: DP of [cite/t:@wright94]. I don't get it.
+#+name: wright94-dp
+[[file:wright94-dp.png]]
+#+caption: Modified DP of [cite/t:@wright94]. This one is self referential... I get it even less.
+#+name: wright94-dp2
+[[file:wright94-dp2.png]]
 
-* Edit distance
-** [cite/t:@wu92]
-:PROPERTIES:
-:CUSTOM_ID: wu92
-:END:
-[cite/title/b:@wu92]
-- Published in same journal issue as [cite/t:@baeza-yates-gonnet92] and extends
-  it to edit distance.
-- $O(nkm/w)$ to find all matches of cost at most $k$.
-  - Introduces indicator bit-vectors $R^d_j[i]$, such that $R^d$ stores whether
-    there is a path of cost $d$ to DP state $(i,j)$.
-- Introduces the /partition approach/: If $k\ll m$ errors are allowed, at least
-  one part must match when the pattern is partitioned into pieces of length $r=\floor{m/(k+1)}$.
-  Thus, one can first do a exact search for multiple patterns, followed by an
-  inexact search around matches.
-
-  (TODO: Cite for A*PA)
-- Solves multiple exact pattern matching by interleaving the (equal length)
-  patterns and shifting left by the number of patterns, instead of by $1$.
-- Extends to character classes and wild cards, like [cite/t:@baeza-yates-gonnet92].
-- Extends to small integer costs for operations.
-- For long patterns and $k>w$, only up to $w$ errors are considered by default
-  and more is only computed when a good candidate is found.
-- For regular expressions, nondeterministic finite automaton are using.
-- ~agrep~: Approximate ~grep~.
-** [cite/t:@myers99]
+- $O(nm/w)$ antidiagonal proccessing of the DP-matrix using bitpacking on $\mod 4$ values,
+  as in [cite/t:@lipton85] (see [[#lipton85]] below).
+- This is implemented without $\min$ operations by using equalities instead.
+- Uses $3$ bits per value: one padding for carry to avoid overflowing into the next state.
+- I have some confusions about this paper:
+  - The DP recurrence ([[wright94-dp]] and [[wright94-dp2]]) seems to be missing $+1$ for the indel terms. What am
+    I missing??
+  - Algorithm 1 has weird initialization (the for loop over $i$ uses an uninitialized $j$??)
+  - (Algorithm 2 makes sense again.)
+*** [cite/t:@myers99]
 [cite/title/b:@myers99]
 #+caption: [cite/t:@myers99] bitpacking algorithm when $m\leq w$.
 #+name: myers99
@@ -174,7 +182,7 @@ For global alignment, typically have $m\sim n$.
 #+name: myers99-blocks
 #+attr_html: :class inset
 [[file:myers99-blocks.png]]
-** [cite/t:@hyyro01]
+*** [cite/t:@hyyro01]
 :PROPERTIES:
 :CUSTOM_ID: hyyro01
 :END:
@@ -191,7 +199,7 @@ For global alignment, typically have $m\sim n$.
 - Good introduction and exposition.
 - Uses $15$ operations ($HP_j\ll 1$ can be reused); same as [cite/t:@myers99]
   $15$ operations.
-** [cite/t:@hyyro02]
+*** [cite/t:@hyyro02]
 :PROPERTIES:
 :CUSTOM_ID: hyyro02
 :END:
@@ -213,7 +221,7 @@ For global alignment, typically have $m\sim n$.
   increasing distance (i.e. Dijkstra) is reported as faster that the band
   doubling algorithm, even though Dijkstra is usually considered slow. Sadly no
   code is provided.
-** [cite/t:@hyyro04-increased]
+*** [cite/t:@hyyro04-increased]
 :PROPERTIES:
 :CUSTOM_ID: hyyro04-increased
 :END:
@@ -236,7 +244,7 @@ For global alignment, typically have $m\sim n$.
   the same text, one can search the same pattern against different texts by
   or-ing together the bit-profile of the different text characters.
 
-** [cite/t:@hyyro05-increased]
+*** [cite/t:@hyyro05-increased]
 :PROPERTIES:
 :CUSTOM_ID: hyyro05-increased
 :END:
@@ -251,21 +259,14 @@ above, and includes a few more results.
 - It applies to one-vs-all edit distance, where multiple patterns are packed in
   a word, and similar for LCS.
 
-** [cite/t:@hyyro02-superseeded]
+*** [cite/t:@hyyro02-superseeded]
 :PROPERTIES:
 :CUSTOM_ID: hyyro02-superseeded
 :END:
 [cite/title/b:@hyyro02-superseeded]
 
 This is the conference paper of the journal paper [cite/t:@hyyro04] below.
-** TODO [cite/t:@hyyro04]
-:PROPERTIES:
-:CUSTOM_ID: hyyro04
-:END:
-[cite/title/b:@hyyro04]
-
-- This paper seems intimidating so far.
-** [cite/t:@hyyro06]
+*** [cite/t:@hyyro06]
 :PROPERTIES:
 :CUSTOM_ID: hyyro06
 :END:
@@ -289,12 +290,23 @@ This is the conference paper of the journal paper [cite/t:@hyyro04] below.
   incrementally shifting these down using the know vertical differences.
 - The resulting algorithm is a beast with $21$ lines of code each containing multiple bit operations.
 
-* Indel distance
+** Indel distance
 This is problem of finding all matches of a pattern in a string with /indel
 distance/ at most $k$, where only indels (insertions and deletions) are allowed,
-and substitutions are not allowed.  Note that in the semi-global alignment case
+and substitutions are not allowed (or equivalently, they have cost $2$).  Note that in the semi-global alignment case
 this is not exactly equivalent to LCS.
-** [cite/t:@hyyro05-indel-1]
+*** [cite/t:@lipton85]
+:PROPERTIES:
+:CUSTOM_ID: lipton85
+:END:
+[cite/title/b:@lipton85]
+#+caption: DP of [cite/t:@lipton85].
+#+name: lipton85-dp
+[[file:lipton85.png]]
+- Introduces recurrence on the DP matrix using mod 4 arithmetic.
+- Parallel over antidiagonals
+- Note: this has substitution cost $2$, so it's actually using indel distance.
+*** [cite/t:@hyyro05-indel-1]
 :PROPERTIES:
 :CUSTOM_ID: hyyro05-indel-1
 :END:
@@ -312,7 +324,7 @@ Modifies existing algorithms for indel-distance.
 - The recurrence for $D$ in the first paragraph of the introduction (and also
   later in the introduction) seems to be missing some $+1$ terms for indels. Or
   maybe I'm missing something?
-** [cite/t:@hyyro05-indel-2]
+*** [cite/t:@hyyro05-indel-2]
 :PROPERTIES:
 :CUSTOM_ID: hyyro05-indel-2
 :END:
@@ -323,14 +335,121 @@ Modifies existing algorithms for indel-distance.
 - The overall speedup was $24.5\%$, more than the instructions savings of $19\%$.
 - Has a much clearer presentation than the previous paper.
 
-* Finite automata
-** TODO [cite/t:@baeza-yates92]
+* Automata methods
+These methods are based on /automata/ (as opposed to a DP matrix). This means
+that instead of storing the distance to a state, they for instance indicate
+whether the state can be reached with cost $d$ in a bit vector/matrix $R^d$.
+Nevertheless, some of these methods seem very closely related to DP based
+methods, and this categorisation is not absolute. Rather, I just needed /some/
+way to separate out papers a bit.
+
+This category also includes e.g. the Knuth-Morris-Pratt algorithm for linear
+time exact string matching.
+** Hamming distance
+*** [cite/t:@landau-vishkin86]
 :PROPERTIES:
-:CUSTOM_ID: baeza-yates92
+:CUSTOM_ID: landau-vishkin86
 :END:
-[cite/title/b:@baeza-yates92]
-- review
-** [cite/t:@bergeron02]
+[cite/title/b:@landau-vishkin86]
+
+- $O(k(m\log m+n))$ approximate string matching under Hamming distance.
+- Constructs some kind of jumplists with mismatches to quickly determine the new
+  number of mismatches after shifting the pattern. (But I did not read or
+  understand in detail.)
+
+*** [cite/t:@baeza-yates-gonnet92]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yater-gonnet92
+:END:
+[cite/title/b:@baeza-yates-gonnet92]
+- $O(mn/w)$ string search under Hamming distance; one of the first uses of
+  bitpacking.
+  - /Shift-add/ algorithm works by counting the number of mismatches along diagonals of the $m\times
+    n$ matrix.
+- Already submitted in 1989.
+- Supposedly builds on theory of finite automata, but seems like a pretty direct
+  algorithm to me.
+- Extends to matching with character classes, but still only does Hamming distance.
+- $O(nm \log k/w)$ when counting up to $k$-mismatches (Hamming distance), by storing each count in
+  $\log k$ bits (instead of a single match/mismatch bit).
+- Multiple exact string matching in $O(\ceil{m_{sum}/w}n)$ time.
+
+- side note: 3 column layout is terrible -- too much scrolling up and down.
+*** TODO [cite/t:@baeza-yates-gonnet94]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yates-gonnet94
+:END:
+[cite/title/b:@baeza-yates-gonnet94]
+
+
+** Edit distance
+:PROPERTIES:
+:CUSTOM_ID: automata-edit-distance
+:END:
+*** [cite/t:@ukkonen85-patterns]
+:PROPERTIES:
+:CUSTOM_ID: ukkonen85-patterns
+:END:
+[cite/title/b:@ukkonen85-patterns]
+
+When the pattern length $m$ is small, one can build an automaton where states
+correspond to columns of the DP matrix, and transitions to parsing a character
+of the text.
+- This gives $O(n)$ processing time once the automaton has been built.
+- There can be up to $K=\min(3^m, 2^t \cdot |\Sigma|^t\cdot m^{t+1})$ different
+  columns, meaning $O(m\cdot |\Sigma|\cdot K)$ precomputation can be very slow.
+- All states can be found from the initial state by BFS/DFS.
+- Not practical.
+
+*** [cite/t:@landau-vishkin85]
+:PROPERTIES:
+:CUSTOM_ID: landau-vishkin85
+:END:
+[cite/title/b:@landau-vishkin85]
+
+- Note that [cite/t:@landau-vishkin86] was submitted before this.
+- Generalizes this earlier paper to edit distance in $O(m^2 + k^2 n)$ time.
+  #+begin_quote
+  we first build a table based on analysis of the pattern. Then, we examine the
+  text from left to right checking possible occurrences with respect to on
+  starting location (in the text) at each iteration.
+  #+end_quote
+- Like the Hamming distance paper, this seems quite involved and technical.
+- TODO: read more carefully at some point (although the details do not sound
+  super interesting/relevant).
+*** [cite/t:@landau-vishkin88]
+:PROPERTIES:
+:CUSTOM_ID: landau-vishkin88
+:END:
+[cite/title/b:@landau-vishkin88]
+
+- Builds on [cite/t:@landau-vishkin85] (earlier conference paper).
+- $O(m + k^2 n)$ approximate string search.
+*** [cite/t:@wu92]
+:PROPERTIES:
+:CUSTOM_ID: wu92
+:END:
+[cite/title/b:@wu92]
+- Published in same journal issue as [cite/t:@baeza-yates-gonnet92] and extends
+  it to edit distance.
+- $O(nkm/w)$ to find all matches of cost at most $k$.
+  - Introduces indicator bit-vectors $R^d_j[i]$, such that $R^d$ stores whether
+    there is a path of cost $d$ to DP state $(i,j)$.
+- Introduces the /partition approach/: If $k\ll m$ errors are allowed, at least
+  one part must match when the pattern is partitioned into pieces of length $r=\floor{m/(k+1)}$.
+  Thus, one can first do a exact search for multiple patterns, followed by an
+  inexact search around matches.
+
+  (TODO: Cite for A*PA)
+- Solves multiple exact pattern matching by interleaving the (equal length)
+  patterns and shifting left by the number of patterns, instead of by $1$.
+- Extends to character classes and wild cards, like [cite/t:@baeza-yates-gonnet92].
+- Extends to small integer costs for operations.
+- For long patterns and $k>w$, only up to $w$ errors are considered by default
+  and more is only computed when a good candidate is found.
+- For regular expressions, nondeterministic finite automaton are using.
+- ~agrep~: Approximate ~grep~.
+*** [cite/t:@bergeron02]
 :PROPERTIES:
 :CUSTOM_ID: bergeron02
 :END:
@@ -340,15 +459,101 @@ Modifies existing algorithms for indel-distance.
   sufficient per column transition, for $O(mnc\log(c)/w)$ total runtime.
 - Very formal paper -- hard to read and understand what is practically going on.
 - Does not give an actual algorithm/implementation, nor experiments.
-** TODO [cite/t:@hyyro08]
+* Suffix array methods
+** Hamming distance
 :PROPERTIES:
-:CUSTOM_ID: hyyro08
+:CUSTOM_ID: ad-hoc-hamming-distance
 :END:
-[cite/title/b:@hyyro08]
-bit parallel NFA
+*** [cite/t:@galil86]
+:PROPERTIES:
+:CUSTOM_ID: galil86
+:END:
+[cite/title/b:@galil86]
+- $O(m+nk)$ for $k$-mismatches string matching
+- Uses a suffix array with LCA for $O(1)$ extension. At each position, simply
+  extend $k$ times.
+*** [cite/t:@grossi89]
+:PROPERTIES:
+:CUSTOM_ID: grossi89
+:END:
+[cite/title/b:@grossi89]
+Based on permutations.
+- First finds all occurrences of permutations of the pattern in the text.
+- Extend that to find all permutations of the pattern with at most $k$ mismatches.
+- For each match, check if the hamming distance is small.
+- Personal remark: it should be possible to extend this to edit distance.
+** Edit distance
+:PROPERTIES:
+:CUSTOM_ID: ad-hoc-edit-distance
+:END:
+*** [cite/t:@landau-vishkin89]
+:PROPERTIES:
+:CUSTOM_ID: landau-vishkin89
+:END:
+[cite/title/b:@landau-vishkin89]
+- $O(nk)$ time approximate string matching under edit distance.
+- $O(\log m + k)$ serial algorithm using $n$ processors.
+- Uses diagonal transition [cite:@ukkonen83;@ukkonen85] together with $O(1)$
+  extension using a suffix array. (Similar to [cite/t:@galil86].)
+*** [cite/t:@galil90]
+:PROPERTIES:
+:CUSTOM_ID: galil90
+:END:
+[cite/title/b:@galil90]
+- $O(kn)$ approximate string matching with $k$ /differences/
+- Diagonal transition
+- Builds $O(m^2)$ lookup table for longest-common-prefix between any two
+  suffixes of the pattern.
+- Uses /reference triples/ $(u,v,w)$: a maximal substring $u\dots v$ of the text that
+  equals $(u-w)\dots (v-w)$ of the pattern.
+- Using these, diagonals can be extended efficiently.
+- TODO: try to understand this better. It sounds interesting, but needs careful reading.
+
+*** [cite/t:@chang-lawler90]
+:PROPERTIES:
+:CUSTOM_ID: chang-lawler90
+:END:
+[cite/title/b:@chang-lawler90]
+
+Based on suffix trees.
+
+- Edit distance in $O(m)$ space and $O(nk/m \cdot \log m)$ /sublinear/ expected time on
+  random strings. Worst case $O(nk)$.
+- quote:
+  #+begin_quote
+  Previous algorithms require at least $O(nk)$ time. When $k$ is a s large as a
+  fraction of $m$, no substantial progress has been made over $O(nm)$ dynamic programming.
+  #+end_quote
+- Twice cites /Ukkonen, personal communication/ :(
+- Exact matching in sublinear expected time: For positions $s \in \{m, 2m, 3m,
+  \dots\}$, find all $j$ such that $T[s+1, \dots, j]$ is a suffix of the
+  pattern. For random strings, $j-s > \log(m)$ is not a suffix with high
+  probability, so there are only $O((n/m) \log m)$ matches in total, each of
+  which is quickly checked.
+- In the inexact case, we can for each position $S_j$ in $T$ query the length
+  $\ell$ of longest
+  prefix of $T[S_j, \dots]$ that is a /substring/ of the pattern, and then jump to
+  $S_{j+1} = S_j + \ell +1$. If $S_{j+k+2} - S_j \geq m-k$ that means it may be
+  possible to match all $m$ chars here with at most $k$ mistakes, in which case
+  an DP-based algorithm can be used for verification.
+- To obtain sublinear expected time, the text can be partitioned into $(m-k)/2$
+  chunks, so that any match includes at least one whole region. Then, we can
+  make $k+1$ /maximum jumps/ from the start of each region. Only if those span
+  the entire region, a match is possible there.
+*** [cite/t:@chang-lawler94]
+:PROPERTIES:
+:CUSTOM_ID: chang-lawler94
+:END:
+[cite/title/b:@chang-lawler94]
+
+This is the journal version of the conference paper [cite/t:@chang-lawler90]. It
+seems no additional methods are introduced. (Rather, additional applications are
+shown.)
+
 * Other
 Some more papers that I downloaded as part of this reading session, but that
 turned out somewhat unrelated.
+
 ** [cite/t:@hyyro09]
 :PROPERTIES:
 :CUSTOM_ID: hyyro09
@@ -375,62 +580,107 @@ This generalizes [cite/t:@hyyro09] to non-unit cost weights.
 It has a somewhat intuitive explanation of an earlier algorithm of Kim and Park.
 * TODO
 
-** [cite/t:@baeza-yates04]
+Many citations link to /Lecture notes in compute science/ instead of the
+original conference. Ideally this is fixed.
+
+** TODO
+*** [cite/t:@chang92]
 :PROPERTIES:
-:CUSTOM_ID: baeza-yates04
+:CUSTOM_ID: chang92
 :END:
-** [cite/t:@baeza-yates99]
+[cite/title/b:@chang92]
+
+*** Baeza-Yates 1989 Improved string searching
+*** Baeza-Yates 1989 Efficient text searching (PhD thesis)
+*** Baeza-Yates 1989 string searching algorithms revisited
+
+*** [cite/t:@baeza-yates-perleberg96]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yates-perleberg96
+:END:
+[cite/title/b:@baeza-yates-perleberg96]
+*** [cite/t:@baeza-yates96]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yates96
+:END:
+[cite/title/b:@baeza-yates96]
+
+*** [cite/t:@baeza-yates99]
 :PROPERTIES:
 :CUSTOM_ID: baeza-yates99
 :END:
-** [cite/t:@navarro02]
+*** [cite/t:@navarro-raffinot00]
 :PROPERTIES:
-:CUSTOM_ID: navarro02
+:CUSTOM_ID: navarro-raffinot00
 :END:
-** [cite/t:@wright94]
-:PROPERTIES:
-:CUSTOM_ID: wright94
-:END:
-** [cite/t:@benson13]
-:PROPERTIES:
-:CUSTOM_ID: benson13
-:END:
-** [cite/t:@fredriksson03]
+[cite/title/b:@navarro-raffinot00]
+*** [cite/t:@fredriksson03]
 :PROPERTIES:
 :CUSTOM_ID: fredriksson03
 :END:
-** [cite/t:@fredriksson05]
+*** [cite/t:@baeza-yates04]
+:PROPERTIES:
+:CUSTOM_ID: baeza-yates04
+:END:
+*** [cite/t:@hyyro04]
+:PROPERTIES:
+:CUSTOM_ID: hyyro04
+:END:
+[cite/title/b:@hyyro04]
+
+- New bitpacking technique building on ABNDM [TODO] and [cite/t:@myers99] bitpacking.
+- Introduces /witnesses/: sparse states of the DP matrix from which others can
+  be bounded quickly.
+- Improves [cite/t:@myers99] as well.
+- $\alpha = k/m$ is called /difference ratio/.
+*** [cite/t:@fredriksson04-conference]
+:PROPERTIES:
+:CUSTOM_ID: fredriksson04-conference
+:END:
+[cite/title/b:@fredriksson04-conference]
+This is the conference paper corresponding to the twice as long journal paper [cite/t:@fredriksson04].
+*** [cite/t:@fredriksson04]
+:PROPERTIES:
+:CUSTOM_ID: fredriksson04
+:END:
+[cite/title/b:@fredriksson04]
+*** [cite/t:@fredriksson05]
 :PROPERTIES:
 :CUSTOM_ID: fredriksson05
 :END:
-TODO Fix citations; add Fredriksson 2004.
- FREDRIKSSON, K.
-1.
-Row-wise tiling for the Myers’ bit-parallel dynamic programming algo-
-rithm. In Proc. 10th International Symposium on String Processing and Information Retrieval
-(SPIRE ’03). LNCS 2857. Berlin, Germany, Springer, New York. 66–79.
-FREDRIKSSON, K. AND NAVARRO, G.
-1.
-Average-optimal single and multiple approximate string
-matching. ACM Journal of Experimental Algorithmics (JEA). 9, 1.4.
-** [cite/t:@setyorini17]
+[cite/title/b:@fredriksson05]
+*** [cite/t:@hyyro08]
+:PROPERTIES:
+:CUSTOM_ID: hyyro08
+:END:
+[cite/title/b:@hyyro08]
+bit parallel NFA
+*** [cite/t:@benson13]
+:PROPERTIES:
+:CUSTOM_ID: benson13
+:END:
+*** [cite/t:@setyorini17]
 :PROPERTIES:
 :CUSTOM_ID: setyorini17
 :END:
-** [cite/t:@segalign]
+*** [cite/t:@segalign]
 :PROPERTIES:
 :CUSTOM_ID: segalign
 :END:
-** [cite/t:@mishin21]
+*** [cite/t:@mishin21]
 :PROPERTIES:
 :CUSTOM_ID: mishin21
 :END:
-** [cite/t:@bitpal]
+*** [cite/t:@bitpal]
 :PROPERTIES:
 :CUSTOM_ID: bitpal
 :END:
 
-** Landau Vishkin 1986 Efficient string matching with k mismatches
-** Baeza-Yater Perleberg 1992 Fast and practical approximate pattern matching
+
+*** [cite/t:@X]
+:PROPERTIES:
+:CUSTOM_ID: X
+:END:
+[cite/title/b:@X]
 
 #+print_bibliography:
