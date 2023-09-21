@@ -1,0 +1,95 @@
+#+title: PTHash: Notes on implementing PTHash in Rust [ongoing]
+#+HUGO_SECTION: notes
+#+hugo_tags: mphf
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-09-21>
+#+author: Ragnar Groot Koerkamp
+
+Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
+[[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for rust a implementation of PTHash [cite:@pthash], and also
+I have some ideas related to memory prefetching I want to play with, so here we
+are.
+
+This post is just to collect random thoughts and questions that come up while
+writing the code.
+
+(See also my [[file:bbhash.org][note on BBHash]] [cite:@bbhash].)
+
+* Questions and remarks
+** Parameters
+Probably some of these questions are answered by reading into the original FCH
+paper [cite:@fch] -- that'll come at some later time.
+- FCH uses $cm/\log_2 n$ buckets because each bucket needs $\log_2 n$ bits
+  storage, but for PTHash the bits per bucket is lower so this isn't really the
+  right formula maybe.
+- FCH uses $\lceil cn / (\log_2n+1)\rceil$ buckets, but PTHash uses $\lceil
+  cn/\log_2 n\rceil$ buckets. To me, $\lceil cn/\lceil \log_2n\rceil\rceil$
+  actually sounds most intuitive.
+- $p_1=0.6n$ and $p_2=0.3m$ seem somewhat arbitrary. Can this be tuned better?
+  Could partitioning into more chunks help?
+
+  Anyway, this puts $60\%$ of data in the first $30\%$ of buckets (i.e. double
+  the average size), and $40\%$ of data in $70\%$ of buckets (i.e. roughly half
+  the average size).
+
+  I suppose the goal is to stitch two binomial distributions of bucket sizes
+  together in a nice way to get a more even distribution over sizes.
+
+** Construction
+- Storing buckets as ~Vec<Vec<Key>>~ is bad for large keys, so now I store
+  ~Vec<Vec<usize>>~, but the nested ~Vec~s still waste a lot of space and will
+  cause allocation slowdowns.
+- When testing $k_i$, not only do we need to test that positions are not filled
+  by previous buckets, but also we have to check that elements within the bucket
+  do not collide. *It is not sufficient that $h(x, s)$ does not collide within
+  buckets,* since they could collide after taking the ~% n~.
+
+* Ideas for improvement
+** Parameters
+- Better tuning of parameters may work?
+- Partitioning into three or more chunks may speed up construction?
+
+** Align packed vectors to cachelines
+Instead of packing $r$ bit values throughout the entire vector, only pack them
+inside cachelines.
+
+** Prefetching
+The query performance of this and other MPHFs seem to be limited by the latency
+of memory lookups. For this reason, most MPHFs minimize the number of memory
+lookups, and in particular PTHash uses one random memory access followed by one
+lookup in a small (cached) dictionary.
+
+When processing a number of lookups sequentially, each lookup currently incurs a
+cache miss. This could be made much more efficient by doing $k$ (e.g. $k=16$) cache
+lookups in parallel:
+1. first compute the array location to lookup for $k$ keys (possibly using SIMD),
+2. then prefetch the $k$ memory locations,
+3. then do the rest of the computation in parallel.
+4. If needed, do lookups in the $free$ table in parallel.
+
+This should mostly hide the memory latency and could give significant speedup.
+I'm not quite sure yet whether this would work best when done in batches (as
+described), or in streaming fashion, where we iterate over elements and prefetch
+memory for the element $k$ iterations ahead. [[https://en.algorithmica.org/hpc/cpu-cache/prefetching/][Algorithmica.org]] has a nice article
+on the streaming approach.
+
+** Fewer modulo operations
+There are a lot of ~% n~, ~% p1~ and ~% (m-p1)~ operations throughout the code.
+I didn't look into it yet, but possibly these are the bottleneck on the CPU
+latency.
+
+First note that
+$$
+a\, \%\, b = a - \lfloor a/b\rfloor * b.
+$$
+This division by a constant can be computed efficiently using a trick which
+replaces division by multiplication with the inversion.
+Using the formula of the [[https://en.wikipedia.org/wiki/Division_algorithm#Division_by_a_constant][wikipedia article]] we can precompute some constants to
+evaluate $\lfloor a/b\rfloor$ in $6$ operations and ~a % b~ in $8$ operations.
+
+(Note that it might be possible compilers already do this, but I don't expect so.)
+
+#+print_bibliography:

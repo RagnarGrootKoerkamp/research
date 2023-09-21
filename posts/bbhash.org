@@ -1,0 +1,36 @@
+#+title: BBHash: some ideas
+#+HUGO_SECTION: notes
+#+hugo_tags: mphf
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-09-04>
+#+author: Ragnar Groot Koerkamp
+
+BBHash [cite/t:@bbhash] uses multiple /layers/ to create a minimal perfect
+hashing functions (MPFH), that hashes some input set into $[n]$.
+
+(See also my [[file:pthash.org][note on PTHash]] [cite:@pthash].)
+
+Simply said, it maps the $n$ elements into $[\gamma \cdot n]$ using hashing function $h_0$.
+The $k_0$ elements that have collisions are mapped into $[\gamma \cdot k_0]$
+using $h_1$.
+Then, the $k_1$ elements with collisions are mapped into $[\gamma \cdot k_1]$,
+and so on.
+
+
+* Possible speedup?
+One bottleneck seems to be that this needs multiple layers of lookups each at
+different positions in memory. A possible idea:
+
+1. Using $h_0$, map all items into buckets with $\sim 100$ elements each.
+2. Hash each of those buckets using the original 'recursive' BBhash technique
+   into a cacheline of $256$ bits.
+This way, only two lookups should be needed (apart from the rank operation that follows).
+
+I have no idea how the analysis works out though -- maybe the recursive strategy
+works better on a larger scale and when hashing only so few items there isn't
+much benefit to the BBhash approach in the first place.
+
+#+print_bibliography:
