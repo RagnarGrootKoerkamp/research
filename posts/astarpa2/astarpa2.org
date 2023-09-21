@@ -14,7 +14,19 @@
 \newcommand{\cgap}{c_{\texttt{gap}}}
 \end{equation*}
 
-* Introduction
+* Abstract
+
+* Summary
+
+This paper improves Edlib and A*PA by
+- reducing overhead by using larger block sizes,
+- avoiding recomputing states where possible,
+- using SIMD with a novel bit-encoding,
+- using a novel /optimistic/ diagonal-transition based traceback,
+- applying and improving the A* heuristic of A*PA,
+leading to a $10\times$ overall speedup on the alignment of $500$kbp ONT reads.
+
+* Introduction and previous work
 
 The problem of /global pairwise alignment/ is to find the shortest sequence of
 edit operations (insertions, deletions, substitutions) to convert a string $A$
@@ -130,8 +142,7 @@ n\cdot t_0 + \dots + n\cdot t_k
 < n\cdot 2^{k+1} = 4\cdot n\cdot 2^{k-1} < 4\cdot n\cdot s = O(ns).
 \end{equation}
 Note that this method does not (and indeed can not) reuse values from previous
-iterations, resulting in a factor $2$ of overhead compared to a runtime of
-$n\cdot t_k < 2\cdot n\cdot s$.
+iterations, resulting in roughly a factor $2$ overhead.
 
 [cite/t:@spouge89] unifies the methods of
 [cite/t:@fickett84] and [cite/t:@ukkonen85], and generalizes them to accept any
@@ -143,8 +154,8 @@ computational volumes are:
 3. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$ [cite:@fickett84].
 4. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
    of length $\leq t$ [cite:@ukkonen85].
-5. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$ [cite:@spouge91].
-6. $\{u: \g(u) + h(u) \leq t\}$, for an admissible heuristic $h$.
+5. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@spouge91;@edlib].
+6. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
 
 As [cite/t:@spouge89] notes:
 #+begin_quote
@@ -169,7 +180,7 @@ given query to $4$ reference sequences in parallel (see also
 /antidiagonals/ of the DP matrix can be computed in parallel, and
 [cite/t:@wozniak97] applied SIMD for this purpose.
 
-[cite/t:@rognes00] splits 64bit words into 8 8-bit values, capping all
+[cite/t:@rognes00] split 64bit words into 8 8-bit values, capping all
 computations at $255$ but doubling the speed.  Further, it uses /vertical/
 instead of antidiagonal vectors.
 #+begin_quote
@@ -189,8 +200,15 @@ bit-encoded in two 64-words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
 the $i$'th difference is $+1$ resp. $-1$.  It then gives an efficient algorithm
 using bitwise operations on these words.
 
-- TODO [cite:@farrar] Farrar's striped; uses query profile; conditional prefix scan
+TODO
+- [cite:@farrar] Farrar's striped; uses query profile; conditional prefix scan
   is moved outside inner loop. $2-8\times$ faster than Wozniak and Rognes.
+- Wu Manber 1992
+- Baeza-Yates Gonnet 1992
+- Hyyro and Navarro, 2005; Hyyro et al., 2005
+- Benson 2013
+- navarro 2004
+- bergeron hamel 2002
 
 *Tools.*
 There are multiple semi-global aligners that implement $O(nm)$ global
@@ -206,57 +224,27 @@ the $\g(u)+\cgap(u, v_t)\leq t$ computational volume of [cite/t:@spouge91] and
 the bitpacking of [cite/t:@myers99].
 WFA and BiWFA [cite:@wfa;@biwfa] implement the $O(n+s^2)$ expected time /diagonal transition/
 algorithm [cite:@ukkonen85;@myers86].
-Lastly, A*PA [cite:@astarpa] directly implements A* with the gap-chaining seed heuristic.
+Block aligner [cite:@block-aligner] is an approximate aligner that can handle
+position-specific scoring matrices whose main novelty is to divide the
+computation into blocks.
+Lastly, A*PA [cite:@astarpa] directly implements A* on the alignment graph using
+the gap-chaining seed heuristic.
 
 
 ---
-WIP below here.
 
-todo citations:
+TODO:
 
-Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
-of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
-Sosic.pdf.
+- Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
+  of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
+  Sosic.pdf.
 
-libssa: Frielingsdorf JT. Improving optimal sequence alignments through a
-simd-accelerated library: Thesis, University of Oslo; 2015. http://urn.nb.no/
-URN:NBN:no-49935. Accessed 10 Dec 2015.
-
----
-
+- libssa: Frielingsdorf JT. Improving optimal sequence alignments through a
+  simd-accelerated library: Thesis, University of Oslo; 2015. http://urn.nb.no/
+  URN:NBN:no-49935. Accessed 10 Dec 2015.
 - [cite:@suzuki-kasahara] libgaba: SIMD with difference recurrence relation for
   affine cost alignment
-- [cite:@block-aligner] block aligner
 - [cite:@bitpal] BitPAl
-- TODO: bit-parallel:
-  - Wu Manber 1992
-  - Baeza-Yates Gonnet 1992
-  - Hyyro and Navarro, 2005; Hyyro et al., 2005
-  - Benson 2013
-  - navarro 2004
-  - bergeron hamel 2002
-
-
-*Further related work.*
-For completeness, we now list some more widely spread techniques that are not
-directly required for the rest of this work, but relevant nevertheless.
-
-- Four Russians :: A completely different approach is taken by the so called
-  /four Russians/ method [cite:@four-russians], resulting in the algorithm with
-  the best worst-case runtime of $O(n^2/\lg n)$.
-- Affine-cost alignment :: In parallel, much work has been done to extend
-  algorithms to /affine cost/ alignments [cite:@gotoh;@altschul;@wfa;@biwfa].
-- Semi-global alignment :: [cite:@edlib;@wfa]
-- Approximate mehhtods :: using heuristic methods to quickly find alignments
-  without guarantee they are of minimal cost [cite:@block-aligner].
-- Meet in the middle :: [cite:@hirschberg75]
-- Diagonal transition :: A second DP-like algorithm that [cite/t:@ukkonen85]
-  presents is the /diagonal transition/ method that only visits so called
-  /farthest reaching states/ along each diagonal, which was discovered
-  independently and in parallel by [cite/t:@myers86]. This method has the same
-  $O(ns)$ worst-case runtime, but is $O(n+s^2)$ in expectation. [cite/t:@wfalm]
-  have since shown that $O(n+s^2)$ worst-case runtime is also possible.
-- GPU methods :: [cite:@korpar15] [cite:@ewfa-gpu]
 
 
 ** Contributions
@@ -265,48 +253,29 @@ In A*PA-v2, we combine many existing techniques and introduce a number of new
 techniques to obtain a $10\times$ speedup over existing single-threaded aligners.
 As a starting point, we take the band doubling algorithm as efficiently
 implemented by Edlib [cite:@edlib] using bitpacking [cite:@myers99].
-From there, we first make a number of improvements that reduce the amount of work
-that needs to be done, then we speed up the implementation, and lastly we apply
-and improve the A* heuristics of [cite/t:@astarpa].
+From there, we make a number of improvements.
 
-*Less work.* In the first category, we first note that both the original
-band doubling method of [cite/t:@ukkonen85] and Edlib recompute states in the
-doubled region. Reusing the theory behind the A* algorithm, we give a theorem
-stating that some of this recomputation can be avoided.  We further observe that
-Edlib computes one column of the DP matrix at a time, and for each column
-decides which range of cells to compute.  We significantly reduce this overhead
-by processing blocks of $256$ columns at a time, similar to
-[cite/t:@block-aligner]. Correspondingly, we only store cells of the DP-matrix
-at block boundaries.
-
-*Faster work.* To speed up the implementation, we use SIMD to compute each
-block, allowing the processing of $4$ computer words in parallel. To further
-improve the efficiency of the generated assembly code, we introduce a new
-/bit-encoding/ of the input sequences.  For the traceback, we use a heuristic
-diagonal transition method within each block, falling back to a full
-recomputation of the block when needed.
-
-*A** *heuristics.* We improve the seed heuristics of [cite/t:@astarpa] in two ways. First,
-instead of updating contours each time a match is pruned, we now only do this
-once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
-that discards most of the /spurious/ (off-path) matches ahead of time.
+1. *Block-based computation.* We first observe that Edlib computes one column of the DP matrix at a time,
+   and for each column decides which range of cells to compute.  We
+   significantly reduce this overhead by processing blocks of $256$ columns at a
+   time, similar to Block aligner [cite:@block-aligner]. Correspondingly, we only store
+   cells of the DP-matrix at block boundaries.
+2. *Incremental doubling.* We further note that both the original band doubling method of
+   [cite/t:@ukkonen85] and Edlib recompute states in the doubled region. Reusing
+   the theory behind the A* algorithm, we prove a novel theorem stating that some of
+   this recomputation can be avoided.
+3. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
+   the processing of $4$ computer words in parallel, and introduce a novel
+   bit-encoding of the input sequence to make this even faster.
+4. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
+   block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
+5. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
+   instead of updating contours each time a match is pruned, we now do this in
+   batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
+   that discards most of the /spurious/ (off-path) matches ahead of time.
 
 ---
 
-* Previous work
-** Edlib
-- Band doubling
-- Gap heuristic
-- Bitpacking
-** WFA
-- Diagonal transition
-** Block aligner
-- Block-based
-- SIMD
-** A*PA
-- A* / graph / DT
-- SH/CSH/GCSH
-- Pruning
 * Methods
 First, we reduce the amount of meta overhead in Edlib.
 Then, we speed up the implementation further. At this point, we should simply
@@ -315,28 +284,29 @@ have a more efficient reimplementation that roughly mimicks Edlib.
 On top of that, we can apply the A*PA heuristics for further speed gains on large/complex
 alignments, at the cost of larger precomputation time to build the heuristic.
 
-** Algorithm
-Reducing overhead and doing less work.
+** Blocks
 - Blocks
   - Param: block size
 - Sparse heuristic
 - Sparse memory
 - Param: sparsity, same as block size
-- Incremental doubling
+** Incremental doubling
+- States with $f \leq f_{max}$ have /fixed/ values (assuming the heuristic is consistent).
+- We can store deltas around the edge of this region and incrementally start the
+  computation from there.
+** SIMD and bitpacking
+- Diagonally strided 4-lane SIMD
+- 2 parallel executions for higher instructions-per-cycle, so 8-lanes (512 states) total.
+- New bitpacking method than
+- TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
+  without success so far.
+** Traceback
 - DT Trace
   - Param: x-drop
-- Local doubling??
-
-  Needs further finetuning and doesn't seem to give much -- global band doubling
-  with pruning is already quite efficient.
-** Implementation
-Doing work faster.
-- SIMD
-- Bit profile
-** Improved A* Heuristics
-- Local pruning
+** A*
+- pre-pruning
   - Param: length of lookahead
-- Lazy pruning
+- bulk contours update
 * Results
 Compare
 - Edlib
