@@ -16,15 +16,18 @@ are: I'm working on a Rust implementation ~pthash-rs~ at [[https://github.com/ra
 This post is just to collect random thoughts and questions that come up while
 writing the code.
 
+Twitter discussion is [[https://twitter.com/curious_coding/status/1704989305158979656][here]].
+
 (See also my [[file:bbhash.org][note on BBHash]] [cite:@bbhash].)
 
-* Questions and remarks
-** Parameters
+* Questions and remarks on PTHash paper
 Probably some of these questions are answered by reading into the original FCH
 paper [cite:@fch] -- that'll come at some later time.
 - FCH uses $cm/\log_2 n$ buckets because each bucket needs $\log_2 n$ bits
   storage, but for PTHash the bits per bucket is lower so this isn't really the
   right formula maybe.
+  - [[https://twitter.com/giulio_pibiri/status/1705114424787308718][Tweet]]: another option is to fix $c = \alpha * \log(n) / d$ for some constant
+    $d$.
 - FCH uses $\lceil cn / (\log_2n+1)\rceil$ buckets, but PTHash uses $\lceil
   cn/\log_2 n\rceil$ buckets. To me, $\lceil cn/\lceil \log_2n\rceil\rceil$
   actually sounds most intuitive.
@@ -37,15 +40,8 @@ paper [cite:@fch] -- that'll come at some later time.
 
   I suppose the goal is to stitch two binomial distributions of bucket sizes
   together in a nice way to get a more even distribution over sizes.
-
-** Construction
-- Storing buckets as ~Vec<Vec<Key>>~ is bad for large keys, so now I store
-  ~Vec<Vec<usize>>~, but the nested ~Vec~s still waste a lot of space and will
-  cause allocation slowdowns.
-- When testing $k_i$, not only do we need to test that positions are not filled
-  by previous buckets, but also we have to check that elements within the bucket
-  do not collide. *It is not sufficient that $h(x, s)$ does not collide within
-  buckets,* since they could collide after taking the ~% n~.
+  - This is an open question ([[https://twitter.com/giulio_pibiri/status/1705112904779915662][tweet]])
+    - Proof in appendix of [[https://jermp.github.io/assets/pdf/papers/TKDE2023.pdf][paper]] could possibly be extended.
 
 * Ideas for improvement
 ** Parameters
@@ -90,12 +86,74 @@ replaces division by multiplication with the inversion.
 Using the formula of the [[https://en.wikipedia.org/wiki/Division_algorithm#Division_by_a_constant][wikipedia article]] we can precompute some constants to
 evaluate $\lfloor a/b\rfloor$ in $6$ operations and ~a % b~ in $8$ operations.
 
-(Note that it might be possible compilers already do this, but I don't expect so.)
++(Note that it might be possible compilers already do this, but I don't expect so.)+
 
-Some blogposts by Daniel Lemire (Thanks Daniel ;)
+Some blogposts by Daniel Lemire ([[https://twitter.com/daniel_c0deb0t/status/1704999240802636051][Thanks Daniel Liu]] ;)
 - [[https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/][A fast alternative to the modulo reduction]]
+
+  Instead of ~a % b~, compute ~a * b >> 64~, assuming that $a$ is uniform in
+  $[2^{64}-1]$.
+
+  This doesn't seem to work though, probably since this only uses the entropy in
+  the high-order bits of $a$.
 - [[https://lemire.me/blog/2019/02/08/faster-remainders-when-the-divisor-is-a-constant-beating-compilers-and-libdivide/][Faster remainders when the divisor is a constant: beating compilers and libdivide]]
+
+  Indeed, the C++ PTHash implementation [[https://twitter.com/giulio_pibiri/status/1705104355270037980][already uses]] the =fastmod= library.
+
 - [[https://lemire.me/blog/2019/02/20/more-fun-with-fast-remainders-when-the-divisor-is-a-constant/][More fun with fast remainders when the divisor is a constant]]
 - [cite/t:@fast-remainder]
+
+* Implementation log
+A somewhat chronological list of notes and remarks.
+** Hashing function
+For now I use =murmur64a=.
+** Bitpacking crates
+There are *a lot* of bitvector and bitpacking crates!
+- [[https://crates.io/search?q=bitvec][bitvectors]] :: All of the below seem to do the same
+  - =bitvec=: $30M$ downloads
+  - =bit-vec=: $30M$ downloads
+  - =fixedbitset=: $55M$ downloads
+  No idea which is best; probably I'll settle for the one below in =sucds=.
+- [[https://crates.io/crates/sucds][sucds]] :: only $60K$ downloads, but contains
+  - [[https://docs.rs/sucds/latest/sucds/bit_vectors/bit_vector/struct.BitVector.html][BitVector]]
+  - fixed-width integer packing: [[https://docs.rs/sucds/latest/sucds/int_vectors/compact_vector/struct.CompactVector.html][CompactVector]]
+  - increasing-integer sequence packing: [[https://docs.rs/sucds/latest/sucds/mii_sequences/index.html][EliasFano]]
+    - Giulio has [[https://github.com/jermp/data_compression_course][lecture notes]] on this.
+
+** Fastmod
+It seems that Daniel Lemire's =fastmod= C++ library has not yet been ported to
+Rust, so I converted the few parts I need.
+
+There is also [[https://crates.io/crates/strength_reduce][=strength_reduce=]], which contains a similar but distinct algorithm
+for ~a % b~ that computes the remainder from the quotient.
+
+*** Benchmark
+I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae92af5be31ac383f2c3ee][implemented]] these under a generic =Reduce= trait.
+
+~just bench~ at the linked commit at ~2.6GHz~ gives the following for $10^7$ keys:
+
+| method           | construction (s) | query (ns) |
+| u64              |        10.474591 |         91 |
+| fastmod64        |        10.731583 |         55 |
+| fastmod32        |         9.911751 |         50 |
+| strengthreduce64 |        11.520939 |         56 |
+| strengthreduce32 |        10.002017 |         50 |
+
+The =u32= versions simply only use the lower $32$ bits of the $64$ bit hash.
+
+This is not yet as fast as the fastest $28ns$ reported in the PTHash paper (for
+C-C encoding), but I also haven't optimized anything else yet.
+
+
+** Construction
+- Storing buckets as ~Vec<Vec<Key>>~ is bad for large keys, so now I store
+  ~Vec<Vec<usize>>~, but the nested ~Vec~s still waste a lot of space and will
+  cause allocation slowdowns. PTHash pushes onto a vector which is sorted later,
+  which seems more efficient.
+- When testing $k_i$, not only do we need to test that positions are not filled
+  by previous buckets, but also we have to check that elements within the bucket
+  do not collide. *It is not sufficient that $h(x, s)$ does not collide within
+  buckets,* since they could collide after taking the ~% n~.
+
 
 #+print_bibliography:
