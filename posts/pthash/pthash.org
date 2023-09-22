@@ -56,6 +56,9 @@ paper [cite:@fch] -- that'll come at some later time.
 - And how large will $n$ be at most? Can we reasonably assume $2^{32} \approx
   4\cdot 10^9$ as a bound?
 
+- Is it reasonable to compute and store hashes of all keys, and then changing
+  the API to let the user pass in the hash instead of the key?
+
 * Ideas for improvement
 ** Parameters
 - Better tuning of parameters may work?
@@ -115,6 +118,17 @@ Some blogposts by Daniel Lemire ([[https://twitter.com/daniel_c0deb0t/status/170
 
 - [[https://lemire.me/blog/2019/02/20/more-fun-with-fast-remainders-when-the-divisor-is-a-constant/][More fun with fast remainders when the divisor is a constant]]
 - [cite/t:@fast-remainder]
+
+** Store dictionary $D$ sorted using Elias-Fano coding
+I doubt whether the memory savings here are worth the time overhead, but it's an
+idea :shrug:.
+
+** How many bits of $n$ and hash entropy do we need?
+One bottleneck of =fastmod64= is that it needs to compute the
+highest $64$ bits of a =u128 * u64= product.
+If we can assume that $n$ is at most $40$ bits, and that $44$ bits are
+sufficient entropy, then I think we could do away with the ~u128 x u64~
+multiplication and do everything inside ~u128~.
 
 * Implementation log
 A somewhat chronological list of notes and remarks.
@@ -416,5 +430,28 @@ the ~FastMod32~ type is smaller (two ~u64~) than the ~Fastmod64~ type (~u128~
 and ~u64~) and hence easier to vectorize (and similar for =StrengthReduce32=).
 But either way this last trick helps a lot for the =64bit= variants that will
 be needed for large hashmaps.
+
+** Compiling and benchmarking PTHash
+Compiling PTHash was very smooth; just a =git clone=, submodule init, and
+building /just worked/ :)
+
+Running a benchmark similar to the ones here:
+#+begin_src shell
+ ./build -n 10000000 -c 7.0 -a 1 -e compact_compact -s 1234567890 --minimal --verbose --lookup
+#+end_src
+reports a query performance of =26ns/key=, similar to the =fastmod64=
+performance I get.
+
+Note that PTHash uses fixed-width bitpacking here, while I just store =u64='s
+directly, but this shouldn't affect the time too much.
+
+*Vectorization:* More interestingly, PTHash is not auto-vectorized by my
+compiler, so I'm surprised it performs this well. Maybe the =vpgatherqq=
+instruction just doesn't give that much speedup over sequential lookups -- I
+don't know yet. But still, my equivalent code using =fastmod64= with $p_2 =
+0.3m$ has =35ns/key= vs =26ns/key= for PTHash. Confusing.
+
+*Branching:* PTHash compiles to a branchy version of =fastmod(x, p2) or
+fastmod(x, m-p2)=, but is still fast.
 
 #+print_bibliography:
