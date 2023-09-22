@@ -98,7 +98,7 @@ Some blogposts by Daniel Lemire ([[https://twitter.com/daniel_c0deb0t/status/170
   the high-order bits of $a$.
 - [[https://lemire.me/blog/2019/02/08/faster-remainders-when-the-divisor-is-a-constant-beating-compilers-and-libdivide/][Faster remainders when the divisor is a constant: beating compilers and libdivide]]
 
-  Indeed, the C++ PTHash implementation [[https://twitter.com/giulio_pibiri/status/1705104355270037980][already uses]] the =fastmod= library.
+  *Indeed, the C++ PTHash implementation [[https://twitter.com/giulio_pibiri/status/1705104355270037980][already uses]] the =fastmod= library.*
 
 - [[https://lemire.me/blog/2019/02/20/more-fun-with-fast-remainders-when-the-divisor-is-a-constant/][More fun with fast remainders when the divisor is a constant]]
 - [cite/t:@fast-remainder]
@@ -120,6 +120,16 @@ There are *a lot* of bitvector and bitpacking crates!
   - increasing-integer sequence packing: [[https://docs.rs/sucds/latest/sucds/mii_sequences/index.html][EliasFano]]
     - Giulio has [[https://github.com/jermp/data_compression_course][lecture notes]] on this.
 
+** Construction
+- Storing buckets as ~Vec<Vec<Key>>~ is bad for large keys, so now I store
+  ~Vec<Vec<usize>>~, but the nested ~Vec~s still waste a lot of space and will
+  cause allocation slowdowns. PTHash pushes onto a vector which is sorted later,
+  which seems more efficient.
+- When testing $k_i$, not only do we need to test that positions are not filled
+  by previous buckets, but also we have to check that elements within the bucket
+  do not collide. *It is not sufficient that $h(x, s)$ does not collide within
+  buckets,* since they could collide after taking the ~% n~.
+
 ** Fastmod
 It seems that Daniel Lemire's =fastmod= C++ library has not yet been ported to
 Rust, so I converted the few parts I need.
@@ -135,25 +145,55 @@ I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae
 | method           | construction (s) | query (ns) |
 | u64              |        10.474591 |         91 |
 | fastmod64        |        10.731583 |         55 |
-| fastmod32        |         9.911751 |         50 |
+| fastmod32        |         9.911751 |         *50* |
 | strengthreduce64 |        11.520939 |         56 |
-| strengthreduce32 |        10.002017 |         50 |
+| strengthreduce32 |        10.002017 |         *50* |
 
 The =u32= versions simply only use the lower $32$ bits of the $64$ bit hash.
 
 This is not yet as fast as the fastest $28ns$ reported in the PTHash paper (for
-C-C encoding), but I also haven't optimized anything else yet.
+C-C encoding), but I also haven't optimized anything else yet. Time for profiling.
+
+Looking at the flamegraph (~cargo flamegraph~), and zooming in on the hash function, we see
+
+#+attr_html: :class inset
+[[file:hash_flame.png]]
+
+A lot of time is spend on fold! The ~murmur2~ function I use has signature
+~murmur2(bytes: &[u8], seed: u64)~, and even though my keys/bytes always correspond
+to just a ~u64~, it's iterating over them!
+
+In the generated ~perf report~, we see
+#+begin_src txt
+  33.14%         27328  test::queries_e  pthash_rs-f15b4648f77f672b           [.] pthash_rs::PTHash<P,R>::new
+  18.18%         14823  test::queries_e  pthash_rs-f15b4648f77f672b           [.] pthash_rs::PTHash<P,R>::index
+  13.76%         11245  test::queries_e  pthash_rs-f15b4648f77f672b           [.] murmur2::murmur64ane
+#+end_src
+We can ignore the $33\%$ for construction and only focus on querying here, where
+we see that the =index= function calls to =murmur2= and a lot of time is spent
+in both. In fact, =murmur2= is not inlined at all! That explains the iterator
+appearing in the flamegraph.
+
+This is fixed by enabling link-time optimization: add ~lto = "thin"~ to
+~cargo.toml~.
+
+Rerunning the benchmark we get
+
+|                  | construction (s) | construction (s) | query (ns) | query (nw) |
+| method           |              old |              new | old        |        new |
+| u64              |             10.5 |              8.9 | 91         |         60 |
+| fastmod64        |             10.7 |              8.3 | 55         |         34 |
+| fastmod32        |              9.9 |              8.5 | *50*       |       *26* |
+| strengthreduce64 |             11.5 |              8.3 | 56         |         38 |
+| strengthreduce32 |             10.0 |              8.8 | *50*       |         31 |
+
+Sweet! $26ns$ is faster than any of the numbers in table 5 of [cite/t:@pthash]!
+(Admittedly, there is no compression yet and the dictionary size is $10\times$
+smaller, but still!)
 
 
-** Construction
-- Storing buckets as ~Vec<Vec<Key>>~ is bad for large keys, so now I store
-  ~Vec<Vec<usize>>~, but the nested ~Vec~s still waste a lot of space and will
-  cause allocation slowdowns. PTHash pushes onto a vector which is sorted later,
-  which seems more efficient.
-- When testing $k_i$, not only do we need to test that positions are not filled
-  by previous buckets, but also we have to check that elements within the bucket
-  do not collide. *It is not sufficient that $h(x, s)$ does not collide within
-  buckets,* since they could collide after taking the ~% n~.
+
+
 
 
 #+print_bibliography:
