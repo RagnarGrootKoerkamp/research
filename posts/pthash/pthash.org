@@ -94,8 +94,8 @@ Some blogposts by Daniel Lemire ([[https://twitter.com/daniel_c0deb0t/status/170
   Instead of ~a % b~, compute ~a * b >> 64~, assuming that $a$ is uniform in
   $[2^{64}-1]$.
 
-  This doesn't seem to work though, probably since this only uses the entropy in
-  the high-order bits of $a$.
+  This doesn't seem to work well in practice though for PTHash, probably since
+  this only uses the entropy in the high-order bits of $a$.
 - [[https://lemire.me/blog/2019/02/08/faster-remainders-when-the-divisor-is-a-constant-beating-compilers-and-libdivide/][Faster remainders when the divisor is a constant: beating compilers and libdivide]]
 
   *Indeed, the C++ PTHash implementation [[https://twitter.com/giulio_pibiri/status/1705104355270037980][already uses]] the =fastmod= library.*
@@ -200,12 +200,12 @@ for key in &keys {
 }
 #+end_src
 and indeed, we now get
-| query (ns)       | no LTO     |   thin-LTO | inline index() |
-| u64              | 91         |         60 |             55 |
-| fastmod64        | 55         |         34 |             33 |
-| fastmod32        | *50*       |       *26* |           *24* |
-| strengthreduce64 | 56         |         38 |             33 |
-| strengthreduce32 | *50*       |         31 |             26 |
+| query (ns)       | no LTO | thin-LTO | inline index() |
+| u64              |     91 |       60 |             55 |
+| fastmod64        |     55 |       34 |             33 |
+| fastmod32        |   *50* |     *26* |           *24* |
+| strengthreduce64 |     56 |       38 |             33 |
+| strengthreduce32 |   *50* |       31 |             26 |
 
 
 *Conclusion:* From now on let's only use =fastmod64= and =fastmod32=. (I suspect
@@ -306,6 +306,19 @@ We can replace ~k[index]~ by ~unsafe { *k.get_unchecked(index) }~.
 This doesn't give much performance gain (less than the few ~ns~ of measurement
 noise I have), but can't hurt. It removes the final =cmp; jbe= lines from the assembly.
 
+*Fix tests:* Instead of ignoring test results we can accumulate the resulting
+indices and pass them to =black_box(sum)=. This prevents the compiler from
+optimizing away all queries. /Somehow/ this affects the reported timings. I now get:
 
+| query (ns)       | no LTO | thin-LTO | inline index() | fixed tests |
+| u64              |     91 |       60 |             55 |          63 |
+| fastmod64        |     55 |       34 |             33 |          35 |
+| fastmod32        |   *50* |     *26* |           *24* |        *20* |
+| strengthreduce64 |     56 |       38 |             33 |          38 |
+| strengthreduce32 |   *50* |       31 |             26 |          30 |
+
+I'm confused how the =fastmod32= timing went down, but the =fastmod64= went up.
+(Typical situation when you do constant profiling and there are more numbers
+than you can make sense of, sadly.)
 
 #+print_bibliography:
