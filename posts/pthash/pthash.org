@@ -8,6 +8,11 @@
 #+date: <2023-09-21>
 #+author: Ragnar Groot Koerkamp
 
+$$
+%\newcommand{\mm}{\,\%\,}
+\newcommand{\mm}{\bmod}
+$$
+
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
 [[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for rust a implementation of PTHash [cite:@pthash], and also
 I have some ideas related to memory prefetching I want to play with, so here we
@@ -42,6 +47,14 @@ paper [cite:@fch] -- that'll come at some later time.
   together in a nice way to get a more even distribution over sizes.
   - This is an open question ([[https://twitter.com/giulio_pibiri/status/1705112904779915662][tweet]])
     - Proof in appendix of [[https://jermp.github.io/assets/pdf/papers/TKDE2023.pdf][paper]] could possibly be extended.
+
+- How many bits of entropy are really needed? When $n$ is a power of $2$, we
+  make sure to use all $64$ bits instead of just $\log_2 n$. But how many are
+  really needed. Maybe as long as $n \ll 2^{32}$, a simpler/faster $32$ bit hash
+  is sufficient?
+
+- And how large will $n$ be at most? Can we reasonably assume $2^{32} \approx
+  4\cdot 10^9$ as a bound?
 
 * Ideas for improvement
 ** Parameters
@@ -320,5 +333,88 @@ optimizing away all queries. /Somehow/ this affects the reported timings. I now 
 I'm confused how the =fastmod32= timing went down, but the =fastmod64= went up.
 (Typical situation when you do constant profiling and there are more numbers
 than you can make sense of, sadly.)
+
+** Branchless, for real now! (aka the trick-of-thirds)
+
+I'm still annoyed by this branching. Branches are bad! They may be fast for now,
+but I kinda have the long term goal to put SIMD on top of this and that doesn't
+go well with branching. Also, branch-misprediction is a thing, and the $70\% -
+30\%$ uniform random split is about as bad as you can do to a branch predictor.
+The code from earlier does fix it, but at the cost of a whole bunch of =mov='s and
+=cmov='s.
+
+But there is a trick we can do! $p_1$ and $p_2$ are sort of arbitrarily
+chosen, and all the original paper [cite:@fch] has to say about it is
+#+begin_quote
+Good values for these two parameters are experimentally
+determined to be around $0.6n$ and $0.3m$, respectively.
+#+end_quote
+Thus I feel at liberty to change the value of $p_2$ from $0.3m$ to $m/3$.
+This gives:
+$$m-p_2 = m-m/3 = \frac 23 m = 2p_2.$$
+The cute tick is that now we can use that
+$$x \mm p_2 = (x \mm (2p_2)) \mm p_2 = (x \mm (m - p_2)) \mm p_2,$$
+and since $ 0\leq x \mm (2p_2) < 2p_2$, computing that value modulo $p_2$ is as
+simple as comparing the value to $p_2$ and subtracting $p_2$ if needed.
+
+Thus, we modify the initialization to round $m$ up to the next multiple of $3$,
+and change the bucket function to
+#+begin_src rust
+fn bucket(&self, hx: u64) -> u64 {
+    let mod_mp2 = hx % self.rem_mp2;
+    let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as u64;
+    let large = (hx % self.rem_n) >= self.p1;
+    self.p2 * large as u64 + if large { mod_mp2 } else { mod_p2 }
+}
+#+end_src
+
+The new timings are
+
+| query (ns)       | no LTO | thin-LTO | inline index() | fixed tests | $p_2 = m/3$ |
+| u64              |     91 |       60 |             55 |          63 |          54 |
+| fastmod64        |     55 |       34 |             33 |          35 |          27 |
+| fastmod32        |   *50* |     *26* |           *24* |        *20* |        *19* |
+| strengthreduce64 |     56 |       38 |             33 |          38 |          33 |
+| strengthreduce32 |   *50* |       31 |             26 |          30 |          21 |
+
+=fastmod32= didn't get much faster, but all others went down a lot! Let's check
+out the generated assembly for =fastmod64=:
+#+begin_src asm
+    10 │          vpunpcklqdq  %xmm3,%xmm5,%xmm3
+     3 │          vmovq        %r15,%xmm12
+     1 │          vpunpcklqdq  %xmm6,%xmm7,%xmm5
+    33 │          vinserti128  $0x1,%xmm3,%ymm5,%ymm5
+    14 │          vpunpcklqdq  %xmm8,%xmm14,%xmm3
+     2 │          vpunpcklqdq  %xmm15,%xmm12,%xmm6
+     2 │          vinserti128  $0x1,%xmm3,%ymm6,%ymm3
+    32 │          vmovdqu      0x570(%rsp),%ymm14
+    15 │          vpxor        %ymm3,%ymm14,%ymm3
+     2 │          vpxor        0x610(%rsp),%ymm14,%ymm12
+     2 │          vpxor        %ymm5,%ymm14,%ymm6
+    29 │          vmovdqu      0x630(%rsp),%ymm11
+    13 │          vpxor        %ymm14,%ymm11,%ymm15
+     2 │          vpcmpgtq     %ymm6,%ymm15,%ymm6
+     2 │          vpcmpgtq     %ymm3,%ymm12,%ymm3
+    39 │          vpandn       %ymm11,%ymm6,%ymm6
+    13 │          vpandn       %ymm11,%ymm3,%ymm7
+     4 │          vpand        %ymm6,%ymm3,%ymm3
+     2 │          vpaddq       %ymm5,%ymm7,%ymm5
+    31 │          vpcmpeqd     %ymm7,%ymm7,%ymm7
+     8 │          vpsubq       %ymm3,%ymm5,%ymm3
+       │          vpxor        %xmm6,%xmm6,%xmm6
+     2 │          mov          0x1c0(%rsp),%r14
+  4264 │          vpgatherqq   %ymm7,(%r14,%ymm3,8),%ymm6 # Do array index
+#+end_src
+
+Huh what?! I don't really what is going on here, but I do know that the compiler
+just vectorized our code for us! All the =vp= instructions are vector/packed
+instructions! Magic! This probably explains the big speedup we get for =fastmod64=.
+
+*Closer inspection:* As it turns out, the =32bit= versions were already
+auto-vectorized before we implemented this last optimization. Probably because
+the ~FastMod32~ type is smaller (two ~u64~) than the ~Fastmod64~ type (~u128~
+and ~u64~) and hence easier to vectorize (and similar for =StrengthReduce32=).
+But either way this last trick helps a lot for the =64bit= variants that will
+be needed for large hashmaps.
 
 #+print_bibliography:
