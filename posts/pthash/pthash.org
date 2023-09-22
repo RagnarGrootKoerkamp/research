@@ -137,7 +137,7 @@ Rust, so I converted the few parts I need.
 There is also [[https://crates.io/crates/strength_reduce][=strength_reduce=]], which contains a similar but distinct algorithm
 for ~a % b~ that computes the remainder from the quotient.
 
-*** Benchmark
+** Benchmark
 I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae92af5be31ac383f2c3ee][implemented]] these under a generic =Reduce= trait.
 
 ~just bench~ at the linked commit at ~2.6GHz~ gives the following for $10^7$ keys:
@@ -151,10 +151,10 @@ I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae
 
 The =u32= versions simply only use the lower $32$ bits of the $64$ bit hash.
 
-This is not yet as fast as the fastest $28ns$ reported in the PTHash paper (for
+This is not yet as fast as the fastest =28ns= reported in the PTHash paper (for
 C-C encoding), but I also haven't optimized anything else yet. Time for profiling.
 
-Looking at the flamegraph (~cargo flamegraph~), and zooming in on the hash function, we see
+*Profiling:* Looking at the flamegraph (~cargo flamegraph~), and zooming in on the hash function, we see
 
 #+attr_html: :class inset
 [[file:hash_flame.png]]
@@ -174,22 +174,39 @@ we see that the =index= function calls to =murmur2= and a lot of time is spent
 in both. In fact, =murmur2= is not inlined at all! That explains the iterator
 appearing in the flamegraph.
 
-This is fixed by enabling link-time optimization: add ~lto = "thin"~ to
+*Thin-LTO:* This is fixed by [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/4b25317bf4c78bc1264f88b0592af2c08de54044][enabling]] link-time optimization: add ~lto = "thin"~ to
 ~cargo.toml~.
 
 Rerunning the benchmark we get
 
-|                  | construction (s) | construction (s) | query (ns) | query (nw) |
-| method           |              old |              new | old        |        new |
+|                  | construction (s) | construction (s) | query (ns) | query (ns) |
+| method           |           no LTO |         thin-LTO | no LTO     |   thin-LTO |
 | u64              |             10.5 |              8.9 | 91         |         60 |
 | fastmod64        |             10.7 |              8.3 | 55         |         34 |
 | fastmod32        |              9.9 |              8.5 | *50*       |       *26* |
 | strengthreduce64 |             11.5 |              8.3 | 56         |         38 |
 | strengthreduce32 |             10.0 |              8.8 | *50*       |         31 |
 
-Sweet! $26ns$ is faster than any of the numbers in table 5 of [cite/t:@pthash]!
+Sweet! =26ns= is faster than any of the numbers in table 5 of [cite/t:@pthash]!
 (Admittedly, there is no compression yet and the dictionary size is $10\times$
 smaller, but still!)
+
+*More inlining:*
+Actually, we don't even want the =index()= function call to show up in our logs:
+[[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/39a3411332f70bde37de90221c9f460bd8b79f9a][inlining]] it should give better instruction pipelining in the benchmarking hot-loop
+#+begin_src rust
+for key in &keys {
+    mphf.index(key);
+}
+#+end_src
+and indeed, we now get
+| query (ns)       | no LTO     |   thin-LTO | inline index() |
+| u64              | 91         |         60 |             55 |
+| fastmod64        | 55         |         34 |             33 |
+| fastmod32        | *50*       |       *26* |           *24* |
+| strengthreduce64 | 56         |         38 |             33 |
+| strengthreduce32 | *50*       |         31 |             26 |
+
 
 
 
