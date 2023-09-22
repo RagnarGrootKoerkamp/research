@@ -72,7 +72,7 @@ described), or in streaming fashion, where we iterate over elements and prefetch
 memory for the element $k$ iterations ahead. [[https://en.algorithmica.org/hpc/cpu-cache/prefetching/][Algorithmica.org]] has a nice article
 on the streaming approach.
 
-** Fewer modulo operations
+** Faster modulo operations
 There are a lot of ~% n~, ~% p1~ and ~% (m-p1)~ operations throughout the code.
 I didn't look into it yet, but possibly these are the bottleneck on the CPU
 latency.
@@ -137,7 +137,7 @@ Rust, so I converted the few parts I need.
 There is also [[https://crates.io/crates/strength_reduce][=strength_reduce=]], which contains a similar but distinct algorithm
 for ~a % b~ that computes the remainder from the quotient.
 
-** Benchmark
+** First benchmark
 I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae92af5be31ac383f2c3ee][implemented]] these under a generic =Reduce= trait.
 
 ~just bench~ at the linked commit at ~2.6GHz~ gives the following for $10^7$ keys:
@@ -208,8 +208,103 @@ and indeed, we now get
 | strengthreduce32 | *50*       |         31 |             26 |
 
 
+*Conclusion:* From now on let's only use =fastmod64= and =fastmod32=. (I suspect
+the =32bit= variant does not have sufficient entropy for large key sets, so we
+keep the original =64bit= variant as well.)
 
+** Faster bucket computation
 
+After inlining everything, the generated assembly for our test is just one big
+$\sim 100$ line assembly function. Currently, the ~bucket(hx)~ function (that
+computes the bucket for the given hash ~hx = hash(x, s)~) looks like
+#+begin_src rust
+fn bucket(&self, hx: u64) -> u64 {
+    if (hx % self.rem_n) < self.p1 { // Compare
+        hx % self.rem_p2
+    } else {
+        self.p2 + hx % self.rem_mp2
+    }
+}
+#+end_src
+The assembly looks like this:
+#+begin_src asm
+     5 │    ┌──cmp        %rdi,0xc0(%rsp)       # compare
+     1 │    ├──jbe        370
+   102 │    │  mov        0x98(%rsp),%rdx       # first branch: fastmod
+    41 │    │  mulx       %r9,%rdx,%rdi
+     4 │    │  imul       0xa0(%rsp),%r9
+    85 │    │  mulx       %r10,%r13,%r13
+    12 │    │  add        %rdi,%r9
+     7 │    │  mov        %r9,%rdx
+    72 │    │  mulx       %r10,%rdx,%rdi
+    17 │    │  add        %r13,%rdx
+     3 │    │  adc        $0x0,%rdi             # add 0
+       │    │  cmp        %rdi,0x58(%rsp)       # index-out-of-bound check for k array
+    56 │    │↓ ja         3ac                   # ok: continue below at line 3ac:
+       │    │↓ jmp        528                   # panic!
+       │    │  cs         nopw 0x0(%rax,%rax,1)
+   128 │370:└─→mov        0xa8(%rsp),%rdx       # second branch: fastmod
+    41 │       mulx       %r9,%rdx,%rdi
+       │       imul       0xb0(%rsp),%r9
+    66 │       mulx       %rcx,%r13,%r13
+    12 │       add        %rdi,%r9
+       │       mov        %r9,%rdx
+    58 │       mulx       %rcx,%rdx,%rdi
+    14 │       add        %r13,%rdx
+       │       adc        0xb8(%rsp),%rdi       # add p2
+    54 │       cmp        %rdi,0x58(%rsp)       # out-of-bound check for k array
+     1 │     ↓ jbe        528                   # panic!
+  8100 │3ac:   mov        (%r11,%rdi,8),%rdx    # Do array index.
+#+end_src
+We see that there are quite some branches:
+- The first and second branch of the ~bucket()~ function are both fully written out.
+- They use the same number of instructions.
+- One branch does =add 0=, I suppose because the CPU likes equal-sized branches.
+- There are redundant index-out-of-bounds checks.
+- The last line, the array index itself, has $8000$ samples: $57\%$ of the total
+  samples is *this single assembly instruction*!
+
+*Branchless bucket index:*
+I tried rewriting the ~bucket()~ function into a branchless form as follows:
+#+begin_src rust
+fn bucket(&self, hx: u64) -> u64 {
+    let is_large = (hx % self.rem_n) >= self.p1;
+    let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
+    is_large as u64 * self.p2 + hx % rem
+}
+#+end_src
+but this turns out to be *slower* than the original, probably because the new
+assembly now needs a lot of =cmov= instructions. (In particular, =rem= contains
+a =u128= and a =u64=, so needs $3$ =mov='s and $3$ =cmov='s.)
+#+begin_src asm
+       │       cmp        %rdi,0xd0(%rsp)     # comparison
+   112 │       mov        0xb8(%rsp),%rdi     # load rem_p2
+    29 │       cmova      0xc8(%rsp),%rdi     # conditionally overwrite with rem_mp2
+       │       mov        0xb0(%rsp),%rdx
+   137 │       cmova      0xc0(%rsp),%rdx
+       │       mov        0xa0(%rsp),%r14
+   137 │       cmova      0xa8(%rsp),%r14
+    26 │       mov        %r9,%r10
+       │       mov        $0x0,%r11d          # set offset to 0
+    90 │       cmova      %r11,%r10           # conditionally overwrite offset
+    38 │       imul       %r8,%rdi            # start computation
+     2 │       mulx       %r8,%rdx,%r8
+   122 │       add        %r8,%rdi
+    48 │       mulx       %r14,%r8,%r8
+       │       mov        %rdi,%rdx
+   163 │       mulx       %r14,%rdx,%rdi
+       │       add        %r8,%rdx
+       │       adc        %r10,%rdi
+   184 │       cmp        %rdi,0x60(%rsp)     # index-out-of-bounds check
+       │     ↓ jbe        52f                 # panic
+    38 │       mov        0x98(%rsp),%rdx
+ 10798 │       mov        (%rdx,%rdi,8),%rdx  # Do array index.
+#+end_src
+
+*No bounds check:*
+We can replace ~k[index]~ by ~unsafe { *k.get_unchecked(index) }~.
+This doesn't give much performance gain (less than the few ~ns~ of measurement
+noise I have), but can't hurt. It removes the final =cmp; jbe= lines from the assembly.
 
 
 
