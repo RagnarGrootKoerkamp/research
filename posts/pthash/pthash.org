@@ -496,4 +496,31 @@ in the paper for what FCH does.
 Basically we can completely drop the $\mm n$ there! Sweet! That's $1$ of $3$
 modulo operations gone :)
 
+** =FastReduce= revisited
+
+Earlier I mentioned the blogpost [[https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/][A fast alternative to the modulo reduction]]:
+to map $h\in[2^k]$ to $[n]$ ($[n] := \{0, \dots, n-1\}$ here), instead of taking $h\mm n$, one can do
+$h*n/2^k$ which is must faster to evaluate. The problem with this approach is
+that it only uses the $\log_2 n$ high-order bits of $n$, discarding some
+necessary entropy.
+
+On second thought, it seems like this may still be useful though. There are two
+modulo operations in the PTHash algorithm:
+1. In the =bucket()= function, mapping from $[2^{64}]$ to $[p_2]$ or $[m - p_2]$.
+2. In the =position()= function, mapping from $[2^{64}]$ to $[n]$.
+
+While we cannot use =FastReduce= twice, I think it may still be possible to use
+it once. In particular, it should be fine to use a low-entropy hash for
+bucket-selection since we anyway have collisions there -- that's the point of
+bucketing in the first place.
+
+A second optimization may be possible if we could find a function that uses the
+lower $\log_2 n$ bits of the hash for =position()=. Then we can access $2\cdot
+\log_2 n$ bits of entropy in total which should be sufficient to avoid
+collisions with constant probability (via the birthday paradox).
+
+One idea is something like $h \mm 2^{\lceil{\log_2 n\rceil}}$, but this is not
+quite fair so it may not work out nicely.
+
+
 #+print_bibliography:
