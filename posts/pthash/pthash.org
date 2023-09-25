@@ -130,6 +130,33 @@ If we can assume that $n$ is at most $40$ bits, and that $44$ bits are
 sufficient entropy, then I think we could do away with the ~u128 x u64~
 multiplication and do everything inside ~u128~.
 
+** Ideas for faster construction
+Once the table is almost filled, determining the $k_i$ becomes slower.
+Some ideas to speed this up:
+- reversing =murmurhash= :: Instead of finding a $k_i$ such that $position(x) :=
+  (h(x) \lxor
+  h(k_i))\mm n$ is not taken becomes slow. Instead, we could keep a list of
+  empty positions $p$ and determine $k_i$ as $h^{inv}((p + j \cdot n) \lxor
+  h(x))$ for different $j$, assuming we can invert =murmurhash=. As it turns
+  out, =murmurhash2= is an invertible function with $O(1)$ inverse! See [[http://bitsquid.blogspot.com/2011/08/code-snippet-murmur-hash-inverse-pre.html][this
+  blogpost]]. Thus, we can easily find many $k_i$ such that $position(x, k_i)$
+  maps to an empty position.
+
+  - All buckets of size $1$ can be directly assigned to slots this way.
+  - Size $2$ and $3$ buckets also need fewer tries than before.
+
+  The big drawback though is that the $k_i$ values found will be uniform in $[0,
+  2^{64}]$.
+
+- Cuckoo-hashing :: For sets of size $1$ and $2$ (and maybe $3$?) we could
+  /displace/ an already taken slot if that is the last remaining slot needed to
+  fix the current bucket. Probably we want to only displace buckets of the same
+  size and never buckets of larger size.
+
+  I wonder though how useful this actually is. If the current bucket is hard to
+  place, there is not really any reason a different bucket of the same size
+  would be easier to fix.
+
 * Implementation log
 A somewhat chronological list of notes and remarks.
 ** Hashing function
@@ -523,6 +550,12 @@ One idea is something like $h \mm 2^{\lceil{\log_2 n\rceil}}$, but this is not
 quite fair so it may not work out nicely.
 But then again, maybe we could use that for the bucketing modulo, since it
 possibly doesn't require (as much) fairness.
+
+Or maybe we can just take the lower $32$ bits of $h$ and do $(h\mm 2^{32}) * n /
+2^{32}$. That should probably work just fine :)
+
+
+
 
 
 #+print_bibliography:
