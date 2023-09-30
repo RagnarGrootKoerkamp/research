@@ -23,7 +23,7 @@ writing the code.
 
 Twitter discussion is [[https://twitter.com/curious_coding/status/1704989305158979656][here]].
 
-(See also my [[file:bbhash.org][note on BBHash]] [cite:@bbhash].)
+(See also my [[file:../bbhash.org][note on BBHash]] [cite:@bbhash].)
 
 * Questions and remarks on PTHash paper
 Probably some of these questions are answered by reading into the original FCH
@@ -58,6 +58,12 @@ paper [cite:@fch] -- that'll come at some later time.
 
 - Is it reasonable to compute and store hashes of all keys, and then changing
   the API to let the user pass in the hash instead of the key?
+
+- What's the probability of failure with the first global seed $s$ that's tried?
+
+- What are the largest $k_i$ found in typical cases?
+
+- What if $\gcd(m, n)$ is large?
 
 * Ideas for improvement
 ** Parameters
@@ -160,7 +166,7 @@ Some ideas to speed this up:
 * Implementation log
 A somewhat chronological list of notes and remarks.
 ** Hashing function
-For now I use =murmur64a=.
+For now I use =murmur64a=, documented on the =SMHasher= [[https://github.com/aappleby/smhasher/wiki][GitHub wiki]].
 ** Bitpacking crates
 There are *a lot* of bitvector and bitpacking crates!
 - [[https://crates.io/search?q=bitvec][bitvectors]] :: All of the below seem to do the same
@@ -536,6 +542,10 @@ modulo operations in the PTHash algorithm:
 1. In the =bucket()= function, mapping from $[2^{64}]$ to $[p_2]$ or $[m - p_2]$.
 2. In the =position()= function, mapping from $[2^{64}]$ to $[n]$.
 
+And there is one related check:
+3. In the =bucket()= function, check whether $h < p_1 \cdot 2^{64}$ (or $h \mm n
+   \leq p_1 \cdot n$), which is actually also a reduction operation.
+
 While we cannot use =FastReduce= twice, I think it may still be possible to use
 it once. In particular, it should be fine to use a low-entropy hash for
 bucket-selection since we anyway have collisions there -- that's the point of
@@ -555,6 +565,178 @@ Or maybe we can just take the lower $32$ bits of $h$ and do $(h\mm 2^{32}) * n /
 2^{32}$. That should probably work just fine :)
 
 
+So, we have 7 possible reduction functions now:
+1. =FastMod64=, same as =mod= but faster.
+2. =FastMod32L=, taking the lower $32$ bits modulo $n$.
+3. =FastMod32H=, taking the higher $32$ bits modulo $n$.
+4. =FastReduce64=: $(h * n) >> 64$
+5. =FastReduce32L=, fastreduce on the $32$ low bits: $((h \mm 2^{32}) * n) >> 32$
+6. =FastReduce32H=, fastreduce on the $32$ high bits: $((h >> 32) * n) >> 32$
+
+Excluding =mod= (which is never better than =FastMod64=, we can make $36$
+combinations from this to use for the two modulo operations.
+
+Not all combinations end up working (because of lack of entropy when e.g. only
+the $32$ high bits are used). It's clear that =FastMod64= tends to be slow, and
+that =Reduce= operations are usually (but not always) faster than =Mod= operations.
+
+The big problem with this benchmark though seems to be that timings are quite
+inconsistent (variance of a few nanoseconds), and that the quality of generated
+code (auto-vectorization and loop unrolling) depends on a lot of things and is
+somewhat unpredictable/inconsistent.
+
+#+caption: Query time (=ns=) for different combinations of reduction functions. Missing entries either fail or slow down construction.
+| =bucket= reduce ($\mm m$) \ =position= reduce ($\mm n$) | =FM32L= | =FM32H= | =FM64= | =FR32L= | =FR32H= | =FR64= |
+| =FastMod32L=                                            |         |      20 |     27 |         |      19 |     20 |
+| =FastMod32H=                                            |      18 |         |     26 |      19 |         |        |
+| =FastMod64=                                             |      29 |      27 |     33 |      28 |      26 |     27 |
+| =FastReduce32L=                                         |         |      18 |        |         |      23 |     18 |
+| =FastReduce32H=                                         |         |         |        |         |         |        |
+| =FastReduce64=                                          |         |         |        |         |         |        |
+
+Note that the last two rows fail in particular, because they strongly correlate
+with the check whether elements belong in a small or large bucket, $h(x, s) <
+p_1$.
+
+** TODO Is there a problem if $\gcd(m, n)$ is large?
+
+
+** Faster hashing
+
+The current implementation uses [[https://github.com/aappleby/smhasher/wiki/MurmurHash2][=Murmur2=]] to hash both the key $x\mapsto h(x, s)$ and the
+pilot $k_i \mapsto h(k_i, s)$. While this hash is fast, it's still quite some
+instructions. Instead, especially for the $h(k_i, s)$, we may be able to get
+away with either no or a much simpler hash.
+
+*No hash:* A first try of $h_0(k_i, s) := k_i$ returns in failures because the
+$k_i$ become too large.
+
+*Multiplication hash (=MulHash=):* So we do need more /mixing/ of bits rather than just
+incrementally increasing $k_i$ starting at $0$. One common way of doing that is
+simply to multiply by a large semi-random $64$bit integer. In particular,
+=Murmur= also does this, so let's just reuse their mixing constant and set:
+$$
+h_1(k_i, s) := (0xc6a4a7935bd1e995 \cdot k_i) \mm 2^{64}.
+$$
+(I tried looking for documentation on why this constant was chosen, but there
+doesn't seem to be more to it than /it works/.)
+
+In experiments, this gives anywhere between $1$ and $4$ nanoseconds of speedup.
+
+** An experiment
+Another fun comparison is here, where I use =MulHash= for $k_i$ and replace the
+=MurmurHash= for $h(x)$ by simply the identity operation (since we're testing on
+uniform random $x$ anyway):
+
+#+caption: Assembly of $index()$ function when using =Murmur= (which takes $17/38$ instructions): =18ns/query=.
+#+begin_src asm
+    17 │1f0:   mov        (%rsi,%rax,1),%rdx
+    11 │       imul       %r13,%rdx           # Start of Murmur
+    32 │       mov        %rdx,%rbx
+   106 │       shr        $0x2f,%rbx
+     7 │       xor        %rdx,%rbx
+    23 │       imul       %r13,%rbx
+    24 │       mov        %rdi,%rdx
+    99 │       movabs     $0x35253c9ade8f4ca8,%rbp
+    11 │       xor        %rbp,%rdx
+    27 │       xor        %rbx,%rdx
+    28 │       imul       %r13,%rdx
+    92 │       mov        %rdx,%rbx
+    15 │       shr        $0x2f,%rbx
+    15 │       xor        %rdx,%rbx
+    28 │       imul       %r13,%rbx
+    95 │       mov        %rbx,%rbp
+    16 │       shr        $0x2f,%rbp
+    17 │       xor        %rbx,%rbp           # End of Murmur
+    25 │       mov        %ebp,%edx
+    64 │       cmp        %rbp,%r8
+    43 │     ↓ jbe        250                 # Branch for bucket index
+     9 │       imul       %r14,%rdx
+    12 │       shr        $0x20,%rdx
+    27 │     ↓ jmp        25d
+       │       cs         nopw 0x0(%rax,%rax,1) # nop; for code alignment
+     7 │250:   imul       %r15,%rdx
+     4 │       shr        $0x20,%rdx
+    11 │       add        0x10(%rsp),%rdx
+  5088 │25d:   mov        (%r9,%rdx,8),%rdx   # Memory lookup -- most waiting is here.
+   301 │       imul       %r13,%rdx
+    98 │       xor        %rbp,%rdx
+   453 │       mulx       %r11,%rdx,%rdx
+   100 │       cmp        %rdx,%r10
+     2 │     ↓ jbe        6e8
+    13 │       add        %rdx,%r12
+    10 │       add        $0x8,%rax
+    37 │       cmp        %rax,%rcx
+   100 │     ↑ jne        1f0
+#+end_src
+
+#+caption: Assembly of $index()$ function when using $h(x) = x$ instead: =7ns/query=.
+#+begin_src asm
+    72 │4a0:   mov        (%rcx,%rbp,1),%rbx
+    38 │       mov        %ebx,%edx
+    21 │       cmp        %rbx,%rsi
+    36 │     ↓ jbe        4c0                 # Branch for bucket index
+    16 │       imul       %r15,%rdx
+    22 │       shr        $0x20,%rdx
+    24 │     ↓ jmp        4cb
+       │       data16     cs nopw 0x0(%rax,%rax,1) # code alignment
+       │4c0:   imul       %r14,%rdx
+    20 │       shr        $0x20,%rdx
+    21 │       add        %r10,%rdx
+  1895 │4cb:   mov        (%rdi,%rdx,8),%rdx  # Memory lookup -- most waiting is here
+   172 │       imul       %r13,%rdx
+    75 │       xor        %rbx,%rdx
+   252 │       mulx       %r9,%rdx,%rdx
+    56 │       cmp        %rdx,%r8
+       │     ↓ jbe        706
+    43 │       add        %rdx,%r11
+    26 │       add        $0x8,%rbp
+       │       cmp        %rbp,%rax
+    34 │     ↑ jne        4a0
+#+end_src
+
+=MurmurHash= takes slightly less than half the instructions, but removing them
+gives almost $2.5\times$ speedup! My current thinking is that this is not so
+much due to the reduced instruction count itself (the CPU is stalling anyway to
+wait for memory), but rather due to the better pipelining it results in: when
+loop iterations are shorter (in number of assembly instructions), pipelining can
+look ahead more iterations, and hence does a better job at prefetching memory.
+But even with this short loop, around two thirds of the time is still spend
+waiting for memory.
+
+*Conclusion 1.:* I should really write code with prefetching.
+
+*Conclusion 2.:* It's time to use =perf stat= for some metrics on /branch
+mispredictions/ and /instructions per cycle/.
+
+** Compiler struggles
+
+*Auto-vectorization:* The compiler is quite eager to generated vectorized assembly code.
+It's quite unpredictable when auto-vectorization triggers, and it seems I have
+to keep at least one branch in the hot loop to prevent it. The vectorized code
+seems bad for a few reasons:
+- *Gather instructions* (=vpgatherqq=) are slow.
+- *Pipelining:* It seems that pipelining works much better for the scalar
+  version, being able to look ahead further and keeping busy while waiting for
+  memory to load.
+
+*Even worse:* Also, it did the following terrible thing. Starting with this piece of innocent looking code:
+#+begin_src rust
+if likely(p < self.n0) {
+    p
+} else {
+    unsafe { *self.free.get_unchecked(p - self.n0) }
+}
+#+end_src
+the compiler decided to generate:
+
+#+attr_html: :class inset
+[[file:bad-asm.png]]
+
+Basically: it created a branchless implementation of this if statement where the
+=false= branch is always executed. But that branch is super slow! Basically a
+completely unnecessary read from main memory!
+For now I'll just completely remove the =false= branch to prevent this issue...
 
 
 
