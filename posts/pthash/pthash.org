@@ -837,8 +837,13 @@ this results in 'random' $k$ in $[2^{64}]$, while for compression purposes we
 much prefer finding small (or even minimal) $k$.
 
 Given the size of the set, the expected value of the smallest solution $k$ is
-$2^r = n$. But I'm not sure if this is solvable efficiently.
+$2^r = n$. But I'm not sure if this is solvable efficiently. We could first look
+for solutions where the $64-r$ high bits of $k_i$ are $0$, and if none are found
+we can relax to $64-r-1$ high bits of $0$, and so on. But does that even help?
 
+Remember that $C$ is a mixing constant and hence both $C$ and $C'$ are quite
+'random' with lots of $1$ bits. Maybe we can choose $C$ to have good mixing but
+also simplify this inverse? Or can it always be done? I don't know..
 
 
 
