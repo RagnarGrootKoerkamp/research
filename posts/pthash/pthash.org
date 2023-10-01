@@ -11,6 +11,7 @@
 $$
 %\newcommand{\mm}{\,\%\,}
 \newcommand{\mm}{\bmod}
+\newcommand{\lxor}{\oplus}
 $$
 
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
@@ -777,6 +778,66 @@ the original PTHash paper! (But note that I don't do any compression here.)
 And this is without vectorization still :)
 
 ** TODO: Prefetching with vectorization
+
+Preliminary results: this seems tricky to get right and tends to be slower. It
+sometimes generates unwanted =gather= instructions, but even when it doesn't
+it's slow although I don't know exactly why yet. *Does pipelining work with SIMD instructions?*
+
+** TODO: Try out =reciprocal= crate
+
+
+** Inverting $h(k_i)$
+:PROPERTIES:
+:CUSTOM_ID: inverting-hki
+:END:
+
+When there are only a few empty slots left, we want to find $k$ such that
+$$
+R(h_1(x) \lxor h_2(k), n) = p
+$$
+for some fixed position $p$.
+
+Using =FastReduce64= as reduction $R$, we want
+$$
+\left\lfloor\frac{(h_1(x) \lxor h_2(k)) * n}{2^{64}}\right\rfloor = p
+$$
+i.e.
+$$
+2^{64} p \leq (h_1(x) \lxor h_2(k)) \cdot n < 2^{64}(p+1)
+$$
+i.e.
+$$
+\frac{2^{64} p}{n} \leq h_1(x) \lxor h_2(k) < \frac{2^{64}(p+1)}{n}.
+$$
+This basically fixes the high $r:=\log_2(n)$ bits of $h_1(x) \lxor h_2(k)$.
+(I suspect it only leaves two possible options for the highest $\lfloor
+r\rfloor$ bits.)
+Thus, we infer (with some handwaving)
+$$
+h_2(k) = \frac{2^{64}(p+\frac 12)}{n} \oplus h_1(x) \oplus A =: X \oplus A
+$$
+where $X$ is the target constant and $A$'s upper $r$ bits are $0$, i.e. $A < 2^{64-r}$.
+(TODO: Maybe we can just for the lower $64-r$ bits of $X$ to $0$. Not sure.)
+
+We could solve this when using =Murmur= for $h_2$, but in practice we use a much
+simpler =MulHash=: $h_2(k) = (C\cdot k) \mm 2^{64}$. Thus, we must solve
+$$
+(C \cdot k) \mm 2^{64} \in \{ X \oplus A : 0\leq A < 2^{64-r}\}
+$$
+for $k$.
+
+Now, since $C$ is odd it has a multiplicative inverse $C'$ over $F_{2^{32}}$
+with $(C \cdot C')\mm 2^{64} = 1$, so we're looking for
+$$
+k \in \{ (C' \cdot (X \oplus A)) \mm 2^{64} : 0\leq A < 2^{64-r}\}.
+$$
+
+This makes it very easy to find arbitrary solutions! The big drawback is that
+this results in 'random' $k$ in $[2^{64}]$, while for compression purposes we
+much prefer finding small (or even minimal) $k$.
+
+Given the size of the set, the expected value of the smallest solution $k$ is
+$2^r = n$. But I'm not sure if this is solvable efficiently.
 
 
 
