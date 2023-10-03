@@ -777,13 +777,13 @@ the original PTHash paper! (But note that I don't do any compression here.)
 
 And this is without vectorization still :)
 
-** TODO: Prefetching with vectorization
+** TODO Prefetching with vectorization
 
 Preliminary results: this seems tricky to get right and tends to be slower. It
 sometimes generates unwanted =gather= instructions, but even when it doesn't
 it's slow although I don't know exactly why yet. *Does pipelining work with SIMD instructions?*
 
-** TODO: Try out =reciprocal= crate
+** TODO Try out =reciprocal= crate
 
 
 ** Inverting $h(k_i)$
@@ -844,6 +844,23 @@ we can relax to $64-r-1$ high bits of $0$, and so on. But does that even help?
 Remember that $C$ is a mixing constant and hence both $C$ and $C'$ are quite
 'random' with lots of $1$ bits. Maybe we can choose $C$ to have good mixing but
 also simplify this inverse? Or can it always be done? I don't know..
+
+** Another day of progress
+- Explored ways to solve the hash-inversion problem above. Seems that an
+  $O(64-r)$ solution is possible, and maybe even $O(r)$ but that's probably more
+  annoying. (Either way both will be $O(1)$ for $n < 2^{64}$ ;)
+  There are a lot of interesting things going on to be written down and
+  formalized later.
+- Added a binary ~src/bin/bucket_sizes.rs -n <n> -c <c> -a <a>~ to print a nice
+  table with number of buckets of each size and related statistics.
+- Replaced ~Vec::sort()~ by ~radsort::sort~ which is roughly $2\times$ faster
+  for uniform =u64= hashes. TODO: Probably it will be faster to only sort by the
+  highest $n$ bits (or $32$ bits), i.e. by only sorting on buckets, since most
+  buckets will have size $1$.
+- I'm playing with the idea of implementing some kind of interpolation sort
+  algorithm that just inserts things directly in the right place in an array of
+  =Option<NonZero<usize>>= of size $(1+\epsilon)n$ or maybe $n + C \cdot
+  \sqrt(n)$ and then runs a collect on this. Should work quite well I think.
 
 
 
