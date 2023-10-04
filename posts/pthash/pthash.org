@@ -12,6 +12,7 @@ $$
 %\newcommand{\mm}{\,\%\,}
 \newcommand{\mm}{\bmod}
 \newcommand{\lxor}{\oplus}
+\newcommand{\K}{\mathcal K}
 $$
 
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
@@ -862,6 +863,429 @@ also simplify this inverse? Or can it always be done? I don't know..
   =Option<NonZero<usize>>= of size $(1+\epsilon)n$ or maybe $n + C \cdot
   \sqrt(n)$ and then runs a collect on this. Should work quite well I think.
 
+** TODO Possible sorting algorithms
+- [[https://github.com/mlochbaum/rhsort][Robinhoodsort]]
+- [[https://pvk.ca/Blog/2019/09/29/a-couple-of-probabilistic-worst-case-bounds-for-robin-hood-linear-probing/][Bounds on linear probing]]
+- Flashsort ([[https://en.wikipedia.org/wiki/Flashsort][wikipedia]], [[http://www.neubert.net/Flapaper/9802n.htm][article]])
+  - Drawback: bad cache locality when writing out buckets. Maybe just write to
+    $O(\sqrt(n))$ buckets (should fit in L2 cache ideally) and then sort each
+    bucket individually.
 
+** Diving into the inverse hash problem
+
+So we want to find the minimal $k$ such that
+$$
+(C\cdot k) \mm 2^{64} \in \{X \oplus A : 0 \leq A < 2^64\}
+$$
+for some given $X$, i.e. the $r$ high bits of =C*k= as $64$ bit integers should
+be equal to the $r$ high bits of $X$. Let $\K$ be the set of $k$ for which this
+holds, so that we are interested in $\min \K$.
+
+A first thought is: can we first find /some/ valid $k=k_0$, and then hope that the
+space of solutions $\K$ has some kind of affine structure so that we can easily
+translate the initial $k_0$ to a minimal solution? So let's investigate the
+linear structure first: let's find solutions that have $r$ leading zeros, i.e
+$$\K_0 := \{k : C \times k < 2^{r'}\},$$
+where I will use $\times$ for $64$bit multiplication and $r' := 64-r$.
+
+We definitely expect $\K_0$ to have /some/ structure: if $C\times k_1 < 2^{r'}$
+and $C\times k_2 < 2^{r'}$, then $C\times (k_1 + k_2) < 2^{r'+1}$, which is
+almost good enough, and similarly, $-2^{r'} \leq C\times (k_1 - k_2) \leq
+2^{r'}$, so that either $k_1 - k_2$ or $k_2 - k_1$ is also a solution.
+
+Thus, consider those $k\in \K_0$ with small absolute value (modulo $2^{64}$, so
+the absolute value $|k|$ of $k$ is $\min(k, 2^{64}-k)$). Then, each difference $k_d$
+between two consecutive elements of $\K_0$ must occur in $\K_0$ either as $k_d$
+or as $-k_d$.
+
+So let's write some code to determine all possible differences. I'm doing this
+for $32$bit integers first since we can quickly iterate over them
+
+#+begin_src rust
+type T = u32;
+fn find_diffs_bruteforce(c: T) {
+    for r in 1..T::BITS {
+        let mut last = 0;
+        let mut diffs = HashSet::new();
+        for i in 0..=T::MAX {
+            let ci = c.wrapping_mul(i);
+            if ci.leading_zeros() >= r {
+                diffs.insert(i - last);
+                last = i;
+            }
+        }
+        eprintln!("r = {r:>2}: {diffs:?}");
+    }
+}
+#+end_src
+
+Result:
+#+begin_src text
+r =  1: {1, 2, 3}
+r =  2: {3, 5, 8}
+r =  3: {3, 11, 14}
+r =  4: {11, 14, 25}
+r =  5: {14, 39, 53}
+r =  6: {39, 53, 92}
+r =  7: {92, 145, 237}
+r =  8: {92, 329, 421}
+r =  9: {421, 513, 934}
+r = 10: {421, 934, 1355}
+r = 11: {1355, 2289, 3644}
+r = 12: {1355, 3644, 4999}
+r = 13: {3644, 8643, 12287}
+r = 14: {8643, 29573, 38216}
+r = 15: {8643, 46859, 55502}
+r = 16: {55502, 64145, 119647}
+r = 17: {55502, 119647, 175149}
+r = 18: {175149, 230651, 405800}
+r = 19: {405800, 1042251, 1448051}
+r = 20: {405800, 2665451, 3071251}
+r = 21: {405800, 3477051, 3882851}
+r = 22: {3882851, 4288651, 8171502}
+r = 23: {3882851, 27585757, 31468608}
+r = 24: {3882851, 35351459, 39234310}
+r = 25: {3882851, 39234310, 43117161}
+r = 26: {43117161, 90117173, 133234334}
+r = 27: {43117161, 133234334, 176351495}
+r = 28: {133234334, 309585829, 442820163}
+r = 29: {442820163, 1195226155}
+r = 30: {442820163, 2966506807}
+r = 31: {3852147133}
+#+end_src
+
+*WOW*: For each $r$, it turns out there are only $3$ possible differences
+between adjacent elements of $\K_0$! And also note that (when there are $3$
+distinct values) the largest one is always the sum of the smaller two. What is
+more: when we increase $r$ by one, the new differences always include one or two
+of the previous differences, and some small linear combination of them. I.e.
+$(a,b,c) \mapsto (b, c, b+c)$ or $(a,b,c) \mapsto (a, a+c, b+c)$.
+
+This inspires a much faster algorithm to find these possible differences: for
+$r$ from $1$ to $32$, start with differences $\Delta_0 := \{1\}$ for $r=0$, and then
+to get $\Delta_r$ from $\Delta_{r-1}$ first make all small linear combinations of elements
+of $\Delta_{r-1}$ and then start with $k=0 \in K_0^r$, and then keep increasing $k$
+by all the possible delta's to see if $k+\delta\in K_0^r$. If this is the case
+add $\delta$ to $\Delta_r$, and otherwise keep going. Once $\Delta_r$ reaches size $3$, we
+can stop assuming our hypothesis that $|\Delta_r| \leq 3$ is true. (TODO: This will
+require a proof eventually.)
+See the implementation [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/1e7f9319e01010519fe598403931c1dd3a2f46a2/examples/hash-inverse.rs#L55][here]] on GitHub.
+
+Also, let's have a look at what $C \times \delta$ looks like in binary for all $\delta \in \Delta_r$:
+#+begin_src text
+r = 1
+         1  1011011110100011110100110010101
+         2 10110111101000111101001100101010
+         3    10011011101011011110010111111
+r = 2
+         3    10011011101011011110010111111
+         5 11001011000110011000111111101001
+         8 11011110100011110100110010101000
+r = 3
+         3    10011011101011011110010111111
+        11 11110010000001010000100101100111
+        14      101011110101100011000100110
+r = 4
+        11 11110010000001010000100101100111
+        14      101011110101100011000100110
+        25 11110111011111111100111110001101
+r = 5
+        14      101011110101100011000100110
+        39 11111100111110101001010110110011
+        53       10011101010101101111011001
+r = 6
+        39 11111100111110101001010110110011
+        53       10011101010101101111011001
+        92 11111111011011111111000110001100
+r = 7
+        92 11111111011011111111000110001100
+       145        1111001010100110101100101
+       237        1010101010011111011110001
+r = 8
+        92 11111111011011111111000110001100
+       329         110001010011000001111101
+       421           1101010010001000001001
+r = 9
+       421           1101010010001000001001
+       513 11111111101001010001001110010101
+       934 11111111110110100011010110011110
+r = 10
+       421           1101010010001000001001
+       934 11111111110110100011010110011110
+      1355             11110101011110100111
+r = 11
+      1355             11110101011110100111
+      2289 11111111111010011000110101000101
+      3644 11111111111110001110010011101100
+r = 12
+      1355             11110101011110100111
+      3644 11111111111110001110010011101100
+      4999             10000011110010010011
+r = 13
+      3644 11111111111110001110010011101100
+      8643                10010000101111111
+     12287 11111111111110100000011001101011
+r = 14
+      8643                10010000101111111
+     29573 11111111111111000100100101101001
+     38216 11111111111111010110101011101000
+r = 15
+      8643                10010000101111111
+     46859 11111111111111101000110001100111
+     55502 11111111111111111010110111100110
+r = 16
+     55502 11111111111111111010110111100110
+     64145                 1100111101100101
+    119647                  111110101001011
+r = 17
+     55502 11111111111111111010110111100110
+    119647                  111110101001011
+    175149                   10101100110001
+r = 18
+    175149                   10101100110001
+    230651 11111111111111111101100100010111
+    405800                      10001001000
+r = 19
+    405800                      10001001000
+   1042251 11111111111111111110000110100111
+   1448051 11111111111111111110010111101111
+r = 20
+    405800                      10001001000
+   2665451 11111111111111111111001011000111
+   3071251 11111111111111111111011100001111
+r = 21
+    405800                      10001001000
+   3477051 11111111111111111111101101010111
+   3882851 11111111111111111111111110011111
+r = 22
+   3882851 11111111111111111111111110011111
+   4288651                       1111100111
+   8171502                       1110000110
+r = 23
+   3882851 11111111111111111111111110011111
+  27585757                        110100001
+  31468608                        101000000
+r = 24
+   3882851 11111111111111111111111110011111
+  35351459                         11011111
+  39234310                          1111110
+r = 25
+   3882851 11111111111111111111111110011111
+  39234310                          1111110
+  43117161                            11101
+r = 26
+  43117161                            11101
+  90117173 11111111111111111111111111011001
+ 133234334 11111111111111111111111111110110
+r = 27
+  43117161                            11101
+ 133234334 11111111111111111111111111110110
+ 176351495                            10011
+r = 28
+ 133234334 11111111111111111111111111110110
+ 309585829                             1001
+ 442820163 11111111111111111111111111111111
+r = 29
+ 442820163 11111111111111111111111111111111
+1195226155                              111
+r = 30
+ 442820163 11111111111111111111111111111111
+2966506807                               11
+r = 31
+ 442820163 11111111111111111111111111111111
+3852147133                                1
+#+end_src
+We see that the first $r$ bits of $C\times \delta_r$ are either $0$ or $1$, so
+$-2^{32-r} < C \times \delta_r < 2^{32-r}$.
+
+So using this knowledge, how do we find $\min \K$ for an arbitrary constant $X$?
+Well, we can start with $k = 0$ and $r=0$, and then keep trying to add elements
+of $\Delta_{r+1}$ until the $r$'th-highest bit of $C\times k$ is the same as the
+one in $X$. Then we increase $r$ and repeat until all highest $r$ bits
+are correct.
+
+#+begin_src rust
+fn find_inverse_fast(X: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
+    let mut k = 0;
+    let mut rr = (C.wrapping_mul(k) ^ X).leading_zeros();
+    'rr: while rr < r {
+        for &d in &diffs[rr as usize] {
+            let new_rr = (C.wrapping_mul(k + d) ^ X).leading_zeros();
+            if new_rr >= rr {
+                k += d;
+                rr = new_rr;
+                eprintln!(
+                    "k+={d:10} = {k:10}: {:032b} {:032b}  {rr:>2}",
+                    C.wrapping_mul(k),
+                    C.wrapping_mul(k) ^ X
+                );
+                continue 'rr;
+            }
+        }
+        unreachable!();
+    }
+    k
+}
+#+end_src
+Running this on some random input for $r=32$ gives for example:
+#+begin_src text
+r = 32                  X = 10110111100010000001010011000110
+
+        delta            k               k*C                              (k*C)^X               r
+k+=         1 =          1: 01011011110100011110100110010101 11101100010110011111110101010011   0
+k+=         1 =          2: 10110111101000111101001100101010 00000000001010111100011111101100  10
+k+=      1355 =       1357: 10110111101100110010101011010001 00000000001110110011111000010111  10
+k+=       934 =       2291: 10110111100011010110000001101111 00000000000001010111010010101001  13
+k+=      8643 =      10934: 10110111100011101000000111101110 00000000000001101001010100101000  13
+k+=      8643 =      19577: 10110111100011111010001101101101 00000000000001111011011110101011  13
+k+=      3644 =      23221: 10110111100010001000100001011001 00000000000000001001110010011111  16
+k+=     55502 =      78723: 10110111100010000011011000111111 00000000000000000010001011111001  18
+k+=    230651 =     309374: 10110111100010000000111101010110 00000000000000000001101110010000  19
+k+=    405800 =     715174: 10110111100010000001001110011110 00000000000000000000011101011000  21
+k+=    405800 =    1120974: 10110111100010000001011111100110 00000000000000000000001100100000  22
+k+=   3882851 =    5003825: 10110111100010000001011110000101 00000000000000000000001101000011  22
+k+=   3882851 =    8886676: 10110111100010000001011100100100 00000000000000000000001111100010  22
+k+=   3882851 =   12769527: 10110111100010000001011011000011 00000000000000000000001000000101  22
+k+=   3882851 =   16652378: 10110111100010000001011001100010 00000000000000000000001010100100  22
+k+=   3882851 =   20535229: 10110111100010000001011000000001 00000000000000000000001011000111  22
+k+=   3882851 =   24418080: 10110111100010000001010110100000 00000000000000000000000101100110  23
+k+=   3882851 =   28300931: 10110111100010000001010100111111 00000000000000000000000111111001  23
+k+=   3882851 =   32183782: 10110111100010000001010011011110 00000000000000000000000000011000  27
+k+= 133234334 =  165418116: 10110111100010000001010011010100 00000000000000000000000000010010  27
+k+= 133234334 =  298652450: 10110111100010000001010011001010 00000000000000000000000000001100  28
+k+= 133234334 =  431886784: 10110111100010000001010011000000 00000000000000000000000000000110  29
+k+=1195226155 = 1627112939: 10110111100010000001010011000111 00000000000000000000000000000001  31
+k+= 442820163 = 2069933102: 10110111100010000001010011000110 00000000000000000000000000000000  32
+#+end_src
+In this example we are somewhat lucky and $k=2$ happens to have the $10$ highest
+bits correct, but generally the number of correct bits grows by a few each step.
+
+I have written some code to verify the correctness and minimality of the result,
+and indeed results are always identical to a bruteforce search starting at $k=0$.
+
+We can also make some statistics on the value of $\min \K^r$ compared to $2^r$.
+Since $|\K^r| = 2^{64-r}$ we expect the smallest solution to be around $2^r /
+2$. In practice this seems to be mostly the case, but not quite exactly. Over a
+total of $10^8$ samples (which takes $40$ seconds) we get the following ratios of
+$k/2^r = \min(\K^r)/2^r$:
+#+begin_src text
+     r  avg(k/2^r) max(k/2^r)
+r =  0:      0.000      0.000
+r =  1:      0.250      0.500
+r =  2:      0.375      0.750
+r =  3:      0.500      1.000
+r =  4:      0.694      2.375
+r =  5:      0.741      1.750
+r =  6:      0.538      1.922
+r =  7:      0.600      1.422
+r =  8:      0.588      1.645
+r =  9:      0.644      1.539
+r = 10:      0.564      1.718
+r = 11:      0.536      1.245
+r = 12:      0.552      1.677
+r = 13:      0.549      1.365
+r = 14:      0.553      1.784
+r = 15:      0.527      2.319
+r = 16:      0.762      2.060
+r = 17:      0.599      1.475
+r = 18:      0.571      1.991
+r = 19:      0.501      1.309
+r = 20:      4.275     16.086
+r = 21:      4.580     12.026
+r = 22:      3.083      7.008
+r = 23:      1.763      3.691
+r = 24:      0.939      1.908
+r = 25:      0.515      1.923
+r = 26:      0.801      2.416
+r = 27:      0.671      1.692
+r = 28:      0.556      1.571
+r = 29:      0.526      1.209
+r = 30:      0.529      1.602
+r = 31:      0.645      1.798
+r = 32:      0.513      1.148
+r = 33:      0.515      1.473
+r = 34:      0.934      2.784
+r = 35:      0.865      2.160
+r = 36:      0.561      1.208
+r = 37:      0.532      1.748
+r = 38:      0.584      1.446
+r = 39:      0.555      1.732
+r = 40:      0.603      3.102
+r = 41:      1.291      4.149
+r = 42:      1.100      2.724
+r = 43:      0.690      1.470
+r = 44:      0.902      4.465
+r = 45:      1.530      4.437
+r = 46:      1.191      2.770
+r = 47:      0.721      1.569
+r = 48:      0.560      1.523
+r = 49:      0.525      1.154
+r = 50:      0.600      1.534
+r = 51:      0.516      1.823
+r = 52:      0.598      1.439
+r = 53:      0.535      1.703
+r = 54:      0.578      1.343
+r = 55:      0.583      1.589
+r = 56:      0.522      1.130
+r = 57:      0.614      1.528
+r = 58:      0.523      1.329
+r = 59:      0.849      2.757
+r = 60:      0.777      1.902
+r = 61:      0.502      1.082
+r = 62:      0.565      1.492
+r = 63:      0.532      1.254
+r = 64:      0.500      1.000
+#+end_src
+
+Indeed, the average value of $k/2^r$ is typically just above $0.5$ or at least
+below $1.0$, but occasionally jumps to above $4$, in particular around $r\in
+\{20, 21, 22, 23\}$. I'm really not quite sure why, but this particular range
+seems to have something weird going on, as also seen by the maximum $k/2^r$
+ratio of $16$. (Note that this is not a bug with our fast inversion algorithm.
+The bruteforce algorithm confirms these results.)
+
+Most likely this is caused in some way by the presence of a very small
+$\delta_r$ for these $r$ (marked with a =*=), and this correlating with all
+$C\times \delta_r$ not only being $< 2^{64-r}$ (in absolute value) but being either very close to it
+or very small.
+#+begin_src text
+     r       delta_r                                                        C*delta_r
+r = 19
+              164249                    111111111101001111010010100101010111100001101
+              521986 1111111111111111111111110111101110100011000101011001011000101010
+              686235                    111110111011000011101011010000100010100110111
+r = 20
+        *     521986 1111111111111111111111110111101110100011000101011001011000101010
+            16345815                     11111111001100111001111011111101111000100011
+            16867801                     11110110111011011101000001010111010001001101
+r = 21
+        *     521986 1111111111111111111111110111101110100011000101011001011000101010
+            24697591                      1111010110101101011010010010100000011000011
+            25219577                      1110010100100001110010111101101011011101101
+r = 22
+        *     521986 1111111111111111111111110111101110100011000101011001011000101010
+            28873479                       111000101010000011111101011111001000010011
+            29395465                       110000011000100111000010111000100000111101
+r = 23
+        *     521986 1111111111111111111111110111101110100011000101011001011000101010
+            30439437                        11111110101101101001101101011010010010001
+            30961423                        10111100100010000010011000100101010111011
+r = 24
+        *     521986 1111111111111111111111110111101110100011000101011001011000101010
+            31483409                         1111010010110011011000011110000011100101
+            32005395                          111000001010110011101110111011100001111
+r = 25
+            32005395                          111000001010110011101110111011100001111
+            32527381 1111111111111111111111111110101111111001100011010000110100111001
+            64532776                          101110001010000000001001000010001001000
+#+end_src
+
+*Conclusion:* We now have a fast algorithm to solve $C\times k = X \lxor A$ with
+$A < 2^{64-r}$. But this does not yet solve the full problem since we wanted
+$X
+\frac{2^{64} p}{n} \leq X \lxor (C\times k) < \frac{2^{64}(p+1)}{n}
+$$
+and we did some handwaving to assume that implies the topmost $r$ bits of
+$C\times k$.
 
 #+print_bibliography:
