@@ -1280,12 +1280,104 @@ r = 25
             64532776                          101110001010000000001001000010001001000
 #+end_src
 
-*Conclusion:* We now have a fast algorithm to solve $C\times k = X \lxor A$ with
-$A < 2^{64-r}$. But this does not yet solve the full problem since we wanted
-$X
+*Conclusion:* We now have a [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/2cc701589bacce47a2cd59659b19d57248ae4d3b/examples/hash-inverse.rs#L155][fast $O(r)$ algorithm]] to solve $C\times k = X \lxor A$ with
+$0\leq A < 2^{64-r}$. But this does not yet solve the full problem since we actually wanted
+$$
 \frac{2^{64} p}{n} \leq X \lxor (C\times k) < \frac{2^{64}(p+1)}{n}
 $$
 and we did some handwaving to assume that implies the topmost $r$ bits of
 $C\times k$.
+
+** Bringing it home
+Let's start with a (slightly pathological, but illustrating) $32$ bit example: $n=511$, $p=127$, so we want
+$$
+\frac{2^{32}\cdot 127}{511} \leq X \lxor (C\times k) < \frac{2^{32} \cdot
+128}{511}.
+$$
+In binary, the lower and (inclusive) upper bound are:
+#+begin_src text
+low : 0011 1111 1001 1111 1100 1111 1110 0111
+high: 0100 0000 0010 0000 0001 0000 0000 1000
+lcp : 0  (r=1)
+#+end_src
+These have a longest common prefix =0= of length $r=1$, so we could now use the
+solution above to enumerate solutions $k$ for $r=1$ and then for each of them
+check if $X \lxor (C\times k)$ is indeed in this interval. But this is quite
+inefficient, as the actual interval only has length $2^{32}/511 \approx 2^{23}$, so that
+each possible $k$ only works with probability $2^{23} / 2^{32 - 1} = 2^{23-31} =
+2^{-8} = 1/256$, indicating that we may have to try a lot of distinct $k$.
+
+Instead, we can split the interval into two ranges:
+#+begin_src text
+low  = r1 start: 0011 1111 1001 1111 1100 1111 1110 0111
+       r1 end  : 0011 1111 1111 1111 1111 1111 1111 1111
+       lcp     : 0011 1111 1   (r=9)
+
+       r2 start: 0100 0000 0000 0000 0000 0000 0000 0000
+high = r2 end  : 0100 0000 0010 0000 0001 0000 0000 1000
+       lcp     : 0100 0000 00  (r=10)
+#+end_src
+Both range $r_1$ and $r_2$ now cover more than half of the values with the
+prefix of length $r=9$ resp. $r=10$ bits, so a suitable $k$ should be
+found within a few tries in each case, and we can simply take the minimum of the
+two solutions.
+
+One additional optimization that we can do is that instead of computing
+solutions for the two ranges independently, we can first compute a $k_0$ that
+gives the right bits in the LCP of =low= and =high=, and then extend from there
+towards the two disjoint intervals.
+
+The [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/b2e218b7bc441574895dc88c9e8d46dae326325e/examples/hash-inverse.rs#L214][final code]] is as follows (and includes some more handling of edge cases):
+#+begin_src rust
+/// Solve FastReduce(x ^ MH(k), n) == p efficiently.
+fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
+    // low = 2^64 * p/n <= x^FR(k) < 2^64 * (p+1)/n = high+1
+    let low = ((1u128 << 64) * p as u128 / n as u128) as u64;
+    // high is an inclusive bound:  (2^64 * (p+1) - 1)/n
+    let high = (((1u128 << 64) * (p + 1) as u128 - 1) / n as u128 - 1) as u64;
+
+    // In this case the partitioning into two intervals doesn't work.
+    if low == high {
+        return find_inverse_fast_with_test(
+            low ^ x.get(),
+            64, // r
+            |k| {
+                let xck = x.get() ^ C.wrapping_mul(k);
+                low <= xck && xck < high
+            },
+            0, // k0
+            diffs,
+        );
+    }
+
+    // Split [low, high] into two pieces [low, low_end] and [high_start, high]
+    // that have (much) longer LCP.
+    let lcp = (low ^ high).leading_zeros();
+
+    // First find the solution for the LCP.
+    let k0 = find_inverse_fast(low ^ x.get(), lcp, diffs);
+
+    let low_end = low | ((1u64 << (63 - lcp)) - 1);
+    let high_start = low_end + 1;
+
+    let low_lcp = (low ^ low_end).leading_zeros();
+    let high_lcp = (high_start ^ high).leading_zeros();
+
+    let test = |k| low <= x.get() ^ C.wrapping_mul(k) && x.get() ^ C.wrapping_mul(k) < high;
+
+    let low_k = find_inverse_fast_with_test(low ^ x.get(), low_lcp, test, k0, diffs);
+    let high_k = find_inverse_fast_with_test(high_start ^ x.get(), high_lcp, test, k0, diffs);
+
+    min(low_k, high_k)
+}
+#+end_src
+
+This is $O(64)$ and takes around a minute to invert $10^8$ hashes.
+
+*Conclusion:* We can now efficiently find $k_i = O(n)$ such that $h_1(x) \lxor
+h_2(k_i)$ maps to a chosen free slot (when $h_2$ is a =FastReduce= instance).
+This should allow us to fill the last slots of the table much faster.
+
+** TODO Hash-inversion for faster PTHash construction
 
 #+print_bibliography:
