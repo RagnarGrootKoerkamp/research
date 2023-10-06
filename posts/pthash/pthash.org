@@ -16,7 +16,7 @@ $$
 $$
 
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
-[[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for rust a implementation of [[https://github.com/jermp/pthash][PTHash]] [cite:@pthash], and also
+[[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for rust a implementation of [[https://github.com/jermp/pthash][PTHash]] [cite:@pthash;@pthash-2], and also
 I have some ideas related to memory prefetching I want to play with, so here we
 are: I'm working on a Rust implementation ~pthash-rs~ at [[https://github.com/ragnargrootkoerkamp/pthash-rs]].
 
@@ -1525,7 +1525,7 @@ for the last few elements, where large $k_i$ are needed.
   1:      263401    1.00  94.00   0.03 100.00     4227.2  126928083      10322      17733 *
 #+end_src
 
-** TODO Cuckoo hashing and perfect matching
+** Perfect matching for the tail
 Let's for now only consider some tail of length $t$ of buckets of size $1$.
 We already saw two techniques to assign them: /sequentially/ and /greedily/
 (giving the minimal $k_i$).
@@ -1553,7 +1553,81 @@ perfect matching exists with high probability.
 #+end_quote
 If we can answer this, than we can find the $d$ smallest $k_i$ solutions for
 the last $t$ buckets and solve the perfect matching problem. In this case all
-final $k_i$ would be $O(d\cdot n/t)$.
+final $k_i$ would be $O(d\cdot n/t)$, for $O(t \log_2(dn/t))$ bits total.
+
+A closely related question is answered [[https://math.stackexchange.com/a/2500096/91741][on stackoverflow]] which implies that we
+should take $d = c + \ln n$.
+
+I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/b5485f08aa85f62ada0b69dd4d6bc60005148a04/src/matching.rs#L149][implemented this]] and it seems to work quite well! Take for example the tail of
+$n=10^8$,
+$c=7$, $\alpha=1$ without this optimization:
+#+begin_src text
+n: 100000000
+m: 26340126
+sz          cnt bucket%  cuml%  elem%  cuml%     avg ki     max ki     new ki       # ki
+...
+ 1:      263401    1.00  79.00   0.26  96.28       25.0        390          0       3680
+...
+ 1:      263401    1.00  91.00   0.26  99.44      146.2       1626          0       3680
+ 1:      263401    1.00  92.00   0.26  99.70      241.8       3699          3       3683
+ 1:      263402    1.00  93.00   0.26  99.97      835.7      21967       3825       7508
+ 1:      263401    1.00  94.00   0.03 100.00     4135.5   52284963      10187      17695
+  :    26340126  100.00 100.00 100.00 100.00      137.3   52284963      17695      17695
+#+end_src
+and now the same where we run perfect matching on the last $500000$
+buckets/slots where we find all $k_i$ below $2^{12} = 4096$:
+#+begin_src text
+n: 100000000
+m: 26340126
+ sz          cnt bucket%  cuml%  elem%  cuml%     avg ki     max ki     new ki       # ki
+...
+  1:      263401    1.00  79.00   0.26  96.28       25.0        418          0       3662
+...
+  1:      263401    1.00  91.00   0.26  99.44      146.0       1819          0       3662
+  1:      263401    1.00  92.00   0.26  99.70      299.7       4094        474       4136
+  1:      263402    1.00  93.00   0.26  99.97      753.4       4095         62       4198
+  1:      263401    1.00  94.00   0.03 100.00      193.9       4095          0       4198
+   :    26340126  100.00 100.00 100.00 100.00       97.7       6655       4198       4198
+#+end_src
+Observe that:
+- The maximum $k_i$ overall is now $6655$ instead of $50M$ (the value for one of the last buckets
+  of size $2$), requiring half the bits to store.
+- The number of distinct $k_i$ has gone down from $17695$ to $4198$, requiring
+  one less bit to store.
+- Both the maximum $k_i$ and the number of distinct $k_i$ is between
+  $2^{12}=4096$ and $2^{13}=8192$. I.e. dictionary compression on the full array
+  does not provide any additional benefits anymore! (I'm not yet sure whether
+  separate front-back encoding would provide benefits.)
+
+For reference, here are the corresponding results when using $\alpha = 0.99$
+without tail optimizations.
+#+begin_src text
+ sz          cnt bucket%  cuml%  elem%  cuml%     avg ki     max ki     new ki       # ki
+...
+  1:      265917    1.00  91.00   0.27  99.48       60.5        804          0       2595
+  1:      265917    1.00  92.00   0.27  99.74       72.2        887          0       2595
+  1:      265917    1.00  93.00   0.26 100.00       86.4       1342          0       2595
+   :    26591682  100.00 100.00 100.00 100.00       69.0       4431       2595       2595
+#+end_src
+- Both the maximum $k_i$ and number of distinct $k_i$ are a bit smaller here,
+  mostly because the buckets of size $2$ are much easier to place.
+
+*Conclusion:* This works extremely well to handle the last size-$1$ buckets.
+It seems to be a bit slower for now, but I think this can be fixed. (The
+matching itself is super fast -- it's rather that we now need to search up to a
+threshold for /all/ buckets, rather than only for the last few buckets.)
+
+*TODO:* See if we can make something similar work for the tail of buckets of
+size $2$. There we don't need perfect matching though, and simpler techniques
+such as /peeling/ may suffice (as used in XOR-filters [cite:@xor-filters]). This
+is also somewhat similar to cuckoo hashing [cite:@cuckoo-filter],
+which has a similar result but uses a slightly less structured approach. In
+particular Cuckoo hashing does a greedy 'DFS' without backtracking for
+augmenting paths, compared to matching/flow algorithms which do a normal DFS and
+are able to 'reset' $k_i$ back to the lowest solution after an augmenting path
+through them has been found.
+
+** TODO Peeling and cuckoo hashing for larger buckets.
 
 
 
