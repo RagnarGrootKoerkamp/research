@@ -205,6 +205,8 @@ Rust, so I converted the few parts I need.
 There is also [[https://crates.io/crates/strength_reduce][=strength_reduce=]], which contains a similar but distinct algorithm
 for ~a % b~ that computes the remainder from the quotient.
 
+** TODO Try out =fastdivide= and =reciprocal= crates
+
 ** First benchmark
 I [[https://github.com/RagnarGrootKoerkamp/pthash-rs/commit/c070936558e756bafaae92af5be31ac383f2c3ee][implemented]] these under a generic =Reduce= trait.
 
@@ -784,8 +786,6 @@ Preliminary results: this seems tricky to get right and tends to be slower. It
 sometimes generates unwanted =gather= instructions, but even when it doesn't
 it's slow although I don't know exactly why yet. *Does pipelining work with SIMD instructions?*
 
-** TODO Try out =reciprocal= crate
-
 
 ** Inverting $h(k_i)$
 :PROPERTIES:
@@ -861,14 +861,14 @@ also simplify this inverse? Or can it always be done? I don't know..
 - I'm playing with the idea of implementing some kind of interpolation sort
   algorithm that just inserts things directly in the right place in an array of
   =Option<NonZero<usize>>= of size $(1+\epsilon)n$ or maybe $n + C \cdot
-  \sqrt(n)$ and then runs a collect on this. Should work quite well I think.
+  \sqrt n$ and then runs a collect on this. Should work quite well I think.
 
 ** TODO Possible sorting algorithms
 - [[https://github.com/mlochbaum/rhsort][Robinhoodsort]]
 - [[https://pvk.ca/Blog/2019/09/29/a-couple-of-probabilistic-worst-case-bounds-for-robin-hood-linear-probing/][Bounds on linear probing]]
 - Flashsort ([[https://en.wikipedia.org/wiki/Flashsort][wikipedia]], [[http://www.neubert.net/Flapaper/9802n.htm][article]])
   - Drawback: bad cache locality when writing out buckets. Maybe just write to
-    $O(\sqrt(n))$ buckets (should fit in L2 cache ideally) and then sort each
+    $O(\sqrt n)$ buckets (should fit in L2 cache ideally) and then sort each
     bucket individually.
 
 ** Diving into the inverse hash problem
@@ -1378,6 +1378,60 @@ This is $O(64)$ and takes around a minute to invert $10^8$ hashes.
 h_2(k_i)$ maps to a chosen free slot (when $h_2$ is a =FastReduce= instance).
 This should allow us to fill the last slots of the table much faster.
 
-** TODO Hash-inversion for faster PTHash construction
+** Hash-inversion for faster PTHash construction
+
+So now we have a fast way to find $k_i$ for the /tail/ of the last $t$ buckets.
+We will assume that these buckets all have size $1$. (Otherwise decrease $t$.)
+Let $F$ be the set of free positions once the /head/ of $m-t$ buckets has been processed.
+We always have $|F| \geq t$ and when $\alpha = 1$ we have $|F| = t$.
+We can then implement two strategies:
+- Lazy :: Iterate over buckets and free slots in parallel, matching each bucket
+  to a slot. Then compute the $k_i$ that sends each bucket to the corresponding
+  free slot. This will give $k_i\sim n$ in expectation, uses $t \cdot
+  \log_2(n)$ bits in total, and runs in $O(t)$.
+- Greedy :: For each bucket (in order), compute $k_i(f)$ for each candidate slot
+  $f$, and choose the minimal value. When $\alpha=1$ this gives $k_i \sim n/f$ and runs in
+  $O(t^2)$.
+  The total number of bits is
+  $$
+  \sum_{f=1}^t \log_2(n/f)
+  = t\log_2(n) - \log_2(t!)
+  \sim t (\log_2(n) - \log_2(t))
+  $$
+  For $t=O(\sqrt n)$, this saves up to half the bits for these numbers.
+
+In some quick experiments with $n=10^8$, the lazy strategy seems to give at most
+around $15\%$ speedup ($35$ to $30$ seconds for $t=10000$), which is not as much
+as I had hoped. This seems to be because relatively a lot of time is also spent
+on finding $k_i$ for the last buckets of size $2$ and $3$.
+
+** Fast path for small buckets
+For small buckets (size $\leq 4$) it pays of to use a code path that knows the
+explicit bucket size and processes a fixed size =&[Hash; BUCKET_SIZE]= array
+instead of an arbitrary sized slice =&[Hash]=. This allows for better code generation.
+
+** TODO Dictionary encoding
+The dictionary will be quite dense for numbers up to some threshold (say
+ $1024$), and sparser afterwards. We can encode the small numbers directly and
+ only do the dictionary lookup for larger ones.
+ - TODO: Figure out if the branch is worth the savings of the lookup.
+
+** TODO Larger buckets
+The largest bucket should be able to have size $O(\sqrt n)$ without issues.
+From there it should slowly decay (TODO: figure out the math) to constant size.
+This could put the elements that are currently in the largest $\sim 1\%$ of
+buckets all together in a few buckets, reducing the average size of the
+remaining buckets. Although the reduction seems only minimal, so this may not
+give too much benefit.
+
+One way of achieving such a skew distribution might be to replace the
+partitioning of $h\in [0, 2^{64})$ in $m$ chunks, by a partitioning of $h^2 \in [0,
+2^{128})$ in $m$ chunks.
+
+** TODO Prefetching free slots
+Looking up whether slots in the array for a certain $k_i$ are free is quite slow
+and memory bound. Maybe we can prefetch values for a few $k_i$ ahead.
+
+Also, the computation of =position= could be vectorized.
 
 #+print_bibliography:
