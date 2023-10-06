@@ -1385,7 +1385,7 @@ We will assume that these buckets all have size $1$. (Otherwise decrease $t$.)
 Let $F$ be the set of free positions once the /head/ of $m-t$ buckets has been processed.
 We always have $|F| \geq t$ and when $\alpha = 1$ we have $|F| = t$.
 We can then implement two strategies:
-- Lazy :: Iterate over buckets and free slots in parallel, matching each bucket
+- Sequential :: Iterate over buckets and free slots in parallel, matching each bucket
   to a slot. Then compute the $k_i$ that sends each bucket to the corresponding
   free slot. This will give $k_i\sim n$ in expectation, uses $t \cdot
   \log_2(n)$ bits in total, and runs in $O(t)$.
@@ -1400,7 +1400,7 @@ We can then implement two strategies:
   $$
   For $t=O(\sqrt n)$, this saves up to half the bits for these numbers.
 
-In some quick experiments with $n=10^8$, the lazy strategy seems to give at most
+In some quick experiments with $n=10^8$, the sequential strategy seems to give at most
 around $15\%$ speedup ($35$ to $30$ seconds for $t=10000$), which is not as much
 as I had hoped. This seems to be because relatively a lot of time is also spent
 on finding $k_i$ for the last buckets of size $2$ and $3$.
@@ -1433,5 +1433,128 @@ Looking up whether slots in the array for a certain $k_i$ are free is quite slow
 and memory bound. Maybe we can prefetch values for a few $k_i$ ahead.
 
 Also, the computation of =position= could be vectorized.
+
+** Filling the last few empty slots needs very high $k_i$!
+Have a look at the last two columns of this table, indicating the number of
+newly appearing $k_i$ in each class and total number of distinct $k_i$ up to then:
+#+begin_src text
+ sz          cnt bucket%  cuml%  elem%  cuml%     avg ki     max ki     new ki       # ki
+ 25:           1    0.00   0.00   0.00   0.00        0.0          0          1          1
+ 24:           1    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 23:           5    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 22:          11    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 21:          63    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 20:         181    0.00   0.00   0.00   0.01        0.0          0          0          1
+ 19:         566    0.00   0.00   0.01   0.02        0.0          1          1          2
+ 18:        1494    0.01   0.01   0.03   0.04        0.0          1          0          2
+ 17:        4143    0.02   0.02   0.07   0.11        0.0          2          1          3
+ 16:       10119    0.04   0.06   0.16   0.28        0.0          2          0          3
+ 15:       23730    0.09   0.15   0.36   0.63        0.1          3          1          4
+ 14:       52393    0.20   0.35   0.73   1.36        0.2          6          3          7
+ 13:      107711    0.41   0.76   1.40   2.77        0.4          8          2          9
+ 12:      205081    0.78   1.54   2.46   5.23        0.8         14          6         15
+ 11:      359440    1.36   2.90   3.95   9.18        1.5         27         10         25
+ 10:      581154    2.21   5.11   5.81  14.99        2.9         57         23         48
+  9:      854333    3.24   8.35   7.69  22.68        6.0        123         44         92
+  8:     1149239    4.36  12.72   9.19  31.87       12.7        264         95        187
+  7:     1418308    5.38  18.10   9.93  41.80       25.6        539        181        368
+  6:     1685178    6.40  24.50  10.11  51.91       46.4        873        288        656
+  5:     2096913    7.96  32.46  10.48  62.40       73.6       1578        391       1047
+  4:     2880342   10.94  43.40  11.52  73.92      107.5       2276        580       1627
+  3:     4046307   15.36  58.76  12.14  86.06      150.3       4334        956       2583
+  2:     4887755   18.56  77.31   9.78  95.83      171.2       8071       1066       3649 *
+  1:     4166126   15.82  93.13   4.17 100.00      382.2  126928083      14084      17733 *
+  0:     1809532    6.87 100.00   0.00 100.00        0.0          0          0      17733
+#+end_src
+The buckets of size $2$ and larger only need $3649$ distinct $k_i$ which can be
+represented using $12$ bits each with dictionary encoding. But after the last
+single-element buckets we need $17733$ distinct $k_i$ which would require $15$
+bits! If we instead use $\alpha=0.99$ things look much better:
+#+begin_src text
+
+ sz          cnt bucket%  cuml%  elem%  cuml%     avg ki     max ki     new ki       # ki
+ 27:           1    0.00   0.00   0.00   0.00        0.0          0          1          1
+ 26:           1    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 24:           4    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 23:           4    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 22:          20    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 21:          53    0.00   0.00   0.00   0.00        0.0          0          0          1
+ 20:         165    0.00   0.00   0.00   0.01        0.0          1          1          2
+ 19:         514    0.00   0.00   0.01   0.01        0.0          1          0          2
+ 18:        1378    0.01   0.01   0.02   0.04        0.0          1          0          2
+ 17:        3736    0.01   0.02   0.06   0.10        0.0          2          1          3
+ 16:        9386    0.04   0.06   0.15   0.25        0.0          2          0          3
+ 15:       22223    0.08   0.14   0.33   0.59        0.1          3          1          4
+ 14:       49298    0.19   0.33   0.69   1.28        0.2          5          2          6
+ 13:      102501    0.39   0.71   1.33   2.61        0.4          7          2          8
+ 12:      196895    0.74   1.45   2.36   4.97        0.7         14          7         15
+ 11:      348772    1.31   2.76   3.84   8.81        1.3         22          8         23
+ 10:      568406    2.14   4.90   5.68  14.49        2.7         49         19         42
+  9:      843818    3.17   8.07   7.59  22.09        5.4        118         45         87
+  8:     1143451    4.30  12.37   9.15  31.23       11.4        210         94        181
+  7:     1426213    5.36  17.74   9.98  41.22       22.9        395        160        341
+  6:     1701482    6.40  24.14  10.21  51.43       41.3       9910        261        602
+  5:     2111700    7.94  32.08  10.56  61.99       65.0       1494        332        934
+  4:     2897775   10.90  42.98  11.59  73.58       93.5       2247        472       1406
+  3:     4079515   15.34  58.32  12.24  85.82      125.3       3209        752       2158
+  2:     4964046   18.67  76.98   9.93  95.74      126.5       4074        437       2595 *
+  1:     4256736   16.01  92.99   4.26 100.00       38.6       1061          0       2595 *
+  0:     1863589    7.01 100.00   0.00 100.00        0.0          0          0       2595
+#+end_src
+Now no new pilot values are needed at all for the single-element buckets, and
+$12$ buts is enough for each value, saving $20\%$ of memory!
+
+Looking closer at the buckets of size $1$, we see that most new values are added
+for the last few elements, where large $k_i$ are needed.
+#+begin_src text
+  1:      263401    1.00  79.00   0.26  96.28       25.0        355          0       3649
+  1:      263401    1.00  80.00   0.26  96.54       27.0        364          0       3649
+  1:      263402    1.00  81.00   0.26  96.80       29.3        381          0       3649
+  1:      263401    1.00  82.00   0.26  97.07       31.8        429          0       3649
+  1:      263401    1.00  83.00   0.26  97.33       35.1        463          0       3649
+  1:      263401    1.00  84.00   0.26  97.60       38.7        562          0       3649
+  1:      263402    1.00  85.00   0.26  97.86       43.4        623          0       3649
+  1:      263401    1.00  86.00   0.26  98.12       49.3        630          0       3649
+  1:      263401    1.00  87.00   0.26  98.39       57.1        720          0       3649
+  1:      263401    1.00  88.00   0.26  98.65       67.2        896          0       3649
+  1:      263402    1.00  89.00   0.26  98.91       82.0       1160          0       3649
+  1:      263401    1.00  90.00   0.26  99.18      105.0       1333          0       3649
+  1:      263401    1.00  91.00   0.26  99.44      146.4       2047          0       3649
+  1:      263401    1.00  92.00   0.26  99.70      240.6       3272          0       3649
+  1:      263402    1.00  93.00   0.26  99.97      824.0      33353       3762       7411 *
+  1:      263401    1.00  94.00   0.03 100.00     4227.2  126928083      10322      17733 *
+#+end_src
+
+** TODO Cuckoo hashing and perfect matching
+Let's for now only consider some tail of length $t$ of buckets of size $1$.
+We already saw two techniques to assign them: /sequentially/ and /greedily/
+(giving the minimal $k_i$).
+
+We also already discussed the possibility of /cuckoo hashing/, where inserting
+an element can 'evict' already placed elements. This seems to need a bit more
+bookkeeping though, as for each placed element we must track the bucket it
+belongs to.
+
+Another more complex way would be a /perfect matching/:
+Compute $k_i(f)$ for each bucket $i$ and each free slot $f$ and find the
+/weighted bipartite matching/ assigning buckets to free slots that minimizes e.g.
+$\sum \log_2 k_i(f)$ (the total number of bits) or $\max k_i(f)$ (the maximal
+number of bits).
+
+This last case is interesting: we could fix a maximal $K$ up front and then find
+all possible $k_i \leq K$ for all buckets. Then we find a perfect matching (if
+one exists) and use these $k_i$ for the final buckets.
+
+This raises the question:
+#+begin_quote
+Let $G$ be a bipartite graph on $|A|+|B|=n+n$ vertices. Let each vertex in $A$
+have degree $d$ edges towards random vertices in $B$. What is the smallest $d$ for which a
+perfect matching exists with high probability.
+#+end_quote
+If we can answer this, than we can find the $d$ smallest $k_i$ solutions for
+the last $t$ buckets and solve the perfect matching problem. In this case all
+final $k_i$ would be $O(d\cdot n/t)$.
+
+
 
 #+print_bibliography:
