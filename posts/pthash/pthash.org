@@ -1541,8 +1541,8 @@ Compute $k_i(f)$ for each bucket $i$ and each free slot $f$ and find the
 $\sum \log_2 k_i(f)$ (the total number of bits) or $\max k_i(f)$ (the maximal
 number of bits).
 
-This last case is interesting: we could fix a maximal $K$ up front and then find
-all possible $k_i \leq K$ for all buckets. Then we find a perfect matching (if
+This last case is interesting: we could fix a maximal $K=2^b$ up front and then find
+all possible $k_i < K$ for all buckets by simply trying them all. Then we find a perfect matching (if
 one exists) and use these $k_i$ for the final buckets.
 
 This raises the question:
@@ -1626,6 +1626,50 @@ particular Cuckoo hashing does a greedy 'DFS' without backtracking for
 augmenting paths, compared to matching/flow algorithms which do a normal DFS and
 are able to 'reset' $k_i$ back to the lowest solution after an augmenting path
 through them has been found.
+
+** Peeling for size-1 buckets
+Instead of full matching, let's try /peeling/ to match the size-1 buckets: Again
+we first choose a threshold $K=2^b$ and find all suitable $k_i < K$ for each
+bucket using bruteforce. Also as before, consider the induced bipartite graph.
+
+Suppose that there is a vertex $u$ of degree $1$. Then we know that the single edge
+incident to it (say $uv$) /must/ be part of the final matching, so we can greedily take it
+and remove any other edges incident to $v$.
+
+We can repeat this process: repeatedly choose a vertex $u$ of minimal remaining
+degree, choosing a random edge $uv$ incident to it, add $uv$ to the matching,
+and remove any other edges incident to $u$ and $v$.
+
+I was hoping that this would result in a perfect matching with high probability,
+but it seems that in practice this procedure typically leaves behind a few
+percent of vertices without any remaining edges. One example situation is where this
+'deadlock' could occur is when we have two fully connected subgraphs $A=K_{x,x}$
+and $B=K_{y,y}$, and additionally a few extra edges from $a \in A$ to $B$. In
+this case, we must never take these 'cross' edges, but the algorithm described
+above doesn't have such non-local information and could create an imbalance.
+
+Not all hope is lost though:
+1. This approach may actually work well for buckets of size $2$ and larger,
+   where there are spare empty slots and we are not looking for a perfect
+   matching.
+2. The partial matching found by peeling could be input to Dinic' full matching
+   algorithm, possibly reducing the number of iterations needed and providing
+   overall speedup. But on the other hand, Dinic also matches all but a few
+   percent of elements in its first round, so it's not clear if it would help much.
+
+
+** Assigning from hard to easy
+
+A simpler alternative to peeling is the following. As before choose a number of bits $b$
+and threshold $K = 2^b$, and find all solutions $k_i < K$ for all buckets of
+size $2$. Then sort the buckets by increasing number of solutions. This leaves
+the buckets with more freedom of choice for last, hopefully giving them a larger
+probability of finding a match.
+
+I had high hopes for this, but it seems to not work great. As expected it
+reduces the maximum $k_i$ required, but (for $n=10^8$) it only goes down from $3000$ to
+$2500$, which is not even enough to save a bit in a direct representation.
+
 
 ** TODO Peeling and cuckoo hashing for larger buckets.
 
