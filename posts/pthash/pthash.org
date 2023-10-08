@@ -1658,7 +1658,7 @@ Not all hope is lost though:
    percent of elements in its first round, so it's not clear if it would help much.
 
 
-** Assigning from hard to easy
+** Greedy peeling 1: Assigning from hard to easy
 
 A simpler alternative to peeling is the following. As before choose a number of bits $b$
 and threshold $K = 2^b$, and find all solutions $k_i < K$ for all buckets of
@@ -1672,6 +1672,63 @@ $2500$, which is not even enough to save a bit in a direct representation.
 
 
 ** TODO Peeling and cuckoo hashing for larger buckets.
+
+We can processing the buckets in various ways:
+1. By increasing number of total edges, as in previous section.
+2. By increasing number of remaining edges.
+3. By increasing number of remaining free slots covered by all edges.
+
+This last method sounds more complicated than the second one, but is simpler in
+practice: Whenever we fill a slot we simply decrease all buckets mapping to it
+by $1$, instead of having to check first whether those edges are still alive.
+
+** TODO Sunday morning ideas
+- Possible speedups for Dinic algorithm:
+  - It's never needed to visit vertices with level $\geq level(t)$ (other than
+    $t$ itself). Do such vertices exist? How many of them? Would it speed things
+    up to skip over them?
+  - For vertices in the left component at $level(u) = level(t)-2$, instead of
+    doing a DFS, we could first check if any of the outgoing $v$ has a free edge
+    to $t$, by storing all taken/free $v$ in a bitmask.
+- Possible improvements to /Greedy peeling 1/:
+  - Run the algorithm once.
+  - Then fix all the remaining unmatched ones to their first outgoing edge.
+  - Rerun the algorithm starting with these 'hard cases' already fixed.
+  - Repeat.
+  Will this converge? How many iterations? Is it better to fix hard cases on the
+  fly, evicting previous ones as soon as the hard one is found?
+- Cuckoo hashing idea:
+  - Same as above, but displace others on the fly, doing a random walk DFS until success.
+  - TODO: Do we choose outgoing edges at random? sequentially (wrapping around)?
+    Always starting at the start of the list (leading to smaller $k_i$)?
+  - Prefer displacing edges that only include one occupied slot. (Or if
+    possible better, never take an edge with $2$ (or more) slots already taken.)
+
+Some statistics for bucket size $2$ ($n=10^8$):
+- $\sim20\%$ of the buckets has size $2$, and $\sim20\%$ of the buckets has
+  size $1$.
+- Bucket size $2$ covers elements from percentile $85\%$ to $95\%$.
+- The 'early' buckets have success rate one in $1/0.15^2 \sim 45$.
+- The 'late' buckets have success rate one in $1/0.05^2 \sim 400$.
+- So only $1$ in $10$ that works initially still works at the end.
+- This is problematic, because even though in expectation most will find a
+  solution with $20$ candidates, some of the $f = O(10^6)$ buckets will be unlucky
+  and will need more like $O(10\cdot \ln f)$ candidates, which corresponds to
+  quite large $k_i$ actually ($400\cdot \ln f \sim 4000$).
+- Basically, all these cuckoo/displacement strategies are really mostly needed
+  for the few buckets that lie a factor $\ln f$ above the average, so if we can
+  fix those the rest should be relatively OK.
+- Coming back to cuckoo hashing: Each candidate $k_i$ maps the two elements to
+  the $15\%$ remaining slots. After most size-$2$ buckets have been assigned,
+  $5\%$ of slots still remains empty. That means that every candidate edge
+  consisting of $2$ slots in this $15\%$ has quite a high probability of
+  including at least one empty slot: $1-(2/3)^2 = 55\%$. So basically cuckoo
+  hashing has a very high probability of finding edges with only one slot
+  already filled, and $1/9$ of the edges has both slots empty. So I think the
+  DFS only needs to so roughly $10$ edges in total before success, which is very
+  little actually!
+
+
 
 
 
