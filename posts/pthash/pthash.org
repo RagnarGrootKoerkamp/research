@@ -16,7 +16,7 @@ $$
 $$
 
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
-[[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for rust a implementation of [[https://github.com/jermp/pthash][PTHash]] [cite:@pthash;@pthash-2], and also
+[[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for a rust implementation of [[https://github.com/jermp/pthash][PTHash]] [cite:@pthash;@pthash-2], and also
 I have some ideas related to memory prefetching I want to play with, so here we
 are: I'm working on a Rust implementation ~pthash-rs~ at [[https://github.com/ragnargrootkoerkamp/pthash-rs]].
 
@@ -1682,27 +1682,65 @@ This last method sounds more complicated than the second one, but is simpler in
 practice: Whenever we fill a slot we simply decrease all buckets mapping to it
 by $1$, instead of having to check first whether those edges are still alive.
 
-** TODO Sunday morning ideas
-- Possible speedups for Dinic algorithm:
-  - It's never needed to visit vertices with level $\geq level(t)$ (other than
-    $t$ itself). Do such vertices exist? How many of them? Would it speed things
-    up to skip over them?
-  - For vertices in the left component at $level(u) = level(t)-2$, instead of
-    doing a DFS, we could first check if any of the outgoing $v$ has a free edge
-    to $t$, by storing all taken/free $v$ in a bitmask.
-- Possible improvements to /Greedy peeling 1/:
-  - Run the algorithm once.
-  - Then fix all the remaining unmatched ones to their first outgoing edge.
-  - Rerun the algorithm starting with these 'hard cases' already fixed.
-  - Repeat.
-  Will this converge? How many iterations? Is it better to fix hard cases on the
-  fly, evicting previous ones as soon as the hard one is found?
-- Cuckoo hashing idea:
-  - Same as above, but displace others on the fly, doing a random walk DFS until success.
-  - TODO: Do we choose outgoing edges at random? sequentially (wrapping around)?
-    Always starting at the start of the list (leading to smaller $k_i$)?
-  - Prefer displacing edges that only include one occupied slot. (Or if
-    possible better, never take an edge with $2$ (or more) slots already taken.)
+** Sunday morning ideas
+*** Dinic
+Possible speedups for Dinic algorithm:
+- It's never needed to visit vertices with level $\geq level(t)$ (other than
+  $t$ itself). Do such vertices exist? How many of them? Would it speed things
+  up to skip over them?
+  - *Answer:* Yes, they exist. But when matching $1M$ buckets, there are only
+    around $100$ at level $>level(t)$. Sometimes there are quite some (up to $n/2$) at level
+    $=level(t)$ though, so we could skip those.
+
+    So during level computation, we can stop as soon as we determine the level
+    of $t$, and leave all other levels at $-1$, so they will never be
+    processed during augmentation, which only visits vertices $v$ with
+    $level(v) > level(u)$.
+
+    This saves up to $25\%$ of time when matching $1M$ buckets.
+- For vertices in the left component at $level(u) = level(t)-2$, instead of
+  doing a DFS, we could first check if any of the outgoing $v$ has a free edge
+  to $t$, by storing all taken/free $v$ in a bitmask.
+  - *Done:* Instead I implemented a check that for vertices in level $level(t)-1$, we
+    only check the edge to $t$. This saves around $30\%$ time of the =augment=
+    step, and around $15\%$ time of the entire Dinic algorithm.
+Together these two optimizations bring the runtime on $1M$ elements down from
+around $3.5$ seconds to $2.5$ seconds: $30\%$ speedup.
+
+*** New iterative greedy assignment idea
+Possible improvement to /Greedy peeling 1/:
+- Run the greedy linear-pass algorithm once.
+ - Then fix all the remaining unmatched ones to their first outgoing edge.
+ - Rerun the algorithm starting with these 'hard cases' already fixed.
+ - Repeat.
+ Will this converge? How many iterations? Is it better to fix hard cases on the
+ fly, evicting previous ones as soon as the hard one is found?
+
+*Answer:* Around 10-20 iterations are typically needed. These iterations are
+relatively fast, but the iterating to find /all/ solutions below some threshold
+is quite slow.
+
+We can try different sorting orders in which the buckets are processed:
+- no sorting,
+- by number of solutions $k_i$ below the threshold (going from few to many),
+- by smallest solution $k_i$ (going from high to low).
+Experiments show that sorting by number of solutions is the best, but this
+requires precomputing all solutions below the threshold which is quite costly in
+practice. Sorting by smallest solution is probably a better idea in the end,
+since this is something that needs to be computed for each bucket anyway.
+
+
+*** Cuckoo hashing, again
+The reason that this keeps coming up is because I think it will work very well,
+but I don't yet see /exactly/ how to implement this in a sufficiently nice/clean
+way. So I procrastinate by first implementing simpler (to implement) ideas.
+
+Basically it's the same as the iterative greedy assignment idea above, but
+displacing others on the fly, doing a random walk DFS until success.
+- TODO: Do we choose outgoing edges at random? sequentially (wrapping around)?
+  Always starting at the start of the list (leading to smaller $k_i$)?
+- Prefer displacing edges that only include one occupied slot. (Or if
+  possible better, never take an edge with $2$ (or more) slots already taken.)
 
 Some statistics for bucket size $2$ ($n=10^8$):
 - $\sim20\%$ of the buckets has size $2$, and $\sim20\%$ of the buckets has
@@ -1710,14 +1748,14 @@ Some statistics for bucket size $2$ ($n=10^8$):
 - Bucket size $2$ covers elements from percentile $85\%$ to $95\%$.
 - The 'early' buckets have success rate one in $1/0.15^2 \sim 45$.
 - The 'late' buckets have success rate one in $1/0.05^2 \sim 400$.
-- So only $1$ in $10$ that works initially still works at the end.
+- So only $1$ in $9$ that works initially still works at the end.
 - This is problematic, because even though in expectation most will find a
   solution with $20$ candidates, some of the $f = O(10^6)$ buckets will be unlucky
-  and will need more like $O(10\cdot \ln f)$ candidates, which corresponds to
-  quite large $k_i$ actually ($400\cdot \ln f \sim 4000$).
+  and will need more like $O(9\cdot \ln f)$ candidates, which corresponds to
+  quite large $k_i$ actually ($45\cdot 9\cdot \ln f \sim 4000$).
 - Basically, all these cuckoo/displacement strategies are really mostly needed
-  for the few buckets that lie a factor $\ln f$ above the average, so if we can
-  fix those the rest should be relatively OK.
+  for the few buckets that lie a factor $\ln f$ (or say more than $3\times$)
+  above the average, so if we can fix those the rest should be relatively OK.
 - Coming back to cuckoo hashing: Each candidate $k_i$ maps the two elements to
   the $15\%$ remaining slots. After most size-$2$ buckets have been assigned,
   $5\%$ of slots still remains empty. That means that every candidate edge
@@ -1725,7 +1763,7 @@ Some statistics for bucket size $2$ ($n=10^8$):
   including at least one empty slot: $1-(2/3)^2 = 55\%$. So basically cuckoo
   hashing has a very high probability of finding edges with only one slot
   already filled, and $1/9$ of the edges has both slots empty. So I think the
-  DFS only needs to so roughly $10$ edges in total before success, which is very
+  DFS only needs to see roughly $10$ edges in total before success, which is very
   little actually!
 
 
