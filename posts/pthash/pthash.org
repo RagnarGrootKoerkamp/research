@@ -1767,6 +1767,110 @@ Some statistics for bucket size $2$ ($n=10^8$):
   little actually!
 
 
+** Cuckoo hashing / displacing, /for real now/
+Ok so I implemented a quick first version and, lo and behold: *It works great!*.
+
+So for completeness the algorithm I run now:
+1. Put all buckets of fixed size (from $2$ to $5$ or so, but not $1$ (TODO:
+   maybe $1$ works as well?)) on a stack.
+2. While the stack is not empty: find a $k_i$ for the top of the stack that maps
+   to all empty slots.
+3. If not possible, find a $k_i$ that minimizes the number of collisions. /Drop/
+   the colliding buckets from the /taken/ slot array and push those buckets on
+   the stack.
+4. Repeat until the stack is empty.
+
+One tricky point is how to tie-break the selection of the minimal bucket. Always
+choosing the smallest $k_i$ with the minimal number of collisions can lead to
+cycles where two buckets keep displacing each other. What seems to work: Choose
+the first $k_i$ after any existing $k_i$ (modulo $2^b$).
+
+For $n=10^7$:
+- the $450k$ buckets of size $3$ needs $4k$ displacements, around $1\%$;
+- the $600k$ buckets of size $2$ need $20k$ displacements, around $3\%$.
+
+For now the bottleneck is twofold:
+- Iterating over all buckets to find all solutions (/edges/) up-front is slower
+  than necessary. In practice most solutions $k_i$ are quite small and there is
+  no need to iterate all the way to the upper bound up-front.
+- The bit width $b$ has to be large enough to ensure each bucket has /at least
+  one/ solution. When the expected value of the smallest solution is $\overline{k}$, the
+  maximum value we need is roughly $\overline{k} \ln b$ when there are $b$ buckets of the
+  current size. This is unfortunate because in practice $b$ is of order $1M$, so
+  we need to go up to $20 \overline{k}$, whereas maybe $2\overline{k}$ would be
+  enough for most of them.
+
+  TODO: We should fix this by allowing some buckets to displace larger buckets.
+  Probably displacing buckets one larger than itself is good enough.
+
+** Displacing globally
+
+A drawback with the implementation above is that it first finds all edges, and
+only then starts the algorithm. Much more efficient is to do things right from
+the start. We can make a single /global displacement/ algorithm:
+1. Set a threshold $k_{max} = 2^b$.
+1. Determine buckets and order by decreasing size.
+2. For each bucket, try to find the smallest $k_i<2^b$ that places it without collisions. If
+   so, move to the next bucket.
+3. Otherwise, find the $k_i<2^b$ that minimizes the number of collisions, and
+   (more importantly) minimizes the size of the colliding buckets. Then evict
+   those other buckets (remove their $k_i$ and push them on a stack), and set
+   the $k_i$ for the current bucket.
+4. While the stack is non-empty, repeat steps 2 and 3 for the top of the stack.
+
+One drawback is that this needs some more memory since for each slot it needs to
+store the bucket it came from, and it's also a bit slow since (in case
+collision-free matching is not possible) we need to lookup the size of each
+bucket in another random-memory-access.
+
+
+*** Running it
+
+This seems to work super well! My implementation isn't as streamlined yet as the
+original that just finds the smallest $k_i$ per bucket (which has a simpler and
+thus faster inner loop), but nevertheless gets the job done. Only around the
+last buckets of size $2$ do displacements go above $1\%$ of buckets. The main
+drawback is that it somewhat explodes at the last $100$ to $1000$ size-$1$
+buckets, where it has a harder time finding chains that lead to a free slot.
+Probably falling back to deterministic matching using Dinic is better here.
+
+The average $k_i$ per bucket-size using this method seems similar to the
+original algorithm, but the main benefit is that even for $n=10^8$ we can now
+find solutions that with all $k_i < 2^8$, meaning that we can store the pilots
+simply as a vector of =u8= instead of needing a compact representation and/or
+dictionary encoding. In fact I'm now thinking it's probably simpler to tune $c$
+(i.e. the number of buckets) such that we can easily find a solution where all
+pilots fit in $8$ bits, rather than having a variable packing size.
+
+Some further observations:
+- Only rarely is more than one collision needed.
+  - TODO: In this case can we backtrack instead of displacing two buckets?
+- When filling buckets of size $s$, at worst buckets of size $s+1$ are evicted,
+  never larger ones.
+
+*** Limitations
+
+As already mentioned, one problem with this is that matching the last few
+buckets is hard. Basically, for the last bucket we have to find a size-$1$
+bucket for which one of its $256$ possible pilots maps it to the remaining free
+slot, which only happens for $0.5\%$ of buckets (which is large for $n=10^8$).
+
+Alternatively we can use Dinic for the size $1$ buckets again, but this also has
+a limitation as mentioned before, that there will always be some size-$1$
+buckets that do not map to any free slot. Thus, it seems we need some balance
+where:
+- Some size-$1$ buckets displace already-placed size-$2$ buckets.
+- For the remaining size-$1$ buckets we find some/all solutions, build the
+  graph, and run Dinic.
+
+One other tricky problem is that not only do we have to ensure that each bucket
+maps to a free slot, but also that each free slot has some bucket mapping to it.
+I'm not quite sure yet how exactly to solve this, since the probability of such
+a position existing is also quite large. One option is to track for each slot
+one or two $(bucket, pilot)$ pairs that maps to it, and then use that in case no
+other remaining values map there. But this might then trigger a chain of
+displacements again in the other ('pulling') direction. Although that's somewhat
+inevitable in the $\alpha = 1$ setting.
 
 
 
