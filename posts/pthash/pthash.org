@@ -1872,6 +1872,49 @@ other remaining values map there. But this might then trigger a chain of
 displacements again in the other ('pulling') direction. Although that's somewhat
 inevitable in the $\alpha = 1$ setting.
 
+** Cleanup and revisiting defaults
 
+So far I have been using =Vec<u64>= as backing storage for pilots, =MurmurHash=
+to hash keys, and $16$ iteration lookahead for prefetching.
+1. Now that we aim to have $k_i < 2^8$, let's switch that to a simple =Vec<u8>=.
+2. I added support for =FxHash=, which processes a =u64= at a time using a
+   simple rotate-xor-multiply: =state=(state.rotate(5) ^ x)*constant=.
+
+   While benchmarking this, I realized that the reason =NoHash= (which is a toy
+   implementation that does exactly nothing) was so much faster than other
+   hashes is not only because it spends less instructions hashing, but also
+   because my random keys were sorted (to check for duplicates), and this lead
+   to linear access patterns rather than random access patterns.
+3. It now seems that $32$-iteration lookahead is around $10\%$ faster for large $n$.
+
+Some results for $n=10^8$ ($c=7$, $\alpha=1$):
+#+begin_src text
+Vec<u64>
+ murmur (1): 20.3 (16):  7.6 (32):  7.2 (64):  7.3
+ fxhash (1): 16.3 (16):  7.6 (32):  7.2 (64):  7.2
+ nohash (1): 15.4 (16):  7.6 (32):  7.2 (64):  7.2
+Vec<u8>
+ murmur (1): 17.4 (16):  5.8 (32):  5.1 (64):  5.2
+ fxhash (1): 13.8 (16):  5.5 (32):  4.9 (64):  5.6
+ nohash (1): 13.0 (16):  5.5 (32):  4.9 (64):  4.8
+sucds::CompactVector
+ murmur (1): 20.9 (16): 27.4 (32): 27.4 (64): 27.5
+ fxhash (1): 62.9 (16): 17.2 (32): 17.6 (64): 17.6
+ nohash (1): 60.5 (16): 16.8 (32): 17.4 (64): 17.3
+sux::CompactArray
+ murmur (1): 21.5 (16): 20.9 (32): 21.0 (64): 20.9
+ fxhash (1): 16.7 (16): 16.9 (32): 16.1 (64): 17.8
+ nohash (1): 15.6 (16): 15.3 (32): 15.5 (64): 16.1
+#+end_src
+(1), (16/32/64) indicate no prefetching resp. prefetching 16/32/64 iterations ahead.
+
+Observations:
+- Switching from =Vec<u64>= to =Vec<u8>= saves around $2ns$ per query.
+- Going from =Murmur= to =FxHash= typically saves a bit.
+- Going further to =NoHash= doesn't save more.
+- At $32$ lookahead, the runtime does not depend much on hash function, so
+  probably it's memory bound rather than cpu bound.
+- =CompactVector= and =CompactArray= do not support prefetching and hence aren't
+  nearly as good.
 
 #+print_bibliography:
