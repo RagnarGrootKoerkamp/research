@@ -1917,4 +1917,111 @@ Observations:
 - =CompactVector= and =CompactArray= do not support prefetching and hence aren't
   nearly as good.
 
+** TODO Sum instead of xor?
+PTHash replaces the summation in $(h(x) + d)\mm n$ by a xor. It's not exactly
+clear to me why this is beneficial. I the xor has slightly better mixing,
+especially when the $\mm n$ is implemented as a reduction of the high bits, and
+$h(k_i) = C\cdot k_i$ has a linear structure as well.
+
+** Revisiting $\alpha < 1$
+After playing some more with $\alpha<1$ values, it seems that we can do this
+with only very minor loss in query performance. Some experiments for $n=10^8$,
+$c=10$, with prefetching $32$ iterations ahead:
+
+#+caption: Query time (ns) for distinct alpha. =index= returns the computed $position(x)$ directly as a lowerbound on time, while =index_remap= looks up the target position for positions after $n$.
+#+attr_html: :class inset
+|---------+---------+---------------|
+| $alpha$ | =index= | =index_remap= |
+| $1.0$   |     5.7 |           5.7 |
+| $0.999$ |     5.6 |           5.8 |
+| $0.995$ |     5.7 |           5.8 |
+| $0.99$  |     5.7 |           5.9 |
+| $0.95$  |     5.7 |           7.1 |
+| $0.9$   |     5.7 |           8.7 |
+
+As can be seen, =index= is independent of $\alpha$ as expected, since it doesn't
+do any extra work for out-of-range elements. =index_remap= becomes slow once too
+many elements fall out of bounds around $\alpha = 0.95$. But we can safely
+choose $\alpha=0.99$ without significant loss of query performance.
+
+** Elias-Fano for the remap-dictionary
+I added support to use =sucds::EliasFano= to store the dictionary elements. This
+saves quite some bits, since (for $\alpha=0.99$) it only needs $2+\log_2(100) =
+9$ bits per element as opposed to the default which encodes each index using a
+=u32=.
+
+So let's see the query performance.
+
+#+caption: Query time (ns) for distinct alpha, using =EliasFano= encoding for the remapping.
+#+attr_html: :class inset
+|---------+---------+---------------|
+| $alpha$ | =index= | =index_remap= |
+| $1.0$   |     5.7 |           6.6 |
+| $0.999$ |     5.8 |           6.7 |
+| $0.995$ |     5.8 |           7.2 |
+| $0.99$  |     5.7 |           7.6 |
+| $0.95$  |     5.7 |          11.1 |
+| $0.9$   |     5.7 |          16.1 |
+
+This comes out quite a bit slower than using a direct =Vec<u32>= encoding. On
+the other hand, it does save space: for $\alpha=0.99$, the vector encoding uses
+$0.01 \cdot 32 = 0.32$ bits per element overall, while EliasFano only needs
+$0.01\cdot 9 = 0.09$ bits per element overall, saving $0.2$ bits/element.
+
+Sadly the EliasFano hot-loop has slightly worse codegen even in the non-EF part,
+introducing a branch where previously non-branching assembly was generated for
+the =>>small= shift in determining the right bucket.
+
+** Global iterative prioritizing
+Instead of displacing using DFS, another idea I had that may work for $\alpha<1$:
+1. Iterate over all buckets by decreasing size; place those that can be placed without collisions.
+2. Collect the rest in a vector of =priority_buckets=.
+3. Repeat, but place the priority buckets before iterating over the others.
+
+This worked well with only buckets of a fixed size, but seems to not work as
+well globally, even when we try to assign the priority buckets to have minimal
+collisions with others. Instead of converging to a stable solution, each
+iteration about the same amount ($0.3\%$ for $n=10^8$, $c=10$, $\alpha=0.99$) of
+buckets is added to the priority list. It seems that the changes made by the few
+extra priority buckets propagate a lot, changing the optimal pilot for $40\%$ of
+buckets. This basically means the =taken= slots are completely newly random each
+iteration, preventing converging to a stable solution where the number of added
+priority elements goes down each round.
+
+Basically, just DFSing the displacement using the earlier strategy seems much better.
+
+** Cleanup: removing peeling and suboptimal displacing code
+The code base is getting messy. I'm going to drop all the peeling experiments,
+and also the 'displacement per bucket size' will go. Basically all methods that
+require computing edges up front are annoying in this regard. Also matching
+seems not-so-useful anymore now that we can settle on $\alpha=0.99$ without
+impacting the query throughput. It may still be useful though in cases where we
+want to minimize memory usage, but even then we can go with $\alpha=0.999$ which
+would take longer to construct but should still be fine, and avoids the
+complexity of having to balance between perfect matching and displacing.
+
+So we're dropping all these algorithms which required all edges to be
+precomputed up-front:
+- Peeling algorithms
+  - Didn't really work in the first place
+- Dinic matching
+  - Works well for size-$1$ buckets, but needs a large threshold to guarantee
+    every bucket and slot have at least one edge. For larger bucket sizes the
+    balancing act is annoying.
+- Per-bucket-size displacing:
+  - The greedy non-iterative version that simply runs once and only fills $95\%$
+    of buckets.
+  - The greedy iterative version works well but only does one bucket size at a time.
+  - The DFS version that works per bucket size isn't quite good enough because
+    sometimes we must displace to larger buckets.
+  - The global iteration method of the previous subsection also goes -- it just
+    doesn't work well.
+- The code to invert hashes $s = C \times k_i$ is also dropped. Inverting
+  returns values that are $O(n)$ while we are now only interested in values at
+  most $2^8$. I'm kinda sad about this because the math there was really cool.
+- The 'fast small buckets' optimization is also dropped for now, to be
+  reintroduced later, to clean up code a bit.
+
+All together, this drops around 1900 lines of code :)
+
 #+print_bibliography:
