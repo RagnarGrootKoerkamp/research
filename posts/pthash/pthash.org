@@ -2144,7 +2144,7 @@ So the new algorithm would be:
 1. Compute bucket for each element.
 2. Partition buckets into $P$ partitions of $m_p$ buckets each.
 3. Sort the buckets in each partition by decreasing size.
-4. Prefetch the $s_p$ bits of the =taken= array corresponding to the current
+4. (Optional) prefetch the $s_p$ bits of the =taken= array corresponding to the current
    partition into low-level cache.
 5. Run the usual algorithm for each partition, searching for the smallest pilot
    that maps each bucket to empty slots only.
@@ -2167,5 +2167,23 @@ creates $500$ buckets, and needs $4\sqrt{n_p} \approx 5k$ buffer slots. $5k/2M =
 already gives plenty of guarantee that buckets are not too full and leaves at
 least $0.75\%$ of free slots at the end to speed up construction.
 
+Note that this should also be *very* good for parallelization, since each thread
+can fill it's own part of the =taken= vector in L1 or L2 without interfering
+with the other threads at all.
+
+*Implementation efficiency*
+- $s_p$ should be a multiple of the $512$ bit cache-line size to avoid sharing
+  cachelines between threads. The entire bitvector should be cacheline-aligned
+  as well.
+- We should either use fast-divide for the bucket partitioning, or ensure that
+  there's $2^k$ buckets per partition so we can just do this via a bitshift.
+
+*Oh some problem?* Ughhh, so we manually create imbalanced bucket sizes, and the
+way we do this is by putting $60\%$ of the elements in the first $30\%$ of
+buckets. That means that if we partition buckets simply by id, the first buckets
+will be much larger than the last buckets.... And also, that means there will be
+very few small buckets to fill gaps among those large buckets...
+So it sounds like we want to either distribute those large buckets equally over
+the range, or partition the buckets e.g. via their id modulo $P$.
 
 #+print_bibliography:
