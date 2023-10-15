@@ -1931,7 +1931,7 @@ $c=10$, with prefetching $32$ iterations ahead:
 #+caption: Query time (ns) for distinct alpha. =index= returns the computed $position(x)$ directly as a lowerbound on time, while =index_remap= looks up the target position for positions after $n$.
 #+attr_html: :class inset
 |---------+---------+---------------|
-| $alpha$ | =index= | =index_remap= |
+| $\alpha$ | =index= | =index_remap= |
 | $1.0$   |     5.7 |           5.7 |
 | $0.999$ |     5.6 |           5.8 |
 | $0.995$ |     5.7 |           5.8 |
@@ -1955,7 +1955,7 @@ So let's see the query performance.
 #+caption: Query time (ns) for distinct alpha, using =EliasFano= encoding for the remapping.
 #+attr_html: :class inset
 |---------+---------+---------------|
-| $alpha$ | =index= | =index_remap= |
+| $\alpha$ | =index= | =index_remap= |
 | $1.0$   |     5.7 |           6.6 |
 | $0.999$ |     5.8 |           6.7 |
 | $0.995$ |     5.8 |           7.2 |
@@ -2024,4 +2024,27 @@ precomputed up-front:
 
 All together, this drops around 1900 lines of code :)
 
+** Some speedups to the displacement algorithm
+- Use a fast-path for detecting placement without collisions, which is
+  sufficient for $99\%$ of buckets.
+- Use a =taken= bitvector for the fast-path, instead of a full
+  slot-to-bucket-index mapping .
+- Attempt at prefetching of positions in the =taken= vector for upcoming $k_i$.
+  Doubtful whether it actually improves construction time though.
+
+** TODO Runtime analysis of displacement algorithm
+It would be nice to be able to estimate the runtime complexity of the
+displacement algorithm in terms of $n$, $m$ (/$c$), $\alpha$, and the maximum
+allowed pilot value.
+
+** TODO Optimal prefetching strategy
+For each class of buckets of the same size we could device some optimal prefetch
+strategy: It's wasteful to prefetch the slot corresponding to the last element
+of each bucket when the probability of failing in earlier elements in the bucket
+is high. E.g. for size $2$ buckets only roughly $1$ in $6$ of the second
+elements needs to be queried. Not prefetching those may give a nice speedup.
+
+** TODO Linux hugepages?
+I may or may not have this already enabled on my laptop, but if not, if may
+make prefetches faster by having a smaller TLB cache.
 #+print_bibliography:
