@@ -2047,4 +2047,125 @@ elements needs to be queried. Not prefetching those may give a nice speedup.
 ** TODO Linux hugepages?
 I may or may not have this already enabled on my laptop, but if not, if may
 make prefetches faster by having a smaller TLB cache.
+
+** Are we close to the memory bandwidth?
+
+I have DDR4 @ 3200MHz, which has a theoretical bandwidth limit of $25GB/s$.
+
+For $n=10^9$ (=1G=),
+the taken vector has size =1G*1bit=125MB= and does not fit in my =12MB= L3
+cache. Thus let's say for simplicity that all lookups in it are cache misses,
+and thus that each lookup reads a single $64$byte cacheline from main memory.
+
+But how many lookups do we need?
+- there are =0.3G= buckets
+- the average $k_i$ is $40$
+- buckets have around $3$ elements on average
+- total number of lookups: =0.3G * 40 * 3 ~ 40G=
+- But that's an upper bound, since in practice we do an early break after the
+  first taken slot.
+
+Simply counting the number of lookups gives me =20G=, which sounds reasonable:
+it's lower and the same order of magnitude.
+
+So how long does it take to do =20G= lookups? $20G * 64byte = 1.28TB$, which at
+$25GB/s$ is $51s$. In practice the construction takes longer at $350s$, so this
+indicates we're not yet memory-bandwidth bound, assuming we could indeed saturate the full
+$25GB/s$, but it's not too far from it.
+
+** More sorting algorithm resources
+
+I found some more implementations and posts about sorting algorithms, so listing
+them here for future reference:
+
+- Robinhoodsort :: https://github.com/mlochbaum/rhsort
+
+  Sorts uniform random data by placing values at their interpolated location in a $2n$ size array.
+
+- Ska_sort :: https://github.com/skarupke/ska_sort
+
+  In-place radix sort with CPU-pipelining-friendly swapping of values to their
+  buckets. See posts [[https://probablydance.com/2016/12/02/investigating-radix-sort/][investigating radix sort]], [[https://probablydance.com/2016/12/27/i-wrote-a-faster-sorting-algorithm/][I wrote a faster sorting
+  algorithm]], and [[https://probablydance.com/2017/01/17/faster-sorting-algorithm-part-2/][faster sorting algorithm part 2.]]
+
+- Wolfsort :: https://github.com/scandum/wolfsort
+
+  Didn't really look into this.
+
+- Voracious sort :: https://github.com/lakwet/voracious_sort
+
+  Rust library with various radix sort implementations, with the default
+  voracious sort being an improved ska_sort.
+  I tried all implementations in here for sorting random $10^8$ random =64=bit
+  hashes, and none beats =radsort::sort_by_key(|h| h>>32)= followed by manually
+  sorting equal buckets.
+
+- More blogs :: http://stereopsis.com/radix.html
+
+
+** Partitioning to reduce memory latency
+As discussed just before, memory latency and bandwidth are a bottleneck in
+construction times when $n=10^9$. For a typical bucket with $2$ elements and
+$k_i=50$, we must lookup $100$ positions in =taken=, corresponding to fetching $100$
+cachelines from main memory. It would be much better if these cachelines were
+already available in a low level cache. So how about if we already roughly know
+where the elements of this bucket are supposed to go? Maybe a window of say $10$
+cachelines (i.e. $10\cdot 64\cdot 8 = 5120$ bits) should be wide enough to find
+an empty slot with high probability. So we could say that bucket $i$ of $m$ maps
+to a window/slice of some length starting at $i/m \cdot s$ (where
+$s=n/\alpha$ is the total number of slots). But actually we can simplify this:
+- We can divide the $m$ buckets into $P$ partitions, and then the first $1/P$ of
+  buckets to the first $1/P$ of slots.
+
+So there are $P$ partitions with $m_p = round(m/P)$ buckets each, and each
+partition corresponds to $s_p = round(n/\alpha/P)$ slots.
+
+So then, the position for an element $x$ with bucket $i$ becomes
+$$p(x, i) = \lfloor i/m_p \rfloor \cdot s_p + ((h(x) \lxor h(k_i)) \mm s_p.$$
+
+As usual, we can remap values larger than $n$ to the free slots in the rest of
+the array. Note that this is different from the PTHash-HEM partitioning in
+[cite/text:@pthash-2] since that builds a number of independent MPHFs, while
+this method builds a single one and only constructs a single =free= array.
+
+One point needs some careful consideration: this method does not guarantee that
+each partition has the same number $n_p = round(n/\alpha)$ of elements, so the
+total load factor per partition will vary. This is not fatal though:
+The expected number of elements per partition is indeed $n_p$, and the standard
+deviation around this is only $\sqrt(n_p)$. This means that as long as we take,
+say, $4\sqrt(n_p)$ additional slots per partition, the probability of a bucket
+exceeding the number of slots is less than $1$ in $16000$.
+Since we anyway reserve free slots with $\alpha<1$, we can simply make some
+more free slots. Construction time may then be slightly concentrated in the
+buckets with number of elements significantly above the mean, but the memory
+latency savings should counter this easily.
+
+So the new algorithm would be:
+1. Compute bucket for each element.
+2. Partition buckets into $P$ partitions of $m_p$ buckets each.
+3. Sort the buckets in each partition by decreasing size.
+4. Prefetch the $s_p$ bits of the =taken= array corresponding to the current
+   partition into low-level cache.
+5. Run the usual algorithm for each partition, searching for the smallest pilot
+   that maps each bucket to empty slots only.
+6. Remap position above $n$ to the free slots.
+
+As said before, the main benefit here is that step 5 should now run much much
+faster, since each lookup for a free slot can go directly to L1 or L2 cache
+rather than main memory. So let's see how many slots $s_p$ we should aim for in
+each partition.
+- My L1 cache is $32kb = 256kbit$, so we could choose $n_p = 200k$ elements per partition.
+- My L2 cache is $256kb = 2048Mbit$, so we could choose $n_p = 2M$ elements per partition.
+The optimal size is probably determined using experimentation. The benefit of
+smaller partitions is that they fit in a faster cache, while $10$ times larger
+partitions have a relatively $\sqrt{10} \approx 3\times$ smaller standard
+deviation, hence needing less buffer slots.
+
+As an example let's take $n=10^9$ with $n_p = 2M$ elements per bucket. This
+creates $500$ buckets, and needs $4\sqrt{n_p} \approx 5k$ buffer slots. $5k/2M =
+0.25\%$, so actually choosing $\alpha=0.99$ (which gives $1\%$ buffer slots)
+already gives plenty of guarantee that buckets are not too full and leaves at
+least $0.75\%$ of free slots at the end to speed up construction.
+
+
 #+print_bibliography:
