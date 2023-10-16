@@ -2186,4 +2186,26 @@ very few small buckets to fill gaps among those large buckets...
 So it sounds like we want to either distribute those large buckets equally over
 the range, or partition the buckets e.g. via their id modulo $P$.
 
+*A fix?* So instead of making the first $30\%$ of buckets large, we can instead
+distribute the large buckets, so that every third bucket is large, or such that
+each partition contains a third of large buckets at its start.
+
+One way to make every third bucket large is as follows:
+- Remap large buckets from =0..m/3= to =0..m= by taking $i \mapsto 3i-1$,
+  filling positions $2\mm 3$.
+- Remap small buckets from =0..2/m3= t0 =0..m= by taking $i\mapsto \lfloor 3i/2 \rfloor$.
+  Filling positions $0\mm 3$ and $1\mm 3$
+
+(This is a specific instance of the more general following result: for
+irrational $\alpha$ and $\beta$ with $1/\alpha + 1/\beta = 1$ the sets
+$\{\lfloor i\alpha\rfloor: i\in \mathbb N\}$ and $\{\lfloor i\beta\rfloor: i\in
+\mathbb N\}$ are disjoint and partition $\mathbb N$.)
+
+Alternatively, we may be able to do something like this:
+- First compute the bucket id as $h(x) \mm m$. Then remap elements that should
+  go to large buckets by setting the last two bits of the bucket id to $0$. That
+  maps some percentage of elements to buckets $0 \mm 4$ by setting the last two
+  bits of the bucket id to $0$. (We could also map them to buckets $0\mm 3$ by
+  doing =i/3*3=, but that requires more operations.)
+
 #+print_bibliography:
