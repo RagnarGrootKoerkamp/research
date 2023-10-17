@@ -1,0 +1,49 @@
+#+title: BAPCtools instruction
+#+HUGO_SECTION: notes
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+date: <2023-10-17>
+#+author: Ragnar Groot Koerkamp
+
+Steps:
+1. Clone https://github.com/RagnarGrootKoerkamp/BAPCtools
+2. Make an alias to the executable:
+   #+begin_src sh
+   ln -s ~/git/BAPCtools/bin/tools.py ~/bin/bt
+   #+end_src
+3. Create a new problem:
+   #+begin_src sh
+   cd ~/problems
+   bt new_problem my_problem_name
+   cd ~/problems/my_problem_name
+   #+end_src
+4. You now have the following:
+   #+begin_src txt
+   .
+   ├── data
+   │   ├── sample
+   │   │   └── 1.in      # Sample testcase input
+   │   │   └── 1.ans     # Sample testcase output
+   │   └── secret
+   ├── generators        # for later
+   │   └── ...
+   ├── input_validators  # for later
+   │   └── ...
+   ├── output_validators # for later
+   │   └── ...
+   ├── problem_statement
+   │   ├── figure.tex.template
+   │   ├── problem.en.tex # The problem statement
+   ├── problem.yaml
+   └── submissions
+       ├── accepted
+       │   └── name.cpp   # A submission
+       ├── run_time_error
+       ├── time_limit_exceeded
+       └── wrong_answer
+   #+end_src
+5. Edit the statement ~problem.en.tex~
+6. Make some samples by hand in ~data/samples/*.{in,ans}~
+7. Write a solution in ~submissions/accepted/<yourname>.{py,cpp,java}~.
+8. Use ~bt run~ or ~bt run submissions/accepted/<submission>~ to test your submission.
