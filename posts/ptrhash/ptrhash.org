@@ -1,0 +1,33 @@
+#+title: [WIP] PTRhash: Improving the PTHash Minimal Perfect Hash Function
+#+HUGO_SECTION: notes
+#+hugo_tags: mphf paper-draft
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-10-23>
+#+author: Ragnar Groot Koerkamp
+
+* Abstract
+*Motivation:*
+Given a set $S$ of $n$ objects, a /minimal perfect hash function/ (/MPHF/) is a
+collision free bijective map $f$ from the elements of $S$ to $\{0, \dots, n-1\}$.
+Such functions have uses in databases, search engines, and are used in
+bioinformatics indexing tools such as Pufferfish (using BBHash), SSHash, and Piscem
+(both using PTHash).
+Practical MPHFs can be constructed efficiently for billions or more elements, use $2$
+to $4$ bits of memory per key, and can be queried in low constant time.
+
+*Contributions:*
+PTRhash builds on PTHash by 1) partitioning the table for faster
+construction, 2) using cuckoo hashing to find $8$bit pilots which (3) makes
+compression redundant, and we further speed up queries by 4) simplifing hash
+functions and other operations, and 5) prefetching memory reads for queries.
+
+*Results:*
+We implemented PTRhash in Rust and
+show that at $3$ bits/key memory usage it is $3\times$ faster to construct
+than PTHash while achieving $5$ns/key query throughput, $5\times$ faster than
+state-of-the-art methods.
+
+Source: [[https://github.com/RagnarGrootKoerkamp/pthash-rs][github.com/RagnarGrootKoerkamp/pthash-rs]]
