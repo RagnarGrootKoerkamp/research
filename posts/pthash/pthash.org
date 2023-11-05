@@ -15,6 +15,8 @@ $$
 \newcommand{\K}{\mathcal K}
 $$
 
+*NOTE:* WIP paper is [[file:../ptrhash][here]].
+
 Daniel got me excited about minimal perfect hashing functions (MPHFs), and then
 [[https://twitter.com/nomad421/status/1701593870734336290][+twitter+ Rob]] asked for a rust implementation of [[https://github.com/jermp/pthash][PTHash]] [cite:@pthash;@pthash-2], and also
 I have some ideas related to memory prefetching I want to play with, so here we
@@ -2118,7 +2120,7 @@ an empty slot with high probability. So we could say that bucket $i$ of $m$ maps
 to a window/slice of some length starting at $i/m \cdot s$ (where
 $s=n/\alpha$ is the total number of slots). But actually we can simplify this:
 - We can divide the $m$ buckets into $P$ partitions, and then the first $1/P$ of
-  buckets to the first $1/P$ of slots.
+  buckets map to the first $1/P$ of slots.
 
 So there are $P$ partitions with $m_p = round(m/P)$ buckets each, and each
 partition corresponds to $s_p = round(n/\alpha/P)$ slots.
@@ -2127,17 +2129,19 @@ So then, the position for an element $x$ with bucket $i$ becomes
 $$p(x, i) = \lfloor i/m_p \rfloor \cdot s_p + ((h(x) \lxor h(k_i)) \mm s_p.$$
 
 As usual, we can remap values larger than $n$ to the free slots in the rest of
-the array. Note that this is different from the PTHash-HEM partitioning in
+the array. Note that this is slightly different from the PTHash-HEM partitioning in
 [cite/text:@pthash-2] since that builds a number of independent MPHFs, while
 this method builds a single one and only constructs a single =free= array.
 
 One point needs some careful consideration: this method does not guarantee that
 each partition has the same number $n_p = round(n/\alpha)$ of elements, so the
 total load factor per partition will vary. This is not fatal though:
-The expected number of elements per partition is indeed $n_p$, and the standard
-deviation around this is only $\sqrt(n_p)$. This means that as long as we take,
-say, $4\sqrt(n_p)$ additional slots per partition, the probability of a bucket
-exceeding the number of slots is less than $1$ in $16000$.
+The expected number of elements per partition is indeed $n_p$, and since this is
+a binomial distribution for large $n$ and small probability $p=1/P$ the standard
+deviation is only $\sqrt{n_p}$. This means that as long as we take,
+say, $4\sqrt{n_p}$ additional slots per partition, the probability of a bucket
+exceeding the number of slots is less than $1$ in $16000$. (Otherwise we
+rehash everything with a new global seed.)
 Since we anyway reserve free slots with $\alpha<1$, we can simply make some
 more free slots. Construction time may then be slightly concentrated in the
 buckets with number of elements significantly above the mean, but the memory
@@ -2177,9 +2181,9 @@ with the other threads at all.
 *Implementation efficiency*
 - $s_p$ should be a multiple of the $512$ bit cache-line size to avoid sharing
   cachelines between threads. The entire bitvector should be cacheline-aligned
-  as well.
-- We should either use fast-divide for the bucket partitioning, or ensure that
-  there's $2^k$ buckets per partition so we can just do this via a bitshift.
+  as well. But this is really nitpicking.
+- We should either use fast-divide for the bucket partitioning, or we can simply
+  ensure that there's $2^k$ buckets per partition so we can just do this via a bitshift.
 
 *Oh some problem?* Ughhh, so we manually create imbalanced bucket sizes, and the
 way we do this is by putting $60\%$ of the elements in the first $30\%$ of
@@ -2189,28 +2193,138 @@ very few small buckets to fill gaps among those large buckets...
 So it sounds like we want to either distribute those large buckets equally over
 the range, or partition the buckets e.g. via their id modulo $P$.
 
-*A fix?* So instead of making the first $30\%$ of buckets large, we can instead
-distribute the large buckets, so that every third bucket is large, or such that
-each partition contains a third of large buckets at its start.
+*A fix?* So instead of making the first $30\%$ of buckets large, we have to
+distribute the large buckets roughly equally over the partitions.
+Some ideas for this:
+1. Make every third bucket large is as follows:
+   - Remap large buckets from =0..m/3= to =0..m= by taking $i \mapsto 3i-1$,
+     filling positions $2\mm 3$.
+   - Remap small buckets from =0..2/m3= t0 =0..m= by taking $i\mapsto \lfloor 3i/2 \rfloor$.
+     Filling positions $0\mm 3$ and $1\mm 3$
 
-One way to make every third bucket large is as follows:
-- Remap large buckets from =0..m/3= to =0..m= by taking $i \mapsto 3i-1$,
-  filling positions $2\mm 3$.
-- Remap small buckets from =0..2/m3= t0 =0..m= by taking $i\mapsto \lfloor 3i/2 \rfloor$.
-  Filling positions $0\mm 3$ and $1\mm 3$
+    (This is a specific instance of the more general following result: for
+    irrational $\alpha$ and $\beta$ with $1/\alpha + 1/\beta = 1$ the sets
+    $\{\lfloor i\alpha\rfloor: i\in \mathbb N\}$ and $\{\lfloor i\beta\rfloor: i\in
+    \mathbb N\}$ are disjoint and partition $\mathbb N$.)
 
-(This is a specific instance of the more general following result: for
-irrational $\alpha$ and $\beta$ with $1/\alpha + 1/\beta = 1$ the sets
-$\{\lfloor i\alpha\rfloor: i\in \mathbb N\}$ and $\{\lfloor i\beta\rfloor: i\in
-\mathbb N\}$ are disjoint and partition $\mathbb N$.)
+2. First compute the bucket id as $h(x) \mm m$. Then remap elements that should
+   go to large buckets by setting the last two bits of the bucket id to $0$. That
+   maps some percentage of elements to buckets $0 \mm 4$, creating large buckets there.
+   (We could also map them to buckets $0\mm 3$ by doing =i/3*3=, but that requires more operations.)
 
-Alternatively, we may be able to do something like this:
-- First compute the bucket id as $h(x) \mm m$. Then remap elements that should
-  go to large buckets by setting the last two bits of the bucket id to $0$. That
-  maps some percentage of elements to buckets $0 \mm 4$ by setting the last two
-  bits of the bucket id to $0$. (We could also map them to buckets $0\mm 3$ by
-  doing =i/3*3=, but that requires more operations.)
+3. Simply do the original logic or partitioning by small or large hash value,
+   but choose a cut-off within each partition. So for reference the
+   bucketing function we currently use is
+   \begin{equation*}
+   bucket(x) =
+   \begin{cases}
+   \phantom{p_2+{}}\lfloor h(x) \cdot p_2 / 2^{64}\rfloor & \text{if } h(x) < p_1 \\
+   p_2 + \lfloor h(x) \cdot (n-p_2) / 2^{64}\rfloor & \text{if } h(x) \geq p_1.
+   \end{cases}
+   \end{equation*}
+   If we have $2^k$ partitions, we can mask the first $k$ bits of $h(x)$ and
+   check $mask_k(h(x)) < p_1 / 2^k$.
 
 
+** Back from a break!
+
+So I finally managed to implement partitioning and it works great! It's super
+fast when putting ~200k elements per part, which exactly fits in L1.
+
+This now also allows for parallelization, since each part can be processed
+independently, and since each part only needs little memory, they don't
+interfere with each other at all!
+
+I now use =FastReduce32H= to determine the part and bucket.
+
+One issue though: Using =FastReduce32L= to determine the slot does not provide
+sufficient entropy, since it only gives $\lg(N/P)$ bits of entropy, whereas we
+need more like $\lg N$ bit of entropy. This is somewhat fixed by reverting to
+=FastMod32L=, but that still lacks entropy for $N = 10^9$, where we need the
+much slower =FastMod64=.
+
+** Speeding up the search for pilots.
+
+Currently the loop that searches for pilots is as follows:
+#+begin_src rust
+'p: for p in 0u64..kmax {
+    let hp = self.hash_pilot(p);
+    // True when the slot for hx is already taken.
+    let check = |hx| unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) };
+
+    for hx in bucket {
+        if check(*hx) {
+            continue 'p;
+        }
+    }
+
+    if self.try_take_pilot(bucket, hp, taken) {
+        return Some((p, hp));
+    }
+}
+#+end_src
+
+This is quite efficient, but has a problem: each iteration of the inner loop is
+quite unpredictable: looking up random bits of =taken= gives random bits =true= or =false=
+with some probability, so there will be lots of branch-mispredictions. Indeed,
+running under ~perf stat -d~ shows:
+#+begin_src text
+         16,324.28 msec task-clock:u                     #    1.000 CPUs utilized
+    57,487,973,942      cycles:u                         #    3.522 GHz
+    87,101,496,658      instructions:u                   #    1.52  insn per cycle
+    10,513,721,875      branches:u                       #  644.054 M/sec
+       643,749,689      branch-misses:u                  #    6.12% of all branches
+#+end_src
+
+To reduce branches and increase parallelization, we can only check for success
+every $4$ lookups, which has much more predictable results (i.e. failing most of
+the time):
+
+#+begin_src rust
+'p: for p in 0u64..kmax {
+    let hp = self.hash_pilot(p);
+    // True when the slot for hx is already taken.
+    let check = |hx| unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) };
+
+    // Process chunks of 4 bucket elements at a time.
+    let chunks = bucket.array_chunks::<4>();
+    for &hxs in chunks.clone() {
+        // Check all 4 elements of the chunk without early break.
+        if hxs.map(check).iter().any(|&bad| bad) {
+            continue 'p;
+        }
+    }
+    // Check remaining elements.
+    let mut bad = false;
+    for &hx in chunks.remainder() {
+        bad |= check(hx);
+    }
+    if bad {
+        continue 'p;
+    }
+
+    if self.try_take_pilot(bucket, hp, taken) {
+        return Some((p, hp));
+    }
+}
+#+end_src
+
+The new ~perf stat -d~:
+
+#+begin_src text
+         14,310.45 msec task-clock:u                     #    0.999 CPUs utilized      (was 16k)
+    50,239,412,832      cycles:u                         #    3.511 GHz                (was 57G)
+   123,285,550,459      instructions:u                   #    2.45  insn per cycle     (was 87G; 1.5)
+    10,003,769,536      branches:u                       #  699.053 M/sec              (was 10.5G)
+       170,547,753      branch-misses:u                  #    1.70% of all branches    (was 650M; 6.1%)
+#+end_src
+
+Note how this roughly $10\%$ faster (in clock and cycles).
+It does use $50\%$ more instructions, but is able to execute those *much* more
+efficiently, at $2.5$ instructions per cycle vs. $1.5$ before. This is probably
+because of the *$4$-fold reduction* in branch-misses!
+
+The remaining branch misses seem to mostly come from the less-optimized case
+where a bucket requires displacing some other buckets.
 
 #+print_bibliography:
