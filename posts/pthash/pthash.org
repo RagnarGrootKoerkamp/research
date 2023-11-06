@@ -2241,9 +2241,9 @@ One issue though: Using =FastReduce32L= to determine the slot does not provide
 sufficient entropy, since it only gives $\lg(N/P)$ bits of entropy, whereas we
 need more like $\lg N$ bit of entropy. This is somewhat fixed by reverting to
 =FastMod32L=, but that still lacks entropy for $N = 10^9$, where we need the
-much slower =FastMod64=.
+much slower =FastMod64=. More on this later.
 
-** Speeding up the search for pilots.
+** Speeding up the search for pilots
 
 Currently the loop that searches for pilots is as follows:
 #+begin_src rust
@@ -2326,5 +2326,26 @@ because of the *$4$-fold reduction* in branch-misses!
 
 The remaining branch misses seem to mostly come from the less-optimized case
 where a bucket requires displacing some other buckets.
+
+** Packing difference from expected position
+Since the values we pack are a random subset of $[0, n]$, it may be possible to
+encode them efficiently by only storing the deviation from their expected value.
+I.e. we store $r=(1/\alpha - 1)n$ values where position $i$ stores the
+difference with $i/r \cdot n$.
+
+** =MultiplyReduce=
+
+For $n$ close to $10^9$ or $2^{32}$, we really must use all $64$ bits of
+entropy. =FastReduce= only uses the high bits, and =FastMod= works but is quite
+slow (taking $2$ multiplications for the $32$bit variant and more for $64$bits).
+
+When the target modulus is a power of $2$, $2^d$, an alternative is what I'll call =MultiplyReduce=:
+$$
+h \mapsto \lfloor \frac {C\cdot h}{2^{64}}\rfloor \mm 2^d.
+$$
+This simply multiplies the hash by a random $64$bit constant and then takes the
+$d$ low bits of the high word of the result.
+
+We can use this for the reduction to slots in each part, so that all entropy is used.
 
 #+print_bibliography:
