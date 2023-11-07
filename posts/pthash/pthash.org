@@ -2405,20 +2405,6 @@ If we drop these two classes things would be much simpler:
 the part is =P*h>>64=, and similarly the bucket is =B*h>>64=, where =B= is the
 total number of buckets over all parts.
 
-*** Query performance
-#+caption: Query performance (ns) for $n=10^9$
-|           | for-loop | prefetching |
-| 2 classes |     14.5 |         7.6 |
-| 1 class   |     10.3 |         7.5 |
-
-As you can see, when we already do prefetching the added simplicity doesn't
-affect performance much, but without it, the simpler and shorter code helps considerably.
-
-Most likely, the prefetching variant is already saturating the memory bandwidth.
-Each cacheline is $64$bytes, which comes down to $64B / 7.5ns = 8.5GB/s$. That's
-a third of the $25GB/s$ peak bandwidth for my RAM, but I'm not sure whether the
-peak is achievable at all for random-access reads.
-
 *** Build performance
 This is a bit more tricky: dropping the two classes roughly doubles the number of
 displacements and slows the construction by around $10\%$. Also, the minimal $c$
@@ -2428,5 +2414,44 @@ for which construction succeeds at all goes up slightly.
 Maybe we can come up with a 'local' way to imbalance buckets, so that each
 bucket roughly maps to position =h*B >> 64=. Maybe we could =or= the last bit
 with another random bit, so that $75\%$ of elements goes to $50\%$ of buckets?
+
+*** Query performance
+#+caption: Query performance (ns) for $n=10^9$
+|           | for-loop | prefetching |
+| 2 classes |     14.5 |         7.6 |
+| 1 class   |     10.3 |         7.5 |
+
+As you can see, when we already do prefetching the added simplicity doesn't
+affect performance much, but without it, the simpler and shorter code helps considerably.
+
+** Query memory bandwidth
+
+Most likely, the prefetching variant is already saturating the memory bandwidth.
+Each cacheline is $64$bytes, which comes down to $64B / 7.5ns = 8.5GB/s$. That's
+a third of the $25GB/s$ peak bandwidth for my RAM, but I'm not sure whether the
+peak is achievable at all for random-access reads.
+
+I did find this [[https://qr.ae/pKCi5P][quora answer]] that talks about /Line-Fill Buffer/. To quote:
+
+#+begin_quote
+If you test performance from a single thread on a machine that’s mostly idle (ie, you’re not competing with other threads for access to the memory bus), then you’ll find that on many chips, you can perform roughly twice as many sequential reads per second as random reads. The explanation for this is that the CPU has clever circuitry that watches your memory access pattern and tries to predict which cache-lines your code is going to want next. Why does this prefetching help? Well, this gets a bit deep. My current understanding is that in the random access case, your parallelism is limited by that fact that each core can only have a limited number of L1 misses outstanding at one time. Intel calls this the “Line-Fill Buffer” and it has 10 slots on recent chip models, and there are similar mechanisms on AMD and Arm. DRAM physics dictate that reads have ~60ns of latency (and this barely changes as the tech evolves), which is ~400 clock cycles, so that would rate limit throughput of random parallel reads to at most 1 per ~40 clock cycles. Versus when the hardware prefetch mechanisms kick in, they don’t consume line-fill slots and can effectively perform more reads in parallel. Sadly, if you issue software prefetch instructions, many CPUs treat that as needing a line-fill entry, so it’s only reads triggered by hardware-prefetching that are able to achieve greater parallelism than the size of your line-fill buffer.
+#+end_quote
+
+So with this in mind, maybe the next question is whether we can get the last
+factor $3$ improvement from $8GB/s$ to $25GB/s$ by using multithreading, since
+each CPU has it's own copy of these Line-Fill Buffers between L2 and L1.
+
+So I tried multithreading, but it seems not to be faster at all! It's usually
+slightly slower. Weirdly though, the threads seem to do the work sequentially,
+with the $i$th of $k$ threads finishing roughly after $i/k$ of the total time.
+Some threads just seem to be busy waiting for memory that never comes until
+other threads are done.
+
+But then does that mean that my memory bandwidth is actually capped at $8GB/s$?
+That would be disappointing.
+
+Maybe another solution could be to store two copies of the pilot array, one
+on each of the two $32GB$ memory cards I have? I don't really know whether the
+main memory or the processor is the bottleneck, so no idea if this would help.
 
 #+print_bibliography:
