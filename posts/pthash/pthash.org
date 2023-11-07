@@ -2053,6 +2053,10 @@ elements needs to be queried. Not prefetching those may give a nice speedup.
 I may or may not have this already enabled on my laptop, but if not, if may
 make prefetches faster by having a smaller TLB cache.
 
+It seems that =jemalloc= has builtin support for optional hugepages so I may try that.
+
+See also [[https://www.reddit.com/r/rust/comments/1796fm9/rustc_is_now_optimized_with_bolt_on_linux_2/][this reddit post]].
+
 ** Are we close to the memory bandwidth?
 
 I have DDR4 @ 3200MHz, which has a theoretical bandwidth limit of $25GB/s$.
@@ -2333,6 +2337,10 @@ encode them efficiently by only storing the deviation from their expected value.
 I.e. we store $r=(1/\alpha - 1)n$ values where position $i$ stores the
 difference with $i/r \cdot n$.
 
+Result: for $n=10^8$ with $\alpha = 0.99$, the largest difference between actual
+and expected position is around $500\ 000$. I.e., this would save only $25\%$ of
+bits, not really enough to be useful.
+
 ** =MultiplyReduce=
 
 For $n$ close to $10^9$ or $2^{32}$, we really must use all $64$ bits of
@@ -2347,5 +2355,8 @@ This simply multiplies the hash by a random $64$bit constant and then takes the
 $d$ low bits of the high word of the result.
 
 We can use this for the reduction to slots in each part, so that all entropy is used.
+
+The one problem with this function (and also =MulHash=) is that $128$bit
+multiplications don't work well with SIMD, but so far SIMD hasn't payed off yet anyway.
 
 #+print_bibliography:
