@@ -2385,4 +2385,48 @@ unsafe {
 }
 #+end_src
 
+** Dropping the bucket split?
+
+So far we have been mapping $\beta = 0.6$ of elements to $\gamma = 0.3$ of slots
+to create two /classes/ of buckets: /large/ and /small/ ones. This helps the
+performance of the construction algorithm by putting more elements in large and
+easy-to-place buckets so that in the end we have more smaller buckets and
+especially more free slots remaining once we get to the last buckets of size
+$2$.
+
+In my current implementation it's kind of annoying to find the bucket for a
+given hash:
+First =FastReduce= for the part: multiply $h$ by $P$, the number of parts.  The
+=P*h>>64= is the part, and we use =P*h % (2^64)= to compute the bucket, which
+uses the high bits of that result to determine whether it belongs in a small or
+large bucket and then sends it there via a linear transformation.
+
+If we drop these two classes things would be much simpler:
+the part is =P*h>>64=, and similarly the bucket is =B*h>>64=, where =B= is the
+total number of buckets over all parts.
+
+*** Query performance
+#+caption: Query performance (ns) for $n=10^9$
+|           | for-loop | prefetching |
+| 2 classes |     14.5 |         7.6 |
+| 1 class   |     10.3 |         7.5 |
+
+As you can see, when we already do prefetching the added simplicity doesn't
+affect performance much, but without it, the simpler and shorter code helps considerably.
+
+Most likely, the prefetching variant is already saturating the memory bandwidth.
+Each cacheline is $64$bytes, which comes down to $64B / 7.5ns = 8.5GB/s$. That's
+a third of the $25GB/s$ peak bandwidth for my RAM, but I'm not sure whether the
+peak is achievable at all for random-access reads.
+
+*** Build performance
+This is a bit more tricky: dropping the two classes roughly doubles the number of
+displacements and slows the construction by around $10\%$. Also, the minimal $c$
+for which construction succeeds at all goes up slightly.
+
+*** An alternative
+Maybe we can come up with a 'local' way to imbalance buckets, so that each
+bucket roughly maps to position =h*B >> 64=. Maybe we could =or= the last bit
+with another random bit, so that $75\%$ of elements goes to $50\%$ of buckets?
+
 #+print_bibliography:
