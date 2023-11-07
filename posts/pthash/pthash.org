@@ -2049,14 +2049,6 @@ of each bucket when the probability of failing in earlier elements in the bucket
 is high. E.g. for size $2$ buckets only roughly $1$ in $6$ of the second
 elements needs to be queried. Not prefetching those may give a nice speedup.
 
-** TODO Linux hugepages?
-I may or may not have this already enabled on my laptop, but if not, if may
-make prefetches faster by having a smaller TLB cache.
-
-It seems that =jemalloc= has builtin support for optional hugepages so I may try that.
-
-See also [[https://www.reddit.com/r/rust/comments/1796fm9/rustc_is_now_optimized_with_bolt_on_linux_2/][this reddit post]].
-
 ** Are we close to the memory bandwidth?
 
 I have DDR4 @ 3200MHz, which has a theoretical bandwidth limit of $25GB/s$.
@@ -2358,5 +2350,39 @@ We can use this for the reduction to slots in each part, so that all entropy is 
 
 The one problem with this function (and also =MulHash=) is that $128$bit
 multiplications don't work well with SIMD, but so far SIMD hasn't payed off yet anyway.
+
+** Linux hugepages?
+I may or may not have this already enabled on my laptop, but if not, if may
+make prefetches faster by having a smaller TLB cache.
+
+It seems that =jemalloc= has builtin support for optional hugepages so I may try that.
+See also [[https://www.reddit.com/r/rust/comments/1796fm9/rustc_is_now_optimized_with_bolt_on_linux_2/][this reddit post]].
+
+---
+
+After trying a bit more ([[https://twitter.com/zommiommy/status/1721843705462575451][tweet]], [[https://github.com/vigna/epserde-rs/blob/ecb7909ca7bf48a2a61646a0b9c119d6ae6cbfab/epserde/src/lib.rs#L70][example code]]), it seems that a simple ~vec![0u8;
+len]~ already uses transparent huge pages on my machine:
+#+begin_src shell
+$ grep AnonHugePages /proc/meminfo
+#+end_src
+goes up by around =300MB= when filling the vector of pilots, and similarly
+#+begin_src shell
+$ grep thp_fault_alloc /proc/vmstat
+#+end_src
+increases by $150$ at the same time, counting the total number of allocated
+=2MB= hugepages.
+
+Either way, here is the full allocation code I tried for completeness:
+#+begin_src rust
+let len = 300_000_000;
+const HUGE_PAGE_SIZE_BYTES: usize = 2 * 1024 * 1024;
+unsafe {
+    let ptr = std::alloc::alloc(
+        std::alloc::Layout::from_size_align(len, HUGE_PAGE_SIZE_BYTES).unwrap(),
+    );
+    libc::madvise(ptr as _, len, libc::MADV_HUGEPAGE);
+    Vec::from_raw_parts(ptr, len, len)
+}
+#+end_src
 
 #+print_bibliography:
