@@ -2454,4 +2454,41 @@ Maybe another solution could be to store two copies of the pilot array, one
 on each of the two $32GB$ memory cards I have? I don't really know whether the
 main memory or the processor is the bottleneck, so no idea if this would help.
 
+*** Some more experiments
+
+I wrote [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/master/examples/memory_bandwidth.rs][some experiments]] to measure memory bandwidth where I sum the first byte
+of each cacheline of a large array. Results:
+#+begin_src text
+stride 1
+strided       1.78s     22.513GB/s
+prefetch      1.77s     22.553GB/s
+stride 2
+strided       2.73s     14.678GB/s
+prefetch      2.79s     14.357GB/s
+stride 4
+strided       3.61s     11.079GB/s
+prefetch      3.48s     11.501GB/s
+stride 8
+strided       3.85s     10.403GB/s
+prefetch      3.76s     10.649GB/s
+stride 16
+strided       4.05s      9.876GB/s
+prefetch      4.00s      9.995GB/s
+stride 32
+strided       4.53s      8.828GB/s
+prefetch      4.50s      8.893GB/s
+stride 64
+strided       3.91s     10.228GB/s
+prefetch      3.89s     10.279GB/s
+stride 128
+strided       4.01s      9.976GB/s
+prefetch      4.02s      9.957GB/s
+#+end_src
+
+so basically it caps out around $9GB/s$ even for very predictable access
+patterns. Prefetching also doesn't help.
+
+So the $8.5GB/s$ we currently get with the queries is already super good and
+basically saturates the full memory bandwidth!
+
 #+print_bibliography:
