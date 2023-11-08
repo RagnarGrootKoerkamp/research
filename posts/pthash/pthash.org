@@ -2457,7 +2457,7 @@ main memory or the processor is the bottleneck, so no idea if this would help.
 *** Some more experiments
 
 I wrote [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/master/examples/memory_bandwidth.rs][some experiments]] to measure memory bandwidth where I sum the first byte
-of each cacheline of a large array. Results:
+of each cacheline of a $4GB$ array. Results:
 #+begin_src text
 stride 1
 strided       1.78s     22.513GB/s
@@ -2490,5 +2490,86 @@ patterns. Prefetching also doesn't help.
 
 So the $8.5GB/s$ we currently get with the queries is already super good and
 basically saturates the full memory bandwidth!
+
+*** Multithreading benchmark
+
+So can we get to the full $25GB/s$ using multithreading? It seems that the
+answer is yes! Running multiple threads in parallel each with a different
+(coprime) stride, I get the following throughput per thread and in total:
+#+begin_src text
+Threads: 1     3.85s     10.396GB/s
+Threads: 2     4.35s     18.393GB/s
+Threads: 3     5.03s     23.845GB/s
+Threads: 4     6.15s     26.035GB/s
+Threads: 5     7.52s     26.578GB/s
+Threads: 6     8.86s     27.074GB/s
+#+end_src
+
+As you can see, this converges to just above $25GB/s$. Probably it's a bit
+higher because some reads are cached in L3, and some reads are shared between threads.
+
+If we give each thread it's own copy of the $4GB$ array, this changes to:
+#+begin_src text
+Threads: 1     4.55s      8.800GB/s
+Threads: 2     5.37s     14.900GB/s
+Threads: 3     6.85s     17.512GB/s
+Threads: 4     8.51s     18.791GB/s
+Threads: 5    10.53s     18.985GB/s
+Threads: 6    12.15s     19.756GB/s
+#+end_src
+This is quite a bit lower!
+
+Changing to a $7GB$ array may be interesting, since $6\cdot 7GB = 42GB$ must be
+spread over two $32GB$ ram sticks. ($8GB$ crashed because I don't have $48GB$
+free currently.) This gives:
+#+begin_src text
+Threads: 1     7.76s      9.016GB/s
+Threads: 2     9.54s     14.679GB/s
+Threads: 3    12.20s     17.211GB/s
+Threads: 4    14.98s     18.686GB/s
+Threads: 5    18.15s     19.282GB/s
+Threads: 6    22.93s     18.313GB/s
+#+end_src
+I.e., very similar to results above. So probably we won't be able to gain
+speedup by distributing reads over the two ram sticks.
+
+*** Multithreading queries: satisfaction at last
+
+I had a silly bug at first, but with that fixed, here's the inverse throughput
+when using up to $6$ threads in parallel, each prefetching $64$ iterations
+ahead:
+
+#+attr_html: :class small
+| threads | ns/query |
+|       1 |      7.59 |
+|       2 |      4.17 |
+|       3 |      3.09 |
+|       4 |      2.81 |
+|       5 |      2.69 |
+|       6 |      2.76 |
+
+*Satisfaction*, at last! $2.69ns/query$ means a memory throughput of $64B/2.69ns =
+23.79GB/s$, quite close to the full memory bandwidth.
+
+Also, each thread is also reading the keys to be queried from main memory. Those
+are efficiently packed so each $8B$ key is only $1/8$th of a $64B$ cacheline and
+hence only requires $1/8$th of a read. But adding those in we get $(1+1/8)
+\cdot 23.79 GB/s = 26.76GB/s$, quite a bit *above* the full memory bandwidth. I
+suppose this is because some queries are already in L3 cache, sparing the main
+memory bus. Let's see more precisely:
+The memory used for all pilots is $2.43bit/elem\cdot 10^9 elem = 2.43\cdot 10^9
+bit = 304MB$. My L3 cache is $12MB$, so each query hits the cache with
+probability $12MB/304MB=4\%$, getting to
+$$
+\frac 18 \cdot \frac{64B}{2.69ns}
++ (1-0.04) \cdot\frac{64B}{2.69ns}
+  = 25.8GB/s
+$$
+This is still slightly above the $25GB/s$ max throughput my ram should have, but
+I'll call it done here. We're within a few percent of the expected maximum
+performance, which is as good as we can get.
+
+Maybe the last bit is L1 and L2 caches containing a
+few more elements than L3?
 
 #+print_bibliography:
