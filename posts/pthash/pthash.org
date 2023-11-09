@@ -2323,16 +2323,6 @@ because of the *$4$-fold reduction* in branch-misses!
 The remaining branch misses seem to mostly come from the less-optimized case
 where a bucket requires displacing some other buckets.
 
-** Packing difference from expected position
-Since the values we pack are a random subset of $[0, n]$, it may be possible to
-encode them efficiently by only storing the deviation from their expected value.
-I.e. we store $r=(1/\alpha - 1)n$ values where position $i$ stores the
-difference with $i/r \cdot n$.
-
-Result: for $n=10^8$ with $\alpha = 0.99$, the largest difference between actual
-and expected position is around $500\ 000$. I.e., this would save only $25\%$ of
-bits, not really enough to be useful.
-
 ** =MultiplyReduce=
 
 For $n$ close to $10^9$ or $2^{32}$, we really must use all $64$ bits of
@@ -2571,5 +2561,63 @@ performance, which is as good as we can get.
 
 Maybe the last bit is L1 and L2 caches containing a
 few more elements than L3?
+
+
+** Packing difference from expected position
+Since the values we pack are a random subset of $[0, n]$, it may be possible to
+encode them efficiently by only storing the deviation from their expected value.
+I.e. we store $r=(1/\alpha - 1)n$ values where position $i$ stores the
+difference with $i/r \cdot n$.
+
+Result: for $n=10^8$ with $\alpha = 0.99$, the largest difference between actual
+and expected position is around $500\ 000$. I.e., this would still need at least
+$20$ compared to the $20$ we started with.
+
+*** Local packing ideas
+Instead we could store a fixed offset $c$ every $k$ positions, and approximate the
+following $k$ values as $c + i/r\cdot n$, where $n/r$ is the expected difference
+between adjacent remap targets (i.e. the distance between adjacent empty slots
+in the =taken= array).
+
+For example, we could store a =u32= offset every $30$ positions, one per
+cacheline, totalling to $16 + 32/30 \sim 17 bits$ per remapped position.
+
+Or maybe we could pack slightly more efficient and only use somewhere between
+$10$ to $15$ bits for the variance from the expected value. Some maths will be
+needed to figure out a safe upper bound on the max deviation.
+
+Some possibilities:
+1. *Absolute:* Store $32bit$ offset, and $16bit$ deltas to it.
+2. *Linear:* Store $32bit$ offset, and $16bit$ deltas to $offset + i\cdot n/r$.
+3. *Custom linear:* Store $32bit$ offset, $32bit$ (or less) difference $d$, and $16bit$ deltas to
+   $offset + i \cdot d$.
+4. *Local EF:* Store $32bit$ offset,  $128$ bits
+   indicating where $256bit$ boundaries are crossed similar to EF encoding, and
+   $44$ $1byte$ values.
+
+This last idea needs $64/44\cdot 8bit=11.6bits$ per value. That's slightly more
+than using EF encoding directly on the full vector (which uses around $9bits$),
+but since this only uses a single cache line lookups are much faster, and it
+uses $3\times$ less bits that the direct =Vec<u32>=.
+
+*** Query times for different remapping structures
+
+#+caption: Query times in nanoseconds without and with remapping, for different remap structures.
+#+caption: $n=10^9$, $c=9$, $\alpha\in\{0.99, 0.98\}$. The bottom row indicates bits/element needed for pilots under =no remap= and additional memory for remapping datastructures.
+|   threads | no remap | =Vec<u32>= | =LocalEF= | =EliasFano= | =Vec<u32>= | =LocalEF= | =EliasFano= |
+|  $\alpha$ |          |     $0.99$ |    $0.99$ |      $0.99$ |     $0.98$ |    $0.98$ |      $0.98$ |
+|         1 |      7.4 |        7.9 |       7.9 |        10.1 |        8.1 |       8.2 |        11.6 |
+|         2 |      4.1 |        4.3 |       4.3 |         5.1 |        4.8 |     *4.5* |         6.0 |
+|         3 |      3.0 |        3.2 |       3.2 |         3.6 |        3.5 |       3.3 |         4.3 |
+|         4 |      2.8 |        2.9 |       2.8 |         3.2 |        3.0 |       2.9 |         3.6 |
+|         5 |      2.7 |        2.7 |       2.8 |         3.0 |        2.8 |       2.7 |         3.2 |
+|         6 |      2.7 |        2.7 |       2.7 |         3.0 |        3.0 |       2.8 |         3.1 |
+| bits/elem |     2.43 |      +0.33 |   *+0.12* |       +0.09 |      +0.66 |   *+0.24* |       +0.17 |
+
+As can be seen, =LocalEF= uses only about a third of the memory of =Vec<u32>=,
+while being at least as fast (and faster for $\alpha=0.98$).
+=EliasFano= uses another $25\%$ less memory, but significantly slows down
+queries due to its non-locality.
+
 
 #+print_bibliography:
