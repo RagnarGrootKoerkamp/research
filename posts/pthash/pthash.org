@@ -2591,7 +2591,7 @@ Some possibilities:
 2. *Linear:* Store $32bit$ offset, and $16bit$ deltas to $offset + i\cdot n/r$.
 3. *Custom linear:* Store $32bit$ offset, $32bit$ (or less) difference $d$, and $16bit$ deltas to
    $offset + i \cdot d$.
-4. *Local EF:* Store $32bit$ offset,  $128$ bits
+4. *Tiny EF:* Store $32bit$ offset,  $128$ bits
    indicating where $256bit$ boundaries are crossed similar to EF encoding, and
    $44$ $1byte$ values.
 
@@ -2604,7 +2604,7 @@ uses $3\times$ less bits that the direct =Vec<u32>=.
 
 #+caption: Query times in nanoseconds without and with remapping, for different remap structures.
 #+caption: $n=10^9$, $c=9$, $\alpha\in\{0.99, 0.98\}$. The bottom row indicates bits/element needed for pilots under =no remap= and additional memory for remapping datastructures.
-|   threads | no remap | =Vec<u32>= | =LocalEF= | =EliasFano= | =Vec<u32>= | =LocalEF= | =EliasFano= |
+|   threads | no remap | =Vec<u32>= | =TinyEF= | =EliasFano= | =Vec<u32>= | =TinyEF= | =EliasFano= |
 |  $\alpha$ |          |     $0.99$ |    $0.99$ |      $0.99$ |     $0.98$ |    $0.98$ |      $0.98$ |
 |         1 |      7.4 |        7.9 |       7.9 |        10.1 |        8.1 |       8.2 |        11.6 |
 |         2 |      4.1 |        4.3 |       4.3 |         5.1 |        4.8 |     *4.5* |         6.0 |
@@ -2614,10 +2614,13 @@ uses $3\times$ less bits that the direct =Vec<u32>=.
 |         6 |      2.7 |        2.7 |       2.7 |         3.0 |        3.0 |       2.8 |         3.1 |
 | bits/elem |     2.43 |      +0.33 |   *+0.12* |       +0.09 |      +0.66 |   *+0.24* |       +0.17 |
 
-As can be seen, =LocalEF= uses only about a third of the memory of =Vec<u32>=,
+As can be seen, =TinyEF= uses only about a third of the memory of =Vec<u32>=,
 while being at least as fast (and faster for $\alpha=0.98$).
 =EliasFano= uses another $25\%$ less memory, but significantly slows down
 queries due to its non-locality.
+
+The code for TinyEF is [[https://github.com/RagnarGrootKoerkamp/pthash-rs/blob/master/src/tiny_ef.rs][here]].
+
 
 
 #+print_bibliography:
