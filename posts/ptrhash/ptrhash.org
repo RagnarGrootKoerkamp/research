@@ -2648,7 +2648,7 @@ different speed vs. randomness tradeoffs. I [[https://github.com/RagnarGrootKoer
 have no idea of the quality of the implementations I used, these are some quick
 results for hashing =u64= keys:
 
-#+caption: Query throughput (=ns=) for different hash functions for sequential
+#+caption: Query throughput (=ns=) for different hash functions on $10^9$ =u64= keys for sequential
 #+caption: querying and streaming with $64$-ahead prefetching.
 | Hasher  | Bits |  seq. | prefetch |
 | fxhash  |   64 |  14.2 |     7.48 |
@@ -2656,10 +2656,10 @@ results for hashing =u64= keys:
 | murmur3 |  128 |  16.5 |     9.40 |
 | xx      |   64 |  39.0 |    14.04 |
 | xx      |  128 |  32.3 |    13.94 |
-| metro   |   64 |  29.9 |    13.21 |
-| metro   |  128 |  40.3 |    16.71 |
 | city    |   64 |  28.0 |    12.19 |
 | city    |  128 |  45.1 |    20.09 |
+| metro   |   64 |  29.9 |    13.21 |
+| metro   |  128 |  40.3 |    16.71 |
 | highway |   64 | 107.6 |    57.20 |
 | highway |  128 | 114.5 |    47.84 |
 | spooky  |   64 | 115.7 |    63.43 |
@@ -2668,5 +2668,31 @@ results for hashing =u64= keys:
 From this we conclude that =FxHash=, =Murmur2=, and =Murmur3= are good fast hash
 functions where throughput is close to the memory bandwidth, while most other
 hash functions are quite a bit slower and lower the throughput.
+
+I also added support for hashing of =&[u8]= strings. Results are here:
+
+#+caption: Query throughput (=ns=) for different hash functions on $4\cdot 10^6$ URLs (avg. $71$ bytes long) for sequential
+#+caption: querying and streaming with $64$-ahead prefetching.
+| Hasher  | Bits | seq. | prefetch |
+| fxhash  |   64 | 31.7 |    21.26 |
+| murmur2 |   64 | 11.5 |     6.23 |
+| murmur3 |  128 | 24.7 |    15.35 |
+| wy      |   64 | 19.5 |    11.58 |
+| xx      |   64 | 23.2 |    14.26 |
+| xx      |  128 | 21.0 |    12.90 |
+| city    |   64 | 18.0 |    10.97 |
+| city    |  128 | 27.5 |    17.90 |
+| metro   |   64 | 22.2 |    15.36 |
+| metro   |  128 | 24.3 |    17.71 |
+| highway |   64 | 61.1 |    36.23 |
+| highway |  128 | 67.0 |    42.51 |
+| spooky  |   64 | 74.1 |    62.48 |
+| spooky  |  128 | 74.1 |    62.87 |
+
+Observations:
+- =fxhash= is slow for strings.
+- =murmur2= is super fast!
+- =city= and =wy= are great for =64=bit hashes.
+- =xx= is best for =128=bit hashes.
 
 #+print_bibliography:
