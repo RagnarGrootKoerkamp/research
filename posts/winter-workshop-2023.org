@@ -1,0 +1,83 @@
+#+title: ALPACA/PANGAIA winter workshop notes
+#+HUGO_SECTION: notes
+#+hugo_tags: conference_notes
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-11-20>
+#+author: Ragnar Groot Koerkamp
+
+These are notes of discussions at the ALPACA/PANGAIA conference in
+November 2023.
+
+* Monday
+
+I had interesting discussions with Giulio, Paul, and Lucas Robidou.
+
+** Fimpera: bloom filter for kmers
+Idea: instead of storing $k$mers in bloom filter, store all constituent $s$mers
+($s<k$). This allows single-memory-lookup membership queries when streaming $k$mers.
+
+- Speedup by Lucas: For each $k$mer only query the first and last $s$mer.
+- Question: can we make a locality preserving bloom filter?
+- Answer: locality-preserving hashing of the $s$-mers using their minimizers.
+  (It's minimizers all the way down.)
+
+** Progress of tools
+1. Generic datastructure
+2. Datastructure for $k$mers
+3. Datastructure for streaming of $k$mers
+4. Locality preserving datastructure for streaming of $k$mers.
+
+** Order-preserving MPHF of minimizers
+
+The big question:
+
+#+begin_quote
+Can we build an order preserving MPHF/index on minimizer in $o(n\lg n)$ space?
+#+end_quote
+
+In SSHash, most memory is used by mapping each minimizer back into the right
+order.
+- There are $n!$ orders, and since $\lg n! \sim n\lg n$, this already takes $\lg
+  n$ bits per element.
+- Can we make some kind of $\varepsilon$-order-preserving MPHF?
+- Maybe we can bucket them and only preserve order between buckets?
+  - If we make $B$ buckets, each $k$mer will still need to be mapped to one of
+    $B$ buckets, requiring $\lg B$ bits per element still. For $10^9$ elements,
+    maybe you want $10^5$ buckets to get to small L1-sized buckets, but that
+    still requires basically $\frac 12 n\lg n$ bits...
+- Can we exploit that we're hashing minimizers?
+- *Are consecutive non-overlapping minimizers correlated???*
+  - If not, it's basically inevitable to encode a permutation of all minimizers,
+    requiring $n\lg n$ memory and most likely a cache miss per lookup.
+- For mapping specifically: what about only looking up say $1\%$ of minimizers?
+  That gives $100\times$ fewer cache misses. What are the drawbacks?
+- Doubling $k$ almost halves the number of minimizers and shrinks (almost
+  halves) the size of the datastructure.
+  - If we build the datastructure for $k=\{31,63,127,255,\dots\}$, we can jump
+    ahead a lot at low cost, and make queries for reads with various accuracies.
+- Is there correlation between the hash value of closely related minimizers?
+  - Maybe small values correlate or large values correlate? Or maybe small-large
+    pairs are more likely? Whatever pairs co-occur could be placed close to each
+    other in cache.
+
+** Algorithmic bottlenecks in SSHash
+- Maybe the cache-miss latency of SSHash can be hidden by prefetching/working in blocks?
+- All minimizers in the query are known up-front, so we don't actually have to
+  stream things; prefetching is easy.
+- Is the bottleneck memory throughput?
+- After prefetching, random-access in itself isn't much slower than sequential,
+  but sequential works with hardware prefetching while non-sequential requires
+  manual software prefetching and corresponding overhead.
+
+** Fourier transform of the human genome?
+- Can we locate $k$mers in the human genome using some inherent properties?
+- Are there some properties of $k$mers that change slowly over 'time', looking
+  something like a sine wave?
+- Suppose something like CG fraction changes slowly over time. Then CG-content
+  of a $k$mer can be used to estimate its position.
+- Sounds like a stretch, but: Can we make an FFT of the human genome, throw away
+  high frequency information, and compute the corresponding low frequency
+  signals for shorter kmers? Than we could use this to locate them.
