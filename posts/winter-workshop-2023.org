@@ -93,3 +93,28 @@ From Tobias' talk.
 | structural variant |             >50 | 25k           |                   10-12 |              0.19 |
 | inversions         |             >50 | 150           |                      23 |             0.397 |
 | multi-copy-number  |           >1000 | 500           |                   12-15 |             0.232 |
+
+* Wednesday
+Many more interesting discussions about de Bruijn Graphs, SSHash, and more.
+
+Main insights:
+- *A de Bruijn Graph is /literally/ just a set of kmers*
+- If you store an array of $n$ things, you can encode $\lg n! = n\lg n$ bits of
+  information in just the order in which they are on disk.
+
+** SSHash
+- We can shuffle the unitigs in the output in any order we want. Roughly half
+  the unitigs only has a single minimizer, so we have around $\lg (n/2)! \approx
+  n/2 \cdot \lg n$ bits of information we may be able to save from the =order=
+  table by permuting the output to have the same order as the MPHF outputs.
+
+** de Bruijn Graphs
+- Metagraph (BOSS table): 3-4 bits/kmer: 2 for the characters, and 1-2 more for metadata
+- Other method (I forgot which): 4-5bits/kmer
+- SSHash: ~5bits/kmer for $k=64$
+Interestingly, the first two methods do not depend on $k$, and involve a lot of
+cache misses for each lookup, while SSHash becomes better for larger $k$, since
+it stores an SPSS (spectrum preserving string set) of fixed size ($\approx 2$
+bits/kmer) and on top of that only stores $O(\lg n)$ bits of data /per minimizer/, of which there
+are fewer for larger $k$. (And also this incurs a cache miss /per minimizer/
+instead of /per basepair/.)
