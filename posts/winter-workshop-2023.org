@@ -107,6 +107,40 @@ Main insights:
   the unitigs only has a single minimizer, so we have around $\lg (n/2)! \approx
   n/2 \cdot \lg n$ bits of information we may be able to save from the =order=
   table by permuting the output to have the same order as the MPHF outputs.
+- We don't need to store the full precision offset. Indicating the start of the
+  cacheline should be good enough. Each cacheline has $64\cdot 8 / 2 = 256$
+  basepairs, so we can just drop the last $8$ bits of each value and search
+  inside the cacheline for the right place.
+- We could exploit that most minimizer only occur once, and skip the =sizes=
+  table: Instead, store a single offset and
+** PTHash
+- There are also other working on PTHash.
+  - GPU implementation
+  - Non-linear formula for optimal bucket size distribution.
+- Why is PTHash not closer to optimal? Where are we not succinct in encoding
+  information?
+  - Some $10\%$ of buckets is empty, which is memory that is directly thrown away.
+  - Average pilot value is around $30$ to $50$. But each bucket can store values
+    up to $256$, so average could be up to $128$. So we throw away $1$ to $2$
+    bits (out of $8$) for each bucket! That's another $\approx 20\%$ of wasted overhead.
+  - (On the other hand, the displacement algorithm currently is not able to
+    construct parts with higher averages.)
+- It would be nice to handle overly full partitions separately. We currently
+  need to choose $\alpha$ a bit smaller than necessary to ensure that the
+  relatively full parts still have $\alpha$ sufficiently small, but this wastes
+  some performance for the buckets with lower fill-factor.
+  - We could store $1$ bit per part, indicating if it is /large/, where we
+    increase the number of slots by $10\%$ (or whatever is necessary). Then, we
+    can run the algorithm as usual but use this larger $s'>s$ for the within-part
+    offset. If we end up with an index $<s$, we proceed as usual. If we end with
+    an index between $s$ and $s'$, we can put these at the very back, using a
+    count of home many such /large/ parts occurred before, and then remap them accordingly.
+
+    This would slow down queries because there are more edge cases, but also
+    speeds them up because we can use larger $\alpha$, reducing other edge cases.
+  - Alternatively, we could store prefix sums of the number of slots allocated
+    to each part. This adds quite some additional metadata that needs to be read
+    for *each* query, and doesn't sound so nice.
 
 ** de Bruijn Graphs
 - Metagraph (BOSS table): 3-4 bits/kmer: 2 for the characters, and 1-2 more for metadata
