@@ -144,11 +144,11 @@ Main insights:
 
 ** de Bruijn Graphs
 - Metagraph (BOSS table): 3-4 bits/kmer: 2 for the characters, and 1-2 more for metadata
-- Other method (I forgot which): 4-5bits/kmer
-- SSHash: ~5bits/kmer for $k=64$
+- Spectral BWT (SBWT): 4-5bits/kmer
+- SSHash: ~5bits/kmer for $k=63$; see table [[https://github.com/jermp/sshash/tree/master/benchmarks][here]].
 Interestingly, the first two methods do not depend on $k$, and involve a lot of
 cache misses for each lookup, while SSHash becomes better for larger $k$, since
 it stores an SPSS (spectrum preserving string set) of fixed size ($\approx 2$
-bits/kmer) and on top of that only stores $O(\lg n)$ bits of data /per minimizer/, of which there
+bits/kmer in the best case, but usually more) and on top of that only stores $O(\lg n)$ bits of data /per minimizer/, of which there
 are fewer for larger $k$. (And also this incurs a cache miss /per minimizer/
 instead of /per basepair/.)
