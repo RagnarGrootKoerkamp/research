@@ -2709,8 +2709,8 @@ Observations:
 ** Varying the partition size
 
 Let's construct for $n=10^9$ keys, $c=8$, $\alpha=0.98$, with different
-partition sizes:
-| slots per part | num parts | displace time | total time | max $\alpha$ |
+partition sizes. $\max \alpha$ is the maximum load factor over all parts.
+| slots per part | num parts | displace time | total time | $\max\alpha$ |
 | $2^{15}$       | $31$k     | -             | -          | $>1$         |
 | $2^{16}$       | $16$k     | $20.7$        | $27.0$     | $99.49$      |
 | $2^{17}$       | $7.8$k    | $22.8$        | $29.0$     | $99.18$      |
@@ -2740,4 +2740,11 @@ Observe that:
 - At $2^{24}$ slots, even the =taken= arrays do not fit in L3 cache anymore and
   things slow down even more. (In fact I'm surprised it's only a $2\times$
   slowdown. The latency is hidden pretty well.)
+
+One way in which PTRHash differs from PTHash is that apart from just the =taken=
+bitvector, it needs to store an additional $32bit$ index for each slot to be able to
+displace elements, which requires a lot more memory. If we could prevent this,
+memory usage would go down and it may be possible to use larger parts without
+slowing down the construction time so much.
+
 #+print_bibliography:
