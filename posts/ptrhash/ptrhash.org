@@ -2706,4 +2706,38 @@ Observations:
 - =city= and =wy= are great for =64=bit hashes.
 - =xx= is best for =128=bit hashes.
 
+** Varying the partition size
+
+Let's construct for $n=10^9$ keys, $c=8$, $\alpha=0.98$, with different
+partition sizes:
+| slots per part | num parts | displace time | total time | max $\alpha$ |
+| $2^{15}$       | $31$k     | -             | -          | $>1$         |
+| $2^{16}$       | $16$k     | $20.7$        | $27.0$     | $99.49$      |
+| $2^{17}$       | $7.8$k    | $22.8$        | $29.0$     | $99.18$      |
+| $2^{18}$       | $3.9$k    | $22.7$        | $29.0$     | $98.59$      |
+| $2^{19}$       | $1947$    | $25.8$        | $31.6$     | $98.40$      |
+| $2^{20}$       | $974$     | $30.3$        | $36.1$     | $98.21$      |
+| $2^{21}$       | $487$     | $42.3$        | $48.0$     | $98.14$      |
+| $2^{22}$       | $244$     | $41.2$        | $48.1$     | $97.83$      |
+| $2^{23}$       | $122$     | $40.9$        | $47.0$     | $97.81$      |
+| $2^{24}$       | $61$      | $72.5$        | $78.3$     | $97.77$      |
+| $2^{25}$       | $31$      | $88.8$        | $94.9$     | $96.17$      |
+
+Observe that:
+- Using too small partitions causes too many parts, with too much
+  load-unbalancing, consistently giving $\alpha > 1$.
+- $\max \alpha$ decreases as the parts get larger, reducing the worst-case
+  outliers. In particular the delta with $98\%$ roughly halves each step.
+- When there are very few parts, $\max \alpha$ goes below $98\%$ due to
+  rounding, because each part is fixed to have a power-of-two size.
+- Smaller parts are faster to build, due to data fitting in lower caches.
+- $2^{17}$ slots per part was my default, but $2^{19}$ is not much slower and
+  more reliable.
+- From $2^{21}$, the displacement time quickly grows. Storing $2^{21}$ =taken=
+  bits takes $256kb$, which is exactly the L2 cache size. But the displacement
+  algorithm also needs to store for each slot which bucket is occupying it,
+  taking $32bit/slot$. This does not fit in L3 and goes to main memory instead.
+- At $2^{24}$ slots, even the =taken= arrays do not fit in L3 cache anymore and
+  things slow down even more. (In fact I'm surprised it's only a $2\times$
+  slowdown. The latency is hidden pretty well.)
 #+print_bibliography:
