@@ -1,0 +1,39 @@
+#+title: NtHash and robust minimizers
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: nthash
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-12-31 Sun>
+#+author: Ragnar Groot Koerkamp
+
+Some NtHash resources and remarks [cite:@nthash;@nthash2]:
+- Nice rolling hash based on character string. Does not need the string representation.
+- Multiple implemenations available, also in Rust:
+  - [[https://crates.io/crates/nthash][=nthash=]] crate
+  - part of [[https://crates.io/crates/kmerutils][=kmerutils=]] crate
+  - [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][Gist]] by Daniel Liu for computing robust minimizers.
+
+* Robust minimizers
+Robust minimizers only return the rightmost position of each window with a
+minimal hash. This works well, but loses correctness guaranteed when distinct
+kmers in a window have the same hash. (E.g. in the extreme case where the hash
+function always returns $0$, it clearly /does not/ work.)
+
+Alternative to NtHash is simply taking the bit representation of a kmer and
+multiplying by a large random odd constant, as in =FxHash=. That is guaranteed
+to be injective.
+
+* Is NtHash injective?
+Specifically for $k\leq 32$-mers.
+- A brute force search shows no collisions for $k\leq 16$. Afterwards my machine
+  runs out of memory.
+- If we had $h(A) \oplus h(C) \oplus h(G) \oplus h(T) = 0$, it would be easy to
+  prove/disprove injectiveness using Gaussian elimination. Alas this is not the
+  case with default parameters, but we could enforce this and see what happens.
+- Can we prove injectiveness for the current parameters? It's very unclear to me
+  and does not seem straightforward.
+- Does it pass SmHasher?
+
+#+print_bibliography:
