@@ -26,7 +26,7 @@ It outputs:
 - the new vertical difference on the right.
 
 #+caption: Bitpacking layout of BitPAl, showing a row of $w=8$ cells.
-#+name:setup
+#+name: setup
 #+attr_html: :class inset
 [[file:bitpacking.jpg]]
 
@@ -103,7 +103,7 @@ summation step.
 
 * Found the bug
 
-I managed to find the but with the help of Gary Benson (author of BitPAl).
+I managed to find the bug with the help of Gary Benson (author of BitPAl).
 He was so kind to upload his code to [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations][github]].
 
 - His implementation has an additional [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations/blob/main/bitwise%20edit%20distance%20alignment%20multiple%20word%20clean.c#L134-L139]['fake' column]] before column $0$ without any matches, and which [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations/blob/main/bitwise%20edit%20distance%20alignment%20multiple%20word%20clean.c#L134-L139][decreases]] from $DP[-1][0]=1$ to $DP[0][0] = 0$.
@@ -112,9 +112,13 @@ He was so kind to upload his code to [[https://github.com/Benson-Genomics-Lab/Bi
 In fact, we don't need to store the carry explicitly. It turns out the carry is
 $1$ exactly when the vertical difference at the start is either $0$ or $1$.
 So the new addition rule is:
-$$Sum = notM_I + SD + [VC_0 == 0 | VC_0 == 1]$$
+$$Sum = notM_I + SD + (V_{0,0} | V_{1,0})$$
 
-The [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner/blob/bc0e73d5ff46ffe4829432ccd370821505cb6d7c/pa-bitpacking/src/bitpal.rs#L28-L29][corresponding code]] now takes 20 operations, exactly the same number as Myers' code:
+The [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner/blob/bc0e73d5ff46ffe4829432ccd370821505cb6d7c/pa-bitpacking/src/bitpal.rs#L28-L29][corresponding code]] now takes 20 operations, exactly the same number as
+Myers' code. (This is more than the 15 resp. 16 operations that are needed when
+the pattern is less than 64 characters long, since the carries between adjacent
+words have quite some overhead.)
+
 #+begin_src rust
 pub fn compute_block<P: Profile, H: HEncoding>(h0: &mut H, v: &mut V, ca: &P::A, cb: &P::B) {
     let eq = P::eq(ca, cb); // this one is not counted as an operation
@@ -123,7 +127,7 @@ pub fn compute_block<P: Profile, H: HEncoding>(h0: &mut H, v: &mut V, ca: &P::A,
     let ris = !eq;
     let notmi = ris | vmz;
     // NEW: We add an additional carry when the input difference is 0 or +1.
-    let carry = h0.z() | h0.p();
+    let carry = h0.z() + h0.p();
     let masksum = notmi.wrapping_add(vmz).wrapping_add(carry) & ris;
     let hz = masksum ^ notmi ^ vm;
     let hp = vm | (masksum & vmz);
@@ -138,5 +142,18 @@ pub fn compute_block<P: Profile, H: HEncoding>(h0: &mut H, v: &mut V, ca: &P::A,
 }
 #+end_src
 
+* Outlook
+
+I should benchmark the BitPAl code compared to Myers' bitpacking. But since they
+use the same number of instructions, I doubt performance will differ much if at
+all. Maybe one of the two allows for slightly better pipelining though.
+
+More importantly: a lot of instructions (6/20) are spent on carrying bits
+between words. It should be possible to reduce this. In [[setup]] the vertical delta
+on the left can take $3$ possible values and hence requires $2$ bits to encode.
+But if we were to take the delta along a diagonal edge as input, there can be
+only $2$ possible values and a single bit is sufficient to encode this
+information. This way it may be possible to process a $1\times 63$ block using 2
+to 4 fewer instructions, which could give up to $20\%$ speedup.
 
 #+print_bibliography:
