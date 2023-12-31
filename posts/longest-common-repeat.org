@@ -1,0 +1,74 @@
+#+title: Notes on implementing Longest Common Repeat (LCR)
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: lcr
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2023-12-06>
+#+author: Ragnar Groot Koerkamp
+
+These are my running notes on implementing an algorithm for Longest Common
+Repeat using minimizers.
+
+* Notes
+** Coloured Tree Problem
+See Lemma 3 at [[https://drops.dagstuhl.de/storage/00lipics/lipics-vol105-cpm2018/LIPIcs.CPM.2018.23/LIPIcs.CPM.2018.23.pdf][here]]
+** Generic sparse suffix array
+
+- paper: https://arxiv.org/pdf/2310.09023.pdf
+- code: https://github.com/lorrainea/SSA/blob/main/PA/ssa.cc
+
+For random strings and $b \leq n / \log n$, direct radix sort on $2\log n + \log
+\log n$-bit
+prefixes is sufficient for $O(n)$ runtime. In fact, since computer word size
+$w\geq \log n$, we only need at most $2$ rounds of radix sort!  (See simple-saca.)
+
+** Sparse suffix array on minimizers
+
+1. Fix $w$, the window length, and $k$, the minimizer length.
+2. Find all minimizers. We expect a density of $2/w$, and there is one at least
+   every $w$ positions.
+3. Radix sort the suffixes of length $2\cdot w$ starting at each minimizer in
+   $O(2/w \cdot 2w \cdot n) = O(n)$ time.
+4. Use prefix doubling to resolve missing elements.
+
+
+* Discussion / TODOs
+- Write kmer code to actually do LCR
+- Bench against =divsufsort=
+- Solons papers on rotations instead of minimizers:
+  - https://github.com/solonas13/bd-anchors/tree/master
+  - https://github.com/lorrainea/BDA-index
+  - https://dl.acm.org/doi/10.14778/3598581.3598586
+- Linear time LCS from SA:
+  - Kasai et al
+  - https://github.com/solonas13/bd-anchors/blob/20dece7aa16a7df4fd322794d07a7497b3d4039a/bd-index/index.cc#L83
+- Minimizer-space suffix array?
+- Fast SSA:
+  - First one round of radix sort
+  - Then comparison-sort on small context. (Or more radix sort rounds?)
+  - Then fall back to PA.
+- Can we be $o(n)$ and avoid hashing the full string? Maybe some kind of lazy
+  hashing? (I.e. only cache parts of the hash that are actually computed?) Maybe
+  in a lazy segment-tree-like structure, where nodes are only computed on demand.
+- Binary search $l$ for LCR length. (Try $n/2$, $n/4$, $n/8$, ...)
+  - Reuse minimizer for fixed $k$, varying the window size.
+- $O(m + \log n)$ mapping
+- Compute matching statistics: for strings $A$ and $B$, for each $A[i..]$ the
+  longest common prefix with some suffix of $B$.
+- Segtree for caching rolling hashes.
+- Minimizer doubling
+- Fir radix sort, only then sort unresolved suffices using minimizer doubling or PA.
+- NtHash2 for longer hashes
+- NtHash for minimizers
+  https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8
+
+** Evals
+- Plot space/time tradeoff in $l$
+- Plot space/time in $n$
+- Compare to full SA/LCP construction algorithm
+
+
+
+#+print_bibliography:
