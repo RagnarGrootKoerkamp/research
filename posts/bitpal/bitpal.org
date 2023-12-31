@@ -12,8 +12,7 @@ operation version of [cite/t:@myers99] bitpacking algorithm, which uses $16$
 operations when modified for edit distance.
 
 I tried implementing it, but it seems to have a bug that I will describe below.
-It may well be that the bug is in my understanding of the code rather than the
-code itself.
+The fix is [[*Found the bug][here]].
 
 * Problem
 
@@ -67,11 +66,11 @@ and $SD = 00000101_2$ (the first position corresponds to the least significant d
 
 Now let's run through the code.
 
-1. $M_m = 00100100 | 0 = 00100100$
+Note: $\wedge$ is xor, and $\&$ is and.
+
+1. $M_m = M|D = 00100100 | 0 = 00100100$
 2. $R_{I|S} = \sim M_m = 11011011$
 3. $notM_I = R_{IS} | SD = R_{IS} | 0 = 11011011$
-
-   (Note, the paper writes $R_{IS}$ here but $R_{I|S}$ on the line above.)
 4. $R_{I|S}orS = notM_I \wedge D = notM_I \wedge 0 = 11011011$
 5. $Sum = notM_I + SD = 11011011 + 0 = 11011011$
 6. $MaskSum = Sum \& R_{I|S} = 11011011 \& 11011011 = 11011011$
@@ -101,6 +100,43 @@ output parameters, but the text accompanying the code seems to agree with my
 understanding. On the other hand, I did not fully understand the brief
 explanation regarding the runs of ones and how they are resolved by the
 summation step.
+
+* Found the bug
+
+I managed to find the but with the help of Gary Benson (author of BitPAl).
+He was so kind to upload his code to [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations][github]].
+
+- His implementation has an additional [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations/blob/main/bitwise%20edit%20distance%20alignment%20multiple%20word%20clean.c#L134-L139]['fake' column]] before column $0$ without any matches, and which [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations/blob/main/bitwise%20edit%20distance%20alignment%20multiple%20word%20clean.c#L134-L139][decreases]] from $DP[-1][0]=1$ to $DP[0][0] = 0$.
+- An [[https://github.com/Benson-Genomics-Lab/Bitwise-Edit-Distance-Unit-Cost-15-Operations/blob/9abf0e8d2b6f0e3f55bd54c725a17c116e9fb154/bitwise%20edit%20distance%20alignment%20multiple%20word%20clean.c#L252-L255][additional carry bit]] is needed for the addition.
+
+In fact, we don't need to store the carry explicitly. It turns out the carry is
+$1$ exactly when the vertical difference at the start is either $0$ or $1$.
+So the new addition rule is:
+$$Sum = notM_I + SD + [VC_0 == 0 | VC_0 == 1]$$
+
+The [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner/blob/bc0e73d5ff46ffe4829432ccd370821505cb6d7c/pa-bitpacking/src/bitpal.rs#L28-L29][corresponding code]] now takes 20 operations, exactly the same number as Myers' code:
+#+begin_src rust
+pub fn compute_block<P: Profile, H: HEncoding>(h0: &mut H, v: &mut V, ca: &P::A, cb: &P::B) {
+    let eq = P::eq(ca, cb); // this one is not counted as an operation
+    let (vm, vmz) = v.m_mz();
+    let eq = eq | vm;
+    let ris = !eq;
+    let notmi = ris | vmz;
+    // NEW: We add an additional carry when the input difference is 0 or +1.
+    let carry = h0.z() | h0.p();
+    let masksum = notmi.wrapping_add(vmz).wrapping_add(carry) & ris;
+    let hz = masksum ^ notmi ^ vm;
+    let hp = vm | (masksum & vmz);
+    let hzw = hz >> (W - 1);
+    let hpw = hp >> (W - 1);
+    let hz = (hz << 1) | h0.z();
+    let hp = (hp << 1) | h0.p();
+    *h0 = H::from(hzw, hpw);
+    let vm = eq & hp;
+    let vmz = hp | (eq & hz);
+    *v = V::from(vm, vmz);
+}
+#+end_src
 
 
 #+print_bibliography:
