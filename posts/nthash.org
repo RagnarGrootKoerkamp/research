@@ -9,7 +9,7 @@
 #+author: Ragnar Groot Koerkamp
 
 * NtHash
-NtHash [cite:@nthash] is a rolling has suitable for hashing any kind of text, but made for DNA originally.
+NtHash [cite:@nthash] is a rolling hash suitable for hashing any kind of text, but made for DNA originally.
 For a string of length $k$ it is a $64$ bit value computed as:
 \begin{equation}
 h(x) = \bigoplus_{i=0}^{k-1} rot^i(h(x_i))
@@ -96,7 +96,7 @@ but that already took $4$ hours and going to $k=22$ would take $4$ times longer.
 
 A nicer approach is this: instead of trying all possibilities for $X$ and
 $Y$, we can split them into two halves $X = x + x'$ and
-$y = y + y'$ ($+$ is concatenation).
+$Y = y + y'$ ($+$ is concatenation).
 Then, we can iterate over all $x$ and $y$ and find all possible
 values of $h(x) \oplus h(y)$.
 Assume $k$ is even, so that $x$ and $y$ have length $k/2$.
@@ -149,23 +149,33 @@ B=\{rot^i(u) : 0\leq i < 32\} \cup \{rot^i(v) : 0\leq i < 32\}.
 If all these $64$ bit-vectors are linearly independent, the xors of all possible
 subsets are distinct, and no hash collisions are possible. If they are not
 independent, there is some collision.
-We can easily test whether the $64$ bitvectors are independent using Guassian
+We can easily test whether the $64$ bitvectors are independent using Gaussian
 Elimination.
 
 It turns out that just replacing $h(T)$ with the xor of the other characters
-results in a matrix of rank $63=64-1$, which is not invertable and has collisions.
+results in a matrix of rank $63=64-1$, which is not invertible and has collisions.
 Changing the last character of $h(A)$ for $4$ to $0$ fixes this.
 
 In fact, there is [[https://math.stackexchange.com/a/54248/91741][this math.stackexchange answer]] states that random
-binary matrices are invertable with probability at least $28\%$. Our matrices
+binary matrices are invertible with probability at least $28\%$. Our matrices
 are not completely random though (since rows are rotations of each other), but
 this makes me conjecture that indeed the probability that chosen $(h(A), h(C),
-h(G))$ result in an invertable matrix is at least $10\%$ or so.
+h(G))$ result in an invertible matrix is at least $10\%$ or so.
 
 * Alternatives
 An alternative to NtHash is simply taking the bit representation of a kmer and
 multiplying by a large random odd constant, as in =FxHash=. That is guaranteed
 to be injective. I plan to benchmark both methods.
 
+* SmHasher results
+I added NtHash to a [[https://github.com/RagnarGrootKoerkamp/smhasher/commits/nthash/][fork]] of SmHasher.
+Note that I convert each =&[u8]= input of arbitrary characters to a 4 times
+larger =&[u8]= containing only =ACTG=, since the =nthash= and
+=kmerutils= crates do not support arbitrary characters. This makes the tests
+quite slow, but I only care about quality for now.
+
+Results are [[https://github.com/RagnarGrootKoerkamp/smhasher/blob/nthash/doc/nthash.txt][here]]. NtHash fails almost all of the tests.
+
+* TODO benchmark NtHash, NtHash2, FxHash
 
 #+print_bibliography:
