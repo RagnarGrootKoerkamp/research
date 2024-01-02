@@ -1,5 +1,5 @@
-#+title: NtHash and robust minimizers
-#+HUGO_SECTION: notes
+#+title: NtHash and Robust Minimizers
+#+HUGO_SECTION: posts
 #+HUGO_TAGS: nthash
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
@@ -8,32 +8,162 @@
 #+date: <2023-12-31 Sun>
 #+author: Ragnar Groot Koerkamp
 
-Some NtHash resources and remarks [cite:@nthash;@nthash2]:
-- Nice rolling hash based on character string. Does not need the string representation.
-- Multiple implemenations available, also in Rust:
+* NtHash
+NtHash [cite:@nthash] is a rolling has suitable for hashing any kind of text, but made for DNA originally.
+For a string of length $k$ it is a $64$ bit value computed as:
+\begin{equation}
+h(x) = \bigoplus_{i=0}^{k-1} rot^i(h(x_i))
+\end{equation}
+where $h(x_i)$ assigns a fixed $64$ bit random value to each character, $rot^i$ rotates
+the bits $i$ places, and $\bigoplus$ is the xor over all terms.
+
+A nice property of NtHash is that is works well directly on uncompressed data,
+and hence can handle both DNA strings and other text.
+
+There is also NtHash2 [cite:@nthash2] which improves NtHash by increasing the
+period from $64$ bits to $31\cdot 33 = 1023$ bits and improves hashing of
+canonical kmers, but both these improvements are not relevant here.
+
+Some Rust implementations are available:
   - [[https://crates.io/crates/nthash][=nthash=]] crate
   - part of [[https://crates.io/crates/kmerutils][=kmerutils=]] crate
   - [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][Gist]] by Daniel Liu for computing robust minimizers.
 
-* Robust minimizers
-Robust minimizers only return the rightmost position of each window with a
-minimal hash. This works well, but loses correctness guaranteed when distinct
-kmers in a window have the same hash. (E.g. in the extreme case where the hash
-function always returns $0$, it clearly /does not/ work.)
+* Minimizers
+/Minimizers/ (also called /winnowing/) [cite:@winnowing] are a way to find /anchors/ in a text in
+predictable positions. Such anchors can be used for estimating similarity
+between sequences [cite:@minimizer-biased] and for sparse data structures [cite:@sampled-sa-minimizers].
 
-Alternative to NtHash is simply taking the bit representation of a kmer and
+Minimizers are defined in terms of the kmer length $k$ and the window length
+$w$, and a hash function $h$ on kmers.
+First, each kmer $k_i$ in the text is hashed to $h(k_i)$.
+Then, for each window of $w$ consecutive kmers, the rightmost kmer with minimal
+hash is stored.
+
+** Robust minimizers
+Minimizers have the problem that they do not compress repetitive regions.
+
+/Robust minimizers/ improves over minimizers by reusing previously chosen
+minimizers if possible: if the minimizer of the preceding window also minimizes
+the hash in the current window, always choose that kmer instead of the
+rightmost minimizer.
+
+This works well, but introduces an edge case when distinct
+kmers in a window have the same hash. In this case, some specific kmer with
+minimal hash could be skipped because other kmers around it have the same hash.
+That is bad for exact applications like building a suffix array, where all
+distinct kmer strings are required.
+
+Thus, we would like our hash function to be injective on kmers to avoid this.
+(An alternative is to order kmers by =(h(kmer), kmer)= instead of just
+=h(kmer)=, but this introduces computational overhead in a hot loop.)
+
+* Is NtHash injective on kmers?
+Clearly NtHash is not injective in general, since for $k>32$ there are more than
+$2^{64}$ kmers and only $2^{64}$ possible hashes. But for $k\leq 32$ it would be
+nice to know whether NtHash is indeed injective.
+
+It turns out that:
+- NtHash is injective on kmers for $k\leq 22$.
+- There is a hash collision for $k=23$, and hence also for all larger $k$.
+  Specifically:
+  #+begin_src rust
+  nthash(b"AAGCAACAAAAGAAAGCAAAGAA") == nthash(b"CATTCAGAGTCTTTGTGGATTAC");
+  #+end_src
+
+The good news is that with a simple modification to the randomly chosen
+parameters, we can prove that NtHash is injective for $k$ up to $32$.
+
+#+caption: Fixed NtHash parameters: change the last hex digit of $h(A)$ from $4$ to $0$, and make $h(T)$ the xor of the other values.
+#+begin_src rust
+//  a = 0x3c8b_fbb3_95c6_0474; (old)
+let a = 0x3c8b_fbb3_95c6_0470;
+let c = 0x3193_c185_62a0_2b4c;
+let g = 0x2032_3ed0_8257_2324;
+//  t = 0x2955_49f5_4be2_4456; (old)
+let t = a ^ c ^ g;
+#+end_src
+
+** Searching for a collision
+A first step is a brute force search: Iterate over all kmers, store their
+hashes, and find duplicates by sorting the list. This works up to
+$k=16$, where we store $4^{16} \cdot 8B = 32GB$ of hashes.
+
+We can improve a bit on this, by only storing hashes at most $2^{64} / 2^{a}$
+for e.g. $a=10$. This reduces memory usage by a factor $1024$, at the cost of
+only finding collisions in small hashes. I could get this to work up to $k=21$,
+but that already took $4$ hours and going to $k=22$ would take $4$ times longer.
+
+A nicer approach is this: instead of trying all possibilities for $X$ and
+$Y$, we can split them into two halves $X = x + x'$ and
+$y = y + y'$ ($+$ is concatenation).
+Then, we can iterate over all $x$ and $y$ and find all possible
+values of $h(x) \oplus h(y)$.
+Assume $k$ is even, so that $x$ and $y$ have length $k/2$.
+At first it seems that we still have to iterate over all possibilities for
+$2\cdot (k/2) = k$ characters, but we can do better!
+NtHash is linear, and the characters at each position can be considered
+independently:
+\begin{align*}
+h(x)\oplus h(y)
+ &= \left(\bigoplus_{i=0}^{k/2-1} rot^i(h(x_i))\right) \oplus \left(\bigoplus_{i=0}^{k/2-1} rot^i(h(y_i))\right)\\
+ &= \bigoplus_{i=0}^{k/2-1} rot^i\big(h(x_i) \oplus h(y_i)\big)
+\end{align*}
+While $x_i$ and $y_i$ have a total of $4\times 4 = 16$ possibilities, the number
+of possibilities for $h(x_i) \oplus h(y_i)$ is much smaller: =AA=, =CC=, =GG=,
+=TT= all have value $0$, and all other values come in pairs such as =AC= and =CA=.
+In total only $7$ distinct combinations remain: =AA=, =AC=, =AG=, =AT=, =CG=, =CT=, =GT=.
+This means that we only have to iterate over $7^{k/2}$ possibilities, which is
+much smaller than $16^{k/2}$. ($2.8\cdot 10^{14}$ vs $1.4\cdot 10^{10}$ for $k=24$.)
+
+The algorithm now works by listing all $7^{k/2}$ possible values of $h(x) \oplus
+h(y)$, and all possible values of $rot^{k/2}(h(x') \oplus h(y'))$, and then
+checking for collisions.
+- If there are no collisions, we can be sure that NtHash is injective for $k$.
+- If there are collisions, we can reconstruct $X$ and $Y$ of length $k$ such
+  that $h(X) = h(Y)$.
+As before, we have to only store hashes below some threshold to save memory for
+$k=24$, but it turns out this is still good enough: Up to $k=22$ there are no
+collisions, but we do find some collisions at $k=24$. One of these collisions
+ends in the same character so is actually already a collision for $k=23$ as
+shown before.
+
+** Proving perfection
+Let's replace the original value of $h(T)$ by $h(T) = h(A) \oplus h(C) \oplus h(G)$.
+Now, $h(X_i) \oplus h(Y_i)$ can take only four distinct values:
+\begin{align*}
+h(A) \oplus h(A) = h(C) \oplus h(C) &= h(G) \oplus h(G) = h(T) \oplus h(T) = 0,\\
+h(A) \oplus h(C) = h(G) \oplus h(T) &=:u,\\
+h(A) \oplus h(G) = h(C) \oplus h(T) &=:v,\\
+h(A) \oplus h(T) = h(C) \oplus h(G) &=u\oplus v.
+\end{align*}
+This means that the four options split into two binary choices: $\{0, u\} \oplus \{0, v\}$.
+The set of all possible values of $h(X) \oplus h(Y)$ is thus all linear
+combinations of the $32$ rotations of $u$ and the $32$ rotations of $v$. I.e. we
+have a linear space with basis
+\begin{align*}
+B=\{rot^i(u) : 0\leq i < 32\} \cup \{rot^i(v) : 0\leq i < 32\}.
+\end{align*}
+If all these $64$ bit-vectors are linearly independent, the xors of all possible
+subsets are distinct, and no hash collisions are possible. If they are not
+independent, there is some collision.
+We can easily test whether the $64$ bitvectors are independent using Guassian
+Elimination.
+
+It turns out that just replacing $h(T)$ with the xor of the other characters
+results in a matrix of rank $63=64-1$, which is not invertable and has collisions.
+Changing the last character of $h(A)$ for $4$ to $0$ fixes this.
+
+In fact, there is [[https://math.stackexchange.com/a/54248/91741][this math.stackexchange answer]] states that random
+binary matrices are invertable with probability at least $28\%$. Our matrices
+are not completely random though (since rows are rotations of each other), but
+this makes me conjecture that indeed the probability that chosen $(h(A), h(C),
+h(G))$ result in an invertable matrix is at least $10\%$ or so.
+
+* Alternatives
+An alternative to NtHash is simply taking the bit representation of a kmer and
 multiplying by a large random odd constant, as in =FxHash=. That is guaranteed
-to be injective.
+to be injective. I plan to benchmark both methods.
 
-* Is NtHash injective?
-Specifically for $k\leq 32$-mers.
-- A brute force search shows no collisions for $k\leq 16$. Afterwards my machine
-  runs out of memory.
-- If we had $h(A) \oplus h(C) \oplus h(G) \oplus h(T) = 0$, it would be easy to
-  prove/disprove injectiveness using Gaussian elimination. Alas this is not the
-  case with default parameters, but we could enforce this and see what happens.
-- Can we prove injectiveness for the current parameters? It's very unclear to me
-  and does not seem straightforward.
-- Does it pass SmHasher?
 
 #+print_bibliography:
