@@ -1,0 +1,296 @@
+#+title: One Billion Row Challenge
+#+HUGO_SECTION: posts
+#+HUGO_TAGS: performance
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-03 Wed>
+#+author: Ragnar Groot Koerkamp
+
+Since everybody is doing it, I'm also going to take a stab at the
+[[https://www.morling.dev/blog/one-billion-row-challenge/][One Billion Row Challenge]].
+
+Rules I set for myself:
+- Rust (of course)
+- External libraries are allowed at first for convenience.
+
+This post is a log of ideas, timings, and general progress.
+
+My processor is a =i7-10750H CPU @ 2.6GHz=
+- Clock speed is capped at =3.60GHz=. (It can run
+at =4.6GHz=, but =3.6GHzz= is more stable for benchmarking.)
+- $64GB$ ram.
+- It has 6 cores.
+- Hyperthreading is disabled initially. (I may try enabling it later.)
+- The file should be cached in memory by the OS.
+
+Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
+
+* The problem
+*Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
+- First a city name. There are $413$ cities, and each row has name chosen at
+  random from the set. Their lengths are from $3$ to $33$ bytes.
+- Then a temperature, formatted as =-?\d?\d?\d(,\d)?=, i.e. a possibly negative number
+  with one to three integral digits and at most one decimal. (I'm not exactly
+  sure whether the orignal java generator is likely to include numbers over $100$.)
+  Each temperature is drawn from a normal distribution for each city.
+
+*Output:* a sorted list of cities of the form =Amsterdam: <min>/<avg>/<max>=,
+each formatted with one decimal place.
+
+* Initial solution: 105s
+Here's a first version. zero optimizations.
+
+#+caption: [[https://github.com/RagnarGrootKoerkamp/1brc/commit/1a812863d277f0f98c7a07abbd590ba34abd9cf4][Commit]].
+#+begin_src rust
+use std::{collections::HashMap, env::args, io::Read};
+
+struct Record {
+    count: u32,
+    min: f32,
+    max: f32,
+    sum: f32,
+}
+
+impl Record {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            min: 1000.0,
+            max: -1000.0,
+            sum: 0.0,
+        }
+    }
+    fn add(&mut self, value: f32) {
+        self.count += 1;
+        self.sum += value;
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+    }
+    fn avg(&self) -> f32 {
+        self.sum / self.count as f32
+    }
+}
+
+fn main() {
+    let filename = args().nth(1).unwrap_or("measurements.txt".to_string());
+    let mut data = String::new();
+    {
+        let mut file = std::fs::File::open(filename).unwrap();
+        file.read_to_string(&mut data).unwrap();
+    }
+    let mut h = HashMap::new();
+    for line in data.trim().split('\n') {
+        let (name, value) = line.split_once(';').unwrap();
+        let value = value.parse::<f32>().unwrap();
+        h.entry(name).or_insert(Record::default()).add(value);
+    }
+
+    let mut v = h.into_iter().collect::<Vec<_>>();
+    v.sort_unstable_by_key(|p| p.0);
+    for (name, r) in v {
+        println!("{name}: {:.1}/{:.1}/{:.1}", r.min, r.avg(), r.max);
+    }
+}
+#+end_src
+
+* First flamegraph
+Let's see what's slow here: =cargo flamegraph --open= (or =just flamegraph=).
+
+#+caption: A flamegraph. Open in a new tab to see the interactive version with zooming and =ctrl-F= support.
+#+attr_html: :class inset large
+[[file:flame1.svg]]
+
+Takeaways:
+- =35%= of time is =next_match=, i.e. searching for =\n= and/or =;=.
+- =14%= of time is parsing the =f32=.
+- =35%= of time is accessing the hashmap.
+- Not sure what exactly is the remainder. We'll figure that out once it becomes relevant.
+
+* Bytes instead of strings: 72s
+Strings in rust are checked to be valid UTF8. Using byte slices (=&[u8]=) is
+usually faster. We have to do some slightly ugly conversions from byteslice back
+to strings for parsing floats and printing, but it's worth it. This basically
+removes =next_match= from the flamegraph.
+
+[[https://github.com/RagnarGrootKoerkamp/1brc/commit/99719930e96aca07ec0147403ef9a4b7c80b4ba5][Commit here]]. (It's neither pretty nor interesting.)
+
+This already saves 21 seconds, from 105 to 84. Pretty great!
+
+* Manual parsing: 61s
+Instead of parsing the input as =f32= float, we can parse manually to a
+fixed-precision =i32= signed integer
+
+#+caption: A custom parsing function using matching on the pattern. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/1fd779a2ae175b733793ca10ec94c73b769fee5e][commit]].
+#+begin_src rust
+type V = i32;
+fn parse(mut s: &[u8]) -> V {
+    let neg = if s[0] == b'-' {
+        s = &s[1..];
+        true
+    } else {
+        false
+    };
+    // s = abc.d
+    let (a, b, c, d) = match s {
+        [c, b'.', d] => (0, 0, c - b'0', d - b'0'),
+        [b, c, b'.', d] => (0, b - b'0', c - b'0', d - b'0'),
+        [a, b, c, b'.', d] => (a - b'0', b - b'0', c - b'0', d - b'0'),
+        [c] => (0, 0, 0, c - b'0'),
+        [b, c] => (0, b - b'0', c - b'0', 0),
+        [a, b, c] => (a - b'0', b - b'0', c - b'0', 0),
+        _ => panic!("Unknown patters {:?}", std::str::from_utf8(s).unwrap()),
+    };
+    let v = a as V * 1000 + b as V * 100 + c as V * 10 + d as V;
+    if neg {
+        -v
+    } else {
+        v
+    }
+}
+#+end_src
+
+* Inline hash keys: 50s
+Currently the hashmap is from =&str= to =Record=, where all =&str= are slices of
+the input string. All this indirection is probably slow.
+So we instead would like to store keys inline as =[u8; 8]= (basically a =u64=).
+It turns out that the first 8 characters of each city name are almost enough for
+uniqueness. Only =Alexandra= and =Alexandria= coincide, so we'll xor in the
+length of the string to make them unique.
+One drawback is that the hashmap must now store the full name corresponding to
+the key as well.
+
+#+caption: The new key function. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/783d3b35808c711f5fdff2be23e1948806dc582d][commit]].
+#+begin_src diff
++fn to_key(name: &[u8]) -> u64 {
++    let mut key = [0u8; 8];
++    let l = name.len().min(8);
++    key[..l].copy_from_slice(&name[..l]);
++    key[0] ^= name.len() as u8;
++    u64::from_ne_bytes(key)
++}
+ ...
+-        h.entry(name).or_insert(Record::default()).add(parse(value));
++        h.entry(to_key(name))
++            .or_insert((Record::default(), name))
++            .0
++            .add(parse(value));
+#+end_src
+
+* Faster hash function: 41s
+The default hash table in rust uses a pretty slow hash function. Let's instead
+use =fxhash::FxHashMap=. For =u64= keys, the hash function is simply
+[[https://nnethercote.github.io/2021/12/08/a-brutally-effective-hash-function-in-rust.html][multiplication by a constant]]. This gives another 10 seconds speedup.
+
+#+caption: Switching to =FxHash.= [[https://github.com/RagnarGrootKoerkamp/1brc/commit/aa308e1876fd27caeea73e0a1dfc95023d2c9ecb][commit]].
+#+begin_src diff
+-    let mut h = HashMap::new();
++    let mut h = FxHashMap::default();
+#+end_src
+
+* A new flame graph
+Now that we've addressed the obvious hot parts, let's make a new graph.
+
+#+caption: A useless flamegraph.
+#+attr_html: :class inset large
+[[file:flame2.svg]]
+
+Yeah well great... I suppose everything is inlined or so. But actually the
+debuginfo should still be there. idk...
+
+* Perf it is
+
+=cargo flamegraph= uses =perf record= under the hood. So we can just =perf
+report= and see what's there.
+
+Some snippets. Numbers on the left are percentage of samples on that line.
+#+caption: 13% of time is spent looking for newlines.
+#+begin_src asm
+  3.85 │2d0:┌─→movzbl       0x0(%rbp,%rbx,1),%r15d // read a byte
+  1.24 │    │  cmp          $0xa,%r15b             // compare to \n
+  0.69 │    │↓ je           300                    // handle the line if \n
+  2.07 │    │  inc          %rbx                   // increment position
+       │    ├──cmp          %rbx,%rcx              // compare to end of data
+  5.43 │    └──jne          2d0                    // next iteration
+#+end_src
+
+#+caption: 15% of time is spent looking for semicolons.
+#+begin_src asm
+  6.25 │330:┌─→cmpb         $0x3b,0x0(%rbp,%r13,1) // read a byte
+  3.40 │    │↓ je           350                    // handle if found
+  3.28 │    │  inc          %r13                   // increment position
+       │    ├──cmp          %r13,%rbx              // compare to length of the line
+  2.53 │    └──jne          330                    // next iteration
+       │     ↓ jmp          c0e                    // fall through to panic handler
+#+end_src
+
+#+caption: Converting from =[u8; 8]= to =u64=, i.e. an unaligned read, is surprisingly slow?
+#+begin_src asm
+       │     key[0] ^= name.len() as u8;
+  3.79 │       xor          %r13b,0x40(%rsp)
+       │     u64::from_ne_bytes(key)
+ 11.77 │       mov          0x40(%rsp),%r12       
+#+end_src
+
+Then there are quite some instructions for indexing the hash table, adding to
+around 20% in total.
+
+Parsing takes around 5%.
+
+* Something simple: allocating the right size: 41s
+We can =stat= the input file for its size and allocate exactly the right amount of space.
+This saves around half a second.
+
+#+caption: reserving space
+#+begin_src diff
+     let mut data = vec![];
++    let stat = std::fs::metadata(filename).unwrap();
++    data.reserve(stat.len() as usize + 1);
+     let mut file = std::fs::File::open(filename).unwrap();
+     file.read_to_end(&mut data).unwrap();
+#+end_src
+
+* =memchr= for scanning: 47s
+=memchr(byte, text)= is a =libc= function that returns the first index of the
+byte in the text.
+But well.. it turns out this is a non-inlined function call after all and things
+slow down. But anyway, here's the diff:
+
+#+caption: Switching to =FxHash.= [[https://github.com/RagnarGrootKoerkamp/1brc/commit/f35a84de1f8e64433358013321b637d4bb91621d][commit]].
+#+begin_src diff
+     let mut h = FxHashMap::default();
+-    for line in data.split(|&c| c == b'\n') {
+-        let (name, value) = line.split_once(|&c| c == b';').unwrap();
++    let mut data = &data[..];
++    loop {
++        let Some(separator) = memchr(b';', data) else {
++            break;
++        };
++        let end = memchr(b'\n', &data[separator..]).unwrap();
++        let name = &data[..separator];
++        let value = &data[separator + 1..separator + end];
+         h.entry(to_key(name))
+             .or_insert((Record::default(), name))
+             .0
+             .add(parse(value));
++        data = &data[separator + end + 1..];
+     }
+#+end_src
+
+* =memchr= crate: 29s
+It also turns out the default =memchr= function doesn't use SIMD. But there is
+the nice [[https://crates.io/crates/memchr][=memchr= crate]] which is heavily optimized and does use SIMD.
+
+This brings us down from the previous best of 42s to 29s!
+
+* =get_unchecked=: 28s
+By default all array accesses are bound checked. We don't really need that.
+Removing them saves half a second.
+
+The code is now a bit uglier sadly: [[https://github.com/RagnarGrootKoerkamp/1brc/commit/cf7d1b21508519e7fdbdef281f2b383bcde6e38b][commit]].
+
+* TODO: =rayon= for parallelization
+This should be fairly straightforward and give 6x speedup. If I go to 4.6GHz
+it's 22s currently, so that would be around 3.5s after parallelization. Not bad,
+but my goal would be 1s really.
