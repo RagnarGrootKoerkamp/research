@@ -493,8 +493,8 @@ Observe:
 It would be much better to use a perfect hash function that we build once. Then
 none of these equality checks are needed.
 
-For this, I will use [[https://github.com/RagnarGrootKoerkamp/PTRHash][PtrHash]], a (minimal) perfect hash function based on [[https://github.com/jermp/pthash][pthash]]
-([[https://dl.acm.org/doi/10.1145/3404835.3462849][paper]]):
+For this, I will use [[https://github.com/RagnarGrootKoerkamp/PTRHash][PtrHash]], a (minimal) perfect hash function I developed based on [[https://github.com/jermp/pthash][PtHash]]
+([[https://dl.acm.org/doi/10.1145/3404835.3462849][PtHash paper]]; I'm still to write a paper on PtHash):
 1. Find all city names the first 100k rows. Since each row has a random city,
    all names will occur here.
 2. Build a perfect hash function. For the given dataset, PtrHash outputs a
@@ -651,7 +651,7 @@ let v = a as V * 1000 * (s.len() >= 5) as V
 #+end_src
 
 
-* Purging all branches: 1.7s
+* Purging all branches: 1.67s
 The remaining branch misses are in the =while eq_sep == 0= in the scanning for
 =;= and =\n= characters ([[*Manual SIMD: 29s]]).
 Since cities and temperatures have variable
@@ -819,6 +819,21 @@ indeed branchless, and only 87 instructions long.
   0.09 │    └──jb           210       
 #+end_src
 
+* Some more attempts
 Possible improvements at this point are increasing parallelism to get more than
 2.49 instructions per cycle, and increasing parallelism by using SIMD to process
 multiple lines at a time.
+
+I quickly hacked something that splits the =data: &[u8]= for each thread into
+two to four chunks that are processed at the same time, hoping multiple
+independent code paths would improve parallelism, but that didn't work out
+immediately. Probably I need to interleave all the instructions everywhere, and
+manually use SIMD where possible, which is slightly annoying and for a later time.
+
+I also know that the PtrHash perfect hash function contains a few redundant
+instructions that are needed in the general case but not here. Removing those
+would be nice.
+
+* Conclusion @ 4.6GHz: 7.5s/1.43s on 1/6 cores
+Boosting CPU frequency all the way to the max, I get 7.5s for the
+single-threaded variant, and 1.43s for the multithreaded variant.
