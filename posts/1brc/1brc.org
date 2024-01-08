@@ -34,8 +34,8 @@ at =4.6GHz= later, but =3.6GHzz= tends to be more stable for benchmarking.)
 Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 
 Best results for my processor, at =4.6GHz=:
-- 7.5s single threaded,
-- 1.43 on 6 threads.
+- 7.0s single threaded,
+- 1.33 on 6 threads.
 
 * The problem
 *Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
@@ -840,6 +840,10 @@ I also know that the PtrHash perfect hash function contains a few redundant
 instructions that are needed in the general case but not here. Removing those
 would be nice.
 
-* Conclusion @ 4.6GHz: 7.5s/1.43s on 1/6 cores
+* Faster perfect hashing: 1.55s
+Turns out I added a function to =PtrHash= for lookups on small tables, but
+wasn't actually using it. Saves some cycles again :)
+
+* Conclusion @ 4.6GHz: 7.0s/1.33s on 1/6 cores
 Boosting CPU frequency all the way to the max, I get 7.5s for the
 single-threaded variant, and 1.43s for the multithreaded variant.
