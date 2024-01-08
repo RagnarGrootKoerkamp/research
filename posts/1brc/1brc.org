@@ -16,16 +16,17 @@ Rules I set for myself:
 - External libraries are allowed at first for convenience.
 - I'm assuming that the set of cities is fixed.
   - Or at least, that each row is sampled randomly from the set of available cities.
-  - Or really, I'm just scanning a prefix until I hit all 413 of them.
+  - Or really, I'm just scanning a prefix of 100k rows, assuming all cities
+    appear there.
 
 This post is a log of ideas, timings, and general progress.
 
 My processor is a =i7-10750H CPU @ 2.6GHz=
 - Clock speed is capped at =3.60GHz=. (It can run
-at =4.6GHz=, but =3.6GHzz= is more stable for benchmarking.)
+at =4.6GHz= later, but =3.6GHzz= tends to be more stable for benchmarking.)
 - $64GB$ ram.
 - It has 6 cores.
-- Hyperthreading is disabled initially. (I may try enabling it later.)
+- Hyperthreading is disabled.
 - The file should be cached in memory by the OS.
 
 Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
@@ -208,7 +209,7 @@ debuginfo should still be there. idk...
 report= and see what's there.
 
 Some snippets. Numbers on the left are percentage of samples on that line.
-#+caption: 13% of time is spent looking for newlines.
+#+caption: The column on the left indicates that in total 13% of time is spent looking for newlines.
 #+begin_src asm
   3.85 │2d0:┌─→movzbl       0x0(%rbp,%rbx,1),%r15d // read a byte
   1.24 │    │  cmp          $0xa,%r15b             // compare to \n
@@ -293,7 +294,531 @@ Removing them saves half a second.
 
 The code is now a bit uglier sadly: [[https://github.com/RagnarGrootKoerkamp/1brc/commit/cf7d1b21508519e7fdbdef281f2b383bcde6e38b][commit]].
 
-* TODO: =rayon= for parallelization
-This should be fairly straightforward and give 6x speedup. If I go to 4.6GHz
-it's 22s currently, so that would be around 3.5s after parallelization. Not bad,
-but my goal would be 1s really.
+* Manual SIMD: 29s
+One 'problem' with =memchr= is that it is made for scanning long ranges, and is
+not super flexible. So let's roll our own.
+
+We make sure that =data= is aligned to SIMD boundaries and iterate over it $32$
+characters at a time. We check for all of them at once whether they equal each
+of them, and convert these results to a bitmask. The number of trailing zeros
+indicates the position of the match. If the bitmask is $0$, there are no matches
+and we try the next $32$ characters.
+
+This turns out to be slightly slower. I'm not exactly sure why, but we can
+profile and iterate from here.
+
+#+caption: Simd code to search for semicolon and newline characters. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/e19de571b13d967bde43b10cbfca107d2e9fd1fe][commit]].
+#+begin_src rust
+/// Number of SIMD lanes. AVX2 has 256 bits, so 32 lanes.
+const L: usize = 32;
+/// The Simd type.
+type S = Simd<u8, L>;
+
+/// Find the regions between \n and ; (names) and between ; and \n (values),
+/// and calls `callback` for each line.
+#[inline(always)]
+fn iter_lines<'a>(data: &'a [u8], mut callback: impl FnMut(&'a [u8], &'a [u8])) {
+    unsafe {
+        // TODO: Handle the tail.
+        let simd_data: &[S] = data.align_to::<S>().1;
+
+        let sep = S::splat(b';');
+        let end = S::splat(b'\n');
+        let mut start_pos = 0;
+        let mut i = 0;
+        let mut eq_sep = sep.simd_eq(simd_data[i]).to_bitmask();
+        let mut eq_end = end.simd_eq(simd_data[i]).to_bitmask();
+
+        // TODO: Handle the tail.
+        while i < simd_data.len() - 2 {
+            // find ; separator
+            // TODO if?
+            while eq_sep == 0 {
+                i += 1;
+                eq_sep = sep.simd_eq(simd_data[i]).to_bitmask();
+                eq_end = end.simd_eq(simd_data[i]).to_bitmask();
+            }
+            let offset = eq_sep.trailing_zeros();
+            eq_sep ^= 1 << offset;
+            let sep_pos = L * i + offset as usize;
+
+            // find \n newline
+            // TODO if?
+            while eq_end == 0 {
+                i += 1;
+                eq_sep = sep.simd_eq(simd_data[i]).to_bitmask();
+                eq_end = end.simd_eq(simd_data[i]).to_bitmask();
+            }
+            let offset = eq_end.trailing_zeros();
+            eq_end ^= 1 << offset;
+            let end_pos = L * i + offset as usize;
+
+            callback(
+                data.get_unchecked(start_pos..sep_pos),
+                data.get_unchecked(sep_pos + 1..end_pos),
+            );
+
+            start_pos = end_pos + 1;
+        }
+    }
+}
+#+end_src
+
+* Profiling
+Running =perf stat -d cargo run -r= gives:
+#+caption: Output of =perf stat= profiling.
+#+begin_src asm
+         28,367.09 msec task-clock:u                     #    1.020 CPUs utilized
+                 0      context-switches:u               #    0.000 /sec
+                 0      cpu-migrations:u                 #    0.000 /sec
+            31,249      page-faults:u                    #    1.102 K/sec
+    92,838,268,117      cycles:u                         #    3.273 GHz
+   153,099,184,152      instructions:u                   #    1.65  insn per cycle
+    19,317,651,322      branches:u                       #  680.988 M/sec
+     1,712,837,337      branch-misses:u                  #    8.87% of all branches
+    27,760,594,151      L1-dcache-loads:u                #  978.620 M/sec
+       339,143,832      L1-dcache-load-misses:u          #    1.22% of all L1-dcache accesses
+        25,000,151      LLC-loads:u                      #  881.308 K/sec
+         4,546,946      LLC-load-misses:u                #   18.19% of all L1-icache accesses #+end_src
+#+end_src
+Observe:
+- Actual cycles is only =3.3GHz=, whereas it should be =3.6GHz=. Not sure why;
+  might be waiting for IO.
+- =1.65= instructions per cycle is quite low. It can be up to 4 and is often at
+  least 2.5.
+- =8.87%= of branch misses is also quite high. Usually this is at most 1% and
+  typically lower. Each branch mispredict causes a stall of 5ns or so, which
+  is over 1 second total, but I suspect the impact is larger.
+- =18.19%= of last-level-cache load misses. Also quite high, but I'm not sure if
+  this is a problem, since the total number of LLC loads is relatively low.
+
+* Revisiting the key function: 23s
+Looking at =perf report= we see that the hottest instruction is a call to
+=memcpy= to read up to =name.len()= bytes from the =&[u8]= name to a =u64=.
+#+caption: 12% of time is spent on casting the name into a =u64=.
+#+begin_src asm
+       │      core::intrinsics::copy_nonoverlapping:
+  0.15 │        lea          0xa8(%rsp),%rdi
+  0.64 │        mov          %rsi,0x168(%rsp)
+  1.18 │        vzeroupper
+  0.68 │      → call         *0x46449(%rip)        # 5f8e8 <memcpy@GLIBC_2.14>
+ 11.31 │        mov          0xa8(%rsp),%r15
+  0.19 │        mov          %rbx,0x160(%rsp)      
+#+end_src
+
+We can avoid this =memcpy= call entirely by just doing a (possibly out of
+bounds) =u64= read of the name, and then shifting away bits corresponding to the
+out-of-bounds part. We'll also improve the hash to add the first and last (up
+to) 8 characters.
+
+#+caption: The new key function. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/6d41aa620d43080805baba420ac04469c27e1ef1][commit]].
+#+begin_src rust
+fn to_key(name: &[u8]) -> u64 {
+    // Hash the first and last 8 bytes.
+    let head: [u8; 8] = unsafe { *name.get_unchecked(..8).split_array_ref().0 };
+    let tail: [u8; 8] = unsafe { *name.get_unchecked(name.len() - 8..).split_array_ref().0 };
+    let shift = 64usize.saturating_sub(8 * name.len());
+    let khead = u64::from_ne_bytes(head) << shift;
+    let ktail = u64::from_ne_bytes(tail) >> shift;
+    khead + ktail
+}
+#+end_src
+
+This brings the runtime down from 28s to 23s!
+
+In =perf stat=, we can also see that the number of branches and branch-misses
+went down around 30%.
+
+* PtrHash perfect hash function: 17s
+
+Now, the hottest instructions are all part of the hashmap lookup.
+
+#+caption: The hasmap takes a lot of time. There are four instructions taking over 5% here, for a total of around 35% of runtime.
+#+begin_src asm
+       │      hashbrown::raw::RawTable<T,A>::find:
+  0.27 │        mov          (%rsp),%rcx
+  0.16 │        mov          0x8(%rsp),%rax
+       │      hashbrown::raw::h2:
+  0.41 │        mov          %rbp,%rdx
+  0.56 │        shr          $0x39,%rdx
+  1.19 │        mov          %rdx,0x158(%rsp)
+  0.13 │        vmovd        %edx,%xmm0
+  0.89 │        vpbroadcastb %xmm0,%xmm0
+  0.20 │        lea          -0x28(%rcx),%rdx
+  0.16 │        xor          %esi,%esi
+  0.16 │        mov          %rbp,%r11
+       │      hashbrown::raw::RawTableInner::find_inner:
+  1.41 │ 586:   and          %rax,%r11
+       │      core::intrinsics::copy_nonoverlapping:
+  3.29 │        vmovdqu      (%rcx,%r11,1),%xmm1
+       │      core::core_arch::x86::sse2::_mm_movemask_epi8:
+  5.60 │        vpcmpeqb     %xmm0,%xmm1,%xmm2                    ; compare key to stores keys
+  0.02 │        vpmovmskb    %xmm2,%r8d
+       │      hashbrown::raw::bitmask::BitMask::lowest_set_bit:
+  0.31 │        nop
+  0.97 │ 5a0:┌─→test         %r8w,%r8w
+       │     │<hashbrown::raw::bitmask::BitMaskIter as core::iter::traits::iterator::Iterator>::next:
+  0.80 │     │↓ je           5d0
+       │     │hashbrown::raw::bitmask::BitMask::lowest_set_bit:
+  5.59 │     │  tzcnt        %r8d,%r9d                            ; find position of match in bitmask
+       │     │hashbrown::raw::bitmask::BitMask::remove_lowest_bit:
+  0.03 │     │  blsr         %r8d,%r8d
+       │     │hashbrown::raw::RawTableInner::find_inner:
+  0.61 │     │  add          %r11,%r9
+  0.53 │     │  and          %rax,%r9
+       │     │core::ptr::mut_ptr::<impl *mut T>::sub:
+  1.93 │     │  neg          %r9
+       │     │core::ptr::mut_ptr::<impl *mut T>::offset:
+  0.57 │     │  lea          (%r9,%r9,4),%r9
+       │     │core::cmp::impls::<impl core::cmp::PartialEq for u64>::eq:
+  8.40 │     ├──cmp          %r14,(%rdx,%r9,8)                    ; check equal
+       │     │hashbrown::raw::RawTableInner::find_inner:
+  0.69 │     └──jne          5a0
+  0.11 │      ↓ jmp          600
+       │      core::core_arch::x86::sse2::_mm_movemask_epi8:
+       │        data16       cs nopw 0x0(%rax,%rax,1)
+  7.55 │ 5d0:   vpcmpeqb     -0x47c8(%rip),%xmm1,%xmm1            ; more equality checking
+  0.00 │        vpmovmskb    %xmm1,%r8d
+       │      hashbrown::raw::bitmask::BitMask::any_bit_set:
+       │     ┌──test         %r8d,%r8d
+       │     │hashbrown::raw::RawTableInner::find_inner:
+       │     ├──jne          6f6
+#+end_src
+Observe:
+- There is a loop for linear probing.
+- There are a lot of equality checks to test if a slot corresponds to the
+  requested key.
+- Generally, this code is long, complex, and branchy.
+
+It would be much better to use a perfect hash function that we build once. Then
+none of these equality checks are needed.
+
+For this, I will use [[https://github.com/RagnarGrootKoerkamp/PTRHash][PtrHash]], a (minimal) perfect hash function based on [[https://github.com/jermp/pthash][pthash]]
+([[https://dl.acm.org/doi/10.1145/3404835.3462849][paper]]):
+1. Find all city names the first 100k rows. Since each row has a random city,
+   all names will occur here.
+2. Build a perfect hash function. For the given dataset, PtrHash outputs a
+   metadata /pilot/ array of $63$ bytes.
+3. On each lookup, the =u64= hash is mapped to one of the $63$ /buckets/. Then
+   the hash is xored by =C * pilots[b]= where $C$ is a random mixing constant.
+   This is then reduced to an integer less than $512$, which is the index in the array
+   of =Records= we are looking for.
+
+   The pilots are constructed such that each hash results in a different index.
+
+The full code is [[https://github.com/RagnarGrootKoerkamp/1brc/commit/4b7970f5b2df6df623e0ee0bb4fddb4e01ca7ab0][here]].
+The diff in the hot loop is this.
+#+caption: Using a perfect hash function for lookups. Before, =h= was a =HashMap<u64, (Record, &str)>=. After, =records= is simply a =[Record; 512]=, and =phf.index(key)= is the perfect hash function.
+#+begin_src diff
+     let callback = |name, value| {
+         let key = to_key(name);
+-        let entry = h.entry(key).or_insert((Record::default(), name)).0;
++        let index = phf.index(&key);
++        let entry = unsafe { records.get_unchecked_mut(index) };
+         entry.add(parse(value));
+     };
+     iter_lines(data, callback);
+#+end_src
+
+In assembly code, it looks like this:
+#+caption: Assembly code for the perfect hash function lookup. Just note how short it is compared to the hash table. It's still 20% of the total time though.
+#+begin_src asm
+  0.24 │        movabs       $0x517cc1b727220a95,%rsi // Load the multiplication constant C
+  2.22 │        imul         %rsi,%rdx                // Hash the key by multiplying by C
+  0.53 │        mov          0xf8(%rsp),%rax          // Some instructions to compute bucket b < 63
+  3.16 │        mulx         %rax,%rax,%rax
+  0.55 │        mov          0x10(%rsp),%r8
+  5.67 │        movzbl       (%r8,%rax,1),%eax        // Read the pilot for this bucket. This is slow.
+  0.03 │        mov          0x110(%rsp),%r8
+  0.57 │        mulx         %r8,%r12,%r12
+  7.09 │        imul         %rsi,%rax                // Some instructions to get the slot < 512.
+  0.81 │        xor          %rdx,%rax
+  0.05 │        mov          %rax,%rdx
+  3.87 │        mulx         %rsi,%rdx,%rdx
+#+end_src
+
+The new running time is now 17s!
+
+* Larger masks: 15s
+Currently we store =u32= masks on which we do =.trailing_zeros()= to find
+character offsets. We can also check two =32= simd lanes in parallel and combine them into
+a single =u64= mask. This gives a small speedup, I think mostly because there
+are now slightly fewer branch-misses (593M now vs 675M before): [[https://github.com/RagnarGrootKoerkamp/1brc/commit/3a7fed3fb8c515fce738dfda22497de77a021269][commit]].
+
+* Reduce pattern matching: 14s
+I modified the [[https://github.com/coriolinus/1brc/blob/b6029edc63611f2a47c462f84a40bdca0de3eede/src/bin/generate.rs][generator]] I'm using to always print exactly one decimal. This
+saves some branches.
+
+#+caption: Assume fixed single-decimal formatting.
+#+begin_src diff
+     // s = abc.d
+     let (a, b, c, d) = match s {
+         [c, b'.', d] => (0, 0, c - b'0', d - b'0'),
+         [b, c, b'.', d] => (0, b - b'0', c - b'0', d - b'0'),
+         [a, b, c, b'.', d] => (a - b'0', b - b'0', c - b'0', d - b'0'),
+-        [c] => (0, 0, 0, c - b'0'),
+-        [b, c] => (0, b - b'0', c - b'0', 0),
+-        [a, b, c] => (a - b'0', b - b'0', c - b'0', 0),
++        // [c] => (0, 0, 0, c - b'0'),
++        // [b, c] => (0, b - b'0', c - b'0', 0),
++        // [a, b, c] => (a - b'0', b - b'0', c - b'0', 0),
+         _ => panic!("Unknown pattern {:?}", to_str(s)),
+     };
+#+end_src
+
+* Memory map: 12s
+Instead of first reading the file into memory and then processing that, we can
+memory map it and transparently read parts as needed. This saves the 2 seconds
+spent reading the file at the start.
+
+#+caption: memory mapping using =memmap2= crate.
+#+begin_src diff
+     let filename = &args().nth(1).unwrap_or("measurements.txt".to_string());
+-    let mut data = vec![];
++    let mut mmap: Mmap;
++    let mut data: &[u8];
+     {
+         let mut file = std::fs::File::open(filename).unwrap();
+         let start = std::time::Instant::now();
+-        let stat = std::fs::metadata(filename).unwrap();
+-        data.reserve(stat.len() as usize + 1);
+-        file.read_to_end(&mut data).unwrap();
++        mmap = unsafe { Mmap::map(&file).unwrap() };
++        data = &*mmap;
+         eprintln!("{}", format!("{:>5.1?}", start.elapsed()).bold().green());
+     }
+#+end_src
+
+* Parallelization: 2.0s
+Parallelizing code is fairly straightforward.
+First we split the data into one chunk per thread. Then we fire a thread for
+each chunk, each with its own vector to accumulate results. Then at the end each
+thread merges its results into the global accumulator.
+
+This gives pretty much exactly $6\times$ speedup on my 6-core machine, since
+accumulating is only a small fraction of the total time.
+
+#+caption: Code to process data in parallel.
+#+begin_src rust
+fn run_parallel(data: &[u8], phf: &PtrHash, num_slots: usize) -> Vec<Record> {
+    let mut slots = std::sync::Mutex::new(vec![Record::default(); num_slots]);
+
+    // Spawn one thread per core.
+    let num_threads = std::thread::available_parallelism().unwrap();
+    std::thread::scope(|s| {
+        let chunks = data.chunks(data.len() / num_threads + 1);
+        for chunk in chunks {
+            s.spawn(|| {
+                // Each thread has its own accumulator.
+                let thread_slots = run(chunk, phf, num_slots);
+
+                // Merge results.
+                let mut slots = slots.lock().unwrap();
+                for (thread_slot, slot) in thread_slots.into_iter().zip(slots.iter_mut()) {
+                    slot.merge(&thread_slot);
+                }
+            });
+        }
+    });
+
+    slots.into_inner().unwrap()
+}
+#+end_src
+
+* Branchless parsing: 1.7s
+The =match= statement on the number of digits in the temperature generated quite
+a lot of branches and =perf stat cargo run -r= was showing =440M= branch-misses,
+i.e. almost one every other line. That's about as bad as it can be with half the
+numbers having a single integer digit and half the numbers having two integer digits.
+
+I was able to pinpoint it to the branching by running =perf record -b -g  cargo
+run -r= followed by =perf report=.
+
+Changing this to a branch-less version is quite a bit faster, and now only
+=140M= branch-misses remain.
+
+#+caption: Branchless float parsing.
+#+begin_src rust
+// s = abc.d
+let a = unsafe { *s.get_unchecked(s.len() - 5) };
+let b = unsafe { *s.get_unchecked(s.len() - 4) };
+let c = unsafe { *s.get_unchecked(s.len() - 3) };
+let d = unsafe { *s.get_unchecked(s.len() - 1) };
+let v = a as V * 1000 * (s.len() >= 5) as V
+      + b as V * 100  * (s.len() >= 4) as V
+      + c as V * 10
+      + d as V;
+#+end_src
+
+
+* Purging all branches: 1.7s
+The remaining branch misses are in the =while eq_sep == 0= in the scanning for
+=;= and =\n= characters ([[*Manual SIMD: 29s]]).
+Since cities and temperatures have variable
+lengths, iterating over the input will always have to do some branching to
+move to the next bit of input or not.
+
+We can work around this by doing an independent scan for the next occurrence of
+=;= and =\n= in each iteration. It turns out the longest line in the input
+contains 33 characters including newline. This means that a single 32-character
+SIMD comparison is exactly sufficient to determine the next occurrence of each character.
+
+In code, it looks like this.
+
+#+caption:
+#+begin_src rust
+#[inline(always)]
+fn iter_lines<'a>(mut data: &'a [u8], mut callback: impl FnMut(&'a [u8], &'a [u8])) {
+    let sep = S::splat(b';');
+    let end = S::splat(b'\n');
+
+    // Find the next occurence of the given separator character.
+    let mut find = |mut last: usize, sep: S| {
+        let simd = S::from_array(unsafe { *data.get_unchecked(last..).as_ptr().cast() });
+        let eq = sep.simd_eq(simd).to_bitmask();
+        let offset = eq.trailing_zeros() as usize;
+        last + offset
+    };
+
+    // Pointers to the last match of ; or \n.
+    let mut sep_pos = 0;
+    let mut start_pos = 0;
+
+    while start_pos < data.len() - 32 {
+        // Both start searching from the last semicolon, so that the unaligned SIMD read can be reused.
+        sep_pos = find(sep_pos+1, sep) ;
+        let end_pos = find(sep_pos+1, end) ;
+
+        unsafe {
+            let name = data.get_unchecked(start_pos + 1..sep_pos);
+            let value = data.get_unchecked(sep_pos + 1..end_pos);
+            callback(name, value);
+        }
+
+        start_pos = end_pos;
+    }
+}
+#+end_src
+
+It turns out this does not actually give a speedup, but we will use this as a
+starting point for further improvements. Note also that =perf stat= changes
+considerably:
+
+#+caption: Selection of =perf stat= before and after
+#+begin_src txt
+BEFORE
+    35,409,579,588      cycles:u                         #    3.383 GHz
+    96,408,277,646      instructions:u                   #    2.72  insn per cycle
+     4,463,603,931      branches:u                       #  426.463 M/sec
+       148,274,976      branch-misses:u                  #    3.32% of all branches
+
+AFTER
+    35,217,349,810      cycles:u                         #    3.383 GHz
+    87,571,263,997      instructions:u                   #    2.49  insn per cycle
+     1,102,455,316      branches:u                       #  105.904 M/sec
+         4,148,835      branch-misses:u                  #    0.38% of all branches
+#+end_src
+Note:
+- The total CPU cycles is the same.
+- The number of instructions has gone down 10%.
+- The number of branches went from 4.4G (4 per line) to 1.1G (1 per line).
+- The number of branch-misses went from 150M (once every 7 lines) to 4M (once
+  every 250 lines).
+
+To illustrate, at this point the main loop looks like this. Note that it is
+indeed branchless, and only 87 instructions long.
+
+#+caption: Main loop of the program. The first column shows the percentage of time in each line.
+#+begin_src asm
+  0.48 │210:┌─→vpcmpeqb     %ymm1,%ymm0,%ymm0
+  1.16 │    │  vpmovmskb    %ymm0,%eax
+  1.03 │    │  tzcnt        %eax,%eax
+  0.11 │    │  mov          %rax,0x38(%rsp)
+  0.40 │    │  lea          (%r14,%rax,1),%r11
+  1.21 │    │  lea          (%r12,%r11,1),%r9
+  5.25 │    │  vmovdqu      0x2(%rdi,%r9,1),%ymm0
+  1.53 │    │  vpcmpeqb     %ymm2,%ymm0,%ymm3
+  0.45 │    │  vpmovmskb    %ymm3,%esi
+  2.20 │    │  tzcnt        %esi,%ebx
+  0.91 │    │  movzbl       0x2(%rdi,%r9,1),%esi
+  0.04 │    │  xor          %ebp,%ebp
+  0.43 │    │  cmp          $0x2d,%sil
+  1.56 │    │  sete         %bpl
+  0.93 │    │  mov          %rbx,%r10
+  0.06 │    │  mov          %r11,%rax
+  0.41 │    │  sub          %rbp,%rax
+  1.50 │    │  sub          %rbp,%r10
+  0.99 │    │  add          %rbp,%rax
+  0.08 │    │  add          %r12,%rax
+  0.62 │    │  add          %rbx,%rax
+  3.78 │    │  movzbl       -0x3(%rdi,%rax,1),%ebp
+  0.93 │    │  movzbl       -0x2(%rdi,%rax,1),%r8d
+  3.18 │    │  imul         $0x3e8,%ebp,%ebp
+  0.22 │    │  cmp          $0x5,%r10
+  0.86 │    │  mov          $0x0,%edx
+  1.82 │    │  cmovb        %edx,%ebp
+  0.84 │    │  imul         $0x64,%r8d,%r8d
+  0.22 │    │  cmp          $0x4,%r10
+  1.27 │    │  cmovb        %edx,%r8d
+  2.10 │    │  add          %ebp,%r8d
+  0.40 │    │  movzbl       -0x1(%rdi,%rax,1),%r10d
+  0.16 │    │  lea          (%r10,%r10,4),%r10d
+  1.42 │    │  lea          (%r8,%r10,2),%r8d
+  0.98 │    │  movzbl       0x1(%rdi,%rax,1),%eax
+  1.07 │    │  add          %eax,%r8d
+  0.08 │    │  mov          %r8d,%ebp
+  2.25 │    │  neg          %ebp
+  0.51 │    │  cmp          $0x2d,%sil
+  1.63 │    │  cmovne       %r8d,%ebp
+  0.09 │    │  mov          %r11,%rax
+  0.68 │    │  sub          %rcx,%rax
+  0.56 │    │  shl          $0x3,%rax
+  1.62 │    │  mov          $0x40,%esi
+  0.06 │    │  add          %r12,%rcx
+  0.69 │    │  sub          %rax,%rsi
+  0.58 │    │  mov          $0x0,%eax
+  1.65 │    │  cmovae       %rsi,%rax
+  0.05 │    │  and          $0x38,%al
+  1.16 │    │  shlx         %rax,0x1(%rdi,%rcx,1),%rsi
+  1.63 │    │  shrx         %rax,-0x7(%rdi,%r9,1),%rcx
+  0.75 │    │  add          %rsi,%rcx
+  0.50 │    │  movabs       $0x517cc1b727220a95,%r8
+  1.53 │    │  imul         %r8,%rcx
+  0.06 │    │  mov          %rcx,%rdx
+  0.70 │    │  mov          0x28(%rsp),%rax
+  1.97 │    │  mulx         %rax,%rax,%rax
+  0.07 │    │  mov          0x20(%rsp),%rdx
+  0.77 │    │  movzbl       (%rdx,%rax,1),%esi
+  0.52 │    │  mov          0x30(%rsp),%rdx
+  1.60 │    │  mulx         %rcx,%rax,%rax
+  0.70 │    │  imul         %r8,%rsi
+  0.62 │    │  mov          0x18(%rsp),%rdx
+  1.50 │    │  shlx         %rdx,%rax,%rax
+  0.10 │    │  xor          %rcx,%rsi
+  0.76 │    │  mov          %rsi,%rdx
+  2.37 │    │  mulx         %r8,%rcx,%rcx
+  0.14 │    │  and          0x10(%rsp),%rcx
+  0.93 │    │  add          %rax,%rcx
+  0.76 │    │  shl          $0x6,%rcx
+ 13.57 │    │  incl         0x0(%r13,%rcx,1)
+  4.95 │    │  add          %ebp,0xc(%r13,%rcx,1)
+  0.81 │    │  mov          0x4(%r13,%rcx,1),%eax
+  0.14 │    │  mov          0x8(%r13,%rcx,1),%edx
+  0.63 │    │  cmp          %ebp,%eax
+  1.21 │    │  cmovge       %ebp,%eax
+  2.32 │    │  mov          %eax,0x4(%r13,%rcx,1)
+  0.11 │    │  cmp          %ebp,%edx
+  0.52 │    │  cmovg        %edx,%ebp
+  1.56 │    │  mov          %ebp,0x8(%r13,%rcx,1)
+  1.12 │    │  mov          0x38(%rsp),%rax
+  0.09 │    │  add          %rax,%r14
+  0.42 │    │  inc          %r14
+  1.25 │    │  lea          (%rbx,%r11,1),%rcx
+  1.03 │    │  add          $0x2,%rcx
+       │    ├──cmp          %r15,%rcx
+  0.09 │    └──jb           210       
+#+end_src
+
+Possible improvements at this point are increasing parallelism to get more than
+2.49 instructions per cycle, and increasing parallelism by using SIMD to process
+multiple lines at a time.
