@@ -25,7 +25,7 @@ This post is a log of ideas, timings, and general progress.
 
 My processor is a =i7-10750H CPU @ 2.6GHz=
 - Clock speed is capped at =3.60GHz=. (It can run
-at =4.6GHz= later, but =3.6GHzz= tends to be more stable for benchmarking.)
+at =4.6GHz=, but =3.6GHzz= tends to be more stable for benchmarking.)
 - $64GB$ ram.
 - It has 6 cores.
 - Hyperthreading is disabled.
@@ -35,7 +35,7 @@ Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 
 Best results for my processor, at =4.6GHz=:
 - 7.0s single threaded,
-- 1.33 on 6 threads.
+- 1.31 on 6 threads.
 
 * The problem
 *Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
@@ -845,6 +845,107 @@ would be nice.
 Turns out I added a function to =PtrHash= for lookups on small tables, but
 wasn't actually using it. Saves some cycles again :)
 
-* Conclusion @ 4.6GHz: 7.0s/1.33s on 1/6 cores
-Boosting CPU frequency all the way to the max, I get 7.5s for the
-single-threaded variant, and 1.43s for the multithreaded variant.
+* Bug time: Back up to 1.71s
+I accidentally dropped the =- b'0'= part when making the floating point parsing branch free.
+Adding them back in bumps the times quite a bit, given that it's only 4
+instructions extra.
+#+caption: Bugfix
+#+begin_src diff
+-    let a = unsafe { *s.get_unchecked(s.len().wrapping_sub(5)) };
+-    let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) };
+-    let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) };
+-    let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) };
++    let a = unsafe { *s.get_unchecked(s.len().wrapping_sub(5)) - b'0' };
++    let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) - b'0' };
++    let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) - b'0' };
++    let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) - b'0' };
+#+end_src
+
+* Temperatures less than 100: 1.62s
+Assuming that temperatures are less than 100 helps quite a bit.
+#+begin_src diff
+-    // s = abc.d
++    // s = bc.d
+-    let a = unsafe { *s.get_unchecked(s.len().wrapping_sub(5)) - b'0' };
+     let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) - b'0' };
+     let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) - b'0' };
+     let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) - b'0' };
+-    let v = a as V * 1000 * (s.len() >= 5) as V
++    let v = 0
+         + b as V * 100 * (s.len() >= 4) as V
+         + c as V * 10
+         + d as V;
+#+end_src
+
+* Computing =min= as a =max=: 1.50
+
+Instead of =record.min = min(value, record.min)= we can do =record.min =
+max(-value, record.min)= and negate the value at the end. This turns out to
+generate slightly faster code, because the two =max= calls can now be done using SIMD.
+
+* Intermezzo: Hyperthreading: 1.34s
+Turns out enabling hyperthreading speeds up the parallel run by around 10%!
+
+Surprisingly, the single-threaded version becomes a bit slower, from 7s down to 9s.
+
+Here's a =perf stat= on 12 threads with hyperthreading:
+#+begin_src
+         15,888.56 msec task-clock:u                     #    9.665 CPUs utilized
+    54,310,677,591      cycles:u                         #    3.418 GHz
+    72,478,697,756      instructions:u                   #    1.33  insn per cycle
+     1,095,632,420      branches:u                       #   68.957 M/sec
+         1,658,837      branch-misses:u                  #    0.15% of all branches
+
+       1.643962284 seconds time elapsed
+      15.107088000 seconds user
+       0.767016000 seconds sys
+#+end_src
+
+Instructions per cycle is very low, probably since the hyperthreads are competing for
+cycles.
+
+And here's a =perf stat= for 6 threads with hyperthreading disabled:
+#+begin_src
+          9,059.31 msec task-clock:u                     #    5.220 CPUs utilized
+    30,369,716,994      cycles:u                         #    3.352 GHz
+    72,476,925,632      instructions:u                   #    2.39  insn per cycle
+     1,095,268,277      branches:u                       #  120.900 M/sec
+         1,641,589      branch-misses:u                  #    0.15% of all branches
+
+       1.735524152 seconds time elapsed
+       8.495397000 seconds user
+       0.556457000 seconds sys
+#+end_src
+
+Notice how elapsed time is a bit higher, but instructions/cycle, task-clock, and user time are lower.
+In fact, the number of instructions, branches, and branch-misses is pretty much
+the same. The hyperthreaded variant just has more contention for the available cycles.
+
+(I'll now disable hyperthreading again to make numbers easier to interpret.)
+
+* Not parsing negative numbers: 1.48s
+Having to deal with positive and negative numbers at the same time is kinda
+annoying for further parsing optimizations. To fix this, we will create separate
+hash map entries for positive and negative numbers. In particular, for cities with a
+negative value I will act as if the =;= separator was located at the position of
+the minus.
+That way, the value is always positive, and the city name gets a =;= appended
+for negative cases.
+
+This now saves some instructions in the parsing where we can assume the number
+is positive.
+
+Overall it's pretty much performance-neutral.
+
+#+caption: adjusting the name and value =&[u8]= slice for negative numbers.
+#+begin_src rust
+iter_lines(data, |mut name, mut value| {
+    unsafe {
+        if value.get_unchecked(0) == &b'-' {
+            value = value.get_unchecked(1..);
+            name = name.get_unchecked(..name.len() + 1);
+        }
+    }
+    ...
+}
+#+end_src
