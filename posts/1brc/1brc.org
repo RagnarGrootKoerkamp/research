@@ -1024,3 +1024,12 @@ unnecessary, but the code is quite a bit shorter for sure.
 I'm also not quite sure exactly how the ~* (s.len() >= 4)~ ends up in here. It
 seems that both values are computed and the right one is automatically picked.
 But then I would expect to see =11 * 48= as a constant also, but that doesn't appear.
+
+* Fixing undefined behaviour: back to 1.56s
+So, it turns out that doing the unsafe equivalent of =s[s.len()-4]= on a slice
+of length =3= is no good. On stable rust it happens to work, but on nightly it
+does not. Apparently =get_unchecked= with out-of-bounds indexes is actually
+[[https://doc.rust-lang.org/std/slice/trait.SliceIndex.html#tymethod.get_unchecked][undefined behaviour]].
+Rewriting everything to use indices into the larger =data: &[u8]= slice instead of
+small slices ends up giving quite a bit of slowdown. Maybe enough to reconsider
+some earlier choices...
