@@ -1111,33 +1111,166 @@ low 2 bits of that byte are always 0. And those 2 bits are exactly what we need!
 Taking them together with the 8 bits of the target byte, we have a 10 bit value,
 which can store anything up to 1024, larger than the max value of T!
 
-(OMG It's hard to understate my happiness here :)
+OMG It's hard to overstate my happiness here! Just think for a moment about
+what just happened.  I wonder if there is some 'deeper' reason this works. We're
+very much using that 2 divides 10, and that the position of the =.= is such that
+only the =100c= term is close by.
 
 The new =parse= function looks like this:
 #+begin_src rust
 /// data[start..end] is the input slice.
 fn parse(data: &[u8], start: usize, end: usize) -> V {
     // Start with a slice b"bc.d" of b"c.d"
-    // Read it as low-endian value 0xdd..ccbb or 0x??dd..cc (?? is what comes after d)
+    // Read it as low-endian value 0x3d..3c3b or 0x??3d..3c (?? is what comes after d)
     let raw = u32::from_le_bytes(unsafe { *data.get_unchecked(start..).as_ptr().cast() });
-    // Shift out the ??, so we now have 0xdd..ccbb or 0xdd..cc00.
+    // Shift out the ??, so we now have 0x3d..3c3b or 0x3d..3c00.
     let raw = raw >> (8 * (4 - (end - start)));
     // Extract only the relevant bits corresponding to digits.
-    // Digits a looks of 0x3a in ASCII, so we simply mask out the high half of each byte.
+    // Digit a looks of 0x3a in ASCII, so we simply mask out the high half of each byte.
     let raw = raw & 0x0f000f0f;
     // Long multiplication.
     const C: u64 = 1 + (10 << 16) + (100 << 24);
     // Shift right by 24 and take the low 10 bits.
     let v = ((raw as u64 * C) >> 24) & ((1 << 10) - 1);
+    // let v = unsafe { core::arch::x86_64::_bextr_u64(v, 24, 10) };
     v as _
 }
 #+end_src
 
+Note: I just learned of the [[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#BMI1_(Bit_Manipulation_Instruction_Set_1)][=bextr= instruction]] that could replace this last
+shift and mask sequence, but it doesn't seem to be faster than the native implementation.
+
+* A side note: ASCII
+One thing that really annoys me a lot is that the bit representation of =;= is
+very close to the digits =0..9= ([[https://en.wikipedia.org/wiki/ASCII#Character_order][ASCII table]]). This means that we can't nicely
+mask it away, and are somewhat forced to do the shift in algorithm above to get
+0 bits.
+
+* Skip parsing using =PDEP=: 1.42s
+The new parsing function is pretty sweet, but there is another idea worth exploring.
+
+Using [[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#Parallel_bit_deposit_and_extract][=PDEP= and =PEXT= instructions]] (parallel bit deposit/extract), we can shuffle bits around in 3 clock
+cycles (same as a multiplication).
+So we could do:
+#+caption: playing with PDEP and PEXT.
+#+begin_src txt
+                                0b0011bbbb0011cccc........0011dddd // Input string.
+                                0b    1111    1111            1111 // Extract these bits (PEXT)
+                                0b                    bbbbccccdddd // Result of extraction
+0b                  1111                 1111                 1111 // Deposit bits here in u64 (PDEP)
+0b                  bbbb                 cccc                 dddd // Result of deposit
+                       ^42                  ^21                  ^0
+#+end_src
+Now we have a =u64= integer containing three 21-bit integers inside it. Since
+each digit has a value up to $10$, we can accumulate ~2^{21}/10 = 200k~
+temperatures in this before overflow happens. So we could process say =10M= rows
+(where each city should only appear =25k= times) and then accumulate things into
+a main buffer.
+
+** Improved
+We can even get rid of the =PEXT= instruction and directly =PDEP= the bits
+where we want them, since all bits only move left. Basically we deposit some
+bloat bits (the =3= of the ASCII digits, and the representation of the =.=), but
+then we simply drop them using an =&=.
+#+caption: More efficient bit deposit.
+#+begin_src txt
+                                0b0011bbbb0011cccc........0011dddd // Input string.
+                                          xxxx    yyyyyyyyyyyy     // name the trash bits
+0b                  bbbb             xxxxcccc     yyyyyyyyyyyydddd // Deposit here
+0b                  1111                 1111                 1111 // Mask out trash using &
+                       ^42                  ^21                  ^0
+#+end_src
+
+#+caption: parsing using =PDEP=
+#+begin_src rust
+fn parse_pdep(data: &[u8], start: usize, end: usize) -> u64 {
+    // Start with a slice b"bc.d" of b"c.d"
+    // Read it as low-endian value 0xdd..ccbb or 0x??dd..cc (?? is what comes after d)
+    let raw = u32::from_be_bytes(unsafe { *data.get_unchecked(start..).as_ptr().cast() });
+    // Shift out the ??, so we now have 0xdd..ccbb or 0xdd..cc00.
+    let raw = raw >> (8 * (4 - (end - start)));
+
+    //         0b                  bbbb             xxxxcccc     yyyyyyyyyyyydddd // Deposit here
+    //         0b                  1111                 1111                 1111 // Mask out trash using &
+    let pdep = 0b0000000000000000001111000000000000011111111000001111111111111111u64;
+    let mask = 0b0000000000000000001111000000000000000001111000000000000000001111u64;
+
+    let v = unsafe { core::arch::x86_64::_pdep_u64(raw as u64, pdep) };
+    v & mask
+}
+#+end_src
+
+Note that we have to do a bit of extra logic around the accumulation, but that's
+fairly straightforward.
+
+The length of the assembly code is now down to 62 instructions!
+#+begin_src
+       │210:┌─→vpcmpeqb     %ymm0,%ymm2,%ymm2
+  0.66 │    │  vpmovmskb    %ymm2,%edx
+  0.00 │    │  tzcnt        %edx,%ebp
+  2.83 │    │  mov          %r13,%r15
+       │    │  add          %rbp,%r15
+  0.81 │    │  xor          %r10d,%r10d
+  2.79 │    │  cmpb         $0x2d,0x1(%r12,%r15,1)
+  0.01 │    │  sete         %r10b
+  0.70 │    │  lea          (%r15,%r10,1),%r11
+  0.01 │    │  mov          %r11,%rdx
+  2.80 │    │  sub          %rax,%rdx
+  0.00 │    │  lea          0x0(,%rdx,8),%rbx
+  0.78 │    │  mov          $0x40,%esi
+  0.00 │    │  sub          %rbx,%rsi
+  2.63 │    │  lea          (%r12,%rax,1),%rbx
+       │    │  mov          $0x0,%r8d
+  0.78 │    │  cmovb        %r8,%rsi
+  0.00 │    │  and          $0x38,%sil
+  2.96 │    │  shrx         %rsi,-0x8(%rdx,%rbx,1),%rdx
+  0.82 │    │  shlx         %rsi,(%r12,%rax,1),%rax
+  6.41 │    │  vmovdqu      0x1(%r12,%r15,1),%ymm2
+  0.04 │    │  add          %rax,%rdx
+  1.02 │    │  imul         %rcx,%rdx
+       │    │  mov          0x20(%rsp),%rax
+  3.37 │    │  mulx         %rax,%rax,%rax
+  0.66 │    │  mov          (%rsp),%rsi
+  2.55 │    │  movzbl       (%rsi,%rax,1),%eax
+  4.62 │    │  imul         %rcx,%rax
+  1.19 │    │  xor          %rdx,%rax
+  0.62 │    │  vpcmpeqb     %ymm1,%ymm2,%ymm3
+  0.01 │    │  vpmovmskb    %ymm3,%edx
+  1.93 │    │  tzcnt        %edx,%esi
+  1.22 │    │  lea          (%rsi,%r15,1),%rdx
+  0.62 │    │  inc          %rdx
+  0.00 │    │  add          %r15,%r10
+  1.91 │    │  inc          %r10
+  1.21 │    │  sub          %edx,%r10d
+  0.63 │    │  movbe        0x1(%r12,%r11,1),%r11d
+  1.84 │    │  mov          %rax,%rdx
+  2.82 │    │  mulx         %rcx,%rdx,%rdx
+  2.66 │    │  and          %r9,%rdx
+  2.79 │    │  shl          $0x5,%rdx
+  0.03 │    │  shl          $0x3,%r10d
+ 23.24 │    │  incl         0x8(%r14,%rdx,1)
+  0.00 │    │  shrx         %r10d,%r11d,%eax
+  0.06 │    │  movabs       $0x3c001fe0ffff,%r8
+  0.04 │    │  pdep         %r8,%rax,%r10
+  3.37 │    │  movabs       $0x3c0001e0000f,%r8
+  0.03 │    │  and          %r8,%r10
+  5.64 │    │  add          %r10,(%r14,%rdx,1)
+       │    │  add          %rbp,%r13
+  0.07 │    │  inc          %r13
+       │    │  mov          %eax,%r10d
+  3.53 │    │  not          %r10d
+       │    │  vmovd        %r10d,%xmm3
+  0.09 │    │  vpinsrd      $0x1,%eax,%xmm3,%xmm3
+  3.46 │    │  lea          0x2(%rsi,%r15,1),%rax
+  0.00 │    │  vmovq        0xc(%r14,%rdx,1),%xmm4
+  1.00 │    │  vpmaxud      %xmm3,%xmm4,%xmm3
+       │    │  vmovq        %xmm3,0xc(%r14,%rdx,1)
+       │    ├──cmp          %rdi,%rax
+  2.74 │    └──jb           210
+#+end_src
+
 
 * TODO
-- Parse integers using multiplication
-- Remove the =-b'0'= for the hundreds digit as well.
-- Try =PEXT=/=PDEP= instructions for spreading out bits.
 - Simplify perfect hash function a bit.
 - Process 2 to 8 entries in parallel, enabling better ILP and SIMD usage.
 - See if making separate records for short vs long numbers helps.
