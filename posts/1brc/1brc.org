@@ -949,3 +949,78 @@ iter_lines(data, |mut name, mut value| {
     ...
 }
 #+end_src
+
+* More efficient parsing: 1.44s
+
+It turns out subtracting =b'0'= from each character is quite slow: since each
+=u8= subtraction could overflow, they all have to be done independently, as we
+can see in the generated assembly:
+
+#+begin_src asm
+       │     let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) - b'0' };
+  0.38 │       movzbl       -0x4(%rax,%r11,1),%ebp
+       │     let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) - b'0' };
+  2.08 │       movzbl       -0x3(%rax,%r11,1),%r15d
+       │     let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) - b'0' };
+  0.37 │       movzbl       -0x1(%rax,%r11,1),%r11d
+       │     let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) - b'0' };
+  0.04 │       add          $0xd0,%bpl
+       │     let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) - b'0' };
+  1.55 │       add          $0xd0,%r15b
+       │     b as V * 100 * (s.len() >= 4) as V + c as V * 10 + d as V
+  0.17 │       movzbl       %bpl,%edx
+  2.20 │       imul         $0x64,%edx,%edx
+       │       movzbl       %r15b,%esi
+  1.59 │       lea          (%rsi,%rsi,4),%esi
+  0.12 │       lea          (%rdx,%rsi,2),%esi
+       │     let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) - b'0' };
+  0.10 │       add          $0xd0,%r11b
+       │     b as V * 100 * (s.len() >= 4) as V + c as V * 10 + d as V
+  1.72 │       movzbl       %r11b,%edx
+  0.14 │       add          %esi,%edx
+#+end_src
+
+To fix this, we can do all subtractions on =i32=. That way, the compiler merges
+them into a single subtraction of =111 * b'0'=.
+
+#+begin_src diff
+     // s = bc.d
+-    let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) - b'0' };
+-    let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) - b'0' };
+-    let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) - b'0' };
++    let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) as V - b'0' as V };
++    let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) as V - b'0' as V };
++    let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) as V - b'0' as V };
+     b as V * 100 * (s.len() >= 4) as V + c as V * 10 + d as V
+#+end_src
+
+New assembly:
+
+#+begin_src asm
+       │     let b = unsafe { *s.get_unchecked(s.len().wrapping_sub(4)) as V - b'0' as V };
+  1.16 │       movzbl       -0x4(%rbp,%rsi,1),%edx
+       │     let c = unsafe { *s.get_unchecked(s.len().wrapping_sub(3)) as V - b'0' as V };
+  0.08 │       movzbl       -0x3(%rbp,%rsi,1),%r11d
+       │     let d = unsafe { *s.get_unchecked(s.len().wrapping_sub(1)) as V - b'0' as V };
+  1.16 │       movzbl       -0x1(%rbp,%rsi,1),%esi
+       │     b as V * 100 * (s.len() >= 4) as V + c as V * 10 + d as V
+  1.18 │       imul         $0x64,%edx,%edx
+  1.08 │       lea          (%r11,%r11,4),%r11d
+  0.57 │       lea          (%rdx,%r11,2),%r11d
+       │     one_billion_row_challenge::Record::add:
+       │     self.min = self.min.max(-value);
+  0.98 │       mov          $0x14d0,%ebp         // the constant is 111*48 = 111*b'0'
+  1.05 │       sub          %r11d,%ebp
+  1.26 │       sub          %esi,%ebp
+       │     one_billion_row_challenge::parse:
+       │     b as V * 100 * (s.len() >= 4) as V + c as V * 10 + d as V
+  1.60 │       lea          (%rsi,%r11,1),%edx
+  0.23 │       add          $0xffffeb30,%edx     // the constant is -111*48
+#+end_src
+
+I'm still confused, because the =111 * 48= constant appears twice, which seems
+unnecessary, but the code is quite a bit shorter for sure.
+
+I'm also not quite sure exactly how the ~* (s.len() >= 4)~ ends up in here. It
+seems that both values are computed and the right one is automatically picked.
+But then I would expect to see =11 * 48= as a constant also, but that doesn't appear.
