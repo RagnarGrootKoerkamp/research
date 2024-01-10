@@ -1033,3 +1033,46 @@ does not. Apparently =get_unchecked= with out-of-bounds indexes is actually
 Rewriting everything to use indices into the larger =data: &[u8]= slice instead of
 small slices ends up giving quite a bit of slowdown. Maybe enough to reconsider
 some earlier choices...
+
+* Lazily subtracting =b'0'=: 1.52s
+So actually we don't even have to do the =- b'0'= subtraction in the hot loop at
+all for =c.d=!
+Since we count how many entries there are, we can just keep them, and compensate
+in the end by subtracting =count * 11 * b'0'= there.
+
+#+caption: Diff. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/b1c25ac9c913ce5312633bdee8c6d6fd59b9fc0e][full commit]]
+#+begin_src diff
+     let b = unsafe { *data.get_unchecked(end - 4) as V - b'0' as V };
+-    let c = unsafe { *data.get_unchecked(end - 3) as V - b'0' as V };
++    let c = unsafe { *data.get_unchecked(end - 3) as V };
+-    let d = unsafe { *data.get_unchecked(end - 1) as V - b'0' as V };
++    let d = unsafe { *data.get_unchecked(end - 1) as V };
+     b as V * 100 * (end - sep >= 5) as V + c as V * 10 + d as V
+#+end_src
+
+* Min/max without parsing: 1.56s
+Instead of doing =min= and =max= operations on parsed integers, we can do them
+on the raw string bytes directly. We only have to be careful to mask out the =;=
+in =;2.3=, since the ASCII value of =;= is larger than the digits.
+
+The [[code][commit]] is kinda ugly. Highlight is this function that reads the bytes in
+big-endian order, and then shifts away out-of-range bytes.
+#+begin_src rust
+fn parse_to_raw(data: &[u8], start: usize, end: usize) -> u32 {
+    let raw = u32::from_be_bytes(unsafe { *data.get_unchecked(start..).as_ptr().cast() });
+    raw >> (8 * (4 - (end - start)))
+}
+#+end_src
+
+This is only a bit slower, and I suspect this will allow speedups later if we
+can drop the other =parse= function completely.
+
+
+
+* TODO
+- Parse integers using multiplication
+- Remove the =-b'0'= for the tens digit as well.
+- Try =PEXT=/=PDEP= instructions for spreading out bits.
+- Simplify perfect hash function a bit.
+- Process 2 to 8 entries in parallel, enabling better ILP and SIMD usage.
+- See if making separate records for short vs long numbers helps.
