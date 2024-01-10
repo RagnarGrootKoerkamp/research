@@ -1050,7 +1050,7 @@ in the end by subtracting =count * 11 * b'0'= there.
      b as V * 100 * (end - sep >= 5) as V + c as V * 10 + d as V
 #+end_src
 
-* Min/max without parsing: 1.56s
+* Min/max without parsing: 1.55s
 Instead of doing =min= and =max= operations on parsed integers, we can do them
 on the raw string bytes directly. We only have to be careful to mask out the =;=
 in =;2.3=, since the ASCII value of =;= is larger than the digits.
@@ -1067,12 +1067,79 @@ fn parse_to_raw(data: &[u8], start: usize, end: usize) -> u32 {
 This is only a bit slower, and I suspect this will allow speedups later if we
 can drop the other =parse= function completely.
 
+* Parsing using a single multiplication: doesn't work
+
+The previous =parse_to_raw= reads bytes in reverse order (big endian, while my
+system is low endian) and returns something like =0x3b_3c_??_3d= (where =??= is
+the value of =.=, and =3b= is the ASCII value of digit =b=).
+Most of this is constant and can be subtracted at the end in bulk.
+The interesting /bits/ are =0x0b_0c_00_0d=. From this we could almost get
+the target value by multiplying with =100 + 10 << 8 + 1 << 24= and then
+shifting right by =24=:
+#+caption: Long multiplication using base 256.
+#+begin_src txt
+              0b    0c    00    0d
+----------------------------------
+            100b  100c     0  100d | * 100
+       10b   10c     0   10d       | * 10 << 8
+b  0     c     d                   | * 1 << 24
+b  0 10b+c     T  100c   10d  100d | sum
+#+end_src
+The problem is that the =100c= term could get larger than 256 and interfere with
+the target value =T=. Also, =T= itself could be up to 1000 and run in the
+=10b+c= stored one position higher.
+
+* Parsing using a single multiplication does work after all! 1.48s
+
+Alternatively, we could read the bytes in low endian order into =0x0d_00_0c_0b= and multiply by
+=1 + 10<<16 + 100<<24=, again followed by a right shift of =24=:
+#+caption: Long multiplication using base 256, attempt 2.
+#+begin_src txt
+                 0d    00  0c  0b
+---------------------------------
+                  d     0   c   b | * 1
+      10d    0  10c   10b         | * 10 << 16
+100d    0 100c 100b               | * 100 << 24
+100d  10d 100c    T   10b   c   b | sum
+#+end_src
+In this case, we see that the =10b= term in the lower significant position can
+never exceed =90 < 256=, so there are no problems there.
+On the other side, we still have the issue that $T = 100b + 10c + d$ can be up
+to $999$ and more than $256$. But it turns out we're lucky! (Very lucky?!) The
+=100c= term does occupy the next byte, but 100 is divisible by 4, and hence the
+low 2 bits of that byte are always 0. And those 2 bits are exactly what we need!
+Taking them together with the 8 bits of the target byte, we have a 10 bit value,
+which can store anything up to 1024, larger than the max value of T!
+
+(OMG It's hard to understate my happiness here :)
+
+The new =parse= function looks like this:
+#+begin_src rust
+/// data[start..end] is the input slice.
+fn parse(data: &[u8], start: usize, end: usize) -> V {
+    // Start with a slice b"bc.d" of b"c.d"
+    // Read it as low-endian value 0xdd..ccbb or 0x??dd..cc (?? is what comes after d)
+    let raw = u32::from_le_bytes(unsafe { *data.get_unchecked(start..).as_ptr().cast() });
+    // Shift out the ??, so we now have 0xdd..ccbb or 0xdd..cc00.
+    let raw = raw >> (8 * (4 - (end - start)));
+    // Extract only the relevant bits corresponding to digits.
+    // Digits a looks of 0x3a in ASCII, so we simply mask out the high half of each byte.
+    let raw = raw & 0x0f000f0f;
+    // Long multiplication.
+    const C: u64 = 1 + (10 << 16) + (100 << 24);
+    // Shift right by 24 and take the low 10 bits.
+    let v = ((raw as u64 * C) >> 24) & ((1 << 10) - 1);
+    v as _
+}
+#+end_src
 
 
 * TODO
 - Parse integers using multiplication
-- Remove the =-b'0'= for the tens digit as well.
+- Remove the =-b'0'= for the hundreds digit as well.
 - Try =PEXT=/=PDEP= instructions for spreading out bits.
 - Simplify perfect hash function a bit.
 - Process 2 to 8 entries in parallel, enabling better ILP and SIMD usage.
 - See if making separate records for short vs long numbers helps.
+- Munmap on the fly, instead of wasting 0.2s at the end.
+- Madvise?
