@@ -33,9 +33,11 @@ at =4.6GHz=, but =3.6GHzz= tends to be more stable for benchmarking.)
 
 Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 
-Best results for my processor, at =4.6GHz=:
-- 7.0s single threaded,
-- 1.31 on 6 threads.
+#+caption: Latest results, =@4.6GHz=, measured inside the program, excluding =munmap= at exit.
+| threads \ HT |  off |   on |
+|            1 | *6.64* | 6.81 |
+|            6 | 1.22 | 1.28 |
+|           12 | 1.22 | *1.05* |
 
 * The problem
 *Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
@@ -1204,7 +1206,7 @@ Note that we have to do a bit of extra logic around the accumulation, but that's
 fairly straightforward.
 
 The length of the assembly code is now down to 62 instructions!
-#+begin_src
+#+begin_src asm
        │210:┌─→vpcmpeqb     %ymm0,%ymm2,%ymm2
   0.66 │    │  vpmovmskb    %ymm2,%edx
   0.00 │    │  tzcnt        %edx,%ebp
@@ -1269,6 +1271,17 @@ The length of the assembly code is now down to 62 instructions!
   2.74 │    └──jb           210
 #+end_src
 
+One slightly ugly part in the above is:
+#+begin_src asm
+  0.06 │    │  movabs       $0x3c001fe0ffff,%r8
+  0.04 │    │  pdep         %r8,%rax,%r10
+  3.37 │    │  movabs       $0x3c0001e0000f,%r8
+  0.03 │    │  and          %r8,%r10
+#+end_src
+
+Both the pdep shuffle and mask require a dedicated =mov=. The
+and-mask can also be done on the =u32= value before the =pdep=, which merges the
+=mov= and =and= to =and $0xf0f000f,%edx=.
 
 * TODO
 - Simplify perfect hash function a bit.
