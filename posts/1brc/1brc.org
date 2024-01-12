@@ -1283,6 +1283,19 @@ Both the pdep shuffle and mask require a dedicated =mov=. The
 and-mask can also be done on the =u32= value before the =pdep=, which merges the
 =mov= and =and= to =and $0xf0f000f,%edx=.
 
+** A further note
+
+Not all systems support =PDEP=. Also, AMD =Zen 1= and =Zen 2= processor do
+support it, but implement it using microcode taking 18 cycles ([[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#Parallel_bit_deposit_and_extract][wikipedia]]). In
+our case we can emulate the =PDEP= relatively easily using some mask and shift
+operations:
+#+caption: Manually implementing PDEP.
+#+begin_src  rust
+let raw = raw as u64;
+(raw & 15) | ((raw & (15 << 16)) << (21 - 16)) | ((raw & (15 << 24)) << (42 - 24))
+#+end_src
+This is only around 3% slower (=1.13s= vs =1.10s=).
+
 * Branchy min/max: 1.37s
 
 Inspired by [[https://en.algorithmica.org/hpc/algorithms/argmin/][this nice post]] on Algorithmica.org, we replace =r.min = min(r.min,
