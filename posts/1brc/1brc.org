@@ -1345,6 +1345,40 @@ branch is never taken!
 Note that just doing ~while eq == 0 {..}~ slows down the code, but wrapping it
 in an always-false if statement makes it not slow down the code.
 
+* 4 entries in parallel: 1.23s
+
+Currently we only process one line at a time. This limits how much we can
+exploit ILP (instruction level parallelism). So instead we will process 4 lines
+at a time.
+
+We don't want to process consecutive lines since they depend on each other.
+Instead, we chunk the data into 4 parts and process them independently of each
+other in parallel.
+
+To improve the generated code, I created a simple macro that interleaves the
+instructions. This gets the IPC (instructions per cycle) up to 2.66 (up from 2.20).
+
+#+begin_src rust
+    let mut state0 = init_state(0);
+    let mut state1 = init_state(data.len() / 4);
+    let mut state2 = init_state(2 * data.len() / 4);
+    let mut state3 = init_state(3 * data.len() / 4);
+
+    // Duplicate each line for each input state.
+    macro_rules! step {
+        [$($e:expr),*] => {
+            $($e.sep_pos = find_long($e.sep_pos, sep) + 1;)*
+                $($e.end_pos = find($e.sep_pos, end) + 1;)*
+                $(callback(data, $e.start_pos, $e.sep_pos - 1, $e.end_pos - 1);)*
+                $($e.start_pos = $e.end_pos;)*
+        }
+    }
+
+    while state3.start_pos < data.len() {
+        step!(state0, state1, state2, state3);
+    }
+#+end_src
+
 * TODO
 - Simplify perfect hash function a bit.
 - Process 2 to 8 entries in parallel, enabling better ILP and SIMD usage.
