@@ -33,7 +33,7 @@ at =4.6GHz=, but =3.6GHzz= tends to be more stable for benchmarking.)
 
 Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 
-#+caption: Latest results, =@4.6GHz=, measured inside the program, excluding =munmap= at exit.
+#+caption: Results after '4 entries in parallel', =@4.6GHz=, measured inside the program, excluding =munmap= at exit.
 #+attr_html: :class small
 | threads | HT off | HT on  |
 |       1 |   5.76 | *5.72* |
@@ -1383,11 +1383,11 @@ instructions. This gets the IPC (instructions per cycle) up to 2.66 (up from 2.2
 
     // Duplicate each line for each input state.
     macro_rules! step {
-        [$($e:expr),*] => {
-            $($e.sep_pos = find_long($e.sep_pos, sep) + 1;)*
-                $($e.end_pos = find($e.sep_pos, end) + 1;)*
-                $(callback(data, $e.start_pos, $e.sep_pos - 1, $e.end_pos - 1);)*
-                $($e.start_pos = $e.end_pos;)*
+        [$($s:expr),*] => {
+            $($s.sep_pos = find_long($s.sep_pos, sep) + 1;)*
+                $($s.end_pos = find($s.sep_pos, end) + 1;)*
+                $(callback(data, $s.start_pos, $s.sep_pos - 1, $s.end_pos - 1);)*
+                $($s.start_pos = $s.end_pos;)*
         }
     }
 
@@ -1395,6 +1395,158 @@ instructions. This gets the IPC (instructions per cycle) up to 2.66 (up from 2.2
         step!(state0, state1, state2, state3);
     }
 #+end_src
+
+
+* Mmap per thread
+
+Currently the main thread spends =180ms= on unmapping the file at the end.
+Instead I tried making a separate =Mmap= instance per thread, so the unmapping
+can happen in parallel. Sadly this doesn't make a difference: now the =180ms= is
+simply divided over all threads, and since =munmap= has a program wide lock, the
+=drop(mmap)= calls in each thread are just waiting for each other.
+
+Some workarounds:
+- Make each thread do its own memory (un)mapping. This does not yet speed things
+  up since they all unmap at the same time.
+- Make two or three times the number of threads, so that other work can be done
+  instead of waiting for the kernel lock. This ends up having around =100ms=
+  overhead, which is better than the =180ms= we started with but still significant.
+
+For now both these options are slightly too messy and I will just keep things as
+they are. I might revisit this later.
+
+* Reordering some operations: 1.19s
+
+Turns out doing the increments for the start/end of each slice in a slightly
+different order gives quite a bit better performance. :shrug:
+
+#+begin_src diff
+     macro_rules! step {
+         [$($s:expr),*] => {
+-            $($s.sep_pos = find_long($s.sep_pos, sep) + 1;)*
++            $($s.sep_pos = find_long($s.sep_pos + 1, sep);)*
+-                $($s.end_pos = find($s.sep_pos, end) + 1;)*
++                $($s.end_pos = find($s.sep_pos + 1, end) ;)*
+-                $(callback(data, $s.start_pos, $s.sep_pos - 1, $s.end_pos - 1);)*
++                $(callback(data, $s.start_pos, $s.sep_pos, $s.end_pos);)*
+-                $($s.start_pos = $s.end_pos;)*
++                $($s.start_pos = $s.end_pos + 1;)*
+         }
+     }
+#+end_src
+
+* Reordering more: 1.11s
+The above still processes the callback sequentially for the 4 parallel states.
+In particular, each callback spends relatively a lot of time waiting for the
+right record to be loaded from L1 cache into registers.
+
+Let's go deeper and call the callback with 4 states. [[https://github.com/RagnarGrootKoerkamp/1brc/commit/961b6913a7e7752f5391bd176115ca616a4aa98a][Ugly commit]], around 0.01s slowdown for some reason.
+
+Now we can interleave the record loading instructions:
+#+begin_src diff
+ // If value is negative, extend name by one character.
+ s0.sep += (data.get_unchecked(s0.sep + 1) == &b'-') as usize;
+ let name0 = data.get_unchecked(s0.start..s0.sep);
+ let key0 = to_key(name0);
+ let index0 = phf.index_single_part(&key0);
+-let entry0 = slots.get_unchecked_mut(index0);
+ let raw0 = parse_to_raw(data, s0.sep + 1, s0.end);
+-entry0.add(raw0, raw_to_pdep(raw0));
+
+ s1.sep += (data.get_unchecked(s1.sep + 1) == &b'-') as usize;
+ let name1 = data.get_unchecked(s1.start..s1.sep);
+ let key1 = to_key(name1);
+ let index1 = phf.index_single_part(&key1);
+-let entry1 = slots.get_unchecked_mut(index1);
+ let raw1 = parse_to_raw(data, s1.sep + 1, s1.end);
+-entry1.add(raw1, raw_to_pdep(raw1));
+
+ s2.sep += (data.get_unchecked(s2.sep + 1) == &b'-') as usize;
+ let name2 = data.get_unchecked(s2.start..s2.sep);
+ let key2 = to_key(name2);
+ let index2 = phf.index_single_part(&key2);
+-let entry2 = slots.get_unchecked_mut(index2);
+ let raw2 = parse_to_raw(data, s2.sep + 1, s2.end);
+-entry2.add(raw2, raw_to_pdep(raw2));
+
+ s3.sep += (data.get_unchecked(s3.sep + 1) == &b'-') as usize;
+ let name3 = data.get_unchecked(s3.start..s3.sep);
+ let key3 = to_key(name3);
+ let index3 = phf.index_single_part(&key3);
+-let entry3 = slots.get_unchecked_mut(index3);
+ let raw3 = parse_to_raw(data, s3.sep + 1, s3.end);
++
++let entry0 = slots.get_unchecked_mut(index0);
++entry0.add(raw0, raw_to_pdep(raw0));
++let entry1 = slots.get_unchecked_mut(index1);
++entry1.add(raw1, raw_to_pdep(raw1));
++let entry2 = slots.get_unchecked_mut(index2);
++entry2.add(raw2, raw_to_pdep(raw2));
++let entry3 = slots.get_unchecked_mut(index3);
+ entry3.add(raw3, raw_to_pdep(raw3));
+#+end_src
+
+This brings us down to 1.11s, quite a big win really!
+Comparing =perf stat= before and after, the number of instructions went from
+=62.7G= to =63.0G= (0.5% more; I'm not sure why), but instructions per cycle went up
+from 2.55 to 2.80, almost 10% better!
+
+* Even more ILP: 1.05
+Of course, we can do better and interleave all the instructions fully. I played
+around a bit and the following gives the best results:
+#+begin_src diff
+ s0.sep += (data.get_unchecked(s0.sep + 1) == &b'-') as usize;
+ let name0 = data.get_unchecked(s0.start..s0.sep);
+-let key0 = to_key(name0);
+-let index0 = phf.index_single_part(&key0);
+-let raw0 = parse_to_raw(data, s0.sep + 1, s0.end);
+
+ s1.sep += (data.get_unchecked(s1.sep + 1) == &b'-') as usize;
+ let name1 = data.get_unchecked(s1.start..s1.sep);
+-let key1 = to_key(name1);
+-let index1 = phf.index_single_part(&key1);
+-let raw1 = parse_to_raw(data, s1.sep + 1, s1.end);
+
+ s2.sep += (data.get_unchecked(s2.sep + 1) == &b'-') as usize;
+ let name2 = data.get_unchecked(s2.start..s2.sep);
+-let key2 = to_key(name2);
+-let index2 = phf.index_single_part(&key2);
+-let raw2 = parse_to_raw(data, s2.sep + 1, s2.end);
+
+ s3.sep += (data.get_unchecked(s3.sep + 1) == &b'-') as usize;
+ let name3 = data.get_unchecked(s3.start..s3.sep);
++
++let key0 = to_key(name0);
++let key1 = to_key(name1);
++let key2 = to_key(name2);
+ let key3 = to_key(name3);
++
++let index0 = phf.index_single_part(&key0);
++let index1 = phf.index_single_part(&key1);
++let index2 = phf.index_single_part(&key2);
+ let index3 = phf.index_single_part(&key3);
++
++let raw0 = parse_to_raw(data, s0.sep + 1, s0.end);
++let raw1 = parse_to_raw(data, s1.sep + 1, s1.end);
++let raw2 = parse_to_raw(data, s2.sep + 1, s2.end);
+ let raw3 = parse_to_raw(data, s3.sep + 1, s3.end);
+
+ let entry0 = slots.get_unchecked_mut(index0);
+ entry0.add(raw0, raw_to_pdep(raw0));
+ let entry1 = slots.get_unchecked_mut(index1);
+ entry1.add(raw1, raw_to_pdep(raw1));
+ let entry2 = slots.get_unchecked_mut(index2);
+ entry2.add(raw2, raw_to_pdep(raw2));
+ let entry3 = slots.get_unchecked_mut(index3);
+ entry3.add(raw3, raw_to_pdep(raw3));
+#+end_src
+
+For some reason keeping the ~sep += ...~ and ~name = ...~ instructions as-is is
+around 0.01s better. Still the overall win is very nice! The number of
+instructions remains the same, but instructions per cycle is up to 2.95! For
+1.05s in total.
+
+
 
 * TODO
 - Simplify perfect hash function a bit.
