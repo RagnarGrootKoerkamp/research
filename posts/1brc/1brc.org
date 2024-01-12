@@ -44,12 +44,11 @@ Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 *Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
 - First a city name. There are $413$ cities, and each row has name chosen at
   random from the set. Their lengths are from $3$ to $26$ bytes.
-- Then a temperature, formatted as =-?\d?\d?\d(,\d)?=, i.e. a possibly negative number
-  with one to three integral digits and at most one decimal. (I'm not exactly
-  sure whether the orignal java generator is likely to include numbers over $100$.)
+- Then a temperature, formatted as =-?\d?\d,\d=, i.e. a possibly negative number
+  with one or two integral digits and exactly one decimal.
   Each temperature is drawn from a normal distribution for each city.
 
-*Output:* a sorted list of cities of the form =Amsterdam: <min>/<avg>/<max>=,
+*Output:* a sorted list of cities of the form =<city>: <min>/<avg>/<max>=,
 each formatted with one decimal place.
 
 * Initial solution: 105s
@@ -1283,6 +1282,46 @@ One slightly ugly part in the above is:
 Both the pdep shuffle and mask require a dedicated =mov=. The
 and-mask can also be done on the =u32= value before the =pdep=, which merges the
 =mov= and =and= to =and $0xf0f000f,%edx=.
+
+* Branchy min/max: 1.37s
+
+Inspired by [[https://en.algorithmica.org/hpc/algorithms/argmin/][this nice post]] on Algorithmica.org, we replace =r.min = min(r.min,
+value)= by a branchy version:
+#+begin_src diff
+-        self.min = self.min.max(!raw_value);
++        if raw_value < self.min {
++            self.min = raw_value;
++        }
+-        self.max = self.max.max(raw_value);
++        if raw_value > self.max {
++            self.max = raw_value;
++        }
+#+end_src
+Indeed, branch-mispredicts are slow, but it turns out these branches are almost
+never taken! In fact, since the data is random, they will be true only $\ln(n)$
+time for each city, where $n$ is the number of times the city appears. Each city
+appears =10G/400 = 2.5M= times, and so for each city we only expect around =15=
+updates, for =400*15=6000= branch misses in total (per thread),
+which is very small compared to the =1G= writes and =cmov=s we save.
+
+I tried adding an [[https://doc.rust-lang.org/std/intrinsics/fn.unlikely.html][=unlikely(..)= hint]] to this, but that didn't change the
+generated assembly code.
+
+* No counting: 1.34s
+Ok this is where you start saying I'm cheating, but it turns out we don't need
+to count how often each city appears in the input. Since each row has a random
+city, the number of times a city appears is $Bin(R, 1/C)$, where $r=10^9$ and
+$C=413$. This has expectation $R/C\sim 15\cdot 10^6$ and standard deviation
+$\approx \sqrt(R/C) \sim 4000$. So the variance around the expected value is
+only $1/4000$. That means that if in the end we simply divide by the expected
+number of occurrences instead of the actual number of occurrences, we're only
+off by $1/4000$ relatively. There are $400$ cities, so the worst deviation will
+be slightly more, maybe $4/4000=1/1000$ or so. And since there are $400<1000$
+cities, the probability that one of them has average value within $1/1000$ from
+a rounding-boundary is less than a half.
+
+Indeed, this ends up giving the correct output for the evaluation set.
+
 
 * TODO
 - Simplify perfect hash function a bit.
