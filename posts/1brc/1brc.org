@@ -1123,7 +1123,7 @@ The new =parse= function looks like this:
 /// data[start..end] is the input slice.
 fn parse(data: &[u8], start: usize, end: usize) -> V {
     // Start with a slice b"bc.d" of b"c.d"
-    // Read it as low-endian value 0x3d..3c3b or 0x??3d..3c (?? is what comes after d)
+    // Read it as big-endian value 0x3d..3c3b or 0x??3d..3c (?? is what comes after d)
     let raw = u32::from_le_bytes(unsafe { *data.get_unchecked(start..).as_ptr().cast() });
     // Shift out the ??, so we now have 0x3d..3c3b or 0x3d..3c00.
     let raw = raw >> (8 * (4 - (end - start)));
