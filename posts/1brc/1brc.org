@@ -31,7 +31,6 @@ at =4.6GHz=, but =3.6GHzz= tends to be more stable for benchmarking.)
 - Hyperthreading is disabled.
 - The file should be cached in memory by the OS.
 
-Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 
 #+caption: Results after improving ILP, =@4.6GHz=, measured inside the program, excluding =munmap= at exit.
 #+attr_html: :class small
@@ -39,6 +38,14 @@ Code is on [[https://github.com/RagnarGrootKoerkamp/1brc][github]].
 |       1 | *4.93* |  5.05 |
 |       6 | *0.90* |  0.97 |
 |      12 | *0.90* |  0.92 |
+
+* External links
+- My code: https://github.com/RagnarGrootKoerkamp/1brc
+  - My twitter: https://twitter.com/curious_coding
+- =lehuyduc='s repo (C++): https://github.com/lehuyduc/1brc-simd
+  - [[https://stackoverflow.com/questions/77800999/c-simd-fastest-way-to-mask-out-bytes-higher-than-separator-position][Stackoverflow question/discussion]], continued on [[https://github.com/lehuyduc/1brc-simd/issues/3][github]]
+- =buybackoff='s repo (C#): https://github.com/buybackoff/1brc
+  - Corresponding blogpost comparing non-Java code: https://hotforknowledge.com/2024/01/13/7-1brc-in-dotnet-even-faster-than-java-cpp/#results
 
 * The problem
 *Input:* a =13GB= file containing $10^9$ lines of the form =Amsterdam;10.5=.
@@ -661,7 +668,7 @@ let v = a as V * 1000 * (s.len() >= 5) as V
 
 
 * Purging all branches: 1.67s
-The remaining branch misses are in the =while eq_sep == 0= in the scanning for
+The remaining branch misses are in the ~while eq_sep == 0~ in the scanning for
 =;= and =\n= characters ([[*Manual SIMD: 29s]]).
 Since cities and temperatures have variable
 lengths, iterating over the input will always have to do some branching to
@@ -1555,7 +1562,18 @@ At this point it turns out that hyperthreading actually slows down the code!
 |       6 | *0.90* |  0.97 |
 |      12 | *0.90* |  0.92 |
 
+* Compliance 1, OK I'll count: 1.06
+
+Ok I'm adding back the record counting. Being non-compliant this way is
+annoying, and it's really quite brittle to rely on the randomness here.
+
+Surprisingly, performance is much (~0.05s) better when I make =count: u64= instead of
+=count: u32=. I didn't bother to figure out why.
+
 * TODO
+- Use AES instructions for hashing
+- Verify hash on lookup
+- Rebuild PHF on hash collision / new key.
 - Simplify perfect hash function
 - SIMD
 - Munmap per chunk/thread
