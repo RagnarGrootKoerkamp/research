@@ -1,0 +1,103 @@
+#+title: Intro to Rust
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: lecture
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-16 Tue>
+#+author: Ragnar Groot Koerkamp
+
+These are notes for a quick introduction to Rust.
+
+* Installation
+Go to https://rustup.rs and follow instructions.
+(Arch Linux has the =rustup= package; maybe other distros as well.)
+
+* Create a project
+Go to your projects folder, and run =cargo new hello_world=. This creates a new
+project:
+#+begin_src txt
+> tree -a hello_world
+hello_world
+├── Cargo.lock
+├── Cargo.toml
+├── .git
+│   └── ...
+├── .gitignore
+└── src
+    └── main.rs
+#+end_src
+
+* Hello, world!
+
+Currently, =main.rs= looks like this:
+#+begin_src rust
+fn main() {
+    println!("Hello, world!");
+}
+#+end_src
+
+- =fn= is the syntax to introduce a new function.
+- =fn main= creates the =main= function, the entry point of a binary.
+- =main()= takes no arguments.
+- [[https://doc.rust-lang.org/std/macro.println.html][=println!=]] is a /macro/ (i.e. not a regular function call) that prints its
+  argument to standard output.
+
+To run the program, simply do =cargo run= from anywhere in the projects directory.
+- This will first build the code (see =/target/=), if not already done.
+- It will then run the binary.
+
+Note that =cargo= is the package manager and build system (and more).
+=cargo= invokes =rustc=, the underlying compiler.
+
+* Useful links
+There is a lot of high quality documentation:
+
+First, [[https://www.rust-lang.org/learn][rust-lang.org/learn]] contains a lot of useful links, some of which I
+replicate here:
+
+- /The/ Rust book, [[https://doc.rust-lang.org/book/][doc.rust-lang.org/book]] :: A gentle step by step introduction to the
+  Rust language and ecosystem.
+
+  #+begin_quote
+  Check out the page on /Control Flow/ and find something that you've not seen
+  in other languages.
+  #+end_quote
+- The reference, [[https://doc.rust-lang.org/reference/][doc.rust-lang.org/reference]] :: A more formal documentation of
+  language features. Probably not so readable for beginners.
+
+  #+begin_quote
+  Find the page on /Traits/.
+  #+end_quote
+- Documentation, [[https://doc.rust-lang.org/std/][doc.rust-lang.org/std]] :: The standard library docs. Always keep
+  this close by, and consider making a hotkey for searching it ;)
+
+  #+begin_quote
+  Read some of the docs for =fn= and =println!=.
+  #+end_quote
+- Crate registry, [[https://crates.io/][crates.io]] :: Where all public /crates/ (packages) are. Useful
+  for searching dependencies.
+
+  #+begin_quote
+  Try searching =cli=, and make sure to sort by /All-Time Downloads/.
+  Find the github page and documentation of the first result.
+  #+end_quote
+- Crate documentation, [[https://docs.rs][docs.rs]] :: Documentation for all crates!
+
+  #+begin_quote
+  Search for =serde= and go to its docs.
+  Find documentation for the =Serialize= trait.
+  Is an array of length 64 serializable?
+  Also you can find the corresponding crates.io page.
+  #+end_quote
+
+* Important concepts
+** Ownership
+** References
+** Arrays
+** Common types
+** Common dependencies
+** Traits
+
+#+print_bibliography:
