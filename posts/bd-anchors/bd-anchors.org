@@ -154,7 +154,7 @@ Some non-technical remarks on the paper content itself.
   was used instead of the recommended $r=4\log_\sigma(n)$.
 
 *Remarks on [cite/t:@anchors-are-all-you-need]*
-- 5 implementations: Minimizers have a very similar density as bd-anchors when
+- section 5 implementations: Minimizers have a very similar density as bd-anchors when
   $k\sim r$. Excluding minimizers based on density is not a good reason.
 - All figures: I assume all log scales are base 2? Quite unclear.
 
@@ -168,7 +168,7 @@ missing something that makes this not $O(n)$ expected runtime?
   2. Set $r = (3+\epsilon)\log_\sigma(\ell)$. Find the $k=r+1$ lexicographic minimizers in $O(n)$ time.
      Each minimizer fits in a constant number of machine words.
   3. By choice of $r$, $(1-o(1))$ of the $\ell$-mers have a unique minimizer.
-  4. This minimizer is also the reduced bd-anchor, so simply (over-) report the set of
+  4. W.h.p., *the minimizer is also the reduced bd-anchor*, so simply (over-) report the set of
      minimizers as bd-anchors.
   5. To prevent over-reporting, equal minimizers can be detected on-the-fly
      while computing them, and suffixes/rotations can be compared as needed.
@@ -177,9 +177,10 @@ missing something that makes this not $O(n)$ expected runtime?
 From fig 5a in the 2nd paper, computing bd-anchors takes around 20 seconds for
 200MB of DNA. 10MB/s is slow when processing up to TBs of data. NtHash
 [cite:@nthash] goes up to 200MB/s and can still be a bottleneck.
+(But I understand the implementation wasn't optimized yet.)
 
 *Density on long random strings:* Neither of the papers makes a claim about
-observed density on long random strings. So I wrote a small tool to do some experiments: [[https://github.com/ragnargrootkoerkamp/bd-anchors][github:me/bd-anchors]].
+observed density on long random strings. So I wrote a small tool to do some experiments: [[https://github.com/ragnargrootkoerkamp/anchors][github:me/anchors]].
 
 Results:
 - For large alphabet size $\sigma = 256$, the density is very close to
