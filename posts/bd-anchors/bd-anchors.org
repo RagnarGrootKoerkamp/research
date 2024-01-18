@@ -1,0 +1,200 @@
+#+title: Notes on bidirectional anchors
+#+HUGO_SECTION: posts
+#+hugo_tags: mphf
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-15 Mon>
+#+author: Ragnar Groot Koerkamp
+
+$$
+\newcommand{\A}{\mathcal{A}_\ell}
+\newcommand{\T}{\mathcal{T}_\ell}
+$$
+
+These are some notes on /Bidirectional String Anchors/ [cite:@bdanchors], also
+called /bd-anchors/.
+
+Resources:
+- [cite/t:@bdanchors-conferencepaper]: preceding conference paper with subset of content.
+- [cite/t:@bdanchors]: The paper discussed here.
+- [cite/t:@anchors-are-all-you-need]: follow-up/second paper containing
+  - a faster average-case $O(n)$ construction algorithm;
+  - a more memory efficient construction algorithms for the index.
+- https://github.com/solonas13/bd-anchors: code for first paper
+- https://github.com/lorrainea/BDA-index: code for follow-up paper
+
+The remainder of this post is split into [[*Paper overview][an overview of the paper]], [[*remarks on
+the paper]], and further [[*thoughts]].
+
+* Paper overview
+*Minimizers:* First recall the definition of /minimizers/, introduced
+independently by [cite/t:@minimizers] and [cite/t:@winnowing]: Given a $(k+w-1)$-mer, consider the $w$ contained $k$-mers.
+The $k$-mer with minimal hash (for some given hash function $h$) is the minimizer.
+
+*Density:* By definition, minimizers sample at least one in every $w$ positions, so
+trivially have a /density/ of at least $1/w$. [cite/t:@winnowing] proves that
+on random strings, any minimizer scheme has a density at least
+$(1.5+1/2w)/(w+1)\geq 1.5/(w+1)$.
+Random minimizers (i.e. using a good hash) have a density of $2/(w+1) + o(1/w)$, as
+proven in both papers, which is only $33\%$ above the lower bound.
+[cite/t:@improved-minimizers-2] corrects this
+and adds the further restriction that this only holds when $k > (3+\epsilon)
+\log_\sigma (w+1)$. I.e. for $w=24$ and $\sigma=4$, $k$ should be at least $7$.
+See also [cite/t:@improved-minimizers-1].
+It is unclear to me whether this bound is tight, i.e. whether the constant $3$
+could be improved. (TODO think about this. For $k>2\log_\sigma (w+1)$ we obtain
+$2/(w+1)+o(1)$ which may or may not be good enough. Experiments needed.)
+
+*Bd-anchors:*
+Whereas minimizers take a minimum over contained substrings, bd-anchors take a
+minimum over all /rotations/ of a string. This means that the minimum is over
+$\ell$ elements instead of just $w$ elements.
+
+*Example:* Take text =BACADE= and $l=4$.
+- The minimal rotation of =BACA= starts at the =A= in position 3 in the text (0-based).
+- The minimal rotation of =ACAD= starts at the =A= in position 1 in the text.
+- The minimal rotation of =CADE= starts at the =A= in position 3 in the text.
+Thus, the anchors are at position $1$ and $3$. Note that unlike minimizers, anchors are *not monotone*!
+
+*Reduced bd-anchors:* One issue with bd-anchors is that they are not very stable
+when the minimal rotation starts close to the end of the string. To prevent
+this, /reduced bd-anchors/ take the position of the minimum rotation /that does
+not start in the last $r$ positions/. Typically $r=C\log_\sigma(\ell)$.
+Reduced bd-anchors are very similar to minimizers for $k=r+1$.
+
+*Construction algorithm*
+- There is a straightforward $O(n\ell)$ construction that finds the minimal
+  rotation of each $\ell$-mer in $O(\ell)$ time.
+- The main data structure used in Theorem 2 for linear time construction is sadly
+  just a block box. Some explanation would have been nice, but I suppose it's
+  not practical anyway.
+- [cite/t:@anchors-are-all-you-need] presents an average-case $O(n)$ linear time
+  construction algorithm for $r=4\log_\sigma(\ell)$ reduced bd-anchors based on minimizers:
+  1. A $r$-reduced bd-anchor is an $k=r+1$ (lexicographical) minimizer.
+  2. Hence these $k=r+1$ minimizers are a superset of bd-anchors.
+     - When is such a minimizer *not* a bd-anchor? Only when there are exact
+       duplicates within an $\ell$-mer?
+  3. Then, a fairly involved procedure is used to find the minimal reduced bd-anchor of
+     each $\ell$-mer.
+     - Rotations corresponding to contained minimizers are compared in $O(1)$
+       using LCP (longest common prefix) queries. This requires the suffix array
+       of the input text, which does not seem practical.
+     - A simpler argument, that does not require the decomposition into fragments, seems
+       to be that each minimizer is in $w\leq \ell$ windows, and hence contributes
+       less than $\ell$ comparisons. Total expected runtime: $w \cdot O(n/l)
+       \cdot O(1) = O(n)$.
+
+*Theoretical density*
+- Lemma 5: When $\ell \leq \sigma$ (or rather, $\log \ell = O(\log \sigma)$),
+  $|\A| = O(n/\ell)$ for random strings.
+  - The big-$O$ makes this result not very useful in practice.
+- Lemma 6: The density of reduced bd-anchors with $r=4\log_\sigma(\ell)$ is
+  $O(n/\ell)$, and in particular it's bounded by $2/(\ell-r) + o(1/\ell)$.
+  - Remark: similar to minimizers, it seems that $r=(3+\epsilon) \log_\sigma
+    (\ell)$ is actually sufficient here. And indeed $r=3\log_\sigma(\ell)$ is
+    used in evaluations.
+  - Remark 2: The $2/(\ell-r)$ bound seems tight for large alphabets.
+- Theorem 4: Either $|\A|$ or $|\A^r|$ is in $O(n/\ell)$.
+  - It seems to me that $|\A^r|$ is always $O(n/\ell)$ and there is no real benefit
+    to falling back to $|\A|$ itself?
+    - This is indeed how Lemma 2.8 is presented in [cite/t:@anchors-are-all-you-need].
+
+*Empirical density*
+- Surprisingly, Miniception [cite:@improved-minimizers-2] did not do better than
+  random minimizers. The miniception paper quite consistently does better with
+  densities around $1.7$ (as also mentioned in 6.3). I'm very curious why.
+- Fig 2:
+  - Random minimizers (with robust winnowing) consistently have density $2/(w+1)$.
+  - Bd-anchors are much better when $k\geq w$.
+  - In most cases, reduced anchors are better. For DNA, there are some
+    cases where reduced anchors are much worse.
+  - Cases with the most gain such as $(w,k) = (8, 128)$ are not used in practice.
+
+*Text indexing*
+- Given the bd-anchors, build two compacted tries (represented as suffix arrays and LCP arrays):
+  - $\T^R$ on suffixes of $T$ starting at bd-anchors;
+  - $\T^L$ on reversed prefixes of $T$ ending at bd-anchors.
+- For both tries, store for each node the interval of leaf nodes corresponding
+  to it.
+- Given a query of length at least $\ell$:
+  1. Find a bd-anchor.
+  2. Search the reverse-prefix of length $\alpha$ before the bd-anchor in
+     $\T^L$. Find the interval of nodes.
+  3. Search the suffix of length $\beta = \ell -\alpha$ in $\T^R$. Find the
+     interval of nodes.
+  4. Do a 2D range query to determine if the intervals intersect.
+- As expected, this 2D range query is slow in practice.
+- Faster alternative in practice:
+  1. Search the longer of the reverse-prefix and suffix in its trie.
+  2. For each match, verify if the rest of the query matches as well using
+     simple string comparison.
+
+* Remarks on the paper
+Some non-technical remarks on the paper content itself.
+
+*Theory*
+- $\A$ is ill-defined. It is defined as the set of bd-anchors over all contained
+  $\ell$-mers. But all those bd-anchors are integers between $1$ and $\ell$,
+  implying $|\A|\leq \ell$ which is not intended.  Some identification from the
+  position in the $\ell$-mer back into the text $T$ should be made.
+  - The same imprecision is present in [cite/t:@anchors-are-all-you-need].
+*Density proofs*
+- Proof of Lemma 5, first line: First $\A$ should be $|\A|$. Second $\A$ should
+  be $\mathbb{E}(|\A|)$.
+- Equation 8: $p^{red} \geq r$ is missing.
+*Evaluation*
+- Fig 2: Many of the parameters shown are not very practical. I have not seen parameters like $k=128$, $w=8$ in practice.
+- The bottom row of table 3a is wrong. Shown are values of $32/l$, not $n/l =
+  20/l$.
+- According to https://github.com/solonas13/bd-anchors, for chromosome 1 of
+  length $n=230\ 000\ 000$, $|\A|=900\ 000$ positions are sampled, or $3.6\cdot
+  n/l$. That's not at all close to $< 2n/l$ hinted at by table 3. Probably $r=0$
+  was used instead of the recommended $r=4\log_\sigma(n)$.
+
+*Remarks on [cite/t:@anchors-are-all-you-need]*
+- 5 implementations: Minimizers have a very similar density as bd-anchors when
+  $k\sim r$. Excluding minimizers based on density is not a good reason.
+- All figures: I assume all log scales are base 2? Quite unclear.
+
+* Thoughts
+Here are some further thoughts and ideas and analysis.
+
+*Naive construction algorithm:*
+The following seems like a much simpler construction algorithm. Maybe I am
+missing something that makes this not $O(n)$ expected runtime?
+  1. Assume the input is a random string.
+  2. Set $r = (3+\epsilon)\log_\sigma(\ell)$. Find the $k=r+1$ lexicographic minimizers in $O(n)$ time.
+     Each minimizer fits in a constant number of machine words.
+  3. By choice of $r$, $(1-o(1))$ of the $\ell$-mers have a unique minimizer.
+  4. This minimizer is also the reduced bd-anchor, so simply (over-) report the set of
+     minimizers as bd-anchors.
+  5. To prevent over-reporting, equal minimizers can be detected on-the-fly
+     while computing them, and suffixes/rotations can be compared as needed.
+
+*The presented construction algorithm is kinda slow:*
+From fig 5a in the 2nd paper, computing bd-anchors takes around 20 seconds for
+200MB of DNA. 10MB/s is slow when processing up to TBs of data. NtHash
+[cite:@nthash] goes up to 200MB/s and can still be a bottleneck.
+
+*Density on long random strings:* Neither of the papers makes a claim about
+observed density on long random strings. So I wrote a small tool to do some experiments: [[https://github.com/ragnargrootkoerkamp/bd-anchors][github:me/bd-anchors]].
+
+Results:
+- For large alphabet size $\sigma = 256$, the density is very close to
+  $2/(\ell + 1 - r)$ and minimized for $r=0$.
+- For small alphabet $\sigma = 4$, $r=0$ has high density due to minimizers
+  wrapping around. The optimal $r$ seems to grow sort of logarithmic in $\ell$,
+  and has density only around $10\%$ above the expected lower bound. The link
+  has a table.
+
+*Density of bd-anchors:*
+- Each bd-anchor ends up in /two/ suffix arrays, so one could argue that the
+  density of this scheme should be doubled.
+- In the faster text index, only the longer of the prefix and suffix is actually
+  queried in the sparse suffix array. This means that actually we can store for each (reduced)
+  bd-anchor only the longer of the prefix and suffix. This should reduce the
+  size of the data structure quite a bit. (Around 30% would be my guesstimate.)
+
+#+print_bibliography:
