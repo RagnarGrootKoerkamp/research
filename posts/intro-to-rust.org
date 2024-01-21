@@ -10,46 +10,165 @@
 
 These are notes for a quick introduction to Rust.
 
-* Installation
-Go to https://rustup.rs and follow instructions.
-(Arch Linux has the =rustup= package; maybe other distros as well.)
+* Rust features
+** Basics
+#+attr_html: :class small
+| C++                | Rust          |
+| std::size_t        | usize         |
+| std::pointerdiff_t | isize         |
+| int                | i32           |
+| unsigned int       | u32           |
+| long long          | i64           |
+| unsigned long long | u64           |
+|                    |               |
+| string             | String        |
+| string_view        | &str          |
+| byte               | u8            |
+| char               | char          |
+|                    |               |
+| vector<T>          | Vec<T>        |
+| array<int, 4>      | [u32; 4]      |
+| int[]              | &[u32]        |
+|                    |               |
+| T                  | T             |
+| const T&           | &T            |
+| T&                 | &mut T        |
+| T*                 | unsafe { T* } |
+| unique_ptr<T>      | Box<T>        |
+|                    |               |
+| optional<T>        | Option<T>     |
+| variant<T, E>      | Result<T, E>  |
 
-* Create a project
-Go to your projects folder, and run =cargo new hello_world=. This creates a new
-project:
-#+begin_src txt
-> tree -a hello_world
-hello_world
-├── Cargo.lock
-├── Cargo.toml
-├── .git
-│   └── ...
-├── .gitignore
-└── src
-    └── main.rs
-#+end_src
+#+attr_html: :class small
+| C++                           | Rust                        |
+| for(int i = 0; i < n; ++i) {} | for i in 0..n {}            |
+| while(true) {}                | loop {}                     |
+| while(f()) {}                 | while f() {}                |
+| do { } while (f());           | loop { if !f() { break; } } |
+| switch x { case 1:; }         | match x { 1 => {} }         |
 
-* Hello, world!
 
-Currently, =main.rs= looks like this:
+#+attr_html: :class small
+| C++ | Rust |
+| cout << "text" << endl; | println!("text"); |
+| cout << 1+1 << endl; | println!("{}", 1+1); |
+| cout << n << endl;   | println!("{n}");   |
+
+** Basic syntax
 #+begin_src rust
-fn main() {
-    println!("Hello, world!");
+// trailing return type
+fn square(x: u32) -> u32 {
+    // return on last line can be omitted
+    x*x
+}
+
+// mutable reference
+fn increment(x: &mut u32) {
+    ,*x += 1;
+}
+
+fn main(){
+    // Introduce variables with let.
+    // Types are automatically inferred.
+    let a = 1;
+    // b is mutable.
+    let mut b = 1;
+    b += 1;
+    // c, d, and e are usize:
+    let c: usize = 1;
+    let d = 1usize;
+    let e = usize::MAX;
+
+    // No parentheses needed.
+    if a > b {
+        // This shouldn't happen.
+        panic!();
+    }
+
+    // 0..n is a `Range`.
+    // Ranges are `IntoIterator` and converted into an iterator, which is looped over.
+    for i in 0..n {
+        // Print i to a line on stderr.
+        eprintln!("{i}");
+    }
+
+    while b < 1000 {
+        increment(b);
+    }
+
+    loop {
+        b = square(b);
+        if b > 1000000000 {
+            break;
+        }
+    }
+
+    // Pattern matching
+    match 5 {
+        0 => panic!(),
+        1 => todo!(),
+        2..3 => eprintln!("small"),
+        x if x%2==0 => eprintln!("even {x}"),
+        _ => eprintln!("odd");
+    }
 }
 #+end_src
+** Expressions everywhere!
+#+begin_src rust
+let a = { 1 + 1 };
+let b = if a > 10 { a } else { 10 };
+let c = loop {
+    break 3;
+};
+let d = {
+    let mut x = 1;
+    while x < 1000 {
+        x *= 2;
+    }
+    x
+};
+let a = match Some(5) {
+    None => 0,
+    Some(x) => 2*x,
+};
+#+end_src
+** Closures
+#+begin_src rust
+let double = |x| 2*x;
+let a = double(1);
+let multiply = |x: usize, y: usize| -> usize { x * y };
+let b = multiply(2, 3);
+#+end_src
 
-- =fn= is the syntax to introduce a new function.
-- =fn main= creates the =main= function, the entry point of a binary.
-- =main()= takes no arguments.
-- [[https://doc.rust-lang.org/std/macro.println.html][=println!=]] is a /macro/ (i.e. not a regular function call) that prints its
-  argument to standard output.
+** Pattern matching
 
-To run the program, simply do =cargo run= from anywhere in the projects directory.
-- This will first build the code (see =/target/=), if not already done.
-- It will then run the binary.
+** Ownership
 
-Note that =cargo= is the package manager and build system (and more).
-=cargo= invokes =rustc=, the underlying compiler.
+** Type inference
+** References
+** Containers
+#+begin_src rust
+// Create an array
+let a: [usize; 10] = [1; 10];
+// Create a vec
+let v: Vec<usize> = vec![1usize; 10];
+assert_eq!(&a, &v, "Slices are not equal!");
+#+end_src
+** Iterators
+** Traits
+** Common libraries
+See [[https://blessed.rs][blessed.rs]] for a list of commonly used and recommended libraries.
+- rand: random number generation.
+- clap: Command Line Argument Parsing.
+- serde: SERialization and Deserialization to json, yaml, and many other formats.
+- itertools: Extra utilities for iterating over stuff.
+- coloured: coloured terminal output.
+
+* Ecosystem
+- Release cycle
+- Unstable rust
+- =cargo {build,run} -r= for release mode is *much* faster.
+- =cargo add <crate>= to add a dependency from CLI.
 
 * Useful links
 There is a lot of high quality documentation:
@@ -92,42 +211,60 @@ replicate here:
   Also you can find the corresponding crates.io page.
   #+end_quote
 
-* Devops
-- Make sure Rust-Analyzer works!
-  - Vscode plugin
-  - Many helpful suggestions!
-- Release cycle
-- Unstable rust
-- Try copilot, it's very convenient.
-- =cargo {build,run} -r= for release mode is *much* faster.
-- =cargo add <crate>= to add a dependency from CLI.
-* Important concepts
-** Ownership
-** References
-** Arrays
-** Matching
-** Common types
-- vec
-- slices
-- string
-- Option/Result
-- =println!("{}", n)=;
-- =println!("{n}")=;
-- =println!("{n:>3}")=;
-** Common dependencies
-- [[https://blessed.rs][blessed.rs]]
-- rand
-- clap
-- serde
-- itertools
-** Iterators
-** Traits
-* Small project ideas
+* Hands-on
+** Installation
+Go to https://rustup.rs and follow instructions.
+- Arch Linux alternatively has the =rustup= package.
+
+Also install Rust analyzer binary, the LSP.
+- =rust-analyzer= vscode extension
+- =rust-analyzer= package in your package manager.
+- via rustup: =rustup component add rust-analyzer=
+Make sure to enable the LSP in your IDE.
+
+Recommended: install GitHub copilot as well.
+
+** Further tools
+- =cargo flamegraph= via =cargo install cargo-flamegraph= for profiling.
+** Create a project
+Go to your projects folder, and run =cargo new hello_world=. This creates a new
+project:
+#+begin_src txt
+> tree -a hello_world
+hello_world
+├── Cargo.lock
+├── Cargo.toml
+├── .git
+│   └── ...
+├── .gitignore
+└── src
+    └── main.rs
+#+end_src
+
+** Hello, world!
+
+Currently, =main.rs= looks like this:
+#+begin_src rust
+fn main() {
+    println!("Hello, world!");
+}
+#+end_src
+
+- =fn= is the syntax to introduce a new function.
+- =fn main= creates the =main= function, the entry point of a binary.
+- =main()= takes no arguments.
+- [[https://doc.rust-lang.org/std/macro.println.html][=println!=]] is a /macro/ (i.e. not a regular function call) that prints its
+  argument to standard output.
+
+To run the program, simply do =cargo run= from anywhere in the projects directory.
+- This will first build the code (see =/target/=), if not already done.
+- It will then run the binary.
+
+Note that =cargo= is the package manager and build system (and more).
+=cargo= invokes =rustc=, the underlying compiler.
+
+** Small project ideas
 - Compute all minimizers of a string.
 - Solve some Project Euler problems
 - Write a guessing game: the program chooses a random number and the user has to
   guess it with lower/correct/higher answers.
-
-* Further tools
-- =cargo flamegraph= via =cargo install cargo-flamegraph= for profiling.
-#+print_bibliography:
