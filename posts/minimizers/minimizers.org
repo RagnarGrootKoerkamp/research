@@ -1,0 +1,272 @@
+#+title: Minimizers and variations
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: minimizers
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-18 Thu><>
+#+author: Ragnar Groot Koerkamp
+
+This posts discusses some variants of minimizers, inspired by the [[file:../bd-anchors/bd-anchors.org][post on
+bidirectional anchors]].
+
+The goal is to *introduce slight variation of minimizers* with slightly lower
+density, but first some background.
+
+All these schemes take an $\ell = k+w-1$ mer, and select a substring of
+length $k$ in a deterministic way, in such a way that consecutive $\ell$-mers
+are likely to share their chosen $k$-mer.
+
+Minimizers can be used for various purposes, such as:
+- Compressing sequences, such as in minimizer-space De Bruijn graphs [cite:@mdbg].
+- /Locality preserving hashing/ of kmers [cite:@sshash;@lphash].
+  - Here a large $m \geq \log_\sigma N$ is used so that minimizers are unique keys.
+  - The objective is to have as few minimizers as possible in any sequence, to
+    reduce the number of cache-misses due to non-locality.
+- Similarity estimation [cite:@minimap].
+  - Here the goal is to cluster similar reads. Ideally reads with a few small
+    mutations have the same minimizer.
+
+Locality preserving hashing and similarity estimation both cluster kmers on
+similarity, but there are some differences:
+- In LPH, we want /consecutive/ kmers to share a minimizer. I.e. we want to
+  partition the De Bruijn graph into long paths.
+- In similarity estimation, we want /similar/ kmers to share a minimizer, where
+  /similar/ explicitly includes small mutations. I.e. we want to partition the
+  De Bruijn graph into 'blobs' covering many variants.
+
+A critical property is the /density/: the proportion of positions that is chosen
+as the start of a minimizer. Fewer chosen positions means better compression and better
+locality of hashing.
+
+I will first discuss some types of minimizers and introduce some new variants,
+and then experimentally evaluate their density on random strings.
+
+* Types of minimizers
+Related but out of scope topics are:
+- universal minimizers: not really a local sampling scheme;
+- spaced minimizers/syncmers/strobemers: used for similarity
+  search methods, but not used for locality sensitive hashing.
+
+** Minimizers
+*Minimizers:* Minimizers were introduced independently
+by [cite/t:@minimizers] and [cite/t:@winnowing]: Given a
+$(k+w-1)$-mer, consider the $w$ contained $k$-mers.  The (rightmost) $k$-mer with minimal
+hash (for some given hash function $h$) is the minimizer.
+
+An example:
+#+begin_src txt
+l=11, k=5, w=l-k+1=7
+lmer:
+ ***********
+candidate minimizer kmers:
+ *****
+ |*****
+ ||*****
+ |||*****
+ ||||*****
+ |||||*****
+ ||||||*****
+ |||||||
+ 8136192   // hashes in [0,9]
+     |     // rightmost minimal hash
+     ***** // minimizer
+#+end_src
+
+*Density:* By definition, minimizers sample at least one in every $w$ positions, so
+trivially have a /density/ of at least $1/w$.
+- [cite/t:@winnowing] prove that on random strings, any minimizer scheme has a
+  density at least $(1.5+1/2w)/(w+1)\geq 1.5/(w+1)$.
+- Random minimizers have a density of $2/(w+1) + o(1/w)$
+  when $k > (3+\epsilon) \log_\sigma (w+1)$ [cite:@miniception;@improved-minimizers].
+
+  This is only $33\%$ above the lower bound!
+  - *Is $(3+\epsilon)$ tight?*
+
+*** Robust minimizers
+To reduce the density, [cite/t:@winnowing] suggest the
+following: when the minimizer of the preceding k-mer is still a minimizer, reuse
+it, even when it is not rightmost.
+
+Continuing the example:
+#+begin_src txt
+l=11, k=5, w=7
+ ************  // n=12 text
+ *****  *****  // first & last minimizer
+ 81361921      // n-k+1 hashes of 5-mers
+ -1--1--       // minimal hashes in first lmer
+     *****     // minimizer is rightmost
+  1--1--1      // minimal hashes in second lmer
+     *****     // reuse minimizer, instead of starting at rightmost 1.
+#+end_src
+
+When the same kmer occurs twice in an $\ell$-mer, only one of them will be
+selected in a way dependent on the context.
+For most applications, this non-determinism is not a problem.
+
+Still there is a drawback: When two distinct kmers have the same hash, only one
+of them is selected. Although unlikely, this is not good for downstream
+applications. To prevent this, minimizers $x$ could be ordered by $(h(x), x)$
+instead of just $h(x)$.
+
+*** PASHA
+PASHA [cite:@pasha] is another minimizer selection algorithm based on a
+universal hitting set. It works as follows:
+1. Start with a complete De Bruijn graph of order $k$, i.e., containing all
+   $4^k$ kmers.
+2. Remove from this a minimal set of $k$-mers $U_1$ that make the graph acyclic.
+3. Then remove additional $k$-mers to remove all paths of length $\geq \ell$.
+   - This is done using the DOCKS heuristic [cite:@docks], which greedily
+     removes the vertex containing the most (length $\ell$) paths.
+PASHAs main contribution is a considerable speedup over DOCKS. It still remains
+slow and has to process the full $4^k$ graph, limiting it to $k\leq 16$, but has
+the lower density.
+
+*** Miniception
+Miniception [cite:@miniception] is a specific minimizer selection algorithm. It
+works using an additional parameter $k_0$ around $3\cdot \log_\sigma(k)$.
+It [[https://github.com/Kingsford-Group/miniception/issues/1][additionally requires]] $k_0 \geq k-w$, although I do not think this is
+explicitly mentioned in the paper.
+
+For a window $T$ of length $\ell = k+w-1$ characters, Miniception selects a minimizer as follows:
+1. Set $w_0 = k-k_0$ and find all $(k_0, w_0)$ minimizers under some hash $h_0$.
+2. Out of the $w$ $k$-mers in $T$, keep only those:
+   - whose prefix $k_0$-mer is a $(k_0, w_0)$ minimizer of $T$, or
+   - whose suffix $k_0$-mer is a $(k_0, w_0)$ minimizer of $T$.
+   This is equivalent to saying that the minimal $k_0$-mer in the $k$-mer is
+   its prefix or suffix.
+3. From the filtered $k$-mers, select the one with minimal hash $h$.
+
+In the limit, it achieves density down to $1.67/w$ for $w\sim k$.
+
+Sadly the preprint [cite:@miniception-preprint] has a typo in
+Figure 6, making the results hard to interpret.
+
+** Bd-anchors
+*Bidirectional anchors* (bd-anchors) are a variant on minimizers that take the minimal
+lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors;@anchors-are-all-you-need].
+I wrote above them before in [[file:../bd-anchors/bd-anchors.org::*Paper overview][this post]].
+
+*Reduced bd-anchors* restrict this rotation to not start in the last
+$r=4\log_\sigma(\ell)$ positions.
+
+*Density:* Reduced bd-anchors have a density of $2/(\ell+1-r)$ for large
+alphabet, and somewhat larger for small $\sigma$.
+
+Bd-anchors have a slightly different purpose than minimizers, in that they are keyed by their
+position in the text, rather than by the corresponding string itself. Thus, a
+suffix array is built on suffixes and reverse-prefixes starting/ending there.
+
+For random strings, reduced bd-anchors are a dense subset of the $k=r+1$ minimizers.
+
+Given the bd-anchors, two suffix arrays are built. One of suffixes starting at
+anchors, and one on reverse prefixes ending at anchors.
+
+*Optimization:*
+When querying an $\ell$-mer, in practice only the longer of the
+prefix and suffix is actually looked up in the corresponding suffix array. Thus,
+we don't need to two suffix arrays over /all/ bd-anchors:
+- The forward SA over suffixes only needs to contains bd-anchors occurring in
+  the left half of some $\ell$-mer.
+- The reverse SA over suffixes only needs to contains bd-anchors occurring in
+  the right half of some $\ell$-mer.
+This makes things slightly sparser.
+
+** Biminimizers (new?)
+Here is an idea I had and that was also tried by Giulio for SSHash [cite:@sshash].
+Surely there is some literature on this but I'm at a loss to find it. Please let me know.
+
+In short: use robust minimizers, but always use at least two candidate positions.
+For this, we can use two hash functions and take the minimizer for $h_1$ and
+$h_2$. Or we can consider the /bottom two/ minimizers with lowest score for $h$.
+
+This also generalizes to /t-minimizers/, where we robustly choose the rightmost
+of $t$ candidates generated either by $t$ hash functions or the bottom-$t$ of a
+single hash function.
+
+A new example:
+#+begin_src txt
+ 8336192     // hashes
+     | |     // bottom two minimal hashes
+       ***** // biminimizer
+#+end_src
+
+Like robust minimizers, this has one big drawback: *Minimizers are not
+deterministic.* Downstream applications will likely have to make two queries to
+locate the minimizer. But this may be worth the tradeoff compared to the space savings.
+
+** Reduced minimizers (new)
+Bidirectional anchors have a benefit over minimizers since they always use
+$r=O(\log_\sigma (\ell))$ instead of possibly much larger $k$. This means their
+average density $2/(\ell+1-r)$ can be lower than $2/(w+1) = 2/(\ell-k+2)$.
+Similarly, Miniception uses a separate $k_0$ of order $3 \log_\sigma(k)$ to
+achieve
+
+Why do we use large $k$, when small $k=\Omega(\log \ell)$ is sufficient and
+preferable for lower density? The reason is that for locality preserving hashing
+we would like (nearly) unique keys of length $\log_\sigma(N)$.
+
+It seems that two conceptually distinct parameters are merged:
+- The length $k_0=r+1$ of the minimizer, which we would like to be small.
+- The length $k$ of the key we want to extract, which we would like to be larger.
+
+Inspired by previous methods, here is a new sampling scheme.
+1. First, find a minimizer of length $k_0=1+3 \log_\sigma w$, say at position $0\leq i < w =
+   \ell - k_0 + 1$.
+2. Extract a key of length $k\leq (\ell+k_0)/2$:
+   - If $i \leq (w-1)/2$, /extend right/, i.e. extract $Q_{i..i+k}$. This is in bounds because:
+     $$i+k \leq (w-1)/2 + (\ell+r)/2 = (\ell-k_0)/2 + (\ell +k_0)/2 = \ell.$$
+   - If $i \geq (w-1)/2$, /extend left/, i.e. extract $Q_{i+r-k..i+r}$. This is in bounds because:
+     $$i+r-k \geq (w-1)/2 - (\ell+r)/2 = (\ell-k_0)/2 - (\ell +k_0)/2 = 0.$$
+
+  When [TODO], we can instead split into three cases
+
+Here is an example for $\ell \geq 2k-3-1$. Stars indicate the candidate
+$k_0$-minimizers, and the dashes indicate the extension to a $k$-mer key.
+#+begin_src txt
+l=10, k=7, r=3
+lmer:
+ **********
+minimizers (*), and extracted keys (*=)
+ ***----
+  ***----
+   ***----
+    ***----
+ ----***
+  ----***
+   ----***
+    ----***
+#+end_src
+
+And here is a 3-way split example that additionally includes extension around the middle.
+#+begin_src txt
+l=10, k=8, r=3
+lmer:
+ ***********
+minimizers (*), and keys (*=)
+ ***=====
+  ***=====
+   ***=====
+ ===***==
+  ===***==
+   ===***==
+  =====***
+   =====***
+#+end_src
+
+It seems that this scheme performs well when $k$ is around $\ell/2$, say $\ell/3 < k < 2\ell/3$.
+
+*TODO:* There are cases where we can be flexible in the exact point where we switch
+from extending left to extending right. Should we switch around the middle? Or
+better make one of the runs as long as possible?
+
+* TODO Experiments
+- How well does reduced minimizers perform to other types of minimizers?
+- For relevant $(k,w)$ pairs, report the (best) density for each method (over
+  $k_0$ or $r$ in $[3, 7]$ (and additionally $[k-w, k-w+3]$ for miniception).
+- Try both $\sigma = 4$ and $\sigma = 256$.
+- PASHA is excluded -- even though it's best, it's much more effort to download
+  $k$mers and quickly benchmark it.
+
+#+print_bibliography:
