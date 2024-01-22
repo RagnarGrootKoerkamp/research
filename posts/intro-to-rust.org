@@ -10,6 +10,12 @@
 
 These are notes for a quick introduction to Rust.
 
+* Overview
+- Statically typed & Compiled language.
+- Great developer experience:
+  - =cargo= build system
+  - =rust-analyzer= LSP
+
 * Rust features
 ** Basics
 #+attr_html: :class small
@@ -141,11 +147,29 @@ let b = multiply(2, 3);
 #+end_src
 
 ** Pattern matching
+#+begin_src rust
+let a: Option<i32> = Some(1);
+match a {
+    Some(0) => eprintln!("I am 0"),
+    Some(x) if x % 2 == 0 => eprintln!("I am even"),
+    Some(x) => eprintln!("I am {x}"),
+    None => eprintln!("I am none"),
+}
 
+if let Some(x) = a {
+    eprintln!("a = Some({x})");
+}
+
+let Some(x) = a else {
+    return;
+};
+eprintln!("{x}");
+
+let x = a.unwrap();
+#+end_src
+** References
 ** Ownership
 
-** Type inference
-** References
 ** Containers
 #+begin_src rust
 // Create an array
@@ -154,8 +178,62 @@ let a: [usize; 10] = [1; 10];
 let v: Vec<usize> = vec![1usize; 10];
 assert_eq!(&a, &v, "Slices are not equal!");
 #+end_src
-** Iterators
 ** Traits
+#+begin_src rust
+trait MyTrait {
+    fn my_fn(&self);
+}
+
+impl MyTrait for usize {
+    fn my_fn(&self) {
+        eprintln!("I am a usize!");
+    }
+}
+
+impl MyTrait for i32 {
+    fn my_fn(&self) {
+        eprintln!("I am a i32!");
+    }
+}
+
+fn f(t: impl MyTrait) {
+    t.my_fn();
+}
+
+fn main() {
+    let a = 1; // i32 by default
+    a.my_fn();
+    let b = 1usize;
+    b.my_fn();
+    f(a);
+    f(b);
+}
+#+end_src
+
+** Iterators
+#+begin_src rust
+for i in 0..10 {
+    eprintln!("i={}", i);
+}
+
+let v = (0..10).collect_vec();
+
+for x in &v {
+    eprintln!("x={}", x);
+}
+
+for (i, x) in v.iter().enumerate() {
+    eprintln!("{i:>2} => {x}");
+}
+
+for x in v.iter().filter(|x| **x % 2 == 0) {
+    eprintln!("x={}", x);
+}
+
+for x in v.iter().map(|x| x * x) {
+    eprintln!("square: {}", x);
+}
+#+end_src
 ** Common libraries
 See [[https://blessed.rs][blessed.rs]] for a list of commonly used and recommended libraries.
 - rand: random number generation.
@@ -169,6 +247,7 @@ See [[https://blessed.rs][blessed.rs]] for a list of commonly used and recommend
 - Unstable rust
 - =cargo {build,run} -r= for release mode is *much* faster.
 - =cargo add <crate>= to add a dependency from CLI.
+- Many tools, like =cargo flamegraph= for profiling
 
 * Useful links
 There is a lot of high quality documentation:
@@ -224,8 +303,6 @@ Make sure to enable the LSP in your IDE.
 
 Recommended: install GitHub copilot as well.
 
-** Further tools
-- =cargo flamegraph= via =cargo install cargo-flamegraph= for profiling.
 ** Create a project
 Go to your projects folder, and run =cargo new hello_world=. This creates a new
 project:
