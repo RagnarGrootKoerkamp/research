@@ -77,7 +77,14 @@ candidate minimizer kmers:
 *Density:* By definition, minimizers sample at least one in every $w$ positions, so
 trivially have a /density/ of at least $1/w$.
 - [cite/t:@winnowing] prove that on random strings, any minimizer scheme has a
-  density at least $(1.5+1/2w)/(w+1)\geq 1.5/(w+1)$.
+  density at least $$\frac{1.5+\frac{1}{2w}}{w+1}\geq \frac{1.5}{w+1}.$$
+  - [cite/t:@asymptotic-optimal-minimizers] contradict that theorem by
+    constructing a universal minimizer with lower density, and remark that the
+    previous result only applies to 'randomized local schemes'.
+    - Note: I am quite unsure what is the current status of this $1.5/(w+1)$
+      lower bound.
+  - Instead they prove that density is at least
+    $$\frac{1.5 + \frac{1}{2w} + \max(0, \lfloor \frac{k-w}{w}\rfloor)}{w+k}.$$
 - Random minimizers have a density of $2/(w+1) + o(1/w)$
   when $k > (3+\epsilon) \log_\sigma (w+1)$ [cite:@miniception;@improved-minimizers].
 
@@ -270,31 +277,41 @@ better make one of the runs as long as possible?
 Here are some quick results.
 
 - Code is at https://github.com/RagnarGrootKoerkamp/minimizers.
-- PASHA is excluded -- even though it's best, it's too much effort to download
+- PASHA is excluded -- even though it's very good, it's too much effort to download
   $k$mers to quickly benchmark it.
 
-#+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale.
+#+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale. Black lines indicate $(1.5+2/w)/(w+1)$.
 #+attr_html: :class inset large
-[[file:./results_4.json.svg]]
+[[file:results_4.json.svg][file:./results_4.json.svg]]
 
 #+caption: Optimal choice of $r$ or $k_0$. $k$ and $w$ are log scale.
 #+attr_html: :class inset large
-[[file:./results_4.json_params.svg]]
+[[file:results_4.json_params.svg][file:./results_4.json_params.svg]]
 
 Note:
 - bd-anchors depend only on $\ell = w+k-1$, and hence density decreases in $k$.
 - Biminimizers are best for $k\leq w$ (but have drawbacks).
 - Miniception is always better than vanilla minimizers.
-- Reduced minimizers are terrible for $k\leq w$, but best for $k>w$.
+- Reduced minimizers are terrible for $k\leq w$, but best for $k>1.25 w$.
+  - They get _very_ close to $(1.5+2/w)/(w+1)$.
   - Why are they bad?
   - Can we optimize them more? By using more ideas from miniception?
-  - TODO: Implement the 3-way split.
 - Can we optimize miniception by introducing a third layer of minimizers??
   - Or what if we sort filtered kmers by their contained k0-mer before comparing
     their own hash?
 - For larger alphabet $\sigma = 256$ (not shown), results are mostly the same
   but bd-anchors have slightly lower density.
 
+* Conclusion
+For $k \geq 1.25 w$, reduced minimizers achieve density very close to the lower
+bound of $(1.5+1/2w)/(w+1)$ that holds for random minimizers.
+
+*TODO*
+- Make an explicit experiment for $k=21$, $w=10$, $\ell=31$.
+- Compare to PASHA?
+- Analyzer robust minimizers formally.
+- See if robust minimizers can be improved for small $k < 1.25w$.
+- Implement 3-way split for robust minimizers.
 
 
 #+print_bibliography:
