@@ -1,5 +1,5 @@
 #+title: Minimizers and variations
-#+HUGO_SECTION: notes
+#+HUGO_SECTION: posts
 #+HUGO_TAGS: minimizers
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
@@ -163,6 +163,10 @@ For random strings, reduced bd-anchors are a dense subset of the $k=r+1$ minimiz
 Given the bd-anchors, two suffix arrays are built. One of suffixes starting at
 anchors, and one on reverse prefixes ending at anchors.
 
+*Note:* bd-anchors are not a so-called /forward/ scheme. That is, it is possible
+for the window to shift right, but the selected position to jump backwards.
+[[file:../bd-anchors/bd-anchors.org::*Paper overview][Example here]].
+
 *Optimization:*
 When querying an $\ell$-mer, in practice only the longer of the
 prefix and suffix is actually looked up in the corresponding suffix array. Thus,
@@ -216,11 +220,11 @@ Inspired by previous methods, here is a new sampling scheme.
    \ell - k_0 + 1$.
 2. Extract a key of length $k\leq (\ell+k_0)/2$:
    - If $i \leq (w-1)/2$, /extend right/, i.e. extract $Q_{i..i+k}$. This is in bounds because:
-     $$i+k \leq (w-1)/2 + (\ell+r)/2 = (\ell-k_0)/2 + (\ell +k_0)/2 = \ell.$$
-   - If $i \geq (w-1)/2$, /extend left/, i.e. extract $Q_{i+r-k..i+r}$. This is in bounds because:
-     $$i+r-k \geq (w-1)/2 - (\ell+r)/2 = (\ell-k_0)/2 - (\ell +k_0)/2 = 0.$$
+     $$i+k \leq (w-1)/2 + (\ell+k_0)/2 = (\ell-k_0)/2 + (\ell +k_0)/2 = \ell.$$
+   - If $i \geq (w-1)/2$, /extend left/, i.e. extract $Q_{i+k_0-k..i+k_0}$. This is in bounds because:
+     $$i+k_0-k \geq (w-1)/2 - (\ell+k_0)/2 = (\ell-k_0)/2 - (\ell +k_0)/2 = 0.$$
 
-  When [TODO], we can instead split into three cases
+  TODO: Split into three cases for larger $k$.
 
 Here is an example for $\ell \geq 2k-3-1$. Stars indicate the candidate
 $k_0$-minimizers, and the dashes indicate the extension to a $k$-mer key.
@@ -262,11 +266,32 @@ from extending left to extending right. Should we switch around the middle? Or
 better make one of the runs as long as possible?
 
 * TODO Experiments
-- How well does reduced minimizers perform to other types of minimizers?
-- For relevant $(k,w)$ pairs, report the (best) density for each method (over
-  $k_0$ or $r$ in $[3, 7]$ (and additionally $[k-w, k-w+3]$ for miniception).
-- Try both $\sigma = 4$ and $\sigma = 256$.
-- PASHA is excluded -- even though it's best, it's much more effort to download
-  $k$mers and quickly benchmark it.
+Here are some quick results. This needs some more polishing though.
+
+- Code is at https://github.com/RagnarGrootKoerkamp/minimizers.
+- PASHA is excluded -- even though it's best, it's too much effort to download
+  $k$mers to quickly benchmark it.
+- TODO: Try both $\sigma = 4$ and $\sigma = 256$.
+- TODO: Plot some lines at density $1.5/w$.
+- TODO: Plot more k (and w?)
+- TODO: Plot value of $k_0$ / $r$ that achieved the minimum.
+
+#+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale.
+#+attr_html: :class inset large
+[[file:./results_4.json.svg]]
+
+Note:
+- bd-anchors depend only on $\ell = w+k-1$, and hence density decreases in $k$.
+  - It's cool to see that /non-local/ schemes can indeed break the $1.5/w$ lowerbound.
+- Biminimizers are best for $k\leq w$ (but have drawbacks).
+- Miniception is always better than vanilla minimizers.
+- Reduced minimizers are terrible for $k\leq w$, but best for $k>w$.
+  - Why are they bad?
+  - Can we optimize them more? By using more ideas from miniception?
+  - TODO: Implement the 3-way split.
+- Can we optimize miniception by introducing a third layer of minimizers??
+
+
+
 
 #+print_bibliography:
