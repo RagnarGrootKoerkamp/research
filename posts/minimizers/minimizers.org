@@ -184,6 +184,7 @@ Surely there is some literature on this but I'm at a loss to find it. Please let
 In short: use robust minimizers, but always use at least two candidate positions.
 For this, we can use two hash functions and take the minimizer for $h_1$ and
 $h_2$. Or we can consider the /bottom two/ minimizers with lowest score for $h$.
+(The latter performs slightly better in evals so is what I'll go with.)
 
 This also generalizes to /t-minimizers/, where we robustly choose the rightmost
 of $t$ candidates generated either by $t$ hash functions or the bottom-$t$ of a
@@ -289,9 +290,10 @@ Note:
   - Can we optimize them more? By using more ideas from miniception?
   - TODO: Implement the 3-way split.
 - Can we optimize miniception by introducing a third layer of minimizers??
+  - Or what if we sort filtered kmers by their contained k0-mer before comparing
+    their own hash?
 - For larger alphabet $\sigma = 256$ (not shown), results are mostly the same
   but bd-anchors have slightly lower density.
-
 
 
 
