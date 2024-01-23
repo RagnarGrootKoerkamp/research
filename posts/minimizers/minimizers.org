@@ -8,13 +8,13 @@
 #+date: <2024-01-18 Thu><>
 #+author: Ragnar Groot Koerkamp
 
-This posts discusses some variants of minimizers, inspired by the [[file:../bd-anchors/bd-anchors.org][post on
-bidirectional anchors]].
+This posts discusses some variants of minimizers, inspired by the previous post on [[file:../bd-anchors/bd-anchors.org][bidirectional anchors]].
 
-The goal is to *introduce slight variation of minimizers* with slightly lower
-density, but first some background.
+The final goal is to introduce variations of minimizers and evaluate their
+density. It will turn out that 'reduced minimizers' have density very close to
+some lower bound.
 
-All these schemes take an $\ell = k+w-1$ mer, and select a substring of
+Minimizer schemes take an $\ell = k+w-1$ mer, and select a substring of
 length $k$ in a deterministic way, in such a way that consecutive $\ell$-mers
 are likely to share their chosen $k$-mer.
 
@@ -211,6 +211,8 @@ deterministic.* Downstream applications will likely have to make two queries to
 locate the minimizer. But this may be worth the tradeoff compared to the space savings.
 
 ** Reduced minimizers
+/(Naming suggestions welcome.)/
+
 Bidirectional anchors have a benefit over minimizers since they always use
 $r=O(\log_\sigma (\ell))$ instead of possibly much larger $k$. This means their
 average density $2/(\ell+1-r)$ can be lower than $2/(w+1) = 2/(\ell-k+2)$.
@@ -314,6 +316,8 @@ bound of $(1.5+1/2w)/(w+1)$ that holds for random minimizers.
 - Analyzer robust minimizers formally.
 - See if robust minimizers can be improved for small $k < 1.25w$.
 - Implement 3-way split for robust minimizers.
+- Plots on distribution of distance between adjacent selected positions.
+-
 
 
 #+print_bibliography:
