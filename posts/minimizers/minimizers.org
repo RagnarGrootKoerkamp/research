@@ -265,24 +265,23 @@ It seems that this scheme performs well when $k$ is around $\ell/2$, say $\ell/3
 from extending left to extending right. Should we switch around the middle? Or
 better make one of the runs as long as possible?
 
-* TODO Experiments
-Here are some quick results. This needs some more polishing though.
+* Experiments
+Here are some quick results.
 
 - Code is at https://github.com/RagnarGrootKoerkamp/minimizers.
 - PASHA is excluded -- even though it's best, it's too much effort to download
   $k$mers to quickly benchmark it.
-- TODO: Try both $\sigma = 4$ and $\sigma = 256$.
-- TODO: Plot some lines at density $1.5/w$.
-- TODO: Plot more k (and w?)
-- TODO: Plot value of $k_0$ / $r$ that achieved the minimum.
 
 #+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale.
 #+attr_html: :class inset large
 [[file:./results_4.json.svg]]
 
+#+caption: Optimal choice of $r$ or $k_0$. $k$ and $w$ are log scale.
+#+attr_html: :class inset large
+[[file:./results_4.json_params.svg]]
+
 Note:
 - bd-anchors depend only on $\ell = w+k-1$, and hence density decreases in $k$.
-  - It's cool to see that /non-local/ schemes can indeed break the $1.5/w$ lowerbound.
 - Biminimizers are best for $k\leq w$ (but have drawbacks).
 - Miniception is always better than vanilla minimizers.
 - Reduced minimizers are terrible for $k\leq w$, but best for $k>w$.
@@ -290,6 +289,8 @@ Note:
   - Can we optimize them more? By using more ideas from miniception?
   - TODO: Implement the 3-way split.
 - Can we optimize miniception by introducing a third layer of minimizers??
+- For larger alphabet $\sigma = 256$ (not shown), results are mostly the same
+  but bd-anchors have slightly lower density.
 
 
 
