@@ -43,7 +43,7 @@ locality of hashing.
 I will first discuss some types of minimizers and introduce some new variants,
 and then experimentally evaluate their density on random strings.
 
-* Types of minimizers
+* Background
 Related but out of scope topics are:
 - universal minimizers: not really a local sampling scheme;
 - spaced minimizers/syncmers/strobemers: used for similarity
@@ -184,7 +184,9 @@ we don't need to two suffix arrays over /all/ bd-anchors:
   the right half of some $\ell$-mer.
 This makes things slightly sparser.
 
-** Biminimizers (new?)
+* New ideas
+
+** Biminimizers
 Here is an idea I had and that was also tried by Giulio for SSHash [cite:@sshash].
 Surely there is some literature on this but I'm at a loss to find it. Please let me know.
 
@@ -208,7 +210,7 @@ Like robust minimizers, this has one big drawback: *Minimizers are not
 deterministic.* Downstream applications will likely have to make two queries to
 locate the minimizer. But this may be worth the tradeoff compared to the space savings.
 
-** Reduced minimizers (new)
+** Reduced minimizers
 Bidirectional anchors have a benefit over minimizers since they always use
 $r=O(\log_\sigma (\ell))$ instead of possibly much larger $k$. This means their
 average density $2/(\ell+1-r)$ can be lower than $2/(w+1) = 2/(\ell-k+2)$.
