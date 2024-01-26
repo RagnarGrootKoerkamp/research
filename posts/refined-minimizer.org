@@ -11,6 +11,11 @@
 
 These are review-like notes on [cite/t:@refined-minimizer]. Code is at [[https://github.com/xp3i4/mini_benchmark][github:xp3i4/mini_benchmark]].
 
+I'm writing this between 1am and 4am after two days of carefully studying
+[cite/t:@winnowing] and the inaccuracies there. I'm overly pedantic at this
+point and most likely some of my claims below are too strong. But either way,
+here are some comments.
+
 Summary:
 - The methods contain a number of false statements.
 - The limit to $|s|$ needs to be made much more precise. In fact it is a
@@ -73,8 +78,19 @@ that could use fixing.
     proof. Also, the $P(\delta_n \delta_{n+1}<0)$ probability should be
     multiplied by $P(h_r(s_n) = h_r(s_{n+1}) | \delta_n\delta_{n+1}<0)$. (That
     term is close to but not equal to $1$.)
+** 2.3 heuristic
+- In the $-1,1,1$ case, suppose you the 2nd and 3rd window have the same
+  minimizer. You skip counting this in the sign change step, and also skip
+  counting it in the last step because it's equal to the minimizer of the
+  preceding window. But for sure we must count this minimizer. Thus, I think your heuristic only seems to work because of
+  under-counting the number of chosen minimizers.
 - /Solo windows are minority especially for large $|s|$/. *FALSE*. They are
-  minority especially for large $k$. For large $w$ but $k$ small there is no proof.
+  minority especially for large $k$. *For large $w$ but $k$ small there is no proof.*
+
+- Is this heuristic actually used for the results? The fact that =Rfd= has a
+  higher density than =Std= in Table 3 suggests not?
+
+  - Some analysis and discussion regarding the heuristic is needed.
 
 * 3. Results
 - The theoretical analysis ignores CPU details such as prefetching, pipelining,
@@ -96,6 +112,10 @@ that could use fixing.
 - Both runtime and sample density and kmer frequency should be compared to
   NtHash2. Performance benchmarks are not meaningful without comparing to some
   highly optimized library for finding (canonical) minimizers.
+
+- *The number of minimizers skipped because of sign changes must be analyzed.*
+  - Very small $k$ is used, so the probability of sign change is quite large.
+    Maybe the density is low simply because many minimizers are skipped?
 
 * Discussion
 - /Gbps/ => /Gbp/
