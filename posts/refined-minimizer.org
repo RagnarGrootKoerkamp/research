@@ -1,0 +1,107 @@
+#+title: Review of refined minimizes
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: review
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-26 Fri>
+#+author: Ragnar Groot Koerkamp
+
+
+These are review-like notes on [cite/t:@refined-minimizer]. Code is at [[https://github.com/xp3i4/mini_benchmark][github:xp3i4/mini_benchmark]].
+
+Summary:
+- The methods contain a number of false statements.
+- The limit to $|s|$ needs to be made much more precise. In fact it is a
+  $k\to\infty$ limit which is not useful in practice.
+- Provided code in the linked repo [[https://github.com/xp3i4/mini_benchmark/issues/1][segfaults]].
+
+* 1. Introduction
+Mostly textual and nitpicky notes here.
+
+- $w>k$: *not needed*. $w\geq 1$ is sufficient.
+- In many places, =\citep= citations like [cite:@refined-minimizer] would have
+  been more appropriate then =\citet= ones like [cite/t:@refined-minimizer].
+- /the minimizer concept is a data structure/: it's not a data structure.
+- /of a predefined ordering scheme/: the minimum of/over some set *with respect
+  to* some ordering scheme.
+- /+Study+ Schleimer et al..../
+- /denote *with* $<$/
+- /and *with* $X$ ... whose size *is* $|S|$/
+- nitpicky imprecion: $X$ is the set of *positions of kmers*, not simply the set
+  of *kmer strings themselves*. (Or I suppose $X$ could be a list of kmers.)
+  (Otherwise we have $|X| \leq 4^k$ and $|S|\to\infty$ so that
+  $\rho\to 0$.)
+- /a k-mer $X = x$/ => Why not just $x$?
+- $n(x)/|S|$ is not really an /average/ (there is only one string $S$); rather it's a density.
+- The definition of $V$ is not clear to me. What is random? What is counted?
+- /3. Its density converges/ => For $w\to \infty$ or $k\to\infty$ or both?
+- /can reach *up to* 2 times *faster* +at most+/
+- =CMP= (branch conditions) can be one of the slowest instructions on modern
+  hardware. Branch misses in an inner loop for minimizer computation could
+  severely affect performance.
+- Simple operations and L1 accesses can be pipelined and latency can be hidden,
+  making them take 2-4x time less in practice. This makes branch-misses up to 4
+  times as bad, relatively.
+- Are lexicographic minimizers used much in practice?
+
+* 2. Methods
+There are a number of simply false statements here and a bunch of unclarities
+that could use fixing.
+
+- The 'standard' definition of minimizers as $\min_i \{ \min(s_i, s'_i)\}$ can
+  also be fixed by replacing the inner minimum by a sum or xor, as done by
+  NtHash [cite:@nthash]. This removes branches.
+- Property 3:
+  - What is the length of $s$? $w+k-1$ as before? but then $s_n$ has length
+    $w+k-2$ which is weird. fix $|s| = w+k$?
+  - The $n$ subscript seems unused and can be dropped? Just $s_0$ and $s_1$ is sufficient.
+    - Only at the end of the proof I realize: the limit is over
+      $k \to \infty$. This is *very* unclear. Consider rewriting this part
+      using explicit $k$ and $w$ instead of $n$ and $|s|$.
+  - Equation 5: the limit is meaningless. The term inside does not depend
+    on $n$. It is sufficient to consider the two windows of a $w+k$ long random
+    string $s$.
+  - Proof: the result from [cite/t:@winnowing] is used, but this only
+  holds for $k \geq (3+\epsilon)\log_\sigma w$. See section 2.3 of [cite/t:@improved-minimizers].
+  - /the probability of each case is $1/(w+1)$./ *FALSE*. The probability of
+    each case is $1/w$. But the two events are not independent. And the
+    probability that one *or* the other happens works out as $2/(w+1)$.
+  - The binomials need better formatting. Use =\binom{n}{k}=, not left and right parentheses.
+  - I don't understand equation 7. The preceding equation already completes the
+    proof. Also, the $P(\delta_n \delta_{n+1}<0)$ probability should be
+    multiplied by $P(h_r(s_n) = h_r(s_{n+1}) | \delta_n\delta_{n+1}<0)$. (That
+    term is close to but not equal to $1$.)
+- /Solo windows are minority especially for large $|s|$/. *FALSE*. They are
+  minority especially for large $k$. For large $w$ but $k$ small there is no proof.
+
+* 3. Results
+- The theoretical analysis ignores CPU details such as prefetching, pipelining,
+  and branch predicting. Putting a fixed number on this feels misleading.
+- When computing minimizers in consecutive windown, NtHash is a very efficient
+  rolling hash. One can not simply say /refined minimizer preserves speedup/.
+- Alg 1 & 2:
+  - The code in both algorithms assumes the previous window has already been
+    computed. This is not at all clear from the description. There is hidden
+    state not mentioned after *Input:*. I.e. $h_{n-1,j}$ comes out of nowhere
+    and is never initialized. (Or should there be a for loop around it?)
+  - How about memory usage? Are all intermediate $h_{x,y}$ stored?
+- =3.88E3= in the table is hard to read without alignment of
+  columns. Also has less significant digits than e.g. =16.95=.
+- Results on distribution of kmer frequencies look good! Around 2x less (and
+  sometimes more).
+- Fig 1 has nice results.
+
+- Both runtime and sample density and kmer frequency should be compared to
+  NtHash2. Performance benchmarks are not meaningful without comparing to some
+  highly optimized library for finding (canonical) minimizers.
+
+* Discussion
+- /Gbps/ => /Gbp/
+
+- How about other ideas such as:?
+  - Taking the maximum of [the minimum of forward kmers] and [the minimum
+    of reverse kmers]?
+  - Taking the minimum of sum/xor of forward and reverse kmer?
+#+print_bibliography:
