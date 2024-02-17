@@ -14,6 +14,7 @@
 \newcommand{\cgap}{c_{\texttt{gap}}}
 \end{equation*}
 
+
 * Abstract
 
 * Summary
@@ -26,7 +27,7 @@ This paper improves Edlib and A*PA by
 - applying and improving the A* heuristic of A*PA,
 leading to a $10\times$ overall speedup on the alignment of $500$kbp ONT reads.
 
-* Introduction and previous work
+* Introduction
 
 The problem of /global pairwise alignment/ is to find the shortest sequence of
 edit operations (insertions, deletions, substitutions) to convert a string $A$
@@ -52,6 +53,8 @@ but is expensive, and an algorithm which is fast but may not give the best
 alignment. In this paper we narrow the gap between these choices by showing how
 to get the optimal alignment much more quickly than before.
 #+end_quote
+
+** Previous work
 
 In the following, we give a brief recap of developments that this work builds
 on, in chronological order per approach.  See also e.g. the reviews by
@@ -249,64 +252,106 @@ TODO:
 
 ** Contributions
 
-In A*PA-v2, we combine many existing techniques and introduce a number of new
-techniques to obtain a $10\times$ speedup over existing single-threaded aligners.
+In A*PA2, we combine multiple existing techniques and introduce a number of new
+ideas to obtain a $10\times$ speedup over existing single-threaded exact aligners.
 As a starting point, we take the band doubling algorithm as efficiently
-implemented by Edlib [cite:@edlib] using bitpacking [cite:@myers99].
-From there, we make a number of improvements.
+implemented by Edlib [cite:@edlib] that uses bitpacking [cite:@myers99].
+First, we speed up the implementation without modifying the algorithm
+(points 1., 2., and 3.), then, we reduce the amount of work done (points 4. and 5.),
+and lastly we apply A*.
 
-1. *Block-based computation.* We first observe that Edlib computes one column of the DP matrix at a time,
-   and for each column decides which range of cells to compute.  We
+1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
+   and for each column decides which range (subset of rows) of cells to compute.  We
    significantly reduce this overhead by processing blocks of $256$ columns at a
-   time, similar to Block aligner [cite:@block-aligner]. Correspondingly, we only store
-   cells of the DP-matrix at block boundaries.
-2. *Incremental doubling.* We further note that both the original band doubling method of
+   time, taking inspiration from Block aligner [cite:@block-aligner].
+   Correspondingly, we only store cells of the DP-matrix at block boundaries,
+   reducing memory usage.
+2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
+   the processing of $4$ computer words in parallel.
+3. *Novel encoding.* We introduce a novel bit-encoding of the input sequence to
+   speed up SIMD operations for size-$4$ alphabets.
+4. *Incremental doubling.* We further note that both the original band doubling method of
    [cite/t:@ukkonen85] and Edlib recompute states in the doubled region. Reusing
-   the theory behind the A* algorithm, we prove a novel theorem stating that some of
+   the theory behind the A* algorithm, we prove and apply a novel theorem stating that some of
    this recomputation can be avoided.
-3. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
-   the processing of $4$ computer words in parallel, and introduce a novel
-   bit-encoding of the input sequence to make this even faster.
-4. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
+5. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
    block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
-5. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
+6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
    instead of updating contours each time a match is pruned, we now do this in
    batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
    that discards most of the /spurious/ (off-path) matches ahead of time.
 
----
-
 * Methods
-First, we reduce the amount of meta overhead in Edlib.
-Then, we speed up the implementation further. At this point, we should simply
-have a more efficient reimplementation that roughly mimicks Edlib.
-
-On top of that, we can apply the A*PA heuristics for further speed gains on large/complex
+First, we explain in detail the algorithm and implementation used by Edlib and
+reduce the overhead in the implementation by using blocks and SIMD.
+Then, we improve the algorithm by avoiding recomputing states and
+speeding up the traceback algorithm.
+On top of that, we apply the A*PA heuristics for further speed gains on large/complex
 alignments, at the cost of larger precomputation time to build the heuristic.
 
+** Band-doubling and bitpacking in Edlib
+As a baseline, we first outline the band-doubling method used by Edlib.
+
+1. Start with edit-distance threshold $t=1$.
+2. Iterate over columns $i$ from $0$ to $n$.
+3. For each column, determine the range of rows $R=(r_{start}, r_{end})$ to compute by finding the top-
+   and bottommost cell that can possibly have cost at most $t$, taking into
+   account the gap-cost to the end.
+   a. If the range is empty, double $t$ and go back to step 2.
+   b. Otherwise, compute the range in blocks of $w=64$ rows at a time using
+     bitpacking and the standard /profile/ of sequence $B$.
+
+     Only the last and current column are kept in memory.
+4. Once the last column has been reached, recursively repeat the algorithm using
+   Hirschberg's /meet-in-the-middle/ approach to find the alignment.
+
 ** Blocks
-- Blocks
-  - Param: block size
-- Sparse heuristic
-- Sparse memory
-- Param: sparsity, same as block size
+Our first improvement is to process $B=256$ columns at a time. Instead of
+computing the range of rows $R$ for each column individually, we compute it once and
+then use this one range for a block of $B$ consecutive columns. While the extra
+computed state in each column introduce some overhead, the time saved by not
+computing $R$ for each column is larger.
+
+See [[*Range-of-rows computation]] for details on the computation of the range of
+rows.
+
+** SIMD
+While it is tempting to use a SIMD vector as a
+single $w=256$-bit word, the four $64$-bit words are dependent on each other and
+require manual work to shift bits between the lanes.
+Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words that are anti-diagonally
+staggered (TODO FIG). This is similar to the original anti-diagonal tiling
+introduced by [cite/t:@wozniak97], but using units of $64$-bit words instead of
+single characters. This idea was already introduced in 2014 by the author of
+Edlib[fn::See https://github.com/Martinsos/edlib/issues/5.], but to our
+knowledge has never been implemented either in Edlib or elsewhere.
+
+We achieve further speedup by improving instruction-level-parallelism.
+Modern CPUs can execute up to 4 instructions per cycle (IPC) and use execution
+pipelines that look ahead tens of instructions. The dependencies
+between the instructions for computing each SIMD vector do not allow such high
+parallelism. We improve this by processing two SIMD vectors in parallel, spanning a total of
+eight antidiagonally-aligned $64$-bit words covering $512$ rows (TODO FIG).
+
+** SIMD-friendly sequence profile
+- New encoding scheme
+- TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
+  without success so far.
 ** Incremental doubling
 - States with $f \leq f_{max}$ have /fixed/ values (assuming the heuristic is consistent).
 - We can store deltas around the edge of this region and incrementally start the
   computation from there.
-** SIMD and bitpacking
-- Diagonally strided 4-lane SIMD
-- 2 parallel executions for higher instructions-per-cycle, so 8-lanes (512 states) total.
-- New bitpacking method than
-- TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
-  without success so far.
 ** Traceback
+- Sparse memory
+  - Param: sparsity, same as block size, but could in theory be a multiple.
 - DT Trace
   - Param: x-drop
 ** A*
-- pre-pruning
-  - Param: length of lookahead
-- bulk contours update
+*** Pre-pruning
+- Param: length of lookahead
+*** Bulk-contours update
+*** Range-of-rows computation
+  - Sparse heuristic
 * Results
 Compare
 - Edlib
