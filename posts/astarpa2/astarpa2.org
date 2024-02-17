@@ -54,6 +54,37 @@ alignment. In this paper we narrow the gap between these choices by showing how
 to get the optimal alignment much more quickly than before.
 #+end_quote
 
+** Contributions
+
+In A*PA2, we combine multiple existing techniques and introduce a number of new
+ideas to obtain a $10\times$ speedup over existing single-threaded exact aligners.
+As a starting point, we take the band doubling algorithm as efficiently
+implemented by Edlib [cite:@edlib] that uses bitpacking [cite:@myers99].
+First, we speed up the implementation without modifying the algorithm
+(points 1., 2., and 3.), then, we reduce the amount of work done (points 4. and 5.),
+and lastly we apply A*.
+
+1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
+   and for each column decides which range (subset of rows) of cells to compute.  We
+   significantly reduce this overhead by processing blocks of $256$ columns at a
+   time, taking inspiration from Block aligner [cite:@block-aligner].
+   Correspondingly, we only store cells of the DP-matrix at block boundaries,
+   reducing memory usage.
+2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
+   the processing of $4$ computer words in parallel.
+3. *Novel encoding.* We introduce a novel bit-encoding of the input sequence to
+   speed up SIMD operations for size-$4$ alphabets.
+4. *Incremental doubling.* We further note that both the original band doubling method of
+   [cite/t:@ukkonen85] and Edlib recompute states in the doubled region. Reusing
+   the theory behind the A* algorithm, we prove and apply a novel theorem stating that some of
+   this recomputation can be avoided.
+5. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
+   block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
+6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
+   instead of updating contours each time a match is pruned, we now do this in
+   batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
+   that discards most of the /spurious/ (off-path) matches ahead of time.
+
 ** Previous work
 
 In the following, we give a brief recap of developments that this work builds
@@ -249,37 +280,6 @@ TODO:
   affine cost alignment
 - [cite:@bitpal] BitPAl
 
-
-** Contributions
-
-In A*PA2, we combine multiple existing techniques and introduce a number of new
-ideas to obtain a $10\times$ speedup over existing single-threaded exact aligners.
-As a starting point, we take the band doubling algorithm as efficiently
-implemented by Edlib [cite:@edlib] that uses bitpacking [cite:@myers99].
-First, we speed up the implementation without modifying the algorithm
-(points 1., 2., and 3.), then, we reduce the amount of work done (points 4. and 5.),
-and lastly we apply A*.
-
-1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
-   and for each column decides which range (subset of rows) of cells to compute.  We
-   significantly reduce this overhead by processing blocks of $256$ columns at a
-   time, taking inspiration from Block aligner [cite:@block-aligner].
-   Correspondingly, we only store cells of the DP-matrix at block boundaries,
-   reducing memory usage.
-2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
-   the processing of $4$ computer words in parallel.
-3. *Novel encoding.* We introduce a novel bit-encoding of the input sequence to
-   speed up SIMD operations for size-$4$ alphabets.
-4. *Incremental doubling.* We further note that both the original band doubling method of
-   [cite/t:@ukkonen85] and Edlib recompute states in the doubled region. Reusing
-   the theory behind the A* algorithm, we prove and apply a novel theorem stating that some of
-   this recomputation can be avoided.
-5. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
-   block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
-6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
-   instead of updating contours each time a match is pruned, we now do this in
-   batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
-   that discards most of the /spurious/ (off-path) matches ahead of time.
 
 * Methods
 First, we explain in detail the algorithm and implementation used by Edlib and
