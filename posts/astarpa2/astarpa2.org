@@ -1,4 +1,4 @@
-#+title: [WIP] 10x faster exact global alignment using A*PA-v2
+#+title: [WIP] A*PA2: 10x faster exact global alignment
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
@@ -18,25 +18,25 @@
 \newcommand{\matches}{\mathcal M}
 \end{equation*}
 
+Preface: This is my work-in-progress draft for my paper on version 2 of A*PA.
+Code is done and works, but needs some cleanup and polishing. The API also needs
+work.
 
 * Abstract
 :PROPERTIES:
 :UNNUMBERED: t
 :END:
 
-
-* Summary
-:PROPERTIES:
-:UNNUMBERED: t
-:END:
-
-This paper improves Edlib and A*PA by
-- reducing overhead by using larger block sizes,
-- avoiding recomputing states where possible,
-- using SIMD with a novel bit-encoding,
-- using a novel /optimistic/ diagonal-transition based traceback,
-- applying and improving the A* heuristic of A*PA,
-leading to a $10\times$ overall speedup on the alignment of $500$kbp ONT reads.
+*Methods.* We introduce a new global pairwise aligner, A*PA2, that builds on Edlib and
+incorporates ideas from Block Aligner and A*PA. A*PA2 1) uses
+Myers' bitpacking with SIMD, 2) significantly reduces overhead by using large block
+sizes, 3) avoids recomputation of states where possible, 4) introduces two new
+techniques for traceback, and 5) improves and applies the heuristics developed
+in A*PA.
+*Results.*
+A $10\times$ overall speedup on the alignment of $500$kbp ONT reads.
+*Availability.* [[github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]]
+*Contact.* [[twitter.com/curious_coding]]
 
 * Introduction
 
@@ -506,11 +506,6 @@ of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
 $p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
 know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
 increase the value of the heuristic while keeping it /admissible/.
-
-
-
-
-
 
 ** Appendix: Range-of-rows computations
 *** Computed range
