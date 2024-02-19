@@ -14,6 +14,7 @@
 \newcommand{\cgap}{c_{\texttt{gap}}}
 \newcommand{\xor}{\ \mathrm{xor}\ }
 \newcommand{\and}{\ \mathrm{and}\ }
+\newcommand{\st}[2]{\langle #1, #2\range}
 \end{equation*}
 
 
@@ -297,31 +298,44 @@ As a baseline, we first outline the band-doubling method used by Edlib.
 1. Start with edit-distance threshold $t=1$.
 2. Iterate over columns $i$ from $0$ to $n$.
 3. For each column, determine the range of rows $R=(r_{start}, r_{end})$ to compute by finding the top-
-   and bottommost cell that can possibly have cost at most $t$, taking into
-   account the gap-cost to the end.
+   and bottommost state that can possibly have cost at most $t$, taking into
+   account the gap-cost to the end. Both $r_{start}$ and $r_{end}$ are rounded
+   /out/ to the previous/next multiple of $w$.
    a. If the range is empty, double $t$ and go back to step 2.
    b. Otherwise, compute the range in blocks of $w=64$ rows at a time using
      bitpacking and the standard /profile/ of sequence $B$.
 
      Only the last and current column are kept in memory.
-4. Once the last column has been reached, recursively repeat the algorithm using
-   Hirschberg's /meet-in-the-middle/ approach to find the alignment.
+4. *Traceback.* Once the last column has been reached, recursively repeat the algorithm using
+   Hirschberg's /meet-in-the-middle/ approach to find the alignment. Continue
+   until the sequences are of length $\leq 1000$. For these small sequences all
+   vertical differences can be stored and a backtrace is done to find the alignment.
 
 ** Blocks
 Our first improvement is to process $B=256$ columns at a time. Instead of
 computing the range of rows $R$ for each column individually, we compute it once and
-then use this one range for a block of $B$ consecutive columns. While the extra
-computed state in each column introduce some overhead, the time saved by not
-computing $R$ for each column is larger.
+then use this one range for a block of $B$ consecutive columns. While this
+computes some extra states in most columns, the time saved by not
+having to compute $R$ for each column is larger.
 
-See [[*Range-of-rows computation]] for details on the computation of the range of
-rows.
+Within each block, we iterate over the rows in /lanes/ of $w$ rows at a time, and for each
+lane compute all $B$ columns before moving on to the next lane.
+
+See [[*Computed range]] for details on the computation of $R$.
+
+Where Edlib does not initially store intermediate values and uses meet-in-the-middle to
+find the alignment, we /always/ store vertical differences at the end of
+each[fn::We support /sparser/ memory usage by only storing differences every
+$S=s\cdot B$ columns, but in practice this does not matter much.]
+block. This simplifies the implementation, and has sufficiently small memory
+usage to be practical. See [[*Traceback]] for details on recovering the alignment.
 
 ** SIMD
-While it is tempting to use a SIMD vector as a
-single $w=256$-bit word, the four $64$-bit words are dependent on each other and
-require manual work to shift bits between the lanes.
-Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words that are anti-diagonally
+While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
+$w=64$-bit words (SIMD lanes) are dependent on each other and require manual
+work to shift bits between the lanes.
+Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words
+(lanes) that are anti-diagonally
 staggered (TODO FIG). This is similar to the original anti-diagonal tiling
 introduced by [cite/t:@wozniak97], but using units of $64$-bit words instead of
 single characters. This idea was already introduced in 2014 by the author of
@@ -333,7 +347,18 @@ Modern CPUs can execute up to 4 instructions per cycle (IPC) and use execution
 pipelines that look ahead tens of instructions. The dependencies
 between the instructions for computing each SIMD vector do not allow such high
 parallelism. We improve this by processing two SIMD vectors in parallel, spanning a total of
-eight antidiagonally-aligned $64$-bit words covering $512$ rows (TODO FIG).
+$8$ anti-diagonally-aligned $64$-bit lanes covering $2W = 512$ rows (TODO FIG).
+
+When the number of lanes of rows to be computed is $c=(r_{end}-r_{start})/64$, we
+process $8$ lanes in parallel as long as $c\geq 8$. If there are remaining
+rows, we end with another $8$-lane ($5\leq c<8$) or $4$-lane ($1\leq c\leq 4$)
+iteration that optionally includes some padding rows at the bottom.
+In case the horizontal differences along the original bottom row are needed (as
+is the case for incremental doubling [[*Incremental doubling]]), we
+do not use padding and instead fall back to trying a $4$-lane SIMD ($c\geq 4$),
+a $2$-lane SIMD ($c\geq 2$), and lastly a scalar iteration ($c\geq 1$).
+
+TODO: How about padding upwards?
 
 ** SIMD-friendly sequence profile
 Myers' bitpacking algorithm precomputes a /profile/ $P_{eq}[c][j]$ containing
@@ -364,36 +389,72 @@ SIMD vectors.
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
 ** Incremental doubling
-The original band doubling algorithm doubles the threshold from $t$ to $t'$ in
-each iteration and simply recomputes the distance to all states.
-On the other hand, BFS, Dijkstra, and A*[fn::A* with a
-/consistent/ heuristic.] visit states in
-increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) = g(u) + h(u)$
-for A*), and the distance to a state is known to be correct as soon as
-it is expanded. This way a state is never expanded twice.
+The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
+in each iteration and simply recomputes the distance to all states.  On the
+other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
+states in increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) =
+g(u) + h(u)$ for A*), and the distance to a state is known to be correct
+(/fixed/) as soon as it is expanded. This way a state is never expanded twice.
 
 Indeed, the band-doubling algorithm can also avoid recomputations. After
-completing the iteration for $t$, it is guaranteed that the distance was
-correctly computed to all states that are indeed at distance $\leq t$.
-Due to the word-based computations, this process usually also
-computes distances to states at distance $>t$, but these are /not/ guaranteed to
-be correct.
+completing the iteration for $t$, it is guaranteed that the distance is fixed
+for all states that are indeed at distance $\leq t$.  Note that due to the
+word-based computations, there will also be states whose computed distance is
+$>t$. These are /not/ guaranteed to be correct.
 
-
-- States with $f \leq f_{max}$ have /fixed/ values (assuming the heuristic is consistent).
-- We can store deltas around the edge of this region and incrementally start the
-  computation from there.
+After a range $R=(r_{start}, r_{end})$ of rows for a block of $B$ columns has
+been computed, we determine the first row $r'_{start} \geq r_{start}$ and last
+row $r'_{end}\leq r_{send}$ that are a multiple of $w$ and for which all
+computed distances in this block are at most $t$, if such rows exists. (See
+[[*Fixed range]] for details.) We then store these values $(r'_{start}, r'_{end})$
+and the horizontal difference along row $r'_{end}$. The next iteration for
+$t'=2t$ then skips the rows in this interval, and uses the stored differences as
+input to compute rows $r'_{end}$ to the new $r_{end}$.
 ** Traceback
-- Sparse memory
-  - Param: sparsity, same as block size, but could in theory be a multiple.
-- DT Trace
-  - Param: x-drop
+The traceback stage takes as input the computed vertical differences at
+the end of each block of columns. We iteratively work backwards through the
+blocks of columns. In each step, we are given the distances $D_i[j]$ to
+the states in column $i$ ($B|i$) and the state $u=\st{i+B}j$ in column $i+B$
+that is on the optimal path and has distance $d_u$.
+The goal is to find an optimal path from column $i$ to $u$.
+
+A naive approach is to simply recompute the entire block of columns for their
+entire range $R$ while storing distances to all cells, but we introduce to
+faster methods.
+*** Optimistic range computation
+Instead of computing the full range $R=(r_{start}, r_{end})$ for this column, a
+first insight is that only rows up to $j$ are needed, since the optimal path to
+$u=\st{i+B}j$ can never go below row $j$.
+
+Secondly, the path crosses $B=256$ rows, and so we optimistically assume that it
+will be contained in rows $j-256-64=j-320$ [CHECK] to $j$. Thus, we first compute the
+states in this range of rows (rounded out to multiples of $w$). If the distance
+to $u$ computed this way agrees with the known distance, the path must lie
+within these rows. Otherwise, we repeatedly try again with double the number of lanes, until
+success. The exponential search ensures low overhead and good average case performance.
+*** Optimistic diagonal transition
+A further improvement uses the /diagonal transition/ algorithm backwards from
+$u$. We simply run the unmodified algorithm on the reverse graph covering
+columns $i$ to $i+B$ and rows $0$ to $j$. When the distance $d_j$ from $u$ to a
+state $\st ij$ in column $i$ is found, we check whether $D_i[j] + d_j = d_u$.
+If this is not the case, we continue until a suitable $j$ is found.  We then
+infer the optimal path by a traceback on the diagonal transition algorithm.
+
+One further optimization to this is that again we can be optimistic and assume
+that the path will have distance at most $d_0=TODO$, and ignore any states that are
+at distance $>d_0$. If all states at distance $\leq d_0$ have been explored
+without finding a /match/ in column $i$, $d_0$ is doubled repeatedly until success.
+
+Another optimization is the X-drop [TODO], meaning that all states that lag
+more than $x$ columns behind the one with smallest $j$ will be dropped.
 ** A*
 *** Pre-pruning
 - Param: length of lookahead
 *** Bulk-contours update
-*** Range-of-rows computation
-  - Sparse heuristic
+** Appendix: Range-of-rows computation
+- Sparse heuristic
+*** Computed range
+*** Fixed range
 * Results
 Compare
 - Edlib
