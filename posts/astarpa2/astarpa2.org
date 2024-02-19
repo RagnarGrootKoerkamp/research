@@ -20,6 +20,7 @@
 
 * Abstract
 
+
 * Summary
 
 This paper improves Edlib and A*PA by
@@ -421,7 +422,7 @@ The goal is to find an optimal path from column $i$ to $u$.
 A naive approach is to simply recompute the entire block of columns for their
 entire range $R$ while storing distances to all cells, but we introduce to
 faster methods.
-*** Optimistic range computation
+*** Optimistic block computation
 Instead of computing the full range $R=(r_{start}, r_{end})$ for this column, a
 first insight is that only rows up to $j$ are needed, since the optimal path to
 $u=\st{i+B}j$ can never go below row $j$.
@@ -448,10 +449,31 @@ without finding a /match/ in column $i$, $d_0$ is doubled repeatedly until succe
 Another optimization is the X-drop [TODO], meaning that all states that lag
 more than $x$ columns behind the one with smallest $j$ will be dropped.
 ** A*
+Edlib already uses a simple /gap-cost/ heuristic that gives a lower bound on the
+number of insertions and deletions on a path from each state to the end.
+We simply replace this by the stronger heuristics introduced in A*PA.
+We use three variants:
+1. *No heuristic.* Only use the gap heuristic. No initialization needed.
+2. *Seed heuristic (SH).* This requires relatively simple precomputation, and
+   little bookkeeping, but works well for low uniform error rate.
+3. *Gap-chaining seed heuristic (GCSH).* The strongest heuristic that requires
+   more time to initialize and update, but is better able to penalize long indels.
+
+The details of how these changes affects the ranges of rows being computed are
+in [[*Appendix: Range-of-rows computations]].
+
+We make two modifications the previous version of the A*PA algorithm.
+
+*** Bulk-contours update
+In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
+found. This helps to penalize states /before/ (left of) the match. Each
+iteration of our new algorithm works left-to-right only, and thus pruning of
+matches does not affect the current iteration. Instead of pruning on the fly, we
+now collect all matches to be pruned at the end of each iteration, and prune
+them in one right-to-left sweep.
 *** Pre-pruning
 - Param: length of lookahead
-*** Bulk-contours update
-** Appendix: Range-of-rows computation
+** Appendix: Range-of-rows computations
 - Sparse heuristic
 *** Computed range
 *** Fixed range
