@@ -481,8 +481,37 @@ iteration of our new algorithm works left-to-right only, and thus pruning of
 matches does not affect the current iteration. Instead of pruning on the fly, we
 now collect all matches to be pruned at the end of each iteration, and prune
 them in one right-to-left sweep.
-*** Pre-pruning
-- Param: length of lookahead
+*** TODO Pre-pruning
+Here we introduce an independent optimization that also applies to the original
+A*PA method.
+
+Each of the heuristics $h$ introduced in A*PA depends on the set of matches
+$\matches$. Given that $\matches$ contains /all/ matches, $h$ was shown to be an
+admissible [TODO] heuristic. Even after pruning some matches, $h$ was shown to
+still be a lower bound on the length of a path not going through already visited states.
+
+Now consider a situation where there are two seeds and there is an exact match
+$m$ from $u=v_s$ to $v$ for seed $s_0$, but going from $v$ to the end of the
+next seed $s_1$ takes cost at least $2$ (TODO FIG).  The existence of the match
+is a 'promise' that $s_0$ can be crossed for free.  In this case, this leads to
+a seed heuristic value of $1$ is $u$, namely $0$ for $s_1$ plus $1$ for $s_1$. But we
+already know that match $m$ can /never/ lead to a path of cost $<2$ to the end
+of $s_1$. Thus, we may as well ignore $m$! This increases the value of the
+seed heuristic in $u$ to $2$, which is indeed a lower bound on the actual distance.
+
+More generally, consider a situation where there is a match $m$ from $u$ to $v$
+in seed $s_i$, and the lowest cost path from $s_i$ to the /start/ of $s_{i+p}$
+has cost $\geq p$.  The seed heuristic penalizes the path from $u$ (at the start
+of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
+$p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
+know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
+increase the value of the heuristic while keeping it /admissible/.
+
+
+
+
+
+
 ** Appendix: Range-of-rows computations
 *** Computed range
 - Sparse heuristic
