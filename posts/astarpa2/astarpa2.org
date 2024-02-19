@@ -15,13 +15,20 @@
 \newcommand{\xor}{\ \mathrm{xor}\ }
 \newcommand{\and}{\ \mathrm{and}\ }
 \newcommand{\st}[2]{\langle #1, #2\rangle}
+\newcommand{\matches}{\mathcal M}
 \end{equation*}
 
 
 * Abstract
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
 
 
 * Summary
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
 
 This paper improves Edlib and A*PA by
 - reducing overhead by using larger block sizes,
@@ -95,14 +102,16 @@ In the following, we give a brief recap of developments that this work builds
 on, in chronological order per approach.  See also e.g. the reviews by
 [cite/t:@kruskal83] and [cite/t:@navarro01].
 
-*Needleman-Wunsch.* This problem has classically been approached as a dynamic
+*** Needleman-Wunsch
+This problem has classically been approached as a dynamic
 programming (DP) problem. For string lengths $n$ and $m$, [cite/t:@nw]
 introduced the first $O(n^2m)$ algorithm.  This was improved to what is now
 known as the $O(nm)$ /Needleman-Wunsch algorithm/ by [cite/t:@sellers] and
 [cite/t:@wagner74], building on the quadratic algorithm for /longest common
 subsequence/ by [cite/t:@sankoff].
 
-*Graph algorithms.* It was already realized early on that this problem
+*** Graph algorithms
+It was already realized early on that this problem
 corresponds to finding the shortest path from $v_s$ to $v_t$ in the /alignment
 graph/ (also called /edit graph/ or /dependency graph/)
 [cite:@vintsyuk68;@ukkonen85]. Both [cite/t:@ukkonen85] and [cite/t:@myers86]
@@ -139,7 +148,8 @@ lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
 Indeed, a lot of work has gone into speeding up DP-based algorithms.
 
-*Computational volumes.* [cite/t:@wilbur-lipman-83] is (to our knowledge) the
+*** Computational volumes
+[cite/t:@wilbur-lipman-83] is (to our knowledge) the
 first paper that speeds up the $O(nm)$ DP algorithm, by only considering states
 near diagonals with many /k-mer matches/, but at the cost of giving up the exactness
 of the method.  [cite/t:@fickett84] notes that for $t\geq s$ only those DP-states with cost $\g(u)$ at
@@ -202,7 +212,8 @@ minor detail in most algorithms.
 #+end_quote
 But this is exactly what was investigated a lot in the search for faster implementations.
 
-*Implementation and parallelism.* Since roughly $1995$, the focus shifted from
+*** Implementation and parallelism
+Since roughly $1995$, the focus shifted from
 reducing the number of computed states to computing states faster through
 advancements in implementation and hardware (SIMD, GPUs).  These speedups are
 often applied to the Smith-Waterman-(Gotoh) [cite:@sw;@gotoh] algorithm for
@@ -238,6 +249,8 @@ bit-encoded in two 64-words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
 the $i$'th difference is $+1$ resp. $-1$.  It then gives an efficient algorithm
 using bitwise operations on these words.
 
+---
+
 TODO
 - [cite:@farrar] Farrar's striped; uses query profile; conditional prefix scan
   is moved outside inner loop. $2-8\times$ faster than Wozniak and Rognes.
@@ -248,7 +261,7 @@ TODO
 - navarro 2004
 - bergeron hamel 2002
 
-*Tools.*
+*** Tools
 There are multiple semi-global aligners that implement $O(nm)$ global
 alignment using numerous of the aforementioned implementation
 techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], Opal
@@ -268,10 +281,7 @@ computation into blocks.
 Lastly, A*PA [cite:@astarpa] directly implements A* on the alignment graph using
 the gap-chaining seed heuristic.
 
-
 ---
-
-TODO:
 
 - Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
   of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
@@ -474,9 +484,10 @@ them in one right-to-left sweep.
 *** Pre-pruning
 - Param: length of lookahead
 ** Appendix: Range-of-rows computations
-- Sparse heuristic
 *** Computed range
+- Sparse heuristic
 *** Fixed range
+- Sparse heuristic
 * Results
 Compare
 - Edlib
@@ -494,7 +505,20 @@ Important:
 - Show benefit of each of the optimizations
 - Show sensitivity to parameter tuning
 
+* Conclusion
+** Summary
+** Limitations
+- Initialization takes time
+- WFA is better when edit distance is /very/ low.
+** Future work
+- Local pruning for seed&extend methods?
+- Semi-global alignment
+- Affine alignment
+
 * Acknowledgements
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
 
 I am grateful to Daniel Liu for regular discussions, and suggesting additional
 papers that have been added to the introduction.
