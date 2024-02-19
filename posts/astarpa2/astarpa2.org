@@ -2,7 +2,7 @@
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
-#+OPTIONS: ^:{}
+#+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+date: <2023-08-08>
@@ -12,6 +12,8 @@
 \newcommand{\g}{g^*}
 \newcommand{\h}{h^*}
 \newcommand{\cgap}{c_{\texttt{gap}}}
+\newcommand{\xor}{\ \mathrm{xor}\ }
+\newcommand{\and}{\ \mathrm{and}\ }
 \end{equation*}
 
 
@@ -58,11 +60,11 @@ to get the optimal alignment much more quickly than before.
 
 In A*PA2, we combine multiple existing techniques and introduce a number of new
 ideas to obtain a $10\times$ speedup over existing single-threaded exact aligners.
-As a starting point, we take the band doubling algorithm as efficiently
-implemented by Edlib [cite:@edlib] that uses bitpacking [cite:@myers99].
-First, we speed up the implementation without modifying the algorithm
-(points 1., 2., and 3.), then, we reduce the amount of work done (points 4. and 5.),
-and lastly we apply A*.
+As a starting point, we take the band doubling algorithm
+implemented by Edlib [cite:@edlib] using bitpacking [cite:@myers99].
+First, we speed up the implementation (points 1., 2., and 3.).
+Then, we reduce the amount of work done (points 4. and 5.).
+Lastly, we apply A*.
 
 1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
    and for each column decides which range (subset of rows) of cells to compute.  We
@@ -334,9 +336,33 @@ parallelism. We improve this by processing two SIMD vectors in parallel, spannin
 eight antidiagonally-aligned $64$-bit words covering $512$ rows (TODO FIG).
 
 ** SIMD-friendly sequence profile
-- New encoding scheme
-- TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
-  without success so far.
+Myers' bitpacking algorithm precomputes a /profile/ $P_{eq}[c][j]$ containing
+$\sigma \times m$ bits. For each character $c$, it contains a bitvector of
+$w$-bit words indicating the positions where $c$ occurs in $B$. We improve
+memory locality by instead storing the profile as an array of blocks of $\sigma$
+words: $P_{eq}[j/w][c]$ containing $\lceil m/w\rceil \times \sigma$ $w$-bit
+words (FIG?).
+
+A drawback of anti-diagonal tiling is that each column contains its own
+character $a_i$ that needs to be looked up. While SIMD offers =gather=
+instructions to do multiple of these lookups in parallel, these instructions are
+not always efficient. Thus, we introduce the following alternative scheme.
+
+Let $b = \lceil \log_2(\sigma)\rceil$ be the number of bits needed to encode
+each character, with $b=2$ for DNA.
+The new profile $P'$ contains $b$ bitvectors, each indicating the negation of one bit of each
+character, stored as an $\lceil m/w\rceil \times b$ array $P'[j/w][p]$ of
+$w$-bit words.
+
+To check whether row $j$ contains character $c$ with bit representation
+$\overline{c_{b-1}\dots c_{0}}$, we compute
+$$(c_0 \xor P'[j/w][0][j\bmod w]) \and \dots \and (c_{b-1} \xor P'[j/w][b-1][j\bmod w]).$$
+This naturally extends to an efficient computation for $w$-bit words and larger
+SIMD vectors.
+
+
+TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
+without success so far.
 ** Incremental doubling
 - States with $f \leq f_{max}$ have /fixed/ values (assuming the heuristic is consistent).
 - We can store deltas around the edge of this region and incrementally start the
