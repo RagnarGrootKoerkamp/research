@@ -364,6 +364,22 @@ SIMD vectors.
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
 ** Incremental doubling
+The original band doubling algorithm doubles the threshold from $t$ to $t'$ in
+each iteration and simply recomputes the distance to all states.
+On the other hand, BFS, Dijkstra, and A*[fn::A* with a
+/consistent/ heuristic.] visit states in
+increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) = g(u) + h(u)$
+for A*), and the distance to a state is known to be correct as soon as
+it is expanded. This way a state is never expanded twice.
+
+Indeed, the band-doubling algorithm can also avoid recomputations. After
+completing the iteration for $t$, it is guaranteed that the distance was
+correctly computed to all states that are indeed at distance $\leq t$.
+Due to the word-based computations, this process usually also
+computes distances to states at distance $>t$, but these are /not/ guaranteed to
+be correct.
+
+
 - States with $f \leq f_{max}$ have /fixed/ values (assuming the heuristic is consistent).
 - We can store deltas around the edge of this region and incrementally start the
   computation from there.
