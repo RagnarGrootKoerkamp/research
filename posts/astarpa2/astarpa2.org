@@ -339,7 +339,7 @@ See [[*Computed range]] for details on the computation of $R$.
 
 Where Edlib does not initially store intermediate values and uses meet-in-the-middle to
 find the alignment, we /always/ store vertical differences at the end of
-each[fn::We support /sparser/ memory usage by only storing differences every
+each[fn::Even /sparser/ memory usage is possible by only storing differences every
 $S=s\cdot B$ columns, but in practice this does not matter much.]
 block. This simplifies the implementation, and has sufficiently small memory
 usage to be practical. See [[*Traceback]] for details on recovering the alignment.
@@ -403,6 +403,12 @@ SIMD vectors.
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
 ** Incremental doubling
+
+TODO: Rephrase $g(u)\leq t$ to $f(u) \leq t$.
+
+TODO: The range-end only matters for the last columns of the block. Intermediate
+columns that go further down can be disregarded.
+
 The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
 in each iteration and simply recomputes the distance to all states.  On the
 other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
@@ -412,14 +418,19 @@ g(u) + h(u)$ for A*), and the distance to a state is known to be correct
 
 Indeed, the band-doubling algorithm can also avoid recomputations. After
 completing the iteration for $t$, it is guaranteed that the distance is fixed
-for all states that are indeed at distance $\leq t$.  Note that due to the
+for all states that are indeed at distance $\leq t$.  In fact a stronger result holds:
+in any column the distance is fixed for /all/ states between the topmost
+and bottommost state with distance $\leq t$.
+Note that due to the
 word-based computations, there will also be states whose computed distance is
 $>t$. These are /not/ guaranteed to be correct.
 
 After a range $R=(r_{start}, r_{end})$ of rows for a block of $B$ columns has
 been computed, we determine the first row $r'_{start} \geq r_{start}$ and last
 row $r'_{end}\leq r_{send}$ that are a multiple of $w$ and for which all
-computed distances in this block are at most $t$, if such rows exists. (See
+computed distances in this block are at most $t$[fn::More precisely, such that
+in each column there is a state of distance $\leq t$ above (below) with distance
+$\leq t$.], if such rows exists. (See
 [[*Fixed range]] for details.) We then store these values $(r'_{start}, r'_{end})$
 and the horizontal difference along row $r'_{end}$. The next iteration for
 $t'=2t$ then skips the rows in this interval, and uses the stored differences as
@@ -484,7 +495,11 @@ iteration of our new algorithm works left-to-right only, and thus pruning of
 matches does not affect the current iteration. Instead of pruning on the fly, we
 now collect all matches to be pruned at the end of each iteration, and prune
 them in one right-to-left sweep.
-*** TODO Pre-pruning
+
+To ensure pruning is a valid optimization, we never allow the range of rows for
+each block to shrink after increasing $t$.
+
+*** Pre-pruning
 Here we introduce an independent optimization that also applies to the original
 A*PA method.
 
@@ -512,16 +527,117 @@ increase the value of the heuristic while keeping it /admissible/.
 
 ** Appendix: Range-of-rows computations
 *** Computed range
-- Sparse heuristic
+Here we determine the range of rows that can possibly contain cells at distance
+$\leq t$ in a block of $B$ columns from $i$ to $i+B$. We assume that the
+heuristic $h$ being used is consistent, i.e. that for any states $u\preceq v$ we
+have $h(u) \leq d(u,v) +h(v)$.
+
+Let $R=(r_{start}, r_{end})$ be the range of states in column $i$ to which the
+distance has been computed. From this we can find the topmost and
+bottommost states $r^t_{start}$ and $r^t_{end}$ that are at distance $\leq t$,
+see [[*Fixed range]].
+
+*Start of range.* Since row $j=r^t_{start}$ is the first row in column $i$ with distance $\leq t$,
+this means that states in columns $i$ to $i+B$ at rows $<j$ can not be at
+distance $\leq t$. Thus, the first row that needs to be computed is row $r^t_{start}$.
+[TODO: Add a $+1$ to this?]
+
+*End of range.* We will now determine the bottommost row $j$ that can contain a
+state at distance $\leq t$ in the block. Let $u=\st{i}{r^t_{end})$ be the bottommost state in
+column $i$ with distance $\leq t$. Let $v = \st{i'}{j'}$ be a state in the
+current block ($i\leq i'\leq i+B$) that is below the diagonal of $u$ ($j'-i' \geq r^t_{end}-i$).
+Then, the distance to $v$ is at least $\g(v) \geq \g(u) + \cgap(u,v)$, and hence
+$$
+f(v) = g(v) + h(v) \geq \g(v) + h(v) \geq \g(u) + \cgap(u,v) + h(v) =: f_l(v).
+$$
+The end of the range can now be computed by finding the bottommost state $v$ in each
+column for which this lower bound $f_l$ on $f$ is $\leq t$, using the following
+algorithm[fn::Bound checks omitted.].
+
+*Algorithm (bottommost row computation).*
+1. Start with $v = \st{i'}{j'} = u = \st{i}{r^t_{end}}$.
+2. While the below-neighbour $v' = \st{i'}{j'+1}$$ of $v$ has $f_l(v)\leq t$, increment $j'$.
+3. Go to the next column by incrementing $i'$ and $j'$ by $1$ and repeat step 2, until $i'=i+B$.
+
+A drawback of this approach is that $h$ is evaluated at least once per column,
+which is slow in practice.
+
+We improve this using the following lemma.
+
+*Lemma 1.* When $h$ is a consistent heuristic and $v\preceq v'$, then $f_l(v')
+\geq f(v) - 2\cdot d(v, v')$.
+
+*Proof.* By consistency, $h(v) \leq d(v, v') + h(v')$, so $h(v') \geq
+h(v)-d(v,v')$. Furthermore, $\cgap(u,v) \leq \cgap(u,v') + \cgap(v,v')\leq
+\cgap(u,v) + d(v,v')$, and hence $\cgap(u,v') \geq \cgap(u,v) - d(v,v')$.
+Putting these together we obtain
+\begin{align*}
+f_l(v') &= \g(u) + \cgap(u,v') + h(v') \\
+&\geq \g(u) + \cgap(u,v) - d(v,v') + h(v) - d(v,v') \\
+&= f_l(v) - 2\cdot d(v,v'). \square % TODO
+\end{align*}
+
+When we have $f_l(v) > t+2x$, the lemma implies that $f_l(v')>t$ for any $v'$
+with $d(v,v')\leq x$. This inspires the following algorithm[fn::Bound checks omitted.], that first takes
+just over $B$ steps down, and then makes jumps to the right.
+
+*Algorithm (sparse bottommost row computation).*
+1. Start with $v = \st{i'}{j'} = u+\st{0}{B+8} = \st{i}{r^t_{end} + B + 8}$.
+2. If $f_l(v) \leq t$, increase $j'$ (go down) by $8$.
+3. If $f_l(v) > t$, increase $i'$ (go right) by $\min(\lceil(f_l(v)-t)/2\rceil, i+B-i')$.
+4. Repeat from step 2, until $i' = i+B$.
+5. While $f_l(v) > t$, decrease $j'$ (go up) by $\lceil(f_l(v)-t)/2\rceil$, but
+   do not go above the diagonal of $u$.
+
+The resulting $v$ is the bottommost state in column $i+B$ with $f_l(v) \leq t$,
+and its row is the last row that will be computed.
+
+TODO: Run this algorithm directly on 64-row lanes.
+
+TODO: Can we be optimistic and bump more than $(f_l(v)-t)/2$? the next value
+will also block 'backwards'.
+
 *** Fixed range
-- Sparse heuristic
+In a column, the /fixed/ range is the range of rows between the topmost and
+bottommost states with $f(v)\leq t$, in rows $r'_{start}$ and $r'_{end}$
+respectively.  Given a range $R=(r_{start}, r_{end})$ of computed values, one
+way to find $r'_{start}$ and $r'_{end}$ is by simply iterating from the
+start/end of the range and dropping all states $v$ with $f(v)>t$.
+Like before, this has the drawback that the heuristic must be invoked many
+times.
+
+Instead, we have the following lemma, somewhat analogous to Lemma 1:
+
+*Lemma 2.* When $h$ is a consistent heuristic we have
+$$|f(v) - f(v')| \leq 2 d(v, v').$$
+
+*Proof.*
+The triangle inequality gives $\g(v) \leq \g(v') + d(v, v')$, and consistency
+gives $h(v) \leq h(v') + d(v,v')$ TODO WHAT IF $v$ and $v'$ ARE IN THE OPPOSITE ORIENTATION??
+Expanding the definitions of $f$, we have
+\begin{align*}
+f(v) - f(v')
+&= (g(v) + h(v)) - (g(v') + h(v'))\\
+&= (\g(v) + h(v)) - (\g(v') + h(v'))\\
+&= (\g(v) - \g(v')) - (h(v) + h(v'))\\
+&\leq d(v,v') + d(v,v') = 2\cdot d(v,v'). \square
+\end{align*}
+
+Now we can use a similar approach as before. To find the first row $j'$ with
+$f(\st ij)\leq t$, start with
+$v=\st{i'}{j'}=\st{i}{r_{start}}$, and increment $j'$ by
+$\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$. The last row is found in the same way.
+
+
+TODO: Run this algorithm directly on 64-row lanes.
 * Results
 Compare
 - Edlib
 - WFA
 - A*PA
-- A*PA-v2 without heuristics
-- A*PA-v2 with heuristics
+- A*PA2 no h
+- A*PA2 SH+pruning
+- A*PA2 GCSH+pruning
 on
 - synthetic data
 - human ONT reads
@@ -538,9 +654,10 @@ Important:
 - Initialization takes time
 - WFA is better when edit distance is /very/ low.
 ** Future work
-- Local pruning for seed&extend methods?
+- Pre-pruning for seed&extend methods?
 - Semi-global alignment
 - Affine alignment
+- Local doubling
 
 * Acknowledgements
 :PROPERTIES:
