@@ -337,12 +337,13 @@ lane compute all $B$ columns before moving on to the next lane.
 
 See [[*Computed range]] for details on the computation of $R$.
 
-Where Edlib does not initially store intermediate values and uses meet-in-the-middle to
-find the alignment, we /always/ store vertical differences at the end of
-each[fn::Even /sparser/ memory usage is possible by only storing differences every
-$S=s\cdot B$ columns, but in practice this does not matter much.]
-block. This simplifies the implementation, and has sufficiently small memory
-usage to be practical. See [[*Traceback]] for details on recovering the alignment.
+Where Edlib does not initially store intermediate values and uses
+meet-in-the-middle to find the alignment, we /always/ store an offset and vertical differences
+at the end of each block[fn::Even sparser memory usage is possible by only
+storing vertical differences every $B'$ columns for $B'$ a multiple of $B$, but in
+practice memory is not a bottleneck.]. This simplifies the implementation, and has sufficiently small
+memory usage to be practical. See [[*Traceback]] for details on recovering the
+alignment.
 
 ** SIMD
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
@@ -402,39 +403,7 @@ SIMD vectors.
 
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
-** Incremental doubling
 
-TODO: Rephrase $g(u)\leq t$ to $f(u) \leq t$.
-
-TODO: The range-end only matters for the last columns of the block. Intermediate
-columns that go further down can be disregarded.
-
-The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
-in each iteration and simply recomputes the distance to all states.  On the
-other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
-states in increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) =
-g(u) + h(u)$ for A*), and the distance to a state is known to be correct
-(/fixed/) as soon as it is expanded. This way a state is never expanded twice.
-
-Indeed, the band-doubling algorithm can also avoid recomputations. After
-completing the iteration for $t$, it is guaranteed that the distance is fixed
-for all states that are indeed at distance $\leq t$.  In fact a stronger result holds:
-in any column the distance is fixed for /all/ states between the topmost
-and bottommost state with distance $\leq t$.
-Note that due to the
-word-based computations, there will also be states whose computed distance is
-$>t$. These are /not/ guaranteed to be correct.
-
-After a range $R=(r_{start}, r_{end})$ of rows for a block of $B$ columns has
-been computed, we determine the first row $r'_{start} \geq r_{start}$ and last
-row $r'_{end}\leq r_{send}$ that are a multiple of $w$ and for which all
-computed distances in this block are at most $t$[fn::More precisely, such that
-in each column there is a state of distance $\leq t$ above (below) with distance
-$\leq t$.], if such rows exists. (See
-[[*Fixed range]] for details.) We then store these values $(r'_{start}, r'_{end})$
-and the horizontal difference along row $r'_{end}$. The next iteration for
-$t'=2t$ then skips the rows in this interval, and uses the stored differences as
-input to compute rows $r'_{end}$ to the new $r_{end}$.
 ** Traceback
 The traceback stage takes as input the computed vertical differences at
 the end of each block of columns. We iteratively work backwards through the
@@ -472,6 +441,43 @@ without finding a /match/ in column $i$, $d_0$ is doubled repeatedly until succe
 
 Another optimization is the X-drop [TODO], meaning that all states that lag
 more than $x$ columns behind the one with smallest $j$ will be dropped.
+
+** TODO DT Blocks
+
+** Incremental doubling
+
+TODO: Rephrase $g(u)\leq t$ to $f(u) \leq t$.
+
+TODO: The range-end only matters for the last columns of the block. Intermediate
+columns that go further down can be disregarded.
+
+The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
+in each iteration and simply recomputes the distance to all states.  On the
+other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
+states in increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) =
+g(u) + h(u)$ for A*), and the distance to a state is known to be correct
+(/fixed/) as soon as it is expanded. This way a state is never expanded twice.
+
+Indeed, the band-doubling algorithm can also avoid recomputations. After
+completing the iteration for $t$, it is guaranteed that the distance is fixed
+for all states that are indeed at distance $\leq t$.  In fact a stronger result holds:
+in any column the distance is fixed for /all/ states between the topmost
+and bottommost state with distance $\leq t$.
+Note that due to the
+word-based computations, there will also be states whose computed distance is
+$>t$. These are /not/ guaranteed to be correct.
+
+After a range $R=(r_{start}, r_{end})$ of rows for a block of $B$ columns has
+been computed, we determine the first row $r'_{start} \geq r_{start}$ and last
+row $r'_{end}\leq r_{send}$ that are a multiple of $w$ and for which all
+computed distances in this block are at most $t$[fn::More precisely, such that
+in each column there is a state of distance $\leq t$ above (below) with distance
+$\leq t$.], if such rows exists. (See
+[[*Fixed range]] for details.) We then store these values $(r'_{start}, r'_{end})$
+and the horizontal difference along row $r'_{end}$. The next iteration for
+$t'=2t$ then skips the rows in this interval, and uses the stored differences as
+input to compute rows $r'_{end}$ to the new $r_{end}$.
+
 ** A*
 Edlib already uses a simple /gap-cost/ heuristic that gives a lower bound on the
 number of insertions and deletions on a path from each state to the end.
@@ -631,6 +637,7 @@ $\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$. The last row is found in the same 
 
 TODO: Run this algorithm directly on 64-row lanes.
 * Results
+
 Compare
 - Edlib
 - WFA
@@ -647,6 +654,58 @@ Important:
 - Find threshold where heuristics become worth the overhead
 - Show benefit of each of the optimizations
 - Show sensitivity to parameter tuning
+
+** Real data
+*** Real data summary
+
+#+name: real
+#+caption: real data summary
+#+attr_html: :class inset large
+[[./real-summary.svg]]
+
+
+*** Incremental improvements
+
+#+name: real
+#+caption: real data improvements
+#+attr_html: :class inset large
+[[./real.svg]]
+
+*** Real data ablation
+
+#+name: ablation
+#+caption: Ablation: how things slow down when removing 1 feature.
+#+attr_html: :class inset large
+[[./real-ablation.svg]]
+
+** Synthetic data
+*** Scaling with length
+
+#+name: scaling-n-0.05
+#+caption: Scaling with length 5%
+#+attr_html: :class inset large
+[[./scaling_n_e0.05.svg]]
+#+name: scaling-n-0.15
+#+caption: Scaling with length 15%
+#+attr_html: :class inset large
+[[./scaling_n_e0.15.svg]]
+*** Scaling with divergence
+#+name: scaling-e
+#+caption: Scaling with error rate
+#+attr_html: :class inset large
+[[./scaling_e.svg]]
+
+** TODO
+- Band/number of computed states?
+- Dataset statistics
+- Memory usage (human & synthetic)
+- runtime distribution real&synthetic
+  - precomputation
+  - computing blocks
+  - traceback
+    - dt trace
+    - block trace
+- Visualizations
 
 * Conclusion
 ** Summary
