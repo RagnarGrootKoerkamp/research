@@ -656,6 +656,18 @@ Important:
 - Show sensitivity to parameter tuning
 
 ** Real data
+*** Dataset statistics
+#+name: statistics
+#+caption: Real dataset statistics. Lengths in kbp, divergence in %.
+| dataset      |   cnt | len min | len mean | len max | div min | div mean | div max | max gap mean | max gap max |
+| ONT >500k    |    50 |     500 |      594 |     849 |     2.7 |      6.1 |    16.7 |          0.1 |         1.3 |
+| ONT+gen.var. |    48 |     502 |      632 |    1053 |     4.3 |      7.2 |    18.2 |          1.9 |          42 |
+| SARS-CoV-2   | 10000 |      27 |       30 |      30 |     0.0 |      1.5 |    12.8 |          0.1 |         1.0 |
+| ONT < 1k     | 12477 |    0.04 |      0.8 |     1.1 |     0.0 |     10.4 |    22.5 |         0.01 |         0.1 |
+| ONT < 10k    |  5000 |     0.2 |      3.6 |      10 |     3.0 |     12.1 |    20.1 |         0.04 |         0.5 |
+| ONT < 50k    | 10000 |     0.2 |       11 |      50 |     3.0 |     11.6 |    19.2 |         0.07 |         3.4 |
+
+
 *** Real data summary
 
 #+name: real
@@ -663,13 +675,19 @@ Important:
 #+attr_html: :class inset large
 [[./real-summary.svg]]
 
+*** Appendix: Real data by divergence
+
+#+name: real
+#+caption: real data scaling with divergence
+#+attr_html: :class inset large
+[[./real-summary-scatter.svg]]
 
 *** Incremental improvements
 
 #+name: real
 #+caption: real data improvements
 #+attr_html: :class inset large
-[[./real.svg]]
+[[./real-incremental.svg]]
 
 *** Real data ablation
 
@@ -677,28 +695,33 @@ Important:
 #+caption: Ablation: how things slow down when removing 1 feature.
 #+attr_html: :class inset large
 [[./real-ablation.svg]]
+*** Real data parameters
+#+name: params
+#+caption: Varying parameters.
+#+attr_html: :class inset large
+[[./real-params.svg]]
+*** Memory usage
 
+#+name: memory
+#+caption: Memory usage
+#+attr_html:
+|              | >500kbp ONT reads Median | >500kbp ONT reads Max | >500kbp ONT reads + genetic variation Median | >500kbp ONT reads + genetic variation Max | SARS-CoV-2 pairs Median | SARS-CoV-2 pairs Max | <1kbp ONT reads Median | <1kbp ONT reads Max | <10kbp ONT reads Median | <10kbp ONT reads Max | <50kbp ONT reads Median | <50kbp ONT reads Max |
+|--------------+--------------------------+-----------------------+----------------------------------------------+-------------------------------------------+-------------------------+----------------------+------------------------+---------------------+-------------------------+----------------------+-------------------------+----------------------|
+| Edlib        |                        0 |                     3 |                                            1 |                                         4 |                       2 |                    5 |                      0 |                   0 |                       0 |                    0 |                       3 |                    5 |
+| BiWFA        |                       10 |                    19 |                                           12 |                                        17 |                      11 |                   14 |                      2 |                   2 |                       2 |                    2 |                       8 |                   11 |
+| A*PA         |                       90 |                   467 |                                          160 |                                       585 |                       3 |                   46 |                      0 |                   0 |                       9 |                   67 |                      63 |                  150 |
+| A*PA2 simple |                       22 |                    86 |                                           31 |                                       197 |                       2 |                    5 |                      0 |                   0 |                       0 |                    0 |                       4 |                    6 |
+| A*PA2 full   |                       28 |                    84 |                                           32 |                                       166 |                       3 |                    7 |                      0 |                   0 |                       0 |                    0 |                       5 |                    7 |
 ** Synthetic data
-*** Scaling with length
-
-#+name: scaling-n-0.05
-#+caption: Scaling with length 5%
-#+attr_html: :class inset large
-[[./scaling_n_e0.05.svg]]
-#+name: scaling-n-0.15
-#+caption: Scaling with length 15%
-#+attr_html: :class inset large
-[[./scaling_n_e0.15.svg]]
 *** Scaling with divergence
 #+name: scaling-e
 #+caption: Scaling with error rate
 #+attr_html: :class inset large
 [[./scaling_e.svg]]
+** Parameters
 
 ** TODO
 - Band/number of computed states?
-- Dataset statistics
-- Memory usage (human & synthetic)
 - runtime distribution real&synthetic
   - precomputation
   - computing blocks
@@ -706,6 +729,7 @@ Important:
     - dt trace
     - block trace
 - Visualizations
+- run with larger TLE
 
 * Conclusion
 ** Summary
