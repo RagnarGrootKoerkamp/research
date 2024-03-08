@@ -5,7 +5,7 @@
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+date: <2023-08-08>
+#+date: <2024-02-29>
 #+author: Ragnar Groot Koerkamp
 
 \begin{equation*}
@@ -98,6 +98,13 @@ Lastly, we apply A*.
    instead of updating contours each time a match is pruned, we now do this in
    batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
    that discards most of the /spurious/ (off-path) matches ahead of time.
+
+#+name: domains
+#+caption: Alignment of two sequences of length 8000 (CHECK) with 20% errors introduced.
+| [[file:intro/0_full.png]] Full grid (NW) | [[file:intro/0_gap-start.png]] gap heuristic                       | [[file:intro/0_gap-gap.png]] gap-gap (ukkonen)    |                                           |
+|                                      | [[file:intro/0_g.png]] g*                                          | [[file:intro/0_g-gap.png]] g*+gap (edlib)         | [[file:intro/5_astarpa.png]] g*+h (A*PA)      |
+|                                      | [[file:intro/2_dijkstra.png]] Dijkstra                             | [[file:intro/6_astarpa2_simple.png]] A*PA2-simple | [[file:intro/7_astarpa2_full.png]] A*PA2-full |
+|                                      | [[file:intro/3_diagonal-transition.png]] Diagonal transition (WFA) |                                               |                                           |
 
 ** Previous work
 
@@ -325,6 +332,10 @@ As a baseline, we first outline the band-doubling method used by Edlib.
    until the sequences are of length $\leq 1000$. For these small sequences all
    vertical differences can be stored and a backtrace is done to find the alignment.
 
+#+name: blocks
+#+caption: introducing blocks
+| [[file:intro/0_g-gap.png]] g-gap | [[file:intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:intro/0_blocks.png]] Blocks (Block aligner) |
+
 ** Blocks
 Our first improvement is to process $B=256$ columns at a time. Instead of
 computing the range of rows $R$ for each column individually, we compute it once and
@@ -337,6 +348,8 @@ lane compute all $B$ columns before moving on to the next lane.
 
 See [[*Computed range]] for details on the computation of $R$.
 
+** Memory
+
 Where Edlib does not initially store intermediate values and uses
 meet-in-the-middle to find the alignment, we /always/ store an offset and vertical differences
 at the end of each block[fn::Even sparser memory usage is possible by only
@@ -346,6 +359,11 @@ memory usage to be practical. See [[*Traceback]] for details on recovering the
 alignment.
 
 ** SIMD
+
+#+name: simd
+#+caption: SIMD+ILP processing of 8*64 rows in parallel. The example uses 4-bit (instead of 64-bit) lanes.
+[[file:simd/0.png]]
+
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
 $w=64$-bit words (SIMD lanes) are dependent on each other and require manual
 work to shift bits between the lanes.
@@ -376,6 +394,7 @@ a $2$-lane SIMD ($c\geq 2$), and lastly a scalar iteration ($c\geq 1$).
 TODO: How about padding upwards?
 
 ** SIMD-friendly sequence profile
+
 Myers' bitpacking algorithm precomputes a /profile/ $P_{eq}[c][j]$ containing
 $\sigma \times m$ bits. For each character $c$, it contains a bitvector of
 $w$-bit words indicating the positions where $c$ occurs in $B$. We improve
@@ -405,6 +424,11 @@ TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
 
 ** Traceback
+
+#+name: trace
+#+caption: traceback shown in blue, both DT trace states and compute blocks as fallback.
+[[file:trace/trace.png]]
+
 The traceback stage takes as input the computed vertical differences at
 the end of each block of columns. We iteratively work backwards through the
 blocks of columns. In each step, we are given the distances $D_i[j]$ to
@@ -415,6 +439,9 @@ The goal is to find an optimal path from column $i$ to $u$.
 A naive approach is to simply recompute the entire block of columns for their
 entire range $R$ while storing distances to all cells, but we introduce to
 faster methods.
+
+TODO: Stop halfway
+
 *** Optimistic block computation
 Instead of computing the full range $R=(r_{start}, r_{end})$ for this column, a
 first insight is that only rows up to $j$ are needed, since the optimal path to
@@ -442,14 +469,16 @@ without finding a /match/ in column $i$, $d_0$ is doubled repeatedly until succe
 Another optimization is the X-drop [TODO], meaning that all states that lag
 more than $x$ columns behind the one with smallest $j$ will be dropped.
 
-** TODO DT Blocks
-
 ** Incremental doubling
 
 TODO: Rephrase $g(u)\leq t$ to $f(u) \leq t$.
 
 TODO: The range-end only matters for the last columns of the block. Intermediate
 columns that go further down can be disregarded.
+
+#+name: doubling
+#+caption: Due to incremental doubling, states 'in the middle' do not have to be recomputed.
+[[file:doubling/doubling.png]]
 
 The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
 in each iteration and simply recomputes the distance to all states.  On the
@@ -478,6 +507,8 @@ and the horizontal difference along row $r'_{end}$. The next iteration for
 $t'=2t$ then skips the rows in this interval, and uses the stored differences as
 input to compute rows $r'_{end}$ to the new $r_{end}$.
 
+TODO: Explain 1/2/3-way split cases. With pseudocode?
+
 ** A*
 Edlib already uses a simple /gap-cost/ heuristic that gives a lower bound on the
 number of insertions and deletions on a path from each state to the end.
@@ -494,18 +525,17 @@ in [[*Appendix: Range-of-rows computations]].
 
 We make two modifications the previous version of the A*PA algorithm.
 
-*** Bulk-contours update
-In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
-found. This helps to penalize states /before/ (left of) the match. Each
-iteration of our new algorithm works left-to-right only, and thus pruning of
-matches does not affect the current iteration. Instead of pruning on the fly, we
-now collect all matches to be pruned at the end of each iteration, and prune
-them in one right-to-left sweep.
-
-To ensure pruning is a valid optimization, we never allow the range of rows for
-each block to shrink after increasing $t$.
-
 *** Pre-pruning
+#+caption: Effect of prepruning. Top: no prepruning, Bot: with prepruning.
+| CSH, no pruning            | CSH, pruning                 |
+| [[file:prepruning/csh.png]]    | [[file:prepruning/csh-p.png]]    |
+| [[file:prepruning/csh-lp.png]] | [[file:prepruning/csh-lp-p.png]] |
+
+#+caption: Appendix: full table. Effect of prepruning. Top: no prepruning, Bot: with prepruning.
+| SH, no pruning | SH, pruning | CSH, no pruning | CSH, pruning | GCSH, no pruning | GCSH, pruning|
+| [[file:prepruning/sh.png]]    | [[file:prepruning/sh-p.png]]    | [[file:prepruning/csh.png]]    | [[file:prepruning/csh-p.png]]    | [[file:prepruning/gcsh.png]]    | [[file:prepruning/gcsh-p.png]]    |
+| [[file:prepruning/sh-lp.png]] | [[file:prepruning/sh-lp-p.png]] | [[file:prepruning/csh-lp.png]] | [[file:prepruning/csh-lp-p.png]] | [[file:prepruning/gcsh-lp.png]] | [[file:prepruning/gcsh-lp-p.png]] |
+
 Here we introduce an independent optimization that also applies to the original
 A*PA method.
 
@@ -530,6 +560,17 @@ of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
 $p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
 know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
 increase the value of the heuristic while keeping it /admissible/.
+
+*** Bulk-contours update
+In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
+found. This helps to penalize states /before/ (left of) the match. Each
+iteration of our new algorithm works left-to-right only, and thus pruning of
+matches does not affect the current iteration. Instead of pruning on the fly, we
+now collect all matches to be pruned at the end of each iteration, and prune
+them in one right-to-left sweep.
+
+To ensure pruning is a valid optimization, we never allow the range of rows for
+each block to shrink after increasing $t$.
 
 ** Appendix: Range-of-rows computations
 *** Computed range
@@ -562,7 +603,7 @@ algorithm[fn::Bound checks omitted.].
 
 *Algorithm (bottommost row computation).*
 1. Start with $v = \st{i'}{j'} = u = \st{i}{r^t_{end}}$.
-2. While the below-neighbour $v' = \st{i'}{j'+1}$$ of $v$ has $f_l(v)\leq t$, increment $j'$.
+2. While the below-neighbour $v' = \st{i'}{j'+1}$ of $v$ has $f_l(v)\leq t$, increment $j'$.
 3. Go to the next column by incrementing $i'$ and $j'$ by $1$ and repeat step 2, until $i'=i+B$.
 
 A drawback of this approach is that $h$ is evaluated at least once per column,
@@ -655,6 +696,7 @@ Important:
 - Show benefit of each of the optimizations
 - Show sensitivity to parameter tuning
 
+
 ** Real data
 *** Dataset statistics
 #+name: statistics
@@ -673,33 +715,33 @@ Important:
 #+name: real
 #+caption: real data summary
 #+attr_html: :class inset large
-[[./real-summary.svg]]
+[[./results/real-summary.svg]]
 
 *** Appendix: Real data by divergence
 
 #+name: real
 #+caption: real data scaling with divergence
 #+attr_html: :class inset large
-[[./real-summary-scatter.svg]]
+[[./results/real-summary-scatter.svg]]
 
 *** Incremental improvements
 
 #+name: real
 #+caption: real data improvements
 #+attr_html: :class inset large
-[[./real-incremental.svg]]
+[[./results/real-incremental.svg]]
 
 *** Real data ablation
 
 #+name: ablation
 #+caption: Ablation: how things slow down when removing 1 feature.
 #+attr_html: :class inset large
-[[./real-ablation.svg]]
+[[./results/real-ablation.svg]]
 *** Real data parameters
 #+name: params
 #+caption: Varying parameters.
 #+attr_html: :class inset large
-[[./real-params.svg]]
+[[./results/real-params.svg]]
 *** Memory usage
 
 #+name: memory
@@ -712,24 +754,30 @@ Important:
 | A*PA         |                       90 |                   467 |                                          160 |                                       585 |                       3 |                   46 |                      0 |                   0 |                       9 |                   67 |                      63 |                  150 |
 | A*PA2 simple |                       22 |                    86 |                                           31 |                                       197 |                       2 |                    5 |                      0 |                   0 |                       0 |                    0 |                       4 |                    6 |
 | A*PA2 full   |                       28 |                    84 |                                           32 |                                       166 |                       3 |                    7 |                      0 |                   0 |                       0 |                    0 |                       5 |                    7 |
+*** Runtime distribution
+#+name: runtime
+#+caption: Runtime distribution
+#+attr_html: :class inset large
+[[./results/real-timing.svg]]
 ** Synthetic data
 *** Scaling with divergence
 #+name: scaling-e
 #+caption: Scaling with error rate
 #+attr_html: :class inset large
-[[./scaling_e.svg]]
-** Parameters
+[[./results/scaling_e.svg]]
 
 ** TODO
-- Band/number of computed states?
-- runtime distribution real&synthetic
-  - precomputation
-  - computing blocks
-  - traceback
-    - dt trace
-    - block trace
+- Bench the new profile
 - Visualizations
-- run with larger TLE
+  - Methods
+    - incremental doubling detail
+  - Results
+    - Complex real alignment
+
+
+*** WONTFIX/too complicated
+- pre-pruning detail?
+- Sparse heuristic detail?
 
 * Conclusion
 ** Summary
@@ -741,6 +789,8 @@ Important:
 - Semi-global alignment
 - Affine alignment
 - Local doubling
+- DT Blocks
+
 
 * Acknowledgements
 :PROPERTIES:
