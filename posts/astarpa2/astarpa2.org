@@ -336,6 +336,41 @@ As a baseline, we first outline the band-doubling method used by Edlib.
 #+caption: introducing blocks
 | [[file:intro/0_g-gap.png]] g-gap | [[file:intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:intro/0_blocks.png]] Blocks (Block aligner) |
 
+** Bitpacking
+
+#+name: myers
+#+caption: Rust code for SIMD version of Myers' bitpacking. Computes four antidiagonal words in parallel.
+#+begin_src rust
+pub fn compute_block_simd(
+    hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates +1 difference on top.
+    hm0: &mut Simd<u64, 4>,  // 0 or 1. Indicates -1 difference on top.
+    vp: &mut Simd<u64, 4>,  // 64-bit indicator of +1 differences on left.
+    vm: &mut Simd<u64, 4>,  // 64-bit indicator of -1 differences on left.
+    eq: Simd<u64, 4>,  // 64-bit indicator which characters equal the top char.
+) {
+    let vx = eq | *vm;
+    let eq = eq | *hm0;
+    // The add here is the only operation that carries information between rows.
+    let hx = (((eq & *vp) + *vp) ^ *vp) | eq;
+    let hp = *vm | !(hx | *vp);
+    let hm = *vp & hx;
+    // Extract the high bit as bottom horizontal difference.
+    let right_shift = Simd<u64,4>::splat(63);   // Shift each lane by 63.
+    let hpw = hp >> right_shift;
+    let hmw = hm >> right_shift;
+    // Insert the top horizontal difference.
+    let left_shift = Simd<u64,4>::splat(1);     // Shift each lane by 1.
+    let hp = (hp << left_shift) | *hp0;
+    let hm = (hm << left_shift) | *hm0;
+    // Update the input-output parameters.
+    *hp0 = hpw;
+    *hm0 = hmw;
+    *vp = hm | !(vx | hp);
+    *vm = hp & vx;
+}
+#+end_src
+
+
 ** Blocks
 Our first improvement is to process $B=256$ columns at a time. Instead of
 computing the range of rows $R$ for each column individually, we compute it once and
@@ -419,6 +454,7 @@ $$(c_0 \xor P'[j/w][0][j\bmod w]) \and \dots \and (c_{b-1} \xor P'[j/w][b-1][j\b
 This naturally extends to an efficient computation for $w$-bit words and larger
 SIMD vectors.
 
+TODO Remark only alphabet size 4 works
 
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
@@ -768,16 +804,15 @@ Important:
 
 ** TODO
 - Bench the new profile
+  - Hmm code is not compatible with old profile...
 - Visualizations
   - Methods
     - incremental doubling detail
-  - Results
-    - Complex real alignment
 
-
-*** WONTFIX/too complicated
-- pre-pruning detail?
+*** WONTFIX/too complicated/maybe later
 - Sparse heuristic detail?
+- SIMD-gif
+- A*PA2-gifs
 
 * Conclusion
 ** Summary
