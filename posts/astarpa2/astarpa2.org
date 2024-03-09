@@ -397,7 +397,7 @@ alignment.
 
 #+name: simd
 #+caption: SIMD+ILP processing of 8*64 rows in parallel. The example uses 4-bit (instead of 64-bit) lanes.
-[[file:imgs/simd/simd.png]]
+[[file:imgs/simd.png]]
 
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
 $w=64$-bit words (SIMD lanes) are dependent on each other and require manual
@@ -535,8 +535,12 @@ TODO: The range-end only matters for the last columns of the block. Intermediate
 columns that go further down can be disregarded.
 
 #+name: doubling
+#+caption: Doubling detail
+| [[file:imgs/doubling-0.png]] | [[file:imgs/doubling-1.png]] |
+
+#+name: doubling-large
 #+caption: Due to incremental doubling, states 'in the middle' do not have to be recomputed.
-[[file:imgs/doubling/doubling.png]]
+[[file:imgs/doubling-large/doubling-large.png]]
 
 The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
 in each iteration and simply recomputes the distance to all states.  On the
@@ -618,6 +622,8 @@ of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
 $p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
 know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
 increase the value of the heuristic while keeping it /admissible/.
+
+TODO: Generally applicable in seed-and-extend settings.
 
 *** Bulk-contours update
 In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
@@ -827,9 +833,6 @@ Important:
 #+caption: Scaling with error rate
 #+attr_html: :class inset large
 [[file:plots/scaling_e.svg]]
-
-** TODO
-- Incremental doubling detail
 
 * Conclusion
 ** Summary
