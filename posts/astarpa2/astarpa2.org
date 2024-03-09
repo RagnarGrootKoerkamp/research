@@ -101,10 +101,10 @@ Lastly, we apply A*.
 
 #+name: domains
 #+caption: Alignment of two sequences of length 8000 (CHECK) with 20% errors introduced.
-| [[file:intro/0_full.png]] Full grid (NW) | [[file:intro/0_gap-start.png]] gap heuristic                       | [[file:intro/0_gap-gap.png]] gap-gap (ukkonen)    |                                           |
-|                                      | [[file:intro/0_g.png]] g*                                          | [[file:intro/0_g-gap.png]] g*+gap (edlib)         | [[file:intro/5_astarpa.png]] g*+h (A*PA)      |
-|                                      | [[file:intro/2_dijkstra.png]] Dijkstra                             | [[file:intro/6_astarpa2_simple.png]] A*PA2-simple | [[file:intro/7_astarpa2_full.png]] A*PA2-full |
-|                                      | [[file:intro/3_diagonal-transition.png]] Diagonal transition (WFA) |                                               |                                           |
+| [[file:imgs/intro/0_full.png]] Full grid (NW) | [[file:imgs/intro/0_gap-start.png]] gap heuristic                       | [[file:imgs/intro/0_gap-gap.png]] gap-gap (ukkonen)    |                                           |
+|                                      | [[file:imgs/intro/0_g.png]] g*                                          | [[file:imgs/intro/0_g-gap.png]] g*+gap (edlib)         | [[file:imgs/intro/5_astarpa.png]] g*+h (A*PA)      |
+|                                      | [[file:imgs/intro/2_dijkstra.png]] Dijkstra                             | [[file:imgs/intro/6_astarpa2_simple.png]] A*PA2-simple | [[file:imgs/intro/7_astarpa2_full.png]] A*PA2-full |
+|                                      | [[file:imgs/intro/3_diagonal-transition.png]] Diagonal transition (WFA) |                                               |                                           |
 
 ** Previous work
 
@@ -334,7 +334,7 @@ As a baseline, we first outline the band-doubling method used by Edlib.
 
 #+name: blocks
 #+caption: introducing blocks
-| [[file:intro/0_g-gap.png]] g-gap | [[file:intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:intro/0_blocks.png]] Blocks (Block aligner) |
+| [[file:imgs/intro/0_g-gap.png]] g-gap | [[file:imgs/intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:imgs/intro/0_blocks.png]] Blocks (Block aligner) |
 
 ** Bitpacking
 
@@ -397,7 +397,7 @@ alignment.
 
 #+name: simd
 #+caption: SIMD+ILP processing of 8*64 rows in parallel. The example uses 4-bit (instead of 64-bit) lanes.
-[[file:simd/0.png]]
+[[file:imgs/simd/simd.png]]
 
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
 $w=64$-bit words (SIMD lanes) are dependent on each other and require manual
@@ -430,6 +430,26 @@ TODO: How about padding upwards?
 
 ** SIMD-friendly sequence profile
 
+#+name: profile
+#+caption: equality check with the new profile
+#+begin_src rust
+/// `pa`: Exploded bit-encoding of single char `c` of `a`.
+/// c=0:  (00...00, 00...00)
+/// c=1:  (11...11, 00...00)
+/// c=2:  (00...00, 11...11)
+/// c=3:  (11...11, 11...11)
+/// 64-char packed *negated* bit-encoding of 64 chars of `b`.
+/// bi=0: (...1..., ...1...)
+/// bi=1: (...0..., ...1...)
+/// bi=2: (...1..., ...0...)
+/// bi=3: (...0..., ...0...)
+///
+/// Returns a mask which chars of `b` equal the char of `a`.
+fn eq(pa: &(u64, u64), pb: &(u64, u64)) -> u64 {
+    (pa.0 ^ pb.0) & (pa.1 ^ pb.1)
+}
+#+end_src
+
 Myers' bitpacking algorithm precomputes a /profile/ $P_{eq}[c][j]$ containing
 $\sigma \times m$ bits. For each character $c$, it contains a bitvector of
 $w$-bit words indicating the positions where $c$ occurs in $B$. We improve
@@ -459,11 +479,13 @@ TODO Remark only alphabet size 4 works
 TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
 without success so far.
 
+TODO: No specific benchmark.
+
 ** Traceback
 
 #+name: trace
 #+caption: traceback shown in blue, both DT trace states and compute blocks as fallback.
-[[file:trace/trace.png]]
+[[file:imgs/trace/trace.png]]
 
 The traceback stage takes as input the computed vertical differences at
 the end of each block of columns. We iteratively work backwards through the
@@ -514,7 +536,7 @@ columns that go further down can be disregarded.
 
 #+name: doubling
 #+caption: Due to incremental doubling, states 'in the middle' do not have to be recomputed.
-[[file:doubling/doubling.png]]
+[[file:imgs/doubling/doubling.png]]
 
 The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
 in each iteration and simply recomputes the distance to all states.  On the
@@ -564,13 +586,13 @@ We make two modifications the previous version of the A*PA algorithm.
 *** Pre-pruning
 #+caption: Effect of prepruning. Top: no prepruning, Bot: with prepruning.
 | CSH, no pruning            | CSH, pruning                 |
-| [[file:prepruning/csh.png]]    | [[file:prepruning/csh-p.png]]    |
-| [[file:prepruning/csh-lp.png]] | [[file:prepruning/csh-lp-p.png]] |
+| [[file:imgs/prepruning/csh.png]]    | [[file:imgs/prepruning/csh-p.png]]    |
+| [[file:imgs/prepruning/csh-lp.png]] | [[file:imgs/prepruning/csh-lp-p.png]] |
 
 #+caption: Appendix: full table. Effect of prepruning. Top: no prepruning, Bot: with prepruning.
 | SH, no pruning | SH, pruning | CSH, no pruning | CSH, pruning | GCSH, no pruning | GCSH, pruning|
-| [[file:prepruning/sh.png]]    | [[file:prepruning/sh-p.png]]    | [[file:prepruning/csh.png]]    | [[file:prepruning/csh-p.png]]    | [[file:prepruning/gcsh.png]]    | [[file:prepruning/gcsh-p.png]]    |
-| [[file:prepruning/sh-lp.png]] | [[file:prepruning/sh-lp-p.png]] | [[file:prepruning/csh-lp.png]] | [[file:prepruning/csh-lp-p.png]] | [[file:prepruning/gcsh-lp.png]] | [[file:prepruning/gcsh-lp-p.png]] |
+| [[file:imgs/prepruning/sh.png]]    | [[file:imgs/prepruning/sh-p.png]]    | [[file:imgs/prepruning/csh.png]]    | [[file:imgs/prepruning/csh-p.png]]    | [[file:imgs/prepruning/gcsh.png]]    | [[file:imgs/prepruning/gcsh-p.png]]    |
+| [[file:imgs/prepruning/sh-lp.png]] | [[file:imgs/prepruning/sh-lp-p.png]] | [[file:imgs/prepruning/csh-lp.png]] | [[file:imgs/prepruning/csh-lp-p.png]] | [[file:imgs/prepruning/gcsh-lp.png]] | [[file:imgs/prepruning/gcsh-lp-p.png]] |
 
 Here we introduce an independent optimization that also applies to the original
 A*PA method.
@@ -680,6 +702,10 @@ TODO: Run this algorithm directly on 64-row lanes.
 TODO: Can we be optimistic and bump more than $(f_l(v)-t)/2$? the next value
 will also block 'backwards'.
 
+#+name: ranges
+#+caption: Computed ranges
+| [[./imgs/ranges/full.png]] Full boundary   | [[./imgs/ranges/sparse.png]] Sparse h calls   |
+
 *** Fixed range
 In a column, the /fixed/ range is the range of rows between the topmost and
 bottommost states with $f(v)\leq t$, in rows $r'_{start}$ and $r'_{end}$
@@ -751,33 +777,33 @@ Important:
 #+name: real
 #+caption: real data summary
 #+attr_html: :class inset large
-[[./results/real-summary.svg]]
+[[file:plots/real-summary.svg]]
 
 *** Appendix: Real data by divergence
 
 #+name: real
 #+caption: real data scaling with divergence
 #+attr_html: :class inset large
-[[./results/real-summary-scatter.svg]]
+[[file:plots/real-summary-scatter.svg]]
 
 *** Incremental improvements
 
 #+name: real
 #+caption: real data improvements
 #+attr_html: :class inset large
-[[./results/real-incremental.svg]]
+[[file:plots/real-incremental.svg]]
 
 *** Real data ablation
 
 #+name: ablation
 #+caption: Ablation: how things slow down when removing 1 feature.
 #+attr_html: :class inset large
-[[./results/real-ablation.svg]]
+[[file:plots/real-ablation.svg]]
 *** Real data parameters
 #+name: params
 #+caption: Varying parameters.
 #+attr_html: :class inset large
-[[./results/real-params.svg]]
+[[file:plots/real-params.svg]]
 *** Memory usage
 
 #+name: memory
@@ -794,25 +820,16 @@ Important:
 #+name: runtime
 #+caption: Runtime distribution
 #+attr_html: :class inset large
-[[./results/real-timing.svg]]
+[[file:plots/real-timing.svg]]
 ** Synthetic data
 *** Scaling with divergence
 #+name: scaling-e
 #+caption: Scaling with error rate
 #+attr_html: :class inset large
-[[./results/scaling_e.svg]]
+[[file:plots/scaling_e.svg]]
 
 ** TODO
-- Bench the new profile
-  - Hmm code is not compatible with old profile...
-- Visualizations
-  - Methods
-    - incremental doubling detail
-
-*** WONTFIX/too complicated/maybe later
-- Sparse heuristic detail?
-- SIMD-gif
-- A*PA2-gifs
+- Incremental doubling detail
 
 * Conclusion
 ** Summary
@@ -825,6 +842,7 @@ Important:
 - Affine alignment
 - Local doubling
 - DT Blocks
+- TALCO: tiling alignment using convergence of traceback pointers: https://turakhia.ucsd.edu/research/
 
 
 * Acknowledgements
