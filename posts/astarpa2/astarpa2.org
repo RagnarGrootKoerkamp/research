@@ -27,15 +27,18 @@ work.
 :UNNUMBERED: t
 :END:
 
-*Methods.* We introduce a new global pairwise aligner, A*PA2, that builds on Edlib and
-incorporates ideas from Block Aligner and A*PA. A*PA2 1) uses
-Myers' bitpacking with SIMD, 2) significantly reduces overhead by using large block
-sizes, 3) avoids recomputation of states where possible, 4) introduces two new
-techniques for traceback, and 5) improves and applies the heuristics developed
-in A*PA.
+*Methods.* We introduce A*PA2, an exact global pairwise aligner with respect to
+edit distance. A*PA2 builds on Edlib and incorporates ideas from Block Aligner,
+WFA, and A*PA. A*PA2 1) uses Myers' bitpacking with SIMD, 2) significantly
+reduces overhead by using large block sizes, 3) avoids recomputation of states
+where possible, 4) introduces a new technique for traceback, and 5) improves and
+applies the heuristics developed in A*PA.
 
 *Results.*
-A $10\times$ overall speedup on the alignment of $500$kbp ONT reads.
+The average runtime of A*PA2 is $20\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
+human genome having $6\%$ divergence on average. On shorter ONT reads of
+ $10\%-12\%$ average divergence the speedup is $5\times$ (length $11$kbp),
+$2.5\times$ (length $4$kbp), and $0.66\times$ (length $800$bp).
 
 *Availability.* [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]]
 
@@ -49,18 +52,15 @@ into a second string $B$ [cite:@nw;@vintsyuk68], where the number of such
 operations is called the /Levenshtein distance/ or /edit distance/
 [cite:@levenshtein;@wagner74].
 
-Per tradition, as [cite/t:@rognes00] write:
-#+begin_quote
-The rapidly increasing amounts of genetic-sequence
-information available represent a constant challenge to
-developers of hardware and software database searching
-and handling.
-#+end_quote
+Over time, the length of genomic reads has increased from hundreds of basepairs
+to hundreds of thousands basepairs now. Meanwhile, the complexity of exact
+algorithms has not been improved by more than a constant factor since the
+introduction of the O(s^2) diagonal transition algorithm [cite:@ukkonen85].
 
 In this work we introduce a new exact algorithm for global pairwise alignment
 building on the recently introduced A* heuristics of A*PA [cite:@astarpa], but
-instead of running A* we use a much more efficient DP-based algorithm. Thus, as
-[cite/t:@fickett84] states,
+instead of running A* we use a much more efficient DP-based algorithm.
+As [cite/t:@fickett84 p. 1] stated already 40 years ago,
 #+begin_quote
 at present one must choose between an algorithm which gives the best alignment
 but is expensive, and an algorithm which is fast but may not give the best
@@ -88,10 +88,10 @@ Lastly, we apply A*.
    the processing of $4$ computer words in parallel.
 3. *Novel encoding.* We introduce a novel bit-encoding of the input sequence to
    speed up SIMD operations for size-$4$ alphabets.
-4. *Incremental doubling.* We further note that both the original band doubling method of
-   [cite/t:@ukkonen85] and Edlib recompute states in the doubled region. Reusing
-   the theory behind the A* algorithm, we prove and apply a novel theorem stating that some of
-   this recomputation can be avoided.
+4. *Incremental doubling.* Both the band doubling methods of [cite/t:@ukkonen85]
+   and Edlib recompute states after doubling the threshold.  We avoid this by
+   using the theory behind the A* algorithm, extending the incremental doubling
+   of [cite/t:@fickett84] to blocks and arbitrary heuristics.
 5. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
    block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
 6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
@@ -115,20 +115,20 @@ on, in chronological order per approach.  See also e.g. the reviews by
 *** Needleman-Wunsch
 This problem has classically been approached as a dynamic
 programming (DP) problem. For string lengths $n$ and $m$, [cite/t:@nw]
-introduced the first $O(n^2m)$ algorithm.  This was improved to what is now
-known as the $O(nm)$ /Needleman-Wunsch algorithm/ by [cite/t:@sellers] and
-[cite/t:@wagner74], building on the quadratic algorithm for /longest common
+introduced the first $O(n^2m)$ algorithm. [cite/t:@sellers] and
+[cite/t:@wagner74] improved this to what is now
+known as the $O(nm)$ /Needleman-Wunsch algorithm/, building on the quadratic algorithm for /longest common
 subsequence/ by [cite/t:@sankoff].
 
 *** Graph algorithms
 It was already realized early on that this problem
 corresponds to finding the shortest path from $v_s$ to $v_t$ in the /alignment
-graph/ (also called /edit graph/ or /dependency graph/)
+graph/, which is also called /edit graph/ or /dependency graph/
 [cite:@vintsyuk68;@ukkonen85]. Both [cite/t:@ukkonen85] and [cite/t:@myers86]
 remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
 taking $O(ns)$ time[fn::Although Ukkonen didn't realize this faster runtime and
 only gave a bound of $O(nm \log (nm))$.], where $s$ is the edit distance between
-the two strings.  However, [cite/t:@myers86] observes that
+the two strings.  However, [cite/t:@myers86 p. 2] observes that
 #+begin_quote
 the resulting  algorithm involves a relatively complex discrete priority queue
 and this queue  may contain as many as O(ND) entries even in the case where just
@@ -144,30 +144,31 @@ that simply uses the difference between the lengths of the suffixes as lower
 bound, and a new improved heuristic based on character frequencies in the two
 suffixes. A*PA [cite:@astarpa] applies the /gap-chaining seed heuristic/ with /pruning/
 [cite:@astarix-2] to obtain near-linear runtime when errors are uniform random.
-Nevertheless, as [cite/t:@spouge91] states:
+Nevertheless, as [cite/t:@spouge91 p. 3] states:
 #+begin_quote
 Many algorithms for finding optimal paths in non-lattice graphs also exist
 [cite:@dijkstra59; @astar-hart67; @rubin74], but algorithms exploiting the
 lattice structure of an alignment graph are usually faster. In molecular
 biology, speed is important, ...
 #+end_quote
-and further [cite:@spouge89]:
+and further [cite:@spouge89 p. 4]:
 #+begin_quote
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-Indeed, a lot of work has gone into speeding up DP-based algorithms.
+In this work we follow this advice and replace the A* search in A*PA with a much
+more efficient DP based approach based on /computational volumes/.
 
 *** Computational volumes
-[cite/t:@wilbur-lipman-83] is (to our knowledge) the
-first paper that speeds up the $O(nm)$ DP algorithm, by only considering states
-near diagonals with many /k-mer matches/, but at the cost of giving up the exactness
-of the method.  [cite/t:@fickett84] notes that for $t\geq s$ only those DP-states with cost $\g(u)$ at
-most $t$ need to be computed:
+[cite/t:@wilbur-lipman-83] is, to our knowledge, the first paper that speeds up
+the $O(nm)$ DP algorithm, by only considering states near diagonals with many
+/k-mer matches/, but at the cost of giving up the exactness of the method.
+[cite/t:@fickett84 p. 177] notes that for $t\geq s$ only those DP-states with
+cost $\g(u)$ at most $t$ need to be computed:
 #+begin_quote
 However it is possible to fill the matrix in many different orders, the only
 restriction being that the calculation of any given $d_{ij}$ depends on already
-having the values of the three element up and to the left of it.
+having the values of the three elements up and to the left of it.
 
 [...]
 
@@ -176,14 +177,13 @@ good (distance at least as small) as the overall one. I.e. one really only needs
 those $d_{ij}$ which are below a fixed bound.
 #+end_quote
 This only requires $O(nt)$ time, which is fast when $t$ is an accurate bound on
-the distance $s$, which for example can be set as a known upper bound for the
-data being aligned, or as the length of a known suboptimal alignment.  When
-$t=t_0$ turns out too small a larger new bound $t_1$ can be chosen, and only
+the distance $s$. For example $t$ can be set as an upper bound for the
+data being aligned, or as the length of a suboptimal alignment.  When
+$t=t_0$ turns out too small, a larger new bound $t_1$ can be chosen, and only
 states with distance in between $t_0$ and $t_1$ have to be computed.  This is
 implemented by keeping for each row the index of the first and last state with
-value at most $t_0$, and skipping over already computed states.  In the limit,
-one could choose $t_i = i$ and compute states by increasing distance,
-closely mirroring Dijkstra's algorithm.
+value at most $t_0$, and skipping over already computed states.  In the limit
+where $t$ increases by $1$ in each iteration, this closely mirrors Dijkstra's algorithm.
 
 [cite/t:@ukkonen85] introduces a very similar idea, statically bounding the
 computation to only those states that can be on a path of length at most $t$
@@ -191,8 +191,9 @@ through the graph. When the sequences have the same length ($n=m$), this only
 considers diagonals $-t/2$ to $t/2$, where diagonal $0$ is the main diagonal of
 the DP-matrix.
 
-On top of this, [cite/t:@ukkonen85] introduces /band doubling/: $t_0=1$ can be /doubled/ ($t_i
-= 2^i$) until $t_k \geq s > t_{k-1}$. Since each test requires $O(n \cdot t_i)$ time, the
+On top of this, [cite/t:@ukkonen85] introduces /band doubling/: $t_0=1$ can be
+/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$, i.e.
+$t_k \geq s > t_{k-1}$. Since each test requires $O(n \cdot t_i)$ time, the
 total time is
 \begin{equation}
 n\cdot t_0 + \dots + n\cdot t_k
@@ -204,7 +205,7 @@ iterations, resulting in roughly a factor $2$ overhead.
 
 [cite/t:@spouge89] unifies the methods of
 [cite/t:@fickett84] and [cite/t:@ukkonen85], and generalizes them to accept any
-A* heuristic. In particular, a /computational volume/ is a subgraph of the
+A* heuristic. In particular, Spouge defines a /computational volume/ as a subgraph of the
 alignment graph that contains /every/ shortest path. Given a bound $t\geq s$, some examples of
 computational volumes are:
 1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph.
@@ -215,15 +216,15 @@ computational volumes are:
 5. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@spouge91;@edlib].
 6. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
 
-As [cite/t:@spouge89] notes:
+As [cite/t:@spouge89 p. 1559] notes:
 #+begin_quote
 The order of computation (row major, column major or antidiagonal) is just a
 minor detail in most algorithms.
 #+end_quote
 But this is exactly what was investigated a lot in the search for faster implementations.
 
-*** Implementation and parallelism
-Since roughly $1995$, the focus shifted from
+*** Parallelism
+In the 1990s, the focus shifted from
 reducing the number of computed states to computing states faster through
 advancements in implementation and hardware (SIMD, GPUs).  These speedups are
 often applied to the Smith-Waterman-(Gotoh) [cite:@sw;@gotoh] algorithm for
@@ -232,32 +233,31 @@ $\Theta(nm)$ are unknown.
 
 The first technique in this direction is /microparallelism/ [cite:@alpern95],
 where each (64 bit) computer word is divided into multiple (e.g. 16 bit) parts,
-and word-size operations modifying all (4) parts in parallel.
+and word-size operations modify all (4) parts in parallel.
 [cite/t:@alpern95] applied this with /inter-sequence parallelism/ to align a
-given query to $4$ reference sequences in parallel (see also
-[cite/t:@rognes11]).  [cite/t:@hughey96] was the first to note that
-/antidiagonals/ of the DP matrix can be computed in parallel, and
+given query to four reference sequences in parallel, see also
+[cite/t:@rognes11].  [cite/t:@hughey96] was the first to note that
+/anti-diagonals/ of the DP matrix are independent and can be computed in parallel, and
 [cite/t:@wozniak97] applied SIMD for this purpose.
 
-[cite/t:@rognes00] split 64bit words into 8 8-bit values, capping all
-computations at $255$ but doubling the speed.  Further, it uses /vertical/
-instead of antidiagonal vectors.
+[cite/t:@rognes00 p. 702] also use microparallelism, but use /vertical/
+instead of anti-diagonal vectors:
 #+begin_quote
 The advantage of this approach is the much-simplified and faster loading of the
 vector of substitution scores from memory. The disadvantage is that data
 dependencies within the vector must be handled.
 #+end_quote
 In particular, [cite/t:@rognes00] introduce the /query profile/: Instead of
-looking up the substitution score $S[A[i]][B[j]]$ for the $i$'th and $j$'th
+looking up the substitution score $S[A_i][B_j]$ for the $i$'th and $j$'th
 character of $A$ and $B$ respectively, it is more efficient to precompute the
-/profile/ $P[c][j] := S[c][B[j]]$ for each character $c$ in the alphabet. Then,
-adjacent scores are simply found as adjacent values $P[A[i]][j \dots j']$.
+/profile/ $Eq[c][j] := S[c][B_j]$ for each character $c$ in the alphabet. Then,
+adjacent scores are simply found as adjacent values $Eq[A_i][j \dots j']$.
 
 Similarly, [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
-for edit distance that stores the differences between adjacent DP-states
-bit-encoded in two 64-words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
-the $i$'th difference is $+1$ resp. $-1$.  It then gives an efficient algorithm
-using bitwise operations on these words.
+for edit distance. This method stores the differences between adjacent DP-states
+bit-encoded in two $w{=}64$-bit words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
+the $i$'th difference is $+1$ resp. $-1$. It then gives an efficient algorithm
+using bit operations on these words ([[myers]]).
 
 ---
 
