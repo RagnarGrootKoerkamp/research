@@ -332,6 +332,9 @@ As a baseline, we first outline the band-doubling method used by Edlib.
    until the sequences are of length $\leq 1000$. For these small sequences all
    vertical differences can be stored and a backtrace is done to find the alignment.
 
+
+TODO: Talk about exact details of growth factor and start growth.
+
 #+name: blocks
 #+caption: introducing blocks
 | [[file:imgs/intro/0_g-gap.png]] g-gap | [[file:imgs/intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:imgs/intro/0_blocks.png]] Blocks (Block aligner) |
@@ -396,7 +399,7 @@ alignment.
 ** SIMD
 
 #+name: simd
-#+caption: SIMD+ILP processing of 8*64 rows in parallel. The example uses 4-bit (instead of 64-bit) lanes.
+#+caption: SIMD+ILP processing of 8 lanes in parallel. The example uses 4-bit (instead of 64-bit) lanes.
 [[file:imgs/simd.png]]
 
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
@@ -404,8 +407,8 @@ $w=64$-bit words (SIMD lanes) are dependent on each other and require manual
 work to shift bits between the lanes.
 Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words
 (lanes) that are anti-diagonally
-staggered (TODO FIG). This is similar to the original anti-diagonal tiling
-introduced by [cite/t:@wozniak97], but using units of $64$-bit words instead of
+staggered ([[simd]]). This is similar to the original anti-diagonal tiling
+introduced by [cite/t:@wozniak97], but using units of $w$-bit words instead of
 single characters. This idea was already introduced in 2014 by the author of
 Edlib[fn::See https://github.com/Martinsos/edlib/issues/5.], but to our
 knowledge has never been implemented either in Edlib or elsewhere.
@@ -415,7 +418,7 @@ Modern CPUs can execute up to 4 instructions per cycle (IPC) and use execution
 pipelines that look ahead tens of instructions. The dependencies
 between the instructions for computing each SIMD vector do not allow such high
 parallelism. We improve this by processing two SIMD vectors in parallel, spanning a total of
-$8$ anti-diagonally-aligned $64$-bit lanes covering $2W = 512$ rows (TODO FIG).
+$8$ anti-diagonally-aligned $64$-bit lanes covering $2W = 512$ rows ([[simd]]).
 
 When the number of lanes of rows to be computed is $c=(r_{end}-r_{start})/64$, we
 process $8$ lanes in parallel as long as $c\geq 8$. If there are remaining
@@ -498,7 +501,6 @@ A naive approach is to simply recompute the entire block of columns for their
 entire range $R$ while storing distances to all cells, but we introduce to
 faster methods.
 
-TODO: Stop halfway
 
 *** Optimistic block computation
 Instead of computing the full range $R=(r_{start}, r_{end})$ for this column, a
@@ -506,7 +508,7 @@ first insight is that only rows up to $j$ are needed, since the optimal path to
 $u=\st{i+B}j$ can never go below row $j$.
 
 Secondly, the path crosses $B=256$ rows, and so we optimistically assume that it
-will be contained in rows $j-256-64=j-320$ [CHECK] to $j$. Thus, we first compute the
+will be contained in rows $j-256-64=j-320$ to $j$. Thus, we first compute the
 states in this range of rows (rounded out to multiples of $w$). If the distance
 to $u$ computed this way agrees with the known distance, the path must lie
 within these rows. Otherwise, we repeatedly try again with double the number of lanes, until
@@ -518,14 +520,13 @@ columns $i$ to $i+B$ and rows $0$ to $j$. When the distance $d_j$ from $u$ to a
 state $\st ij$ in column $i$ is found, we check whether $D_i[j] + d_j = d_u$.
 If this is not the case, we continue until a suitable $j$ is found.  We then
 infer the optimal path by a traceback on the diagonal transition algorithm.
+When no path has been found of distance $\leq 40$, we fall back to the block
+doubling described above.
 
-One further optimization to this is that again we can be optimistic and assume
-that the path will have distance at most $d_0=TODO$, and ignore any states that are
-at distance $>d_0$. If all states at distance $\leq d_0$ have been explored
-without finding a /match/ in column $i$, $d_0$ is doubled repeatedly until success.
+Another optimization is the WF-adaptive heuristic introduced by WFA: all states
+that lag more than $10$ behind the furthest reaching diagonal are dropped.
 
-Another optimization is the X-drop [TODO], meaning that all states that lag
-more than $x$ columns behind the one with smallest $j$ will be dropped.
+TODO: Stop halfway
 
 ** Incremental doubling
 
@@ -625,6 +626,8 @@ increase the value of the heuristic while keeping it /admissible/.
 
 TODO: Generally applicable in seed-and-extend settings.
 
+TODO: Properly introduce $p$
+
 *** Bulk-contours update
 In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
 found. This helps to penalize states /before/ (left of) the match. Each
@@ -654,7 +657,7 @@ distance $\leq t$. Thus, the first row that needs to be computed is row $r^t_{st
 [TODO: Add a $+1$ to this?]
 
 *End of range.* We will now determine the bottommost row $j$ that can contain a
-state at distance $\leq t$ in the block. Let $u=\st{i}{r^t_{end})$ be the bottommost state in
+state at distance $\leq t$ in the block. Let $u=\st{i}{r^t_{end}}$ be the bottommost state in
 column $i$ with distance $\leq t$. Let $v = \st{i'}{j'}$ be a state in the
 current block ($i\leq i'\leq i+B$) that is below the diagonal of $u$ ($j'-i' \geq r^t_{end}-i$).
 Then, the distance to $v$ is at least $\g(v) \geq \g(u) + \cgap(u,v)$, and hence
@@ -703,14 +706,9 @@ just over $B$ steps down, and then makes jumps to the right.
 The resulting $v$ is the bottommost state in column $i+B$ with $f_l(v) \leq t$,
 and its row is the last row that will be computed.
 
-TODO: Run this algorithm directly on 64-row lanes.
-
-TODO: Can we be optimistic and bump more than $(f_l(v)-t)/2$? the next value
-will also block 'backwards'.
-
 #+name: ranges
 #+caption: Computed ranges
-| [[./imgs/ranges/full.png]] Full boundary   | [[./imgs/ranges/sparse.png]] Sparse h calls   |
+| [[./imgs/ranges/full.png]] Full boundary | [[./imgs/ranges/sparse.png]] Sparse h calls |
 
 *** Fixed range
 In a column, the /fixed/ range is the range of rows between the topmost and
