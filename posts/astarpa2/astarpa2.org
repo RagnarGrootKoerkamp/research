@@ -1,4 +1,4 @@
-#+title: [WIP] A*PA2: 10x faster exact global alignment
+#+title: [WIP] A*PA2: 20x faster exact global alignment
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
@@ -28,17 +28,18 @@ work.
 :END:
 
 *Methods.* We introduce A*PA2, an exact global pairwise aligner with respect to
-edit distance. A*PA2 builds on Edlib and incorporates ideas from Block Aligner,
-WFA, and A*PA. A*PA2 1) uses Myers' bitpacking with SIMD, 2) significantly
-reduces overhead by using large block sizes, 3) avoids recomputation of states
-where possible, 4) introduces a new technique for traceback, and 5) improves and
-applies the heuristics developed in A*PA.
+edit distance.  Like Edlib, A*PA2 uses Ukkonen's band doubling in combination
+with Myers' bitpacking. A*PA2 1) extends this with SIMD, 2) uses large block
+sizes inspired by Block Aligner, 3) avoids recomputation of states where
+possible as suggested before by Fickett, 4) introduces a new optimistic technique for
+traceback based on diagonal transition, and 5) applies and improves the heuristics
+developed in A*PA using pre-pruning.
 
 *Results.*
-The average runtime of A*PA2 is $20\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
+The average runtime of A*PA2 is  $20\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
 human genome having $6\%$ divergence on average. On shorter ONT reads of
- $10\%-12\%$ average divergence the speedup is $5\times$ (length $11$kbp),
-$2.5\times$ (length $4$kbp), and $0.66\times$ (length $800$bp).
+ $10\%-12\%$ average divergence the speedup is $6.1\times$ (length $11$kbp),
+$3.7\times$ (length $4$kbp), and $0.96\times$ (length $800$bp).
 
 *Availability.* [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]]
 
@@ -55,7 +56,7 @@ operations is called the /Levenshtein distance/ or /edit distance/
 Over time, the length of genomic reads has increased from hundreds of basepairs
 to hundreds of thousands basepairs now. Meanwhile, the complexity of exact
 algorithms has not been improved by more than a constant factor since the
-introduction of the O(s^2) diagonal transition algorithm [cite:@ukkonen85].
+introduction of the $O(s^2+n)$ diagonal transition algorithm [cite:@ukkonen85].
 
 In this work we introduce a new exact algorithm for global pairwise alignment
 building on the recently introduced A* heuristics of A*PA [cite:@astarpa], but
@@ -86,7 +87,7 @@ Lastly, we apply A*.
    reducing memory usage.
 2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
    the processing of $4$ computer words in parallel.
-3. *Novel encoding.* We introduce a novel bit-encoding of the input sequence to
+3. *Novel encoding.* We introduce a novel encoding of the input sequence to
    speed up SIMD operations for size-$4$ alphabets.
 4. *Incremental doubling.* Both the band doubling methods of [cite/t:@ukkonen85]
    and Edlib recompute states after doubling the threshold.  We avoid this by
@@ -539,10 +540,6 @@ columns that go further down can be disregarded.
 #+caption: Doubling detail
 | [[file:imgs/doubling-0.png]] | [[file:imgs/doubling-1.png]] |
 
-#+name: doubling-large
-#+caption: Due to incremental doubling, states 'in the middle' do not have to be recomputed.
-[[file:imgs/doubling-large/doubling-large.png]]
-
 The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
 in each iteration and simply recomputes the distance to all states.  On the
 other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
@@ -578,9 +575,7 @@ number of insertions and deletions on a path from each state to the end.
 We simply replace this by the stronger heuristics introduced in A*PA.
 We use three variants:
 1. *No heuristic.* Only use the gap heuristic. No initialization needed.
-2. *Seed heuristic (SH).* This requires relatively simple precomputation, and
-   little bookkeeping, but works well for low uniform error rate.
-3. *Gap-chaining seed heuristic (GCSH).* The strongest heuristic that requires
+2. *Gap-chaining seed heuristic (GCSH).* The strongest heuristic that requires
    more time to initialize and update, but is better able to penalize long indels.
 
 The details of how these changes affects the ranges of rows being computed are
@@ -589,15 +584,10 @@ in [[*Appendix: Range-of-rows computations]].
 We make two modifications the previous version of the A*PA algorithm.
 
 *** Pre-pruning
-#+caption: Effect of prepruning. Top: no prepruning, Bot: with prepruning.
-| CSH, no pruning            | CSH, pruning                 |
-| [[file:imgs/prepruning/csh.png]]    | [[file:imgs/prepruning/csh-p.png]]    |
-| [[file:imgs/prepruning/csh-lp.png]] | [[file:imgs/prepruning/csh-lp-p.png]] |
-
-#+caption: Appendix: full table. Effect of prepruning. Top: no prepruning, Bot: with prepruning.
-| SH, no pruning | SH, pruning | CSH, no pruning | CSH, pruning | GCSH, no pruning | GCSH, pruning|
-| [[file:imgs/prepruning/sh.png]]    | [[file:imgs/prepruning/sh-p.png]]    | [[file:imgs/prepruning/csh.png]]    | [[file:imgs/prepruning/csh-p.png]]    | [[file:imgs/prepruning/gcsh.png]]    | [[file:imgs/prepruning/gcsh-p.png]]    |
-| [[file:imgs/prepruning/sh-lp.png]] | [[file:imgs/prepruning/sh-lp-p.png]] | [[file:imgs/prepruning/csh-lp.png]] | [[file:imgs/prepruning/csh-lp-p.png]] | [[file:imgs/prepruning/gcsh-lp.png]] | [[file:imgs/prepruning/gcsh-lp-p.png]] |
+#+name: pre-pruning
+#+caption: *Effect of pre-pruning* on chaining seed heuristic (CSH) contours. The left shows contours and layers of the heuristic at the end of an A*PA alignment, after matches (black diagonals) on the path have been pruned (red). The right shows pre-pruned matches in purple and the states visited during pre-pruning in green. After pre-pruning, almost no off-path matches remain. This decreases the number of contours, making the heuristic stronger, and simplifies contours, making the heuristic faster to evaluate.
+#+attr_html: :class small
+| [[file:imgs/prepruning/csh-p.png]] | [[file:imgs/prepruning/csh-lp-p.png]] |
 
 Here we introduce an independent optimization that also applies to the original
 A*PA method.
@@ -623,8 +613,6 @@ of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
 $p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
 know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
 increase the value of the heuristic while keeping it /admissible/.
-
-TODO: Generally applicable in seed-and-extend settings.
 
 TODO: Properly introduce $p$
 
@@ -783,11 +771,14 @@ blocks, new traceback) and uses the simple gap-heuristic.
 incremental-doubling, and the gap-chaining seed heuristic introduced by
 A*PA with pre-pruning.
 
-*A*PA2 parameters.*
-We fix block size $B=256$. For A*PA2-full, we use the gap-chaining seed
+*Parameters.*
+For A*PA2, we fix block size $B=256$. For A*PA2-full, we use the gap-chaining seed
 heuristic (GCSH) of A*PA with exact matches ($r=1$) and seed length $k=12$. We
 pre-prune matches by looking ahead up to $p=14$ seeds.
 A detailed parameter comparison can be found in [[*Comparison with other aligners]].
+For A*PA, we use inexact matches ($r=2$) with seed length $k=15$ by default, and
+only change this for the low-divergence SARS-CoV-2 dataset, where we use exact
+matches ($r=1$) intead.
 
 *Execution.*
 We ran all benchmarks using PaBench ([[https://github.com/pairwise-alignment/pa-bench][github.com/pairwise-alignment/pa-bench]]) on
@@ -801,27 +792,36 @@ initialize the heuristic.
 
 ** Comparison with other aligners
 *Speedup on real data.*
-[[real-summary]] compares the running time of aligners on real datasets.
-For long ONT reads, with $6\%-7\%$ divergence, A*PA2-full is TODO times faster
+[[real-summary]] compares the running time of aligners on real datasets, and
+[[real-table]] shows average running times more precisely.
+For long ONT reads, with $6\%-7\%$ divergence, A*PA2-full is $20\times$ faster
 than Edlib, BiWFA, and A*PA in average running time, and using the gap-chaining
 seed heuristic in A*PA2-full provides speedup over A*PA2-simple.
 
 On shorter sequences, the overhead of initializing the heuristic in A*PA2-full is large, and
 A*PA2-simple is faster. For the <10kbp and <50kbp datasets ($4$kbp and $11$kbp
-average length), A*PA2-simple is TODO and TODO times faster than other methods.
+average length), A*PA2-simple is $3.7\times$ and $6.1\times$ faster than other methods.
 For the shortest (<1kbp ONT reads) and most similar sequences (SARS-CoV-2
-with $1\%$ divergence), BiWFA is faster than A*PA2-simple. In these cases,
+with $1\%$ divergence), BiWFA is usually faster than Edlib and A*PA2-simple. In these cases,
 the overhead of using $256$ wide blocks is relatively large compared to the
-edit distance $s$ of only $100$ to $500$ in combination with BiWFAs
-$O(s^2+n)$ expected running time.
-
-- TODO: Table of mean runtimes
+edit distance $s\leq 500$ in combination with BiWFAs $O(s^2+n)$ expected running time.
 
 #+name: real-summary
-#+caption: *Runtime comparison (log).* TODO timeouts. Each dot shows the running time of a single alignment (left two plots) or the average runtime over $2\%$ of the input pairs (right four plots). Box plots show the three quartiles, and the red circled dot shows the average running time over all alignments. In the left two plots, the average running time of A*PA2-full is TODO times faster than Edlib and BiWFA. In the right four plots, A*PA2-simple is TODO times faster.
+#+caption: *Runtime comparison (log).* Each dot shows the running time of a single alignment (right two plots) or the average runtime over $2\%$ of the input pairs (left four plots). Box plots show the three quartiles, and the red circled dot shows the average running time over all alignments. Dots on the red line indicate timeouts. On the >500kbp reads, A*PA2-full is $20\times$ faster than other methods.
 #+attr_html: :class inset large
 [[file:plots/real-summary.svg]]
 
+#+name: real-table
+#+caption: *Average runtime per sequence* of each aligner on each dataset. Cells marked with $>$ are a lower bound due to timeouts. Speedup is reported as the fastest A*PA2 variant compared to the fastest of Edlib, BiWFA, and A*PA.
+#+attr_html: :class small
+|              | SARS-CoV-2 pairs (ms) | <1kbp ONT reads  (ms) | <10kbp ONT reads  (ms) | <50kbp ONT reads  (ms) | >500kbp ONT reads (s) | >500kbp ONT reads + gen.var. (s) |
+|--------------+-----------------------+-----------------------+------------------------+------------------------+-----------------------+-------------------------------------------|
+| Edlib        |                 11.56 |                 0.122 |                   1.17 |                    8.2 |                  3.72 |                                      5.17 |
+| BiWFA        |                  1.51 |                 0.049 |                   1.02 |                   12.9 |                  6.29 |                                      9.71 |
+| A*PA         |                  6.84 |                 0.546 |                  15.22 |                  203.2 |                 14.14 |                                     13.53 |
+| A*PA2 simple |                  0.85 |                 0.051 |                   0.27 |                    1.3 |                  0.52 |                                      0.69 |
+| A*PA2 full   |                  1.98 |                 0.082 |                   0.40 |                    1.6 |                  0.19 |                                      0.25 |
+| Speedup      |             1.8\times |            0.96\times |              3.7\times |              6.1\times |              20\times |                                  21\times |
 
 *Scaling with divergence.*
 [[scaling-e]] compares the runtime of aligners on synthetic sequences of increasing
@@ -830,20 +830,21 @@ linearly and jumps up each time another doubling of the threshold is required.
 A*PA is fast until the maximum potential is reached at $6\%$ resp. $12\%$ and
 then becomes very slow. A*PA2 behaves similar to Edlib and jumps up each time
 another doubling of the threshold is needed, but is much faster.
-It outperforms BiWFA starting for divergence $\geq 2\%$ and A*PA for divergence
+It outperforms BiWFA for divergence $\geq 2\%$ and A*PA for divergence
 $\geq 4\%$.
 The runtime of A*PA2-full is near-constant up to divergence $7\%$ due to the
 gap-chaining seed heuristic which can correct for up to $1/k=1/12=8.3\%$ of divergence, while
-A*PA2-simple starts to slow down because of doubling at lower divergence already.
+A*PA2-simple starts to slow down because of doubling at lower divergence.
 For a fixed number of doublings of the threshold, A*PA2 is faster for higher
 divergence because too low thresholds are rejected more quickly.
+
 
 On real data, A*PA and BiWFA slow down as divergence goes up, while Edlib and
 A*PA2 are much less sensitive to this for sequences of length <50kbp, as shown
 in [[*Comparison with other aligners]].
 
 #+name: scaling-e
-#+caption: *Runtime scaling with divergence.* Average running time of aligners over $10$ sequences of length $n=100$kbp with varying uniform divergence. The right plot is the same but zoomed in.
+#+caption: *Runtime scaling with divergence.* Average running time of aligners over $10$ sequences of length $100$kbp with varying uniform divergence. The right plot is the same but zoomed in.
 #+attr_html: :class inset large
 | [[file:plots/scaling_e.svg]] | [[file:plots/scaling_e_zoom.svg]] |
 
@@ -888,22 +889,39 @@ optimal alignment.
 #+caption: *Runtime distribution per stage of A*PA2,* using A*PA2-full for >500kbp sequences in the left two plots and A*PA2-simple in the remaining four plots. Each column corresponds to a (set of) alignment(s), which are sorted by total runtime. /Overhead/ is the part of the runtime not measured in one of the other parts and includes the time to build the profile.
 #+attr_html: :class inset large
 [[file:plots/real-timing.svg]]
-* Conclusion
-** Summary
-- TODO times faster on long sequences, and TODO times faster on shorter 10%
-  divergence sequence.
-** Limitations
-- Initialization takes time
-- BiWFA is better when edit distance is /very/ low.
-** Future work
-- 'Smoothen' the divergence curve, choosing better thresholds for doubling, e.g.
-  based on an initial heuristic alignment.
-- Pre-pruning for seed&extend methods?
-- Semi-global alignment
-- Affine alignment
-- Local doubling
-- DT Blocks
-- TALCO: tiling alignment using convergence of traceback pointers: https://turakhia.ucsd.edu/research/
+* Discussion
+We have shown that A*PA2 is over $20\times$ faster than other methods when aligning $>500$kbp
+ONT reads with $6\%$ divergence, $2$ to $6\times$ faster for sequences of length
+$4$ kbp to $50$ kbp, and only slightly slower than BiWFA for very short ($<1000$ bp) and
+very similar ($<2\%$ divergence) sequences.
+A*PA2 achieves this by building on Edlib, using bitpacking, blocks, SIMD, the
+gap-chaining seed heuristic, and pre-pruning.
+
+*Limitations.*
+1. The main limitation of A*PA2-full is that the heuristic requires finding all
+   matches between the two input sequences, which can take long compared to the
+   alignment itself.
+2. For sequences with divergence $<2\%$, BiWFA exploits the
+   sparse structure of the diagonal transition algorithm. In comparison, computing full
+   blocks of size around $256\times 256$ in A*PA2 has considerable overhead.
+*Future work.*
+1. When divergence is low, performance could be improved by applying A* to the
+   diagonal transition algorithm directly, instead of using DP. As a middle
+   ground, it may be possible to compute individual blocks using DT when the
+   divergence is low.
+2. Currently A*PA2 is completely unaware of the type of sequences it aligns.
+   Using an upper bound on the edit distance, either known or found using a
+   non-exact method, could avoid trying overly large thresholds and smoothen the
+   curve in [[scaling-e]].
+3. It should be possible to extend A*PA2 to open-ended and semi-global
+   alignment, just like Edlib and WFA support these modes.
+4. Extending A*PA2 to affine cost models should also be possible. This will
+   require adjusting the gap-chaining seed heuristic, and changing the
+   computation of the blocks from a bitpacking approach to one of the
+   SIMD-based methods for affine costs.
+5. Lastly, TALCO (Tiling ALignment using COnvergence of traceback pointers,
+   https://turakhia.ucsd.edu/research/) provides an interesting idea: it may be
+   possible start traceback while still computing blocks, saving memory.
 
 * Acknowledgements
 :PROPERTIES:
@@ -924,13 +942,13 @@ The SARS-CoV-2 dataset stands out for having only $1.5\%$ divergence.
 
 #+name: statistics
 #+caption: Statistics of the real datasets. Lengths are in kbp, divergence in %. Max gap indicates the average length of the largest gap in each alignment.
-| Dataset              | Source |   #Pairs | len min | len mean | len max | div min | div mean | div max | max gap mean | max gap max |
-| SARS-CoV-2           | A*PA2  | 10000 |      27 |       30 |      30 |     0.0 |      1.5 |    12.8 |          0.1 |         1.0 |
-| ONT <1k              | WFA    | 12477 |    0.04 |      0.8 |     1.1 |     0.0 |     10.4 |    22.5 |         0.01 |         0.1 |
-| ONT <10k             | BiWFA  |  5000 |     0.2 |      3.6 |      10 |     3.0 |     12.1 |    20.1 |         0.04 |         0.5 |
-| ONT <50k             | BiWFA  | 10000 |     0.2 |       11 |      50 |     3.0 |     11.6 |    19.2 |         0.07 |         3.4 |
-| ONT >500k            | A*PA   |    50 |     500 |      594 |     849 |     2.7 |      6.1 |    16.7 |          0.1 |         1.3 |
-| ONT >500k + gen.var. | BiWFA  |    48 |     502 |      632 |    1053 |     4.3 |      7.2 |    18.2 |          *1.9* |          42 |
+| Dataset              | Source | #Pairs | len min | len mean | len max | div min | div mean | div max | max gap mean | max gap max |
+| SARS-CoV-2           | A*PA2  |  10000 |      27 |       30 |      30 |     0.0 |      1.5 |    12.8 |          0.1 |         1.0 |
+| ONT <1k              | WFA    |  12477 |    0.04 |      0.8 |     1.1 |     0.0 |     10.4 |    22.5 |         0.01 |         0.1 |
+| ONT <10k             | BiWFA  |   5000 |     0.2 |      3.6 |      10 |     3.0 |     12.1 |    20.1 |         0.04 |         0.5 |
+| ONT <50k             | BiWFA  |  10000 |     0.2 |       11 |      50 |     3.0 |     11.6 |    19.2 |         0.07 |         3.4 |
+| ONT >500k            | A*PA   |     50 |     500 |      594 |     849 |     2.7 |      6.1 |    16.7 |          0.1 |         1.3 |
+| ONT >500k + gen.var. | BiWFA  |     48 |     502 |      632 |    1053 |     4.3 |      7.2 |    18.2 |        *1.9* |          42 |
 
 *Real data scaling by divergence.* [[real-summary-scatter]] shows the same data as [[real-summary]], but split out by divergence.
 
@@ -942,15 +960,15 @@ The SARS-CoV-2 dataset stands out for having only $1.5\%$ divergence.
 *Memory usage.* [[real-memory]] shows the memory usage of all compared aligners.
 
 #+name: real-memory
-#+caption: Memory usage
+#+caption: Memory usage of aligners, measured as the increase in =max_rss= before and after aligning a pair of sequences. These measurements are rather unstable, so should only be taken as an indication of the order of magnitude.
 #+attr_html:
-|              | SARS-CoV-2 pairs Median | SARS-CoV-2 pairs Max | <1kbp ONT reads Median | <1kbp ONT reads Max | <10kbp ONT reads Median | <10kbp ONT reads Max | <50kbp ONT reads Median | <50kbp ONT reads Max | >500kbp ONT reads Max | >500kbp ONT reads Median | >500kbp ONT reads + genetic variation Median | >500kbp ONT reads + genetic variation Max |
-|--------------+-------------------------+----------------------+------------------------+---------------------+-------------------------+----------------------+-------------------------+----------------------+-----------------------+--------------------------+----------------------------------------------+-------------------------------------------|
-| Edlib        |                       2 |                    5 |                      0 |                   0 |                       0 |                    0 |                       3 |                    5 |                     3 |                        0 |                                            1 |                                         4 |
-| BiWFA        |                      11 |                   14 |                      2 |                   2 |                       2 |                    2 |                       8 |                   11 |                    19 |                       10 |                                           12 |                                        17 |
-| A*PA         |                       3 |                   46 |                      0 |                   0 |                       9 |                   67 |                      63 |                  150 |                   467 |                       90 |                                          160 |                                       585 |
-| A*PA2 simple |                       2 |                    5 |                      0 |                   0 |                       0 |                    0 |                       4 |                    6 |                    86 |                       22 |                                           31 |                                       197 |
-| A*PA2 full   |                       3 |                    7 |                      0 |                   0 |                       0 |                    0 |                       5 |                    7 |                    84 |                       28 |                                           32 |                                       166 |
+| Memory [MB]  |   SARS-CoV-2 pairs Median |   SARS-CoV-2 pairs Max |   <1kbp ONT reads Median |   <1kbp ONT reads Max |   <10kbp ONT reads Median |   <10kbp ONT reads Max |   <50kbp ONT reads Median |   <50kbp ONT reads Max |   >500kbp ONT reads Median |   >500kbp ONT reads Max |   >500kbp ONT reads + gen.var. Median |   >500kbp ONT reads + gen.var. Max |
+|--------------+---------------------------+------------------------+--------------------------+-----------------------+---------------------------+------------------------+---------------------------+------------------------+----------------------------+-------------------------+---------------------------------------+------------------------------------|
+| Edlib        |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                          0 |                       0 |                                     0 |                                  0 |
+| BiWFA        |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                          5 |                      12 |                                     0 |                                  0 |
+| A*PA         |                         0 |                    237 |                        0 |                     0 |                         0 |                     43 |                       181 |                    873 |                         85 |                    3454 |                                   160 |                               6870 |
+| A*PA2 simple |                         2 |                      5 |                        0 |                     0 |                         0 |                      0 |                         4 |                      6 |                          0 |                      57 |                                     4 |                                166 |
+| A*PA2 full   |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                         31 |                      83 |                                     7 |                                143 |
 
 ** Effects of methods
 *Ablation.* [[real-ablation]] shows how the performance of A*PA2 changes as individual features are removed.
@@ -966,19 +984,14 @@ heuristic, which take significantly longer to find, larger seed length $k$, whic
 smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 
 #+name: real-params
-#+caption: Running time of A*PA2-full (left) and A*PA2-simple (middle, right) with one parameter modified. Default parameters are
+#+caption: Running time of A*PA2-simple (left, middle) and A*PA2-full (right) with one parameter modified. Default parameters are
 #+caption: seed length $k=12$, pre-pruning look-ahead $p=14$, growth factor $f=2$, block size
-#+caption: $b=256$, max traceback cost $g=40$, and f-drop $x=10$.
+#+caption: $b=256$, max traceback cost $g=40$, and dropping diagonals that lag $fd=10$ behind during traceback.
 #+attr_html: :class inset large
 [[file:plots/real-params.svg]]
 
 * TODO
-- Final run of experiments without parallelisation and timelimit 100s
-- Update plots
-- Update order & name of datasets
+- Rerun with =debug = false=, =strip = true=
 - update tables
-- disable frequency boost
-- x-drop => WFA-adaptive f-drop
-- swap left two / right 4
 
 #+print_bibliography:
