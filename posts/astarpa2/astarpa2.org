@@ -1,4 +1,4 @@
-#+title: [WIP] A*PA2: 20x faster exact global alignment
+#+title: [WIP] A*PA2: 20x faster exact global alignment of long sequences
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
@@ -11,6 +11,7 @@
 \begin{equation*}
 \newcommand{\g}{g^*}
 \newcommand{\h}{h^*}
+\newcommand{\f}{f^*}
 \newcommand{\cgap}{c_{\texttt{gap}}}
 \newcommand{\xor}{\ \mathrm{xor}\ }
 \newcommand{\and}{\ \mathrm{and}\ }
@@ -28,12 +29,12 @@ work.
 :END:
 
 *Methods.* We introduce A*PA2, an exact global pairwise aligner with respect to
-edit distance.  Like Edlib, A*PA2 uses Ukkonen's band doubling in combination
+e Edlib, A*PA2 uses Ukkonen's band doubling in combination
 with Myers' bitpacking. A*PA2 1) extends this with SIMD, 2) uses large block
 sizes inspired by Block Aligner, 3) avoids recomputation of states where
 possible as suggested before by Fickett, 4) introduces a new optimistic technique for
-traceback based on diagonal transition, and 5) applies and improves the heuristics
-developed in A*PA using pre-pruning.
+traceback based on diagonal transition (WFA), and 5) applies the heuristics
+developed in A*PA and improves them using /pre-pruning/.
 
 *Results.*
 The average runtime of A*PA2 is  $20\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
@@ -80,10 +81,10 @@ Then, we reduce the amount of work done (points 4. and 5.).
 Lastly, we apply A*.
 
 1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
-   and for each column decides which range (subset of rows) of cells to compute.  We
+   and for each column decides which range (subset of rows) of states to compute.  We
    significantly reduce this overhead by processing blocks of $256$ columns at a
    time, taking inspiration from Block aligner [cite:@block-aligner].
-   Correspondingly, we only store cells of the DP-matrix at block boundaries,
+   Correspondingly, we only store states of the DP-matrix at block boundaries,
    reducing memory usage.
 2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
    the processing of $4$ computer words in parallel.
@@ -209,13 +210,12 @@ iterations, resulting in roughly a factor $2$ overhead.
 A* heuristic. In particular, Spouge defines a /computational volume/ as a subgraph of the
 alignment graph that contains /every/ shortest path. Given a bound $t\geq s$, some examples of
 computational volumes are:
-1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph.
-2. $\{u: \g(u) + \h(u)=s\}$, the vertices on a shortest paths.
-3. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$ [cite:@fickett84].
-4. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
+1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
+2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$ [cite:@fickett84].
+3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
    of length $\leq t$ [cite:@ukkonen85].
-5. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@spouge91;@edlib].
-6. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@spouge91;@edlib].
+5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
 
 As [cite/t:@spouge89 p. 1559] notes:
 #+begin_quote
@@ -377,15 +377,15 @@ pub fn compute_block_simd(
 
 ** Blocks
 Our first improvement is to process $B=256$ columns at a time. Instead of
-computing the range of rows $R$ for each column individually, we compute it once and
+computing the range of rows for each column individually, we compute it once and
 then use this one range for a block of $B$ consecutive columns. While this
-computes some extra states in most columns, the time saved by not
-having to compute $R$ for each column is larger.
+computes some extra states in most columns, the time saved by only determining
+the range to compute once per block is larger.
 
 Within each block, we iterate over the rows in /lanes/ of $w$ rows at a time, and for each
 lane compute all $B$ columns before moving on to the next lane.
 
-See [[*Computed range]] for details on the computation of $R$.
+See [[*Determining the rows to compute]] for details on exactly which rows are computed.
 
 ** Memory
 
@@ -411,7 +411,7 @@ Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words
 staggered ([[simd]]). This is similar to the original anti-diagonal tiling
 introduced by [cite/t:@wozniak97], but using units of $w$-bit words instead of
 single characters. This idea was already introduced in 2014 by the author of
-Edlib[fn::See https://github.com/Martinsos/edlib/issues/5.], but to our
+Edlib in a GitHub issue (https://github.com/Martinsos/edlib/issues/5), but to our
 knowledge has never been implemented either in Edlib or elsewhere.
 
 We achieve further speedup by improving instruction-level-parallelism.
@@ -421,16 +421,16 @@ between the instructions for computing each SIMD vector do not allow such high
 parallelism. We improve this by processing two SIMD vectors in parallel, spanning a total of
 $8$ anti-diagonally-aligned $64$-bit lanes covering $2W = 512$ rows ([[simd]]).
 
-When the number of lanes of rows to be computed is $c=(r_{end}-r_{start})/64$, we
-process $8$ lanes in parallel as long as $c\geq 8$. If there are remaining
-rows, we end with another $8$-lane ($5\leq c<8$) or $4$-lane ($1\leq c\leq 4$)
+When the number of remaining lanes of rows to be computed is $\ell$, we
+process $8$ lanes in parallel as long as $\ell\geq 8$. If there are remaining
+rows, we end with another $8$-lane ($5\leq \ell<8$) or $4$-lane ($1\leq \ell\leq 4$)
 iteration that optionally includes some padding rows at the bottom.
 In case the horizontal differences along the original bottom row are needed (as
-is the case for incremental doubling [[*Incremental doubling]]), we
-do not use padding and instead fall back to trying a $4$-lane SIMD ($c\geq 4$),
-a $2$-lane SIMD ($c\geq 2$), and lastly a scalar iteration ($c\geq 1$).
+required by incremental doubling [[*Incremental doubling]]), we
+do not use padding and instead fall back to trying a $4$-lane SIMD ($\ell\geq 4$),
+a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 
-TODO: How about padding upwards?
+# TODO: How about padding upwards?
 
 ** SIMD-friendly sequence profile
 
@@ -493,95 +493,65 @@ TODO: No specific benchmark.
 
 The traceback stage takes as input the computed vertical differences at
 the end of each block of columns. We iteratively work backwards through the
-blocks of columns. In each step, we are given the distances $D_i[j]$ to
-the states in column $i$ ($B|i$) and the state $u=\st{i+B}j$ in column $i+B$
-that is on the optimal path and has distance $d_u$.
+blocks. In each step, we know the distances $g\st ij$ to
+the states in column $i$ and the state $u=\st{i+B}j$ in column $i+B$
+that is on the optimal path and has distance $\g(u)$.
 The goal is to find an optimal path from column $i$ to $u$.
 
-A naive approach is to simply recompute the entire block of columns for their
-entire range $R$ while storing distances to all cells, but we introduce to
-faster methods.
+A naive approach is to simply recompute the entire block of columns while
+storing distances to all states. Here we consider two more efficient methods.
 
-
-*** Optimistic block computation
-Instead of computing the full range $R=(r_{start}, r_{end})$ for this column, a
+*Optimistic block computation.*
+Instead of computing the full range for this column, a
 first insight is that only rows up to $j$ are needed, since the optimal path to
 $u=\st{i+B}j$ can never go below row $j$.
 
-Secondly, the path crosses $B=256$ rows, and so we optimistically assume that it
-will be contained in rows $j-256-64=j-320$ to $j$. Thus, we first compute the
-states in this range of rows (rounded out to multiples of $w$). If the distance
-to $u$ computed this way agrees with the known distance, the path must lie
-within these rows. Otherwise, we repeatedly try again with double the number of lanes, until
-success. The exponential search ensures low overhead and good average case performance.
-*** Optimistic diagonal transition
-A further improvement uses the /diagonal transition/ algorithm backwards from
-$u$. We simply run the unmodified algorithm on the reverse graph covering
-columns $i$ to $i+B$ and rows $0$ to $j$. When the distance $d_j$ from $u$ to a
-state $\st ij$ in column $i$ is found, we check whether $D_i[j] + d_j = d_u$.
-If this is not the case, we continue until a suitable $j$ is found.  We then
-infer the optimal path by a traceback on the diagonal transition algorithm.
-When no path has been found of distance $\leq 40$, we fall back to the block
-doubling described above.
+Secondly, the path crosses $B=256$ columns, and so we optimistically assume that
+it will be contained in rows $j-256-64=j-320$ to $j$. Thus, we first compute the
+distance to all states in this range of rows (rounded out to multiples of
+$w=64$). If the distance to $u$ computed this way agrees with the known
+distance, there is a shortest path contained within the computed rows and we
+trace it one state at a time. Otherwise, we repeatedly try again with double the
+number of lanes, until success. The exponential search ensures low overhead and
+good average case performance.
 
+*Optimistic diagonal transition traceback (DTT).*
+A second improvement uses the /diagonal transition/ algorithm backwards from
+$u$. We simply run the unmodified algorithm on the reverse graph covering
+columns $i$ to $i+B$ and rows $0$ to $j$.
+Whenever a state $v$ in column $i$ is reached, with distance $d$ from $u$, we check
+whether $g(v) + d=\g(u)$, and continue until a $v$ is found for which this holds.
+We then know that $v$ lies on a shortest path and can find the path from $v$ to
+$u$ by a usual traceback on the diagonal transition algorithm.
+
+As an optimization, when no suitable $v$ is found after trying all states at
+distance $\leq 40$, we abort the DT trace fall back to the block doubling described above.
 Another optimization is the WF-adaptive heuristic introduced by WFA: all states
 that lag more than $10$ behind the furthest reaching diagonal are dropped.
+Lastly, we abort early when after reaching distance $20=40/2$, less than half
+the columns were reached.
 
-TODO: Stop halfway
-
-** Incremental doubling
-
-TODO: Rephrase $g(u)\leq t$ to $f(u) \leq t$.
-
-TODO: The range-end only matters for the last columns of the block. Intermediate
-columns that go further down can be disregarded.
-
-#+name: doubling
-#+caption: Doubling detail
-| [[file:imgs/doubling-0.png]] | [[file:imgs/doubling-1.png]] |
-
-The original band doubling algorithm doubles the threshold from $t$ to $t'=2t$
-in each iteration and simply recomputes the distance to all states.  On the
-other hand, BFS, Dijkstra, and A*[fn::A* with a /consistent/ heuristic.] visit
-states in increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) =
-g(u) + h(u)$ for A*), and the distance to a state is known to be correct
-(/fixed/) as soon as it is expanded. This way a state is never expanded twice.
-
-Indeed, the band-doubling algorithm can also avoid recomputations. After
-completing the iteration for $t$, it is guaranteed that the distance is fixed
-for all states that are indeed at distance $\leq t$.  In fact a stronger result holds:
-in any column the distance is fixed for /all/ states between the topmost
-and bottommost state with distance $\leq t$.
-Note that due to the
-word-based computations, there will also be states whose computed distance is
-$>t$. These are /not/ guaranteed to be correct.
-
-After a range $R=(r_{start}, r_{end})$ of rows for a block of $B$ columns has
-been computed, we determine the first row $r'_{start} \geq r_{start}$ and last
-row $r'_{end}\leq r_{send}$ that are a multiple of $w$ and for which all
-computed distances in this block are at most $t$[fn::More precisely, such that
-in each column there is a state of distance $\leq t$ above (below) with distance
-$\leq t$.], if such rows exists. (See
-[[*Fixed range]] for details.) We then store these values $(r'_{start}, r'_{end})$
-and the horizontal difference along row $r'_{end}$. The next iteration for
-$t'=2t$ then skips the rows in this interval, and uses the stored differences as
-input to compute rows $r'_{end}$ to the new $r_{end}$.
-
-TODO: Explain 1/2/3-way split cases. With pseudocode?
+[[trace]] shows that in regions with low divergence, the DTT is sufficient to trace
+the path, and only in noisy regions the algorithm falls back to recomputing full blocks.
 
 ** A*
 Edlib already uses a simple /gap-cost/ heuristic that gives a lower bound on the
 number of insertions and deletions on a path from each state to the end.
-We simply replace this by the stronger heuristics introduced in A*PA.
-We use three variants:
-1. *No heuristic.* Only use the gap heuristic. No initialization needed.
-2. *Gap-chaining seed heuristic (GCSH).* The strongest heuristic that requires
-   more time to initialize and update, but is better able to penalize long indels.
+We replace this by the much stronger gap-chaining seed heuristic (GCSH) introduced in A*PA.
 
-The details of how these changes affects the ranges of rows being computed are
-in [[*Appendix: Range-of-rows computations]].
+Compared to A*PA, we make two modifications.
 
-We make two modifications the previous version of the A*PA algorithm.
+*** Bulk-contours update
+In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
+found. This helps to penalize states /before/ (left of) the match. Each
+iteration of our new algorithm works left-to-right only, and thus pruning of
+matches does not affect the current iteration. Instead of pruning on the fly, we
+collect all matches to be pruned at the end of each iteration, and update the
+contours in one right-to-left sweep.
+
+To ensure the band doubling approach remains valid after pruning, we ensure that
+the range of computed rows never shrinks after an increase of $t$ and subsequent
+pruning.
 
 *** Pre-pruning
 #+name: pre-pruning
@@ -593,146 +563,155 @@ Here we introduce an independent optimization that also applies to the original
 A*PA method.
 
 Each of the heuristics $h$ introduced in A*PA depends on the set of matches
-$\matches$. Given that $\matches$ contains /all/ matches, $h$ was shown to be an
-admissible [TODO] heuristic. Even after pruning some matches, $h$ was shown to
-still be a lower bound on the length of a path not going through already visited states.
+$\matches$. Given that $\matches$ contains /all/ matches, $h$ is an
+admissible heuristic that never overestimates the true distance. Even after
+pruning some matches, $h$ is still a lower bound on the length of a
+path not going through already visited states.
 
-Now consider a situation where there are two seeds and there is an exact match
-$m$ from $u=v_s$ to $v$ for seed $s_0$, but going from $v$ to the end of the
-next seed $s_1$ takes cost at least $2$ (TODO FIG).  The existence of the match
-is a 'promise' that $s_0$ can be crossed for free.  In this case, this leads to
-a seed heuristic value of $1$ is $u$, namely $0$ for $s_1$ plus $1$ for $s_1$. But we
-already know that match $m$ can /never/ lead to a path of cost $<2$ to the end
-of $s_1$. Thus, we may as well ignore $m$! This increases the value of the
-seed heuristic in $u$ to $2$, which is indeed a lower bound on the actual distance.
+Now consider an exact match $m$ from $u$ to $v$ for seed $s_i$.  The existence
+of the match is a 'promise' that seed $s_i$ can be crossed for free.  When $m$
+is a match outside the optimal alignment,
+it is likely that $m$ can not be extended into a longer alignment.  When indeed
+$m$ can not be extended into an alignment of $s_i$ and $s_{i+1}$ of cost less
+than $2$, the existence of $m$ was a 'false promise', since crossing the two
+seeds takes cost at least $2$. Thus, we can ignore $m$ and remove $m$ from the
+heuristic, making the heuristic more accurate.
 
-More generally, consider a situation where there is a match $m$ from $u$ to $v$
-in seed $s_i$, and the lowest cost path from $s_i$ to the /start/ of $s_{i+p}$
-has cost $\geq p$.  The seed heuristic penalizes the path from $u$ (at the start
-of $s_i$) to the start of $s_{i+p}$ by at most $p-1$, since there are at most
-$p-1$ seeds in $\{s_{i+1}, \dots, s_{i+p-1}\}$ without match. Since in fact we
-know that this path has cost at least $p$, we can /pre-prune/ the match $m$ and
-increase the value of the heuristic while keeping it /admissible/.
+More generally, we try to extend each match $m$ into an alignment covering seeds
+$s_i$ up to (but excluding) $s_{i+q}$ for all $q\leq p=14$. If any of these
+extensions has cost at least $q$, that means $m$ falsely promised that $s_i$ to
+$s_{i+q}$ can be crossed for cost $<q$, and we /pre-prune/ (remove) $m$.
 
-TODO: Properly introduce $p$
+We try to extend each match by running the diagonal transition algorithm
+from the end of each match, and dropping any furthest reaching points that are
+at distance $\geq q$ while at most $q$ seeds have been covered.
 
-*** Bulk-contours update
-In A*PA, matches are /pruned/ as soon as a shortest path to their start has been
-found. This helps to penalize states /before/ (left of) the match. Each
-iteration of our new algorithm works left-to-right only, and thus pruning of
-matches does not affect the current iteration. Instead of pruning on the fly, we
-now collect all matches to be pruned at the end of each iteration, and prune
-them in one right-to-left sweep.
+As shown in [[pre-pruning]]b, the effect is that the number of off-path matches is
+significantly reduced.  This makes contours faster to initialize, update, and
+query, and increases the value of the heuristic
 
-To ensure pruning is a valid optimization, we never allow the range of rows for
-each block to shrink after increasing $t$.
+** Determining the rows to compute
+For each block spanning columns $i$ to $i+B$, only a subset of rows is computed in each iteration.
+Namely, we only compute those rows that can possibly contain states on a
+path/alignment of cost at most $t$.
+Intuitively, we try to 'trap' the alignment inside a wall of states that can not lie
+on a path of length at most $t$ (i.e. have $\f(u) \geq t$), as can be seen in [[ranges]]a.
+We determine this range of rows in two steps:
+1. First, we determine the /fixed range/ at the end of the preceding block.
+   I.e., we find the topmost and
+   bottom-most states $u=\st i{j_{start}}$ and $u=\st i{j_{end}}$ with $f(u) = g(u) + h(u)
+   \leq t$. All in-between states $u=\st ij$ with $j_{start}\leq j\leq j_{end}$
+   are then /fixed/, meaning that the correct distance has been found and $g(u) = \g(u)$.
+2. Then, we use the heuristic to find the bottom-most state $v=\st{i+B}{j_{end}'}$ at the
+   end of the to-be-computed block that can possibly have $f(v) \leq t$.
+   We then compute rows $j_{start}$ to $j_{end}'$ in columns $i$ to $i+B$,
+   rounding $[j_{start}, j_{end}']$ /out/ to the previous/next multiple of the word size $w=64$.
 
-** Appendix: Range-of-rows computations
-*** Computed range
-Here we determine the range of rows that can possibly contain cells at distance
-$\leq t$ in a block of $B$ columns from $i$ to $i+B$. We assume that the
-heuristic $h$ being used is consistent, i.e. that for any states $u\preceq v$ we
-have $h(u) \leq d(u,v) +h(v)$.
+Before describing these two steps in detail, we state the following lemma.
 
-Let $R=(r_{start}, r_{end})$ be the range of states in column $i$ to which the
-distance has been computed. From this we can find the topmost and
-bottommost states $r^t_{start}$ and $r^t_{end}$ that are at distance $\leq t$,
-see [[*Fixed range]].
+*Step 1: Fixed range.*
+In a given column $i$, the /fixed/ range is the range of rows between the topmost and
+bottom-most states with $f(u)\leq t$, in rows $j_{start}$ and $j_{end}$
+respectively. Suppose that states in rows $[r_{start}, r_{end}]$ were computed.
+One way to find $j_{start}$ and $j_{end}$ is by simply iterating inward from the
+start/end of the range and dropping all states $v=\st ij$ with
+$f(v)=g(v)+h(v)>t$, as indicated by the red columns in [[ranges]]a.
 
-*Start of range.* Since row $j=r^t_{start}$ is the first row in column $i$ with distance $\leq t$,
-this means that states in columns $i$ to $i+B$ at rows $<j$ can not be at
-distance $\leq t$. Thus, the first row that needs to be computed is row $r^t_{start}$.
-[TODO: Add a $+1$ to this?]
-
-*End of range.* We will now determine the bottommost row $j$ that can contain a
-state at distance $\leq t$ in the block. Let $u=\st{i}{r^t_{end}}$ be the bottommost state in
-column $i$ with distance $\leq t$. Let $v = \st{i'}{j'}$ be a state in the
-current block ($i\leq i'\leq i+B$) that is below the diagonal of $u$ ($j'-i' \geq r^t_{end}-i$).
-Then, the distance to $v$ is at least $\g(v) \geq \g(u) + \cgap(u,v)$, and hence
+*Step 2: End of computed range.*
+We will now determine the bottom-most row $j$ that can contain a state at
+distance $\leq t$ at the end of the block. Let $u=\st{i}{j_{end}}$ be the
+bottom-most fixed state in column $i$ with distance $\leq t$.  Let $v =
+\st{i'}{j'}$ be a state in the current block ($i\leq i'\leq i+B$) that is below
+the diagonal of $u$.
+Then, the distance to $v$ is at least $g(v) \geq \g(u) + \cgap(u,v)$ (TODO PROOF), and hence
 $$
-f(v) = g(v) + h(v) \geq \g(v) + h(v) \geq \g(u) + \cgap(u,v) + h(v) =: f_l(v).
+f(v) = g(v) + h(v) \geq \g(u) + \cgap(u,v) + h(v) =: f_l(v).
 $$
-The end of the range can now be computed by finding the bottommost state $v$ in each
-column for which this lower bound $f_l$ on $f$ is $\leq t$, using the following
-algorithm[fn::Bound checks omitted.].
-
-*Algorithm (bottommost row computation).*
+The end of the range is now computed by finding the bottom-most state $v$ in each
+column for which this lower bound $f_l$ on $f$ is at most $t$, using the following
+algorithm (omitting boundary checks).
 1. Start with $v = \st{i'}{j'} = u = \st{i}{r^t_{end}}$.
 2. While the below-neighbour $v' = \st{i'}{j'+1}$ of $v$ has $f_l(v)\leq t$, increment $j'$.
 3. Go to the next column by incrementing $i'$ and $j'$ by $1$ and repeat step 2, until $i'=i+B$.
+The row $j'_{end}$ of the last $v$ we find in this way is the bottom-most state
+in column $i+B$ that can possibly have $f(v)\leq t$, and hence this is end of
+the range we compute.
 
-A drawback of this approach is that $h$ is evaluated at least once per column,
-which is slow in practice.
+In [[ranges]]a, we see that $f(v)$ is computed at a diagonal of states just below
+the bottommost green (fixed) state $u$, and that the to-be-computed range
+(indicated in blue) includes exactly all states above the diagonal.
 
-We improve this using the following lemma.
+#+name: ranges
+#+caption: *Detail of computed ranges.* Coloured cells are invocations of $f(u) = g(u) + h(u)$. Red: $f(u) > t$, green: $f(u) \leq t$ and $u$ is fixed, and blue: $f(u)\leq t$, but only tentatively. Vertical black rectangles indicated fixed states, and blue rectangles indicate the range of rows $[j_{start}, j'_{end}]$ that must be computed for each block. The third block has no fixed states in its right column, indicating that $t$ must be increased.
+#+attr_html: :class small
+| [[./imgs/ranges/full.png]] Simple | [[./imgs/ranges/sparse.png]] Sparse |
 
-*Lemma 1.* When $h$ is a consistent heuristic and $v\preceq v'$, then $f_l(v')
-\geq f(v) - 2\cdot d(v, v')$.
+*** Sparse heuristic invocation
+A drawback of the previous method is that it require a large number of
+calls to $f$ and hence the heuristic $h$: roughly one per column and one per row.
+Here we present a /sparse/ version that uses fewer calls to $f$, based on the
+following lemma:
 
-*Proof.* By consistency, $h(v) \leq d(v, v') + h(v')$, so $h(v') \geq
-h(v)-d(v,v')$. Furthermore, $\cgap(u,v) \leq \cgap(u,v') + \cgap(v,v')\leq
-\cgap(u,v) + d(v,v')$, and hence $\cgap(u,v') \geq \cgap(u,v) - d(v,v')$.
-Putting these together we obtain
-\begin{align*}
-f_l(v') &= \g(u) + \cgap(u,v') + h(v') \\
-&\geq \g(u) + \cgap(u,v) - d(v,v') + h(v) - d(v,v') \\
-&= f_l(v) - 2\cdot d(v,v'). \square % TODO
-\end{align*}
+*Lemma 1.* When $f_l(v) > t + 2d$, then $\f(v') > t$ for any $v$ with
+$d(v,v')\leq d$.
 
-When we have $f_l(v) > t+2x$, the lemma implies that $f_l(v')>t$ for any $v'$
-with $d(v,v')\leq x$. This inspires the following algorithm[fn::Bound checks omitted.], that first takes
-just over $B$ steps down, and then makes jumps to the right.
+*Proof TODO.*
 
-*Algorithm (sparse bottommost row computation).*
-1. Start with $v = \st{i'}{j'} = u+\st{0}{B+8} = \st{i}{r^t_{end} + B + 8}$.
+*Sparse fixed range.* To find the first row $j_{start}$ with $f(\st
+i{j_{start}})\leq t$, start with $j=r_{start}$, and increment $j$ by
+$\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$, since none of the intermediate
+states can lie on a path of length $\leq t$ by Lemma 1. The last row is found in the same
+way.  As seen in [[ranges]]b, this sparse variant significantly reduces the number
+of evaluations of the heuristic in the right-most columns of each block.
+
+*Sparse end of computed range.*
+Lemma 1 inspires the following algorithm ([[ranges]]b). Instead of considering
+one column at a time, we now first make a big just down and then jump to the right.
+1. Start with $v = \st{i'}{j'} = u+\st{1}{B+1} = \st{i+1}{j_{end} + B+1}$.
 2. If $f_l(v) \leq t$, increase $j'$ (go down) by $8$.
-3. If $f_l(v) > t$, increase $i'$ (go right) by $\min(\lceil(f_l(v)-t)/2\rceil, i+B-i')$.
+3. If $f_l(v) > t$, increase $i'$ (go right) by $\lceil(f_l(v)-t)/2\rceil$, but do not exceed column $i+B$.
 4. Repeat from step 2, until $i' = i+B$.
 5. While $f_l(v) > t$, decrease $j'$ (go up) by $\lceil(f_l(v)-t)/2\rceil$, but
    do not go above the diagonal of $u$.
-
-The resulting $v$ is the bottommost state in column $i+B$ with $f_l(v) \leq t$,
-and its row is the last row that will be computed.
-
-TODO: Drop fixed-h box from here and add to doubling figure instead.
-
-#+name: ranges
-#+caption: Computed ranges
-| [[./imgs/ranges/full.png]] Full boundary | [[./imgs/ranges/sparse.png]] Sparse h calls |
-
-*** Fixed range
-In a column, the /fixed/ range is the range of rows between the topmost and
-bottommost states with $f(v)\leq t$, in rows $r'_{start}$ and $r'_{end}$
-respectively.  Given a range $R=(r_{start}, r_{end})$ of computed values, one
-way to find $r'_{start}$ and $r'_{end}$ is by simply iterating from the
-start/end of the range and dropping all states $v$ with $f(v)>t$.
-Like before, this has the drawback that the heuristic must be invoked many
-times.
-
-Instead, we have the following lemma, somewhat analogous to Lemma 1:
-
-*Lemma 2.* When $h$ is a consistent heuristic we have
-$$|f(v) - f(v')| \leq 2 d(v, v').$$
-
-*Proof.*
-The triangle inequality gives $\g(v) \leq \g(v') + d(v, v')$, and consistency
-gives $h(v) \leq h(v') + d(v,v')$ TODO WHAT IF $v$ and $v'$ ARE IN THE OPPOSITE ORIENTATION??
-Expanding the definitions of $f$, we have
-\begin{align*}
-f(v) - f(v')
-&= (g(v) + h(v)) - (g(v') + h(v'))\\
-&= (\g(v) + h(v)) - (\g(v') + h(v'))\\
-&= (\g(v) - \g(v')) - (h(v) + h(v'))\\
-&\leq d(v,v') + d(v,v') = 2\cdot d(v,v'). \square
-\end{align*}
-
-Now we can use a similar approach as before. To find the first row $j'$ with
-$f(\st ij)\leq t$, start with
-$v=\st{i'}{j'}=\st{i}{r_{start}}$, and increment $j'$ by
-$\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$. The last row is found in the same way.
+The resulting $v$ is again the bottom-most state in column $i+B$ that can
+potentially have $f(t)\leq t$, and its row is the last row that will be computed.
 
 
-TODO: Run this algorithm directly on 64-row lanes.
+** Incremental doubling
+
+#+name: doubling
+#+caption: *Incremental doubling detail.* Blue rectangles show the ranges required to be computed, and grey the computed blocks. Vertical green rectangles show the fixed range at the end of each block, and horizontal rectangles a fixed row of states inside some blocks. In both figures the third column was just computed, in the first (left) and second (right) iteration of trying a threshold. The black horizontal rectangle indicates the new candidate for fixed horizontal region.
+| [[file:imgs/doubling-0.png]] | [[file:imgs/doubling-1.png]] |
+
+When the original band doubling algorithm doubles the threshold from $t$ to $2t$,
+it simply recomputes the distance to all states.  On the
+other hand, BFS, Dijkstra, and A* with a consistent heuristic visit
+states in increasing order of distance ($g(u)$ for BFS and Dijkstra, $f(u) =
+g(u) + h(u)$ for A*), and the distance to a state is known to be correct
+(/fixed/) as soon as it is expanded. This way a state is never expanded twice.
+
+Indeed, our band-doubling algorithm can also avoid recomputations. After
+completing the iteration for $t$, it is guaranteed that the distance is fixed
+to all states that indeed satisfy $f(u)\leq t$.  In fact a stronger result holds:
+in any column the distance is fixed for /all/ states between the topmost
+and bottom-most state in that column with $f(u)\leq t$.
+
+To be able to skip rows, we must store horizontal differences along
+a row so we can continue from there. We choose this row $j_f$ (for /fixed/)
+as the last row at a lane boundary before the end of the fixed states
+in the last column of the preceding block, as indicated in [[doubling]] by a
+horizontal black rectangle. In the first iteration, reusing values is not
+possible, so we split the computation of the block into two parts ([[doubling]]a): one above
+$j_h$, to extract and store the horizontal differences at $j_h$, and the remainder below $j_h$.
+
+In the second and further iterations, the values at $j_h$ may be
+reused and the block is split into three parts. The first part computes all
+lanes covering states before the start of the already-fixed range at the end of the block (the
+green column at the end of the third column in [[doubling]]b). Then we skip the
+lanes up to the previous $j_h$, since the values at both the bottom and right of this
+region are already fixed. Then, we compute the lanes between the old $j_h$ and its new
+value $j'_h$. Lastly we compute
+the lanes from $j'_h$ to the end.
 
 * Results
 Our implementation A*PA is written in Rust and available at
@@ -928,8 +907,13 @@ gap-chaining seed heuristic, and pre-pruning.
 :UNNUMBERED: t
 :END:
 
-I am grateful to Daniel Liu for regular discussions, and suggesting additional
-papers that have been added to the introduction.
+I am grateful to Daniel Liu for discussions, feedback, and suggesting additional
+papers relating to this topic, and to Andrea Guarracino and Santiago Marco-Sola
+for sharing the WFA and BiWFA benchmark datasets.  RGK is financed by ETH
+Research Grant ETH-1721-1 to Gunnar Rätsch.
+
+* Conflict of interest
+None declared.
 
 * Appendix
 ** Comparison with other aligners
@@ -984,7 +968,7 @@ heuristic, which take significantly longer to find, larger seed length $k$, whic
 smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 
 #+name: real-params
-#+caption: Running time of A*PA2-simple (left, middle) and A*PA2-full (right) with one parameter modified. Default parameters are
+#+caption: *Changing parameters.* Running time of A*PA2-simple (left, middle) and A*PA2-full (right) with one parameter modified. Default parameters are
 #+caption: seed length $k=12$, pre-pruning look-ahead $p=14$, growth factor $f=2$, block size
 #+caption: $b=256$, max traceback cost $g=40$, and dropping diagonals that lag $fd=10$ behind during traceback.
 #+attr_html: :class inset large
