@@ -71,9 +71,11 @@ to get the optimal alignment much more quickly than before.
 #+end_quote
 
 ** Contributions
+We introduce A*PA2, an exactly pairwise global sequence aligner with respect to
+edit distance.
 
-In A*PA2, we combine multiple existing techniques and introduce a number of new
-ideas to obtain a $10\times$ speedup over existing single-threaded exact aligners.
+In A*PA2 we combine multiple existing techniques and introduce a number of new
+ideas to obtain a $20\times$ speedup over existing single-threaded exact aligners.
 As a starting point, we take the band doubling algorithm
 implemented by Edlib [cite:@edlib] using bitpacking [cite:@myers99].
 First, we speed up the implementation (points 1., 2., and 3.).
@@ -89,7 +91,7 @@ Lastly, we apply A*.
 2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
    the processing of $4$ computer words in parallel.
 3. *Novel encoding.* We introduce a novel encoding of the input sequence to
-   speed up SIMD operations for size-$4$ alphabets.
+   speed up SIMD operations. This limits the current implementation to size-$4$ alphabets.
 4. *Incremental doubling.* Both the band doubling methods of [cite/t:@ukkonen85]
    and Edlib recompute states after doubling the threshold.  We avoid this by
    using the theory behind the A* algorithm, extending the incremental doubling
@@ -194,35 +196,19 @@ considers diagonals $-t/2$ to $t/2$, where diagonal $0$ is the main diagonal of
 the DP-matrix.
 
 On top of this, [cite/t:@ukkonen85] introduces /band doubling/: $t_0=1$ can be
-/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$, i.e.
-$t_k \geq s > t_{k-1}$. Since each test requires $O(n \cdot t_i)$ time, the
-total time is
-\begin{equation}
-n\cdot t_0 + \dots + n\cdot t_k
-= n\cdot (2^0 + \dots + 2^k)
-< n\cdot 2^{k+1} = 4\cdot n\cdot 2^{k-1} < 4\cdot n\cdot s = O(ns).
-\end{equation}
-Note that this method does not (and indeed can not) reuse values from previous
-iterations, resulting in roughly a factor $2$ overhead.
+/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$, so that
+the alignment can be found in $O(ns)$ time.
 
 [cite/t:@spouge89] unifies the methods of
-[cite/t:@fickett84] and [cite/t:@ukkonen85], and generalizes them to accept any
-A* heuristic. In particular, Spouge defines a /computational volume/ as a subgraph of the
-alignment graph that contains /every/ shortest path. Given a bound $t\geq s$, some examples of
-computational volumes are:
-1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
-2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$ [cite:@fickett84].
-3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
-   of length $\leq t$ [cite:@ukkonen85].
-4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@spouge91;@edlib].
-5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$.
-
+[cite/t:@fickett84] and [cite/t:@ukkonen85] in /computational volumes/
+(see [[*Preliminaries]]): subgraphs of the full edit graph that are guaranteed to
+contain the shortest paths that are much smaller and can hence be computed faster.
 As [cite/t:@spouge89 p. 1559] notes:
 #+begin_quote
 The order of computation (row major, column major or antidiagonal) is just a
 minor detail in most algorithms.
 #+end_quote
-But this is exactly what was investigated a lot in the search for faster implementations.
+But this is exactly what was investigated a lot in the search for more efficient implementations.
 
 *** Parallelism
 In the 1990s, the focus shifted from
@@ -248,17 +234,14 @@ The advantage of this approach is the much-simplified and faster loading of the
 vector of substitution scores from memory. The disadvantage is that data
 dependencies within the vector must be handled.
 #+end_quote
-In particular, [cite/t:@rognes00] introduce the /query profile/: Instead of
-looking up the substitution score $S[A_i][B_j]$ for the $i$'th and $j$'th
-character of $A$ and $B$ respectively, it is more efficient to precompute the
-/profile/ $Eq[c][j] := S[c][B_j]$ for each character $c$ in the alphabet. Then,
-adjacent scores are simply found as adjacent values $Eq[A_i][j \dots j']$.
-
+They also introduce the /query profile/
+to efficiently compute which characters equal each other, see [[*Preliminaries]].
 Similarly, [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
-for edit distance. This method stores the differences between adjacent DP-states
-bit-encoded in two $w{=}64$-bit words $P$ and $M$, with $P_i$ and $M_i$ indicating whether
-the $i$'th difference is $+1$ resp. $-1$. It then gives an efficient algorithm
-using bit operations on these words ([[myers]]).
+for edit distance. It bit-encodes the differences between $w=64$ states in a
+column into two computer words, and an efficient algorithm to operate on them ([[myers]]).
+BitPAl [cite:@bitpal] introduces an alternative bitpacking scheme based on a
+slightly different bit-encoding, but as both methods end up using $20$ [TODO]
+instructions we did not pursue this further.
 
 ---
 
@@ -305,42 +288,129 @@ the gap-chaining seed heuristic.
   affine cost alignment
 - [cite:@bitpal] BitPAl
 
+* Preliminaries
+*Edit graph.* We take as input two zero-indexed sequences $A$ and $B$ over an alphabet of size
+$4$ of lengths $n$ and $m$.  The /edit graph/ contains /states/ $\st ij$ ($0\leq
+i\leq n$, $0\leq j\leq m$) as vertices. It further contains directed insertion and
+deletion edges $\st ij \to \st i{j+1}$ and $\st ij \to \st {i+1}j$ of cost $1$,
+and diagonal edges $\st ij\to \st{i+1}{j+1}$ of cost $0$ when $A_i = B_i$ and
+substitution cost $1$ otherwise.  The shortest path from $v_s:=\st 00$ to $v_t :=
+\st nm$ in the edit graph corresponds to an alignment of $A$ and $B$.
+We write $d(u,v)$ for the distance from $u$ to
+$v$, $\g(u) := d(v_s, u)$ for the distance from the start, $\h(u) := d(u, v_t)$
+for the distance to the end, and $\f(u) := \g(u) + \h(u)$ for the length of the
+shortest path through $u$.
 
-* Methods
-First, we explain in detail the algorithm and implementation used by Edlib and
-reduce the overhead in the implementation by using blocks and SIMD.
-Then, we improve the algorithm by avoiding recomputing states and
-speeding up the traceback algorithm.
-On top of that, we apply the A*PA heuristics for further speed gains on large/complex
-alignments, at the cost of larger precomputation time to build the heuristic.
+*A** is a shortest path algorithm based on a /heuristic/ function $h(u)$ [cite:@astar-hart67]. A
+heuristic is called /admissible/ when $h(u)$ underestimates the distance to the
+end, i.e., $h(u) \leq \h(u)$, and admissible $h$ guarantee that A* finds a
+shortest path. A* /expands/ states in order of increasing $f(u) :=
+g(u) + h(u)$, where $g(u)$ is the best distance to $u$ found so far. We say that
+$u$ is /fixed/ when the distance to $u$ has been found, i.e., $g(u) = \g(u)$.
 
-** Band-doubling and bitpacking in Edlib
-As a baseline, we first outline the band-doubling method used by Edlib.
+*Computational volumes.* [cite/t:@spouge89] defines a /computational volume/ as a subgraph of the
+alignment graph that contains all shortest paths . Given a bound $t\geq s$, some examples of
+computational volumes are:
+1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
+2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
+   [cite/t:@fickett84] and similar to Dijkstra's algorithm [cite:@dijkstra59].
+3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
+   of length $\leq t$ [cite:@ukkonen85].
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@edlib;@spouge91;@papamichail2009].
+5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$, which we will
+   use as is similar to A*.
 
+
+*Band-doubling* is the following algorithm by [cite/t:@ukkonen85], that depends on the choice of
+computational volume being used.
 1. Start with edit-distance threshold $t=1$.
-2. Iterate over columns $i$ from $0$ to $n$.
-3. For each column, determine the range of rows $R=(r_{start}, r_{end})$ to compute by finding the top-
-   and bottommost state that can possibly have cost at most $t$, taking into
-   account the gap-cost to the end. Both $r_{start}$ and $r_{end}$ are rounded
-   /out/ to the previous/next multiple of $w$.
-   a. If the range is empty, double $t$ and go back to step 2.
-   b. Otherwise, compute the range in blocks of $w=64$ rows at a time using
-     bitpacking and the standard /profile/ of sequence $B$.
+2. Loop over columns $i$ from $0$ to $n$.
+3. For each column, determine the range of rows $[j_{start}, j_{end}]$ to be
+   computed according the computational volume that's being used.
+   a. If this range is empty or does not contain a state at distance $\leq t$, double $t$ and go back to step 1.
+   b. Otherwise, compute the distance to the states in the range, and continue
+      with the next column.
+The algorithm stops when $t_k \geq s > t_{k-1}$. For the
+$\cgap(v_s,u)+\cgap(u,v_t)\leq t$ computational volume used by Ukkonen, each
+test requires $O(n \cdot t_i)$ time, and hence the total time is
+\begin{equation}
+n\cdot t_0 + \dots + n\cdot t_k
+= n\cdot (2^0 + \dots + 2^k)
+< n\cdot 2^{k+1} = 4\cdot n\cdot 2^{k-1} < 4\cdot n\cdot s = O(ns).
+\end{equation}
+Note that this method does not (and indeed can not) reuse values from previous
+iterations, resulting in roughly a factor $2$ overhead.
 
-     Only the last and current column are kept in memory.
-4. *Traceback.* Once the last column has been reached, recursively repeat the algorithm using
-   Hirschberg's /meet-in-the-middle/ approach to find the alignment. Continue
-   until the sequences are of length $\leq 1000$. For these small sequences all
-   vertical differences can be stored and a backtrace is done to find the alignment.
+*Myers' bitpacking* exploits that the difference in distance to adjacent states
+is always in $\{-1,0,+1\}$ [cite:@myers99]. The method bit-encodes $w=64$ differences between
+adjacent states in a columns in two
+indicator words, indicating positions where the difference is $+1$ and $-1$ respectively.
+Given also the similarly encoded difference along the top, a $1\times w$
+rectangle can be computed in only $20$ bit operations ([[myers]]).
+We call each consecutive non-overlapping chunk of $64$ rows a /lane/, so that
+there are $\lceil m/64\rceil$ lanes, where the last lane may be padded.
 
+*Profile.* Instead of computing each substitution score $S[A_i][B_j] = [A_i\neq
+B_j]$ for the $64$ states in a word one by one, Myers' algorithm first builds a
+/profile/ [cite:@rognes00].  For each character $c$, $Eq[c][j]$ stores a bitvector indicating
+which characters of $B$ equal $c$.  This way, adjacent equalities in a columns
+are simply found as $Eq[A_i][j \dots j']$.
 
-TODO: Talk about exact details of growth factor and start growth.
+*Edlib* implements band doubling using the $\g(u) + \cgap(u, v_t)\leq t$ computational
+volume and bitpacking [cite:@edlib]. For traceback, it uses Hirschberg's /meet-in-the-middle/
+approach: once the distance is found, the alignment is started over from both
+sides towards the middle column, where a state on the shortest path is
+determined. This is recursively applied to the left and right halves until the
+sequences are short enough that $O(tn)$ memory can be used.
 
 #+name: blocks
 #+caption: introducing blocks
 | [[file:imgs/intro/0_g-gap.png]] g-gap | [[file:imgs/intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:imgs/intro/0_blocks.png]] Blocks (Block aligner) |
 
-** Bitpacking
+
+* Methods
+Conceptually, A*PA2 builds on Edlib.
+First we describe how we make the implementation more efficient
+using SIMD and blocks.
+Then, we modify the algorithm itself by using a new traceback method and
+avoiding unnecessary recomputation of states.
+On top of that, we apply the A*PA heuristics for further speed gains on large/complex
+alignments, at the cost of larger precomputation time to build the heuristic.
+
+** Band-doubling
+A*PA2 uses band-doubling with the $\g(u) + h(u) \leq t$ computational volume.
+That is, in each iteration of $t$ we compute the distance to all states with
+$\g(u) + h(u) \leq t$.  In its simple form, we use $h(u) =\cgap(u, v_t)$ like
+Edlib does.  As initial guess $t_0$ for $t$ we use $h(v_s)=h\st 00$.  Instead of
+doubling $t$ itself, we double the increment, so that initially we stay close to
+$t_0$. Additionally we start with a small offset to compensate for the block
+sizes and bitpacking (see below), so that the $t_i$ we try are
+$$
+t_i := h\st 00 + B \cdot 2^i.
+$$
+
+** Blocks
+Instead of determining the range of rows to be computed for each column
+individually, we determine it once per /block/ and then reuse it for $B=256$
+consecutive columns.  This computes some extra states, but reduces the overhead
+by a lot.
+
+Within each block, we iterate over the /lanes/ of $w=64$ rows at a time, and for
+each lane compute all $B$ columns before moving on to the next lane.
+
+[[*Determining the rows to compute]] explains in detail how the range of rows to be
+computed is determined.
+
+** Memory
+
+Where Edlib does not initially store intermediate values and uses
+meet-in-the-middle to find the alignment, A*PA2 /always/ stores the distance to
+all states at the end of a block, encoded as the distance to the top-right state
+of the block and the bit-encoded vertical differences along the right-most
+column.  This simplifies the traceback method (see [[*Traceback]]), and has
+sufficiently small memory usage to be practical.
+
+** SIMD
 
 #+name: myers
 #+caption: Rust code for SIMD version of Myers' bitpacking. Computes four antidiagonal words in parallel.
@@ -374,33 +444,8 @@ pub fn compute_block_simd(
 }
 #+end_src
 
-
-** Blocks
-Our first improvement is to process $B=256$ columns at a time. Instead of
-computing the range of rows for each column individually, we compute it once and
-then use this one range for a block of $B$ consecutive columns. While this
-computes some extra states in most columns, the time saved by only determining
-the range to compute once per block is larger.
-
-Within each block, we iterate over the rows in /lanes/ of $w$ rows at a time, and for each
-lane compute all $B$ columns before moving on to the next lane.
-
-See [[*Determining the rows to compute]] for details on exactly which rows are computed.
-
-** Memory
-
-Where Edlib does not initially store intermediate values and uses
-meet-in-the-middle to find the alignment, we /always/ store an offset and vertical differences
-at the end of each block[fn::Even sparser memory usage is possible by only
-storing vertical differences every $B'$ columns for $B'$ a multiple of $B$, but in
-practice memory is not a bottleneck.]. This simplifies the implementation, and has sufficiently small
-memory usage to be practical. See [[*Traceback]] for details on recovering the
-alignment.
-
-** SIMD
-
 #+name: simd
-#+caption: SIMD+ILP processing of 8 lanes in parallel. The example uses 4-bit (instead of 64-bit) lanes.
+#+caption: SIMD processing of two times 4 lanes in parallel. This example uses 4-row (instead of 64-row) lanes. First the top-left triangle is computed lane by lane, and then 8-lane diagonals are computed by using two 4-lane SIMD vectors in parallel.
 [[file:imgs/simd.png]]
 
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
@@ -408,26 +453,22 @@ $w=64$-bit words (SIMD lanes) are dependent on each other and require manual
 work to shift bits between the lanes.
 Instead, we let each $256$-bit AVX2 SIMD vector represent four $64$-bit words
 (lanes) that are anti-diagonally
-staggered ([[simd]]). This is similar to the original anti-diagonal tiling
+staggered as in [[simd]]. This is similar to the original anti-diagonal tiling
 introduced by [cite/t:@wozniak97], but using units of $w$-bit words instead of
 single characters. This idea was already introduced in 2014 by the author of
 Edlib in a GitHub issue (https://github.com/Martinsos/edlib/issues/5), but to our
 knowledge has never been implemented either in Edlib or elsewhere.
 
-We achieve further speedup by improving instruction-level-parallelism.
-Modern CPUs can execute up to 4 instructions per cycle (IPC) and use execution
-pipelines that look ahead tens of instructions. The dependencies
-between the instructions for computing each SIMD vector do not allow such high
-parallelism. We improve this by processing two SIMD vectors in parallel, spanning a total of
-$8$ anti-diagonally-aligned $64$-bit lanes covering $2W = 512$ rows ([[simd]]).
+We further improve instruction-level-parallelism (ILP) by processing $8$ lanes
+at a time using two SIMD vectors in parallel, spanning a total of $512$ rows ([[simd]]).
 
-When the number of remaining lanes of rows to be computed is $\ell$, we
+When the number of remaining lanes to be computed is $\ell$, we
 process $8$ lanes in parallel as long as $\ell\geq 8$. If there are remaining
-rows, we end with another $8$-lane ($5\leq \ell<8$) or $4$-lane ($1\leq \ell\leq 4$)
-iteration that optionally includes some padding rows at the bottom.
+lanes, we end with another $8$-lane ($5\leq \ell<8$) or $4$-lane ($1\leq \ell\leq 4$)
+iteration that optionally includes some padding lanes at the bottom.
 In case the horizontal differences along the original bottom row are needed (as
 required by incremental doubling [[*Incremental doubling]]), we
-do not use padding and instead fall back to trying a $4$-lane SIMD ($\ell\geq 4$),
+can not use padding and instead fall back to trying a $4$-lane SIMD ($\ell\geq 4$),
 a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 
 # TODO: How about padding upwards?
@@ -449,41 +490,35 @@ a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 /// bi=3: (...0..., ...0...)
 ///
 /// Returns a mask which chars of `b` equal the char of `a`.
-fn eq(pa: &(u64, u64), pb: &(u64, u64)) -> u64 {
-    (pa.0 ^ pb.0) & (pa.1 ^ pb.1)
+fn eq(ca: &(u64, u64), profile_b: &(u64, u64)) -> u64 {
+    (ca.0 ^ profile_b.0) & (ca.1 ^ profile_b.1)
 }
 #+end_src
 
-Myers' bitpacking algorithm precomputes a /profile/ $P_{eq}[c][j]$ containing
-$\sigma \times m$ bits. For each character $c$, it contains a bitvector of
-$w$-bit words indicating the positions where $c$ occurs in $B$. We improve
-memory locality by instead storing the profile as an array of blocks of $\sigma$
-words: $P_{eq}[j/w][c]$ containing $\lceil m/w\rceil \times \sigma$ $w$-bit
-words (FIG?).
+# Myers' bitpacking algorithm precomputes a /profile/ $Eq[c][j]$ containing
+# $\sigma \times m$ bits. For each character $c$, it contains a bitvector of
+# $w$-bit words indicating the positions where $c$ occurs in $B$. We improve
+# memory locality by instead storing the profile as an array of blocks of $\sigma$
+# words: $Eq[j/w][c]$ containing $\lceil m/w\rceil \times \sigma$ $w$-bit
+# words.
 
 A drawback of anti-diagonal tiling is that each column contains its own
-character $a_i$ that needs to be looked up. While SIMD offers =gather=
-instructions to do multiple of these lookups in parallel, these instructions are
+character $a_i$ that needs to be looked up in the profile $Eq[a_i][j]$. While SIMD can do multiple
+lookups in parallel using =gather= instructions, these instructions are
 not always efficient. Thus, we introduce the following alternative scheme.
 
 Let $b = \lceil \log_2(\sigma)\rceil$ be the number of bits needed to encode
 each character, with $b=2$ for DNA.
-The new profile $P'$ contains $b$ bitvectors, each indicating the negation of one bit of each
-character, stored as an $\lceil m/w\rceil \times b$ array $P'[j/w][p]$ of
-$w$-bit words.
-
-To check whether row $j$ contains character $c$ with bit representation
-$\overline{c_{b-1}\dots c_{0}}$, we compute
-$$(c_0 \xor P'[j/w][0][j\bmod w]) \and \dots \and (c_{b-1} \xor P'[j/w][b-1][j\bmod w]).$$
-This naturally extends to an efficient computation for $w$-bit words and larger
-SIMD vectors.
-
-TODO Remark only alphabet size 4 works
-
-TODO: Tried BitPAl's bitpacking method which is one less than Myers 99's, but
-without success so far.
-
-TODO: No specific benchmark.
+For each lane, the new profile $Eq'$ stores $b$ words as an $\lceil
+m/w\rceil\times b$ array $Eq'[\ell][p]$. Each word $0\leq p< b$
+stores the negation of the $p$th bit of each character.
+To check which characters in lane $\ell$ contain character $c$ with bit representation
+$\overline{c_{b-1}\dots c_{0}}$, we precompute $b$ words $C_0 =
+\overline{c_0\dots c_0}$ to
+$C_{b-1}=\overline{c_{b-1}\dots c_{b-1}}$ and then compute
+$$(C_0 \xor Eq'[\ell][0]) \and \dots \and (C_{b-1} \xor Eq'[\ell][b-1]).$$
+This naturally extends to SIMD vectors, where each lane is initialized with its
+own constants $C_i$. See [[profile]] for example code.
 
 ** Traceback
 
@@ -642,7 +677,7 @@ the bottommost green (fixed) state $u$, and that the to-be-computed range
 (indicated in blue) includes exactly all states above the diagonal.
 
 #+name: ranges
-#+caption: *Detail of computed ranges.* Coloured cells are invocations of $f(u) = g(u) + h(u)$. Red: $f(u) > t$, green: $f(u) \leq t$ and $u$ is fixed, and blue: $f(u)\leq t$, but only tentatively. Vertical black rectangles indicated fixed states, and blue rectangles indicate the range of rows $[j_{start}, j'_{end}]$ that must be computed for each block. The third block has no fixed states in its right column, indicating that $t$ must be increased.
+#+caption: *Detail of computed ranges.* Coloured states are invocations of $f(u) = g(u) + h(u)$. Red: $f(u) > t$, green: $f(u) \leq t$ and $u$ is fixed, and blue: $f(u)\leq t$, but only tentatively. Vertical black rectangles indicated fixed states, and blue rectangles indicate the range of rows $[j_{start}, j'_{end}]$ that must be computed for each block. The third block has no fixed states in its right column, indicating that $t$ must be increased.
 #+attr_html: :class small
 | [[./imgs/ranges/full.png]] Simple | [[./imgs/ranges/sparse.png]] Sparse |
 
@@ -883,6 +918,8 @@ gap-chaining seed heuristic, and pre-pruning.
 2. For sequences with divergence $<2\%$, BiWFA exploits the
    sparse structure of the diagonal transition algorithm. In comparison, computing full
    blocks of size around $256\times 256$ in A*PA2 has considerable overhead.
+3. Only sequences over alphabet size $4$ are currently supported, so DNA
+   sequences containing e.g. =N= characters must be cleaned first.
 *Future work.*
 1. When divergence is low, performance could be improved by applying A* to the
    diagonal transition algorithm directly, instead of using DP. As a middle
@@ -977,5 +1014,6 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 * TODO
 - Rerun with =debug = false=, =strip = true=
 - update tables
+- no 'cell'
 
 #+print_bibliography:
