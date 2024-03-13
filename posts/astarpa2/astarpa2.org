@@ -243,7 +243,7 @@ for edit distance. It bit-encodes the differences between $w=64$ states in a
 column into two computer words, and an efficient algorithm to operate on them ([[myers]]).
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative bitpacking scheme based on a
 slightly different bit-encoding, but as both methods end up using $20$
-instructions (see [[*BitPAl bitpacking]]) we did not pursue this further.
+instructions (see [[*BitPAl]]) we did not pursue this further.
 
 ---
 
@@ -279,6 +279,7 @@ the gap-chaining seed heuristic.
 
 ---
 
+TODO
 - Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
   of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
   Sosic.pdf.
@@ -348,8 +349,11 @@ adjacent states in a columns in two
 indicator words, indicating positions where the difference is $+1$ and $-1$ respectively.
 Given also the similarly encoded difference along the top, a $1\times w$
 rectangle can be computed in only $20$ bit operations ([[myers]]).
+[[*Bitpal]] contains similar code for BitPAL, which also uses $20$ instructions.
 We call each consecutive non-overlapping chunk of $64$ rows a /lane/, so that
 there are $\lceil m/64\rceil$ lanes, where the last lane may be padded.
+Note that this method originally only uses $17$ instructions, but some additional
+instructions are needed to support multiple lanes when $m>w$.
 
 *Profile.* Instead of computing each substitution score $S[A_i][B_j] = [A_i\neq
 B_j]$ for the $64$ states in a word one by one, Myers' algorithm first builds a
@@ -365,7 +369,7 @@ determined. This is recursively applied to the left and right halves until the
 sequences are short enough that $O(tn)$ memory can be used.
 
 #+name: blocks
-#+caption: introducing blocks
+#+caption: TODO introducing blocks
 | [[file:imgs/intro/0_g-gap.png]] g-gap | [[file:imgs/intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:imgs/intro/0_blocks.png]] Blocks (Block aligner) |
 
 
@@ -414,7 +418,7 @@ sufficiently small memory usage to be practical.
 ** SIMD
 
 #+name: myers
-#+caption: Rust code for SIMD version of Myers' bitpacking. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
+#+caption: *Myers' bitpacking.* Rust code for SIMD version of Myers' bitpacking algorithm. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
 #+begin_src rust
 pub fn compute_block_simd_myers(
     hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates +1 difference on top.
@@ -425,6 +429,7 @@ pub fn compute_block_simd_myers(
 ) {
     let vx = eq | *vm;
     let eq = eq | *hm0;
+    // The addition carries information between rows.
     let hx = (((eq & *vp) + *vp) ^ *vp) | eq;
     let hp = *vm | !(hx | *vp);
     let hm = *vp & hx;
@@ -437,15 +442,15 @@ pub fn compute_block_simd_myers(
     let hp = (hp << left_shift) | *hp0;
     let hm = (hm << left_shift) | *hm0;
     // Update the input-output parameters.
-    *hp0 = hpw;
-    *hm0 = hmw;
-    *vp = hm | !(vx | hp);
-    *vm = hp & vx;
+    ,*hp0 = hpw;
+    ,*hm0 = hmw;
+    ,*vp = hm | !(vx | hp);
+    ,*vm = hp & vx;
 }
 #+end_src
 
 #+name: simd
-#+caption: SIMD processing of two times 4 lanes in parallel. This example uses 4-row (instead of 64-row) lanes. First the top-left triangle is computed lane by lane, and then 8-lane diagonals are computed by using two 4-lane SIMD vectors in parallel.
+#+caption: *SIMD* processing of two times 4 lanes in parallel. This example uses 4-row (instead of 64-row) lanes. First the top-left triangle is computed lane by lane, and then 8-lane diagonals are computed by using two 4-lane SIMD vectors in parallel.
 [[file:imgs/simd.png]]
 
 While it is tempting to use a SIMD vector as a single $W=256$-bit word, the four
@@ -476,7 +481,7 @@ a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 ** SIMD-friendly sequence profile
 
 #+name: profile
-#+caption: equality check with the new profile
+#+caption: *Sequence profile.* Character equality check for the SIMD-friendly sequence profile.
 #+begin_src rust
 /// `ca`: Exploded bit-encoding of single char `c` of `a`.
 ///   e.g.  c=1: (11...11, 00...00)
@@ -510,7 +515,7 @@ own constants $C_i$.
 ** Traceback
 
 #+name: trace
-#+caption: traceback shown in blue, both DT trace states and compute blocks as fallback.
+#+caption: *Traceback method.* States expanded by the diagonal transition traceback in each block are shown in green. When the distance in a block is too large, a part of the block is fully recomputed as fallback, as shown in blue.
 [[file:imgs/trace/trace.png]]
 
 The traceback stage takes as input the computed vertical differences at
@@ -858,15 +863,15 @@ shorter sequences ([[*Comparison with other aligners]]).
 
 *Incremental improvements.*
 [[real-incremental]] shows the effect of one-by-one adding improvements to A*PA2 on
->500kbp long sequences,
-starting with Ukkonens band-doubling method using Myers' bitpacking. We first change to the
-$\g(u) + \cgap(u, v_t)$ domain, making it comparable to Edlib. Then we
-process blocks of $256$ columns at a time and only store differences at block
-boundaries giving $\approx 2\times$ speedup. Adding SIMD
-gives another $\approx 3\times$ speedup, and instruction level parallelism (ILP)
-provides a further small improvement. The diagonal transition traceback (DTT) and sparse heuristic
-computation do not improve performance of A*PA2-simple much on long sequences,
-but their removal can be seen to slow it down for shorter sequences in [[real-ablation]].
+>500kbp long sequences, starting with Ukkonens band-doubling method using Myers'
+bitpacking. We first change to the $\g(u) + \cgap(u, v_t)$ domain, making it
+comparable to Edlib. Then we process blocks of $256$ columns at a time and only
+store differences at block boundaries giving $\approx 2\times$ speedup. Adding
+SIMD gives another $\approx 3\times$ speedup, and instruction level parallelism
+(ILP) provides a further small improvement. The diagonal transition traceback
+(DTT) and sparse heuristic computation do not improve performance of
+A*PA2-simple much on long sequences, but their removal can be seen to slow it
+down for shorter sequences in [[real-ablation]].
 
 Incremental doubling (ID), the gap-chaining seed heuristic (GCSH), pre-pruning
 (PP), and the pruning of A*PA give another $2\times$ speedup on average and
@@ -878,11 +883,11 @@ $3\times$ speedup in the first quantile.
 [[file:plots/real-incremental.svg]]
 
 
-*Runtime profile.* In [[real-timing]] we see that for >500kbp long sequences, A*PA2-full
-spends most of its time computing blocks, followed by the initialization of the
-heuristic. For shorter sequences the heuristic is not used, and for
-very short sequences <10kbp, up to half the time is spent on tracing the
-optimal alignment.
+*Runtime profile.* In [[real-timing]] we see that for >500kbp long sequences,
+A*PA2-full spends most of its time computing blocks, followed by the
+initialization of the heuristic. For shorter sequences the heuristic is not
+used, and for very short sequences <10kbp, up to half the time is spent on
+tracing the optimal alignment.
 
 #+name: real-timing
 #+caption: *Runtime distribution per stage of A*PA2,* using A*PA2-full for >500kbp sequences in the left two plots and A*PA2-simple in the remaining four plots. Each column corresponds to a (set of) alignment(s), which are sorted by total runtime. /Overhead/ is the part of the runtime not measured in one of the other parts and includes the time to build the profile.
@@ -930,15 +935,16 @@ gap-chaining seed heuristic, and pre-pruning.
 :END:
 
 I am grateful to Daniel Liu for discussions, feedback, and suggesting additional
-papers relating to this topic, and to Andrea Guarracino and Santiago Marco-Sola
-for sharing the WFA and BiWFA benchmark datasets.  RGK is financed by ETH
-Research Grant ETH-1721-1 to Gunnar Rätsch.
+papers relating to this topic, to Andrea Guarracino and Santiago Marco-Sola for
+sharing the WFA and BiWFA benchmark datasets, and to Gary Benson for help with
+debugging the BitPAl bitpacking code.  RGK is financed by ETH Research Grant
+ETH-1721-1 to Gunnar Rätsch.
 
 * Conflict of interest
 None declared.
 
 * Appendix
-** BitPAl bitpacking
+** BitPAl
 [[bitpal]] shows a SIMD version of the edit distance bitpacking scheme explained
 in the supplement of [cite/t:@bitpal]. Like Myers method it requires $20$ instructions.
 
@@ -948,8 +954,6 @@ instructions) and the initialization of the carry (one operation). We require
 these additional outputs/inputs since we want to align multiple $64$bit lanes
 below each other, and the horizontal difference in between must be carried
 through.
-
-Similar
 
 #+name: bitpal
 #+caption: Rust code for SIMD version of BitPAl's bitpacking. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
@@ -965,6 +969,7 @@ pub fn compute_block_simd_bitpal(
     let ris = !eq;
     let notmi = ris | *vmz;
     let carry = *hp0 | *hz0;
+    // The addition carries information between rows.
     let masksum = (notmi + *vmz + carry) & ris;
     let hz = masksum ^ notmi ^ *vm;
     let hp = *vm | (masksum & *vmz);
@@ -1046,8 +1051,9 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 - Rerun with =debug = false=, =strip = true=
 - update tables
 - no 'cell'
-- captions
+- subcaptions
 - range proofs
 - intro papers
+- integrate intro figs
 
 #+print_bibliography:
