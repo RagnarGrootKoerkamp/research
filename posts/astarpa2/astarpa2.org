@@ -75,36 +75,38 @@ We introduce A*PA2, an exactly pairwise global sequence aligner with respect to
 edit distance.
 
 In A*PA2 we combine multiple existing techniques and introduce a number of new
-ideas to obtain a $20\times$ speedup over existing single-threaded exact aligners.
-As a starting point, we take the band doubling algorithm
-implemented by Edlib [cite:@edlib] using bitpacking [cite:@myers99].
-First, we speed up the implementation (points 1., 2., and 3.).
-Then, we reduce the amount of work done (points 4. and 5.).
-Lastly, we apply A*.
+ideas to obtain a $20\times$ speedup over existing single-threaded exact
+aligners.  As a starting point, we take the band doubling algorithm implemented
+by Edlib [cite:@edlib] using bitpacking [cite:@myers99].  First, we speed up the
+implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
+(points 4. and 5.).  Lastly, we apply A*.
 
-1. *Block-based computation.* Edlib computes one column of the DP matrix at a time,
-   and for each column decides which range (subset of rows) of states to compute.  We
-   significantly reduce this overhead by processing blocks of $256$ columns at a
-   time, taking inspiration from Block aligner [cite:@block-aligner].
-   Correspondingly, we only store states of the DP-matrix at block boundaries,
-   reducing memory usage.
-2. *SIMD.* We speed up the implementation using SIMD to compute each block, allowing
-   the processing of $4$ computer words in parallel.
+1. *Block-based computation.* Edlib computes one column of the DP matrix at a
+   time, and for each column decides which range (subset of rows) of states to
+   compute.  We significantly reduce this overhead by processing blocks of $256$
+   columns at a time, taking inspiration from Block aligner
+   [cite:@block-aligner].  Correspondingly, we only store states of the
+   DP-matrix at block boundaries, reducing memory usage.
+2. *SIMD.* We speed up the implementation using SIMD to compute each block,
+   allowing the processing of $4$ computer words in parallel.
 3. *Novel encoding.* We introduce a novel encoding of the input sequence to
-   speed up SIMD operations. This limits the current implementation to size-$4$ alphabets.
+   speed up SIMD operations. This limits the current implementation to size-$4$
+   alphabets.
 4. *Incremental doubling.* Both the band doubling methods of [cite/t:@ukkonen85]
    and Edlib recompute states after doubling the threshold.  We avoid this by
    using the theory behind the A* algorithm, extending the incremental doubling
    of [cite/t:@fickett84] to blocks and arbitrary heuristics.
-5. *Traceback.* For the traceback, we optimistically use the diagonal transition method within each
-   block with a strong Z-drop [TODO] heuristic, falling back to a full recomputation of the block when needed.
-6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways. First,
-   instead of updating contours each time a match is pruned, we now do this in
-   batches once the band is doubled. Secondly, we introduce a new /pre-pruning/ technique
-   that discards most of the /spurious/ (off-path) matches ahead of time.
+5. *Traceback.* For the traceback, we optimistically use the diagonal transition
+   method within each block with a strong adaptive heuristic, falling back to a
+   full recomputation of the block when needed.
+6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways.
+   First, instead of updating contours each time a match is pruned, we now do
+   this in batches once the band is doubled. Secondly, we introduce a new
+   /pre-pruning/ technique that discards most of the /spurious/ (off-path)
+   matches ahead of time.
 
 #+name: domains
-#+caption: Alignment of two sequences of length 8000 (CHECK) with 20% errors introduced.
+#+caption: Alignment of two sequences of length 4000 with 20% errors introduced.
 | [[file:imgs/intro/0_full.png]] Full grid (NW) | [[file:imgs/intro/0_gap-start.png]] gap heuristic                       | [[file:imgs/intro/0_gap-gap.png]] gap-gap (ukkonen)    |                                           |
 |                                      | [[file:imgs/intro/0_g.png]] g*                                          | [[file:imgs/intro/0_g-gap.png]] g*+gap (edlib)         | [[file:imgs/intro/5_astarpa.png]] g*+h (A*PA)      |
 |                                      | [[file:imgs/intro/2_dijkstra.png]] Dijkstra                             | [[file:imgs/intro/6_astarpa2_simple.png]] A*PA2-simple | [[file:imgs/intro/7_astarpa2_full.png]] A*PA2-full |
@@ -239,9 +241,9 @@ to efficiently compute which characters equal each other, see [[*Preliminaries]]
 Similarly, [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
 for edit distance. It bit-encodes the differences between $w=64$ states in a
 column into two computer words, and an efficient algorithm to operate on them ([[myers]]).
-BitPAl [cite:@bitpal] introduces an alternative bitpacking scheme based on a
-slightly different bit-encoding, but as both methods end up using $20$ [TODO]
-instructions we did not pursue this further.
+BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative bitpacking scheme based on a
+slightly different bit-encoding, but as both methods end up using $20$
+instructions (see [[*BitPAl bitpacking]]) we did not pursue this further.
 
 ---
 
@@ -286,7 +288,6 @@ the gap-chaining seed heuristic.
   URN:NBN:no-49935. Accessed 10 Dec 2015.
 - [cite:@suzuki-kasahara] libgaba: SIMD with difference recurrence relation for
   affine cost alignment
-- [cite:@bitpal] BitPAl
 
 * Preliminaries
 *Edit graph.* We take as input two zero-indexed sequences $A$ and $B$ over an alphabet of size
@@ -413,9 +414,9 @@ sufficiently small memory usage to be practical.
 ** SIMD
 
 #+name: myers
-#+caption: Rust code for SIMD version of Myers' bitpacking. Computes four antidiagonal words in parallel.
+#+caption: Rust code for SIMD version of Myers' bitpacking. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
 #+begin_src rust
-pub fn compute_block_simd(
+pub fn compute_block_simd_myers(
     hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates +1 difference on top.
     hm0: &mut Simd<u64, 4>,  // 0 or 1. Indicates -1 difference on top.
     vp: &mut Simd<u64, 4>,  // 64-bit indicator of +1 differences on left.
@@ -424,16 +425,15 @@ pub fn compute_block_simd(
 ) {
     let vx = eq | *vm;
     let eq = eq | *hm0;
-    // The add here is the only operation that carries information between rows.
     let hx = (((eq & *vp) + *vp) ^ *vp) | eq;
     let hp = *vm | !(hx | *vp);
     let hm = *vp & hx;
     // Extract the high bit as bottom horizontal difference.
-    let right_shift = Simd<u64,4>::splat(63);   // Shift each lane by 63.
+    let right_shift = Simd::<u64,4>::splat(63);   // Shift each lane by 63.
     let hpw = hp >> right_shift;
     let hmw = hm >> right_shift;
     // Insert the top horizontal difference.
-    let left_shift = Simd<u64,4>::splat(1);     // Shift each lane by 1.
+    let left_shift = Simd::<u64,4>::splat(1);     // Shift each lane by 1.
     let hp = (hp << left_shift) | *hp0;
     let hm = (hm << left_shift) | *hm0;
     // Update the input-output parameters.
@@ -478,29 +478,15 @@ a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 #+name: profile
 #+caption: equality check with the new profile
 #+begin_src rust
-/// `pa`: Exploded bit-encoding of single char `c` of `a`.
-/// c=0:  (00...00, 00...00)
-/// c=1:  (11...11, 00...00)
-/// c=2:  (00...00, 11...11)
-/// c=3:  (11...11, 11...11)
+/// `ca`: Exploded bit-encoding of single char `c` of `a`.
+///   e.g.  c=1: (11...11, 00...00)
 /// 64-char packed *negated* bit-encoding of 64 chars of `b`.
-/// bi=0: (...1..., ...1...)
-/// bi=1: (...0..., ...1...)
-/// bi=2: (...1..., ...0...)
-/// bi=3: (...0..., ...0...)
-///
+///   e.g. bj=1: (...0..., ...1...)
 /// Returns a mask which chars of `b` equal the char of `a`.
 fn eq(ca: &(u64, u64), profile_b: &(u64, u64)) -> u64 {
     (ca.0 ^ profile_b.0) & (ca.1 ^ profile_b.1)
 }
 #+end_src
-
-# Myers' bitpacking algorithm precomputes a /profile/ $Eq[c][j]$ containing
-# $\sigma \times m$ bits. For each character $c$, it contains a bitvector of
-# $w$-bit words indicating the positions where $c$ occurs in $B$. We improve
-# memory locality by instead storing the profile as an array of blocks of $\sigma$
-# words: $Eq[j/w][c]$ containing $\lceil m/w\rceil \times \sigma$ $w$-bit
-# words.
 
 A drawback of anti-diagonal tiling is that each column contains its own
 character $a_i$ that needs to be looked up in the profile $Eq[a_i][j]$. While SIMD can do multiple
@@ -516,9 +502,10 @@ To check which characters in lane $\ell$ contain character $c$ with bit represen
 $\overline{c_{b-1}\dots c_{0}}$, we precompute $b$ words $C_0 =
 \overline{c_0\dots c_0}$ to
 $C_{b-1}=\overline{c_{b-1}\dots c_{b-1}}$ and then compute
-$$(C_0 \xor Eq'[\ell][0]) \and \dots \and (C_{b-1} \xor Eq'[\ell][b-1]).$$
+$$(C_0 \xor Eq'[\ell][0]) \and \dots \and (C_{b-1} \xor Eq'[\ell][b-1]),$$
+see [[profile]].
 This naturally extends to SIMD vectors, where each lane is initialized with its
-own constants $C_i$. See [[profile]] for example code.
+own constants $C_i$.
 
 ** Traceback
 
@@ -885,8 +872,6 @@ Incremental doubling (ID), the gap-chaining seed heuristic (GCSH), pre-pruning
 (PP), and the pruning of A*PA give another $2\times$ speedup on average and
 $3\times$ speedup in the first quantile.
 
-TODO: Fix vertical line in plot.
-
 #+name: real-incremental
 #+caption: *Effect of adding features.* Box plots showing the performance improvements of A*PA2 when incrementally adding new methods one-by-one. A*PA2-simple corresponds to teh rightmost red columns, and A*PA2-full corresponds to the rightmost blue column.
 #+attr_html: :class inset large
@@ -953,6 +938,52 @@ Research Grant ETH-1721-1 to Gunnar Rätsch.
 None declared.
 
 * Appendix
+** BitPAl bitpacking
+[[bitpal]] shows a SIMD version of the edit distance bitpacking scheme explained
+in the supplement of [cite/t:@bitpal]. Like Myers method it requires $20$ instructions.
+
+We note that the method in BitPAl is reported as requiring $15$ instructions,
+but those exclude the shifting out of the bottom horizontal difference (four
+instructions) and the initialization of the carry (one operation). We require
+these additional outputs/inputs since we want to align multiple $64$bit lanes
+below each other, and the horizontal difference in between must be carried
+through.
+
+Similar
+
+#+name: bitpal
+#+caption: Rust code for SIMD version of BitPAl's bitpacking. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
+#+begin_src rust
+pub fn compute_block_simd_bitpal(
+    hz0: &mut Simd<u64, 4>,  // 0 or 1. Indicates 0 difference on top.
+    hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates -1 difference on top.
+    vm:  &mut Simd<u64, 4>,  // 64-bit indicator of -1 differences on left.
+    vmz: &mut Simd<u64, 4>,  // 64-bit indicator of -1 and 0 differences on left.
+    eq: Simd<u64, 4>,  // 64-bit indicator which characters equal the top char.
+) {
+    let eq = eq | *vm;
+    let ris = !eq;
+    let notmi = ris | *vmz;
+    let carry = *hp0 | *hz0;
+    let masksum = (notmi + *vmz + carry) & ris;
+    let hz = masksum ^ notmi ^ *vm;
+    let hp = *vm | (masksum & *vmz);
+    // Extract the high bit as bottom horizontal difference.
+    let right_shift = Simd::<u64,4>::splat(63);
+    let hzw = hz >> right_shift;
+    let hpw = hp >> right_shift;
+    // Insert the top horizontal difference.
+    let left_shift = Simd::<u64,4>::splat(1);
+    let hz = (hz << left_shift) | *hz0;
+    let hp = (hp << left_shift) | *hp0;
+    // Update the input-output parameters.
+    *hz0 = hzw;
+    *hp0 = hpw;
+    *vm = eq & hp;
+    *vmz = hp | (eq & hz);
+}
+#+end_src
+
 ** Comparison with other aligners
 Here we provide further results on the comparison of aligners.
 
@@ -1015,5 +1046,8 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 - Rerun with =debug = false=, =strip = true=
 - update tables
 - no 'cell'
+- captions
+- range proofs
+- intro papers
 
 #+print_bibliography:
