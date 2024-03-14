@@ -12,7 +12,7 @@
 \newcommand{\g}{g^*}
 \newcommand{\h}{h^*}
 \newcommand{\f}{f^*}
-\newcommand{\cgap}{c_{\texttt{gap}}}
+\newcommand{\cgap}{c_{\textrm{gap}}}
 \newcommand{\xor}{\ \mathrm{xor}\ }
 \newcommand{\and}{\ \mathrm{and}\ }
 \newcommand{\st}[2]{\langle #1, #2\rangle}
@@ -70,6 +70,7 @@ alignment. In this paper we narrow the gap between these choices by showing how
 to get the optimal alignment much more quickly than before.
 #+end_quote
 
+
 ** Contributions
 We introduce A*PA2, an exactly pairwise global sequence aligner with respect to
 edit distance.
@@ -84,7 +85,7 @@ implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
 1. *Block-based computation.* Edlib computes one column of the DP matrix at a
    time, and for each column decides which range (subset of rows) of states to
    compute.  We significantly reduce this overhead by processing blocks of $256$
-   columns at a time, taking inspiration from Block aligner
+   columns at a time ([[intro]]f), taking inspiration from Block aligner
    [cite:@block-aligner].  Correspondingly, we only store states of the
    DP-matrix at block boundaries, reducing memory usage.
 2. *SIMD.* We speed up the implementation using SIMD to compute each block,
@@ -97,26 +98,27 @@ implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
    using the theory behind the A* algorithm, extending the incremental doubling
    of [cite/t:@fickett84] to blocks and arbitrary heuristics.
 5. *Traceback.* For the traceback, we optimistically use the diagonal transition
-   method within each block with a strong adaptive heuristic, falling back to a
-   full recomputation of the block when needed.
-6. *A** *.* We improve the A* seed heuristics of [cite/t:@astarpa] in two ways.
-   First, instead of updating contours each time a match is pruned, we now do
-   this in batches once the band is doubled. Secondly, we introduce a new
-   /pre-pruning/ technique that discards most of the /spurious/ (off-path)
-   matches ahead of time.
+   method [cite:@ukkonen85;@myers86;@wfa] within each block with a strong
+   adaptive heuristic, falling back to a full recomputation of the block when
+   needed.
+6. *A** *.* We apply the gap-chaining seed heuristic of A*PA [cite:@astarpa]
+   ([[intro]]gh), and improve it using /pre-pruning/. This technique discards most of
+   the /spurious/ (off-path) matches ahead of time.
 
-#+name: domains
-#+caption: Alignment of two sequences of length 4000 with 20% errors introduced.
-| [[file:imgs/intro/0_full.png]] Full grid (NW) | [[file:imgs/intro/0_gap-start.png]] gap heuristic                       | [[file:imgs/intro/0_gap-gap.png]] gap-gap (ukkonen)    |                                           |
-|                                      | [[file:imgs/intro/0_g.png]] g*                                          | [[file:imgs/intro/0_g-gap.png]] g*+gap (edlib)         | [[file:imgs/intro/5_astarpa.png]] g*+h (A*PA)      |
-|                                      | [[file:imgs/intro/2_dijkstra.png]] Dijkstra                             | [[file:imgs/intro/6_astarpa2_simple.png]] A*PA2-simple | [[file:imgs/intro/7_astarpa2_full.png]] A*PA2-full |
-|                                      | [[file:imgs/intro/3_diagonal-transition.png]] Diagonal transition (WFA) |                                               |                                           |
+#+name: intro
+#+caption: Alignment of two sequences of length $3000$bp with 25% errors using different algorithms.
+#+attr_html: :class equal-width
+| [[file:imgs/intro/2_dijkstra.png]] | [[file:imgs/intro/3_diagonal-transition.png]] | [[file:imgs/intro/0_gap-gap.png]] | [[file:imgs/intro/0_g-gap.png]] | [[file:imgs/intro/0_bitpacking.png]] | [[file:imgs/intro/6_astarpa2_simple.png]] | [[file:imgs/intro/7_astarpa2_full.png]]         | file:imgs/intro/5_astarpa-prune.png |
+|                                | + DT                                      | + band doubling               | $\g(v_s,u){+}\cgap(u,v_t)$  | +bitpacking                      | + blocks                              | + GCSH                                      |   A*                                |
+| Dijkstra                       | WFA                                       | Ukkonen                       |                             | Edlib                            | A*PA2-simple                          | A*PA2-full                                  | A*PA                                |
+
 
 ** Previous work
 
 In the following, we give a brief recap of developments that this work builds
 on, in chronological order per approach.  See also e.g. the reviews by
-[cite/t:@kruskal83] and [cite/t:@navarro01].
+[cite/t:@kruskal83] and [cite/t:@navarro01], and the introduction of our
+previous paper [cite/t:@astarpa].
 
 *** Needleman-Wunsch
 This problem has classically been approached as a dynamic
@@ -133,7 +135,7 @@ graph/, which is also called /edit graph/ or /dependency graph/
 [cite:@vintsyuk68;@ukkonen85]. Both [cite/t:@ukkonen85] and [cite/t:@myers86]
 remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
 taking $O(ns)$ time[fn::Although Ukkonen didn't realize this faster runtime and
-only gave a bound of $O(nm \log (nm))$.], where $s$ is the edit distance between
+only gave a bound of $O(nm \log (nm))$.] ([[intro]]a), where $s$ is the edit distance between
 the two strings.  However, [cite/t:@myers86 p. 2] observes that
 #+begin_quote
 the resulting  algorithm involves a relatively complex discrete priority queue
@@ -147,9 +149,9 @@ $\h(u)$ between the suffixes following DP state $u$. He uses two heuristics, the
 used /gap cost/ heuristic $h(u)=\cgap(u, v_t)$
 [cite:@ukkonen85;@hadlock88detour;@wu90-O-np;@spouge89;@spouge91;@papamichail2009;]
 that simply uses the difference between the lengths of the suffixes as lower
-bound, and a new improved heuristic based on character frequencies in the two
-suffixes. A*PA [cite:@astarpa] applies the /gap-chaining seed heuristic/ with /pruning/
-[cite:@astarix-2] to obtain near-linear runtime when errors are uniform random.
+bound ([[intro]]d), and a new improved heuristic based on character frequencies in the two
+suffixes. A*PA [cite:@astarpa] improves the /seed heuristic/ [cite:@astarix-2] to the /gap-chaining seed heuristic/ with /pruning/
+to obtain near-linear runtime when errors are uniform random ([[intro]]h).
 Nevertheless, as [cite/t:@spouge91 p. 3] states:
 #+begin_quote
 Many algorithms for finding optimal paths in non-lattice graphs also exist
@@ -193,7 +195,7 @@ where $t$ increases by $1$ in each iteration, this closely mirrors Dijkstra's al
 
 [cite/t:@ukkonen85] introduces a very similar idea, statically bounding the
 computation to only those states that can be on a path of length at most $t$
-through the graph. When the sequences have the same length ($n=m$), this only
+through the graph ([[intro]]c). When the sequences have the same length ($n=m$), this only
 considers diagonals $-t/2$ to $t/2$, where diagonal $0$ is the main diagonal of
 the DP-matrix.
 
@@ -215,17 +217,17 @@ But this is exactly what was investigated a lot in the search for more efficient
 *** Parallelism
 In the 1990s, the focus shifted from
 reducing the number of computed states to computing states faster through
-advancements in implementation and hardware (SIMD, GPUs).  These speedups are
-often applied to the Smith-Waterman-(Gotoh) [cite:@sw;@gotoh] algorithm for
-(affine-cost) local alignment, where algorithmic improvements beyond
-$\Theta(nm)$ are unknown.
+advancements in implementation and hardware. This resulted in a plethora of new
+methods. We focus here on methods for edit distance.
+Many recent methods optimize for arbitrary scoring schemes and affine costs, but we do not
+discuss these in detail here [cite:@sw;@gotoh;@bergeron02;@suzuki-kasahara;@bsalign].
 
 The first technique in this direction is /microparallelism/ [cite:@alpern95],
 where each (64 bit) computer word is divided into multiple (e.g. 16 bit) parts,
 and word-size operations modify all (4) parts in parallel.
-[cite/t:@alpern95] applied this with /inter-sequence parallelism/ to align a
-given query to four reference sequences in parallel, see also
-[cite/t:@rognes11].  [cite/t:@hughey96] was the first to note that
+This was then applied this with /inter-sequence parallelism/ to align a
+given query to multiple reference sequences in parallel
+[cite/t:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11].  [cite/t:@hughey96] was the first to note that
 /anti-diagonals/ of the DP matrix are independent and can be computed in parallel, and
 [cite/t:@wozniak97] applied SIMD for this purpose.
 
@@ -236,59 +238,38 @@ The advantage of this approach is the much-simplified and faster loading of the
 vector of substitution scores from memory. The disadvantage is that data
 dependencies within the vector must be handled.
 #+end_quote
-They also introduce the /query profile/
-to efficiently compute which characters equal each other, see [[*Preliminaries]].
-Similarly, [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
-for edit distance. It bit-encodes the differences between $w=64$ states in a
+To work around these dependencies, [cite/t:@farrar] introduces an alternative /striped/ SIMD scheme where lanes are
+interleaved with each other. A*PA2 does not use this, but for example
+[cite/t:@bsalign] does.
+
+[cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
+for edit distance ([[intro]]f). It bit-encodes the differences between $w=64$ states in a
 column into two computer words, and an efficient algorithm to operate on them ([[myers]]).
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative bitpacking scheme based on a
 slightly different bit-encoding, but as both methods end up using $20$
 instructions (see [[*BitPAl]]) we did not pursue this further.
 
----
-
-TODO
-- [cite:@farrar] Farrar's striped; uses query profile; conditional prefix scan
-  is moved outside inner loop. $2-8\times$ faster than Wozniak and Rognes.
-- Wu Manber 1992
-- Baeza-Yates Gonnet 1992
-- Hyyro and Navarro, 2005; Hyyro et al., 2005
-- Benson 2013
-- navarro 2004
-- bergeron hamel 2002
 
 *** Tools
-There are multiple semi-global aligners that implement $O(nm)$ global
+There are multiple semi-global aligners that implement $O(nm)$ (semi)-global
 alignment using numerous of the aforementioned implementation
-techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], Opal
-(https://github.com/martinsos/opal), libssa
-(https://github.com/RonnySoak/libssa), SWIPE [cite:@rognes11], SWPS3
-[cite:@swps3], SSW library [cite:@ssw-library] ([[https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library][link]]), and KSW2 [cite:@minimap2].
+techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], SWIPE [cite:@rognes11], Opal
+[cite:@opal], libssa [cite:@libssa],  SWPS3
+[cite:@swps3], SSW library [cite:@ssw-library] ([[https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library][link]]), and KSW2 [cite:@suzuki-kasahara;@minimap2].
 
-Dedicated global alignment implementations are much rarer.
+Dedicated global alignment implementations implementing band-doubling are much rarer.
 Edlib [cite:@edlib] implements the band doubling of [cite/t:@ukkonen85] using
 the $\g(u)+\cgap(u, v_t)\leq t$ computational volume of [cite/t:@spouge91] and
-the bitpacking of [cite/t:@myers99].
+the bitpacking of [cite/t:@myers99] ([[intro]]e).
 WFA and BiWFA [cite:@wfa;@biwfa] implement the $O(n+s^2)$ expected time /diagonal transition/
-algorithm [cite:@ukkonen85;@myers86].
+algorithm [cite:@ukkonen85;@myers86] ([[intro]]b).
 Block aligner [cite:@block-aligner] is an approximate aligner that can handle
 position-specific scoring matrices whose main novelty is to divide the
 computation into blocks.
+Recently [cite/t:@bsalign] provided a new implementation of band doubling that
+also supports edit distance.
 Lastly, A*PA [cite:@astarpa] directly implements A* on the alignment graph using
 the gap-chaining seed heuristic.
-
----
-
-TODO
-- Opal: Šošic M. An simd dynamic programming c/c++ library: Thesis, University
-  of Zagreb; 2015. https://bib.irb.hr/datoteka/758607.diplomski_Martin_
-  Sosic.pdf.
-
-- libssa: Frielingsdorf JT. Improving optimal sequence alignments through a
-  simd-accelerated library: Thesis, University of Oslo; 2015. http://urn.nb.no/
-  URN:NBN:no-49935. Accessed 10 Dec 2015.
-- [cite:@suzuki-kasahara] libgaba: SIMD with difference recurrence relation for
-  affine cost alignment
 
 * Preliminaries
 *Edit graph.* We take as input two zero-indexed sequences $A$ and $B$ over an alphabet of size
@@ -315,12 +296,12 @@ alignment graph that contains all shortest paths . Given a bound $t\geq s$, some
 computational volumes are:
 1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
 2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
-   [cite/t:@fickett84] and similar to Dijkstra's algorithm [cite:@dijkstra59].
+   [cite/t:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
 3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
-   of length $\leq t$ [cite:@ukkonen85].
-4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@edlib;@spouge91;@papamichail2009].
+   of length $\leq t$ ([[intro]]cd) [cite:@ukkonen85].
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]def) [cite:@edlib;@spouge91;@papamichail2009].
 5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$, which we will
-   use as is similar to A*.
+   use as is similar to A* ([[intro]]gh).
 
 
 *Band-doubling* is the following algorithm by [cite/t:@ukkonen85], that depends on the choice of
@@ -367,10 +348,6 @@ approach: once the distance is found, the alignment is started over from both
 sides towards the middle column, where a state on the shortest path is
 determined. This is recursively applied to the left and right halves until the
 sequences are short enough that $O(tn)$ memory can be used.
-
-#+name: blocks
-#+caption: TODO introducing blocks
-| [[file:imgs/intro/0_g-gap.png]] g-gap | [[file:imgs/intro/0_bitpacking.png]] myers bitpacking (Edlib) | [[file:imgs/intro/0_blocks.png]] Blocks (Block aligner) |
 
 
 * Methods
@@ -1048,12 +1025,11 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 [[file:plots/real-params.svg]]
 
 * TODO
-- Rerun with =debug = false=, =strip = true=
+- Rerun with =debug = false=, =strip = true=, =lto = true=, =codegen-units=1=.
 - update tables
 - no 'cell'
 - subcaptions
 - range proofs
 - intro papers
-- integrate intro figs
 
 #+print_bibliography:
