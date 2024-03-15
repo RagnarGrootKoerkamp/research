@@ -603,46 +603,49 @@ on a path of length at most $t$ (i.e. have $\f(u) \geq t$), as can be seen in [[
 We determine this range of rows in two steps:
 1. First, we determine the /fixed range/ at the end of the preceding block.
    I.e., we find the topmost and
-   bottom-most states $u=\st i{j_{start}}$ and $u=\st i{j_{end}}$ with $f(u) = g(u) + h(u)
+   bottom-most states $\st i{j_{start}}$ and $\st i{j_{end}}$ with $f(u) = g(u) + h(u)
    \leq t$. All in-between states $u=\st ij$ with $j_{start}\leq j\leq j_{end}$
    are then /fixed/, meaning that the correct distance has been found and $g(u) = \g(u)$.
 2. Then, we use the heuristic to find the bottom-most state $v=\st{i+B}{j_{end}'}$ at the
-   end of the to-be-computed block that can possibly have $f(v) \leq t$.
+   end of the to-be-computed block that can possibly lie on a path of length
+   $\leq t$.
    We then compute rows $j_{start}$ to $j_{end}'$ in columns $i$ to $i+B$,
    rounding $[j_{start}, j_{end}']$ /out/ to the previous/next multiple of the word size $w=64$.
 
-Before describing these two steps in detail, we state the following lemma.
-
 *Step 1: Fixed range.*
-In a given column $i$, the /fixed/ range is the range of rows between the topmost and
-bottom-most states with $f(u)\leq t$, in rows $j_{start}$ and $j_{end}$
-respectively. Suppose that states in rows $[r_{start}, r_{end}]$ were computed.
+Suppose that states in rows $[r_{start}, r_{end}]$ were computed.
 One way to find $j_{start}$ and $j_{end}$ is by simply iterating inward from the
-start/end of the range and dropping all states $v=\st ij$ with
-$f(v)=g(v)+h(v)>t$, as indicated by the red columns in [[ranges]]a.
+start/end of the range and dropping all states with
+$f(u)=g(u)+h(u)>t$, as indicated by the red columns in [[ranges]]a.
 
 *Step 2: End of computed range.*
 We will now determine the bottom-most row $j$ that can contain a state at
 distance $\leq t$ at the end of the block. Let $u=\st{i}{j_{end}}$ be the
 bottom-most fixed state in column $i$ with distance $\leq t$.  Let $v =
 \st{i'}{j'}$ be a state in the current block ($i\leq i'\leq i+B$) that is below
-the diagonal of $u$.
-Then, the distance to $v$ is at least $g(v) \geq \g(u) + \cgap(u,v)$ (TODO PROOF), and hence
+the diagonal of $u$. Suppose $v$ lies on a path of length $\leq t$. This path
+most cross column $i$ in or above $u$, since states $u'$ below $u$ have $\f(u')>t$.
+The distance to $v$ is now at least $\min_{j\leq j_{end}} \g\st ij + \cgap(\st
+ij, v) \geq \g(u) + \cgap(u, v)$, and thus we define
 $$
-f(v) = g(v) + h(v) \geq \g(u) + \cgap(u,v) + h(v) =: f_l(v).
+f_l(v) := \g(u) + \cgap(u,v) + h(v)
 $$
+as a lower bound on the length of the shortest path through $v$, assuming $v$ is
+below the diagonal of $u$ and $\f(v) \leq t$. When $f_l(v)>t$, this implies
+$\f(v)>t$ and also $\f(v') > t$ for all $v'$ below $v$.
+
 The end of the range is now computed by finding the bottom-most state $v$ in each
-column for which this lower bound $f_l$ on $f$ is at most $t$, using the following
+column for which $f_l$ is at most $t$, using the following
 algorithm (omitting boundary checks).
-1. Start with $v = \st{i'}{j'} = u = \st{i}{r^t_{end}}$.
+1. Start with $v = \st{i'}{j'} = u = \st{i}{j_{end}}$.
 2. While the below-neighbour $v' = \st{i'}{j'+1}$ of $v$ has $f_l(v)\leq t$, increment $j'$.
 3. Go to the next column by incrementing $i'$ and $j'$ by $1$ and repeat step 2, until $i'=i+B$.
 The row $j'_{end}$ of the last $v$ we find in this way is the bottom-most state
 in column $i+B$ that can possibly have $f(v)\leq t$, and hence this is end of
 the range we compute.
 
-In [[ranges]]a, we see that $f(v)$ is computed at a diagonal of states just below
-the bottommost green (fixed) state $u$, and that the to-be-computed range
+In [[ranges]]a, we see that $f(v)$ is evaluated at a diagonal of states just below
+the bottommost green (fixed) state $u$ at the end of the preceding black, and that the to-be-computed range
 (indicated in blue) includes exactly all states above the diagonal.
 
 #+name: ranges
@@ -653,19 +656,50 @@ the bottommost green (fixed) state $u$, and that the to-be-computed range
 *** Sparse heuristic invocation
 A drawback of the previous method is that it require a large number of
 calls to $f$ and hence the heuristic $h$: roughly one per column and one per row.
-Here we present a /sparse/ version that uses fewer calls to $f$, based on the
-following lemma:
+Here we present a /sparse/ version that uses fewer calls to $f$, based on two
+similar lemmas.
 
-*Lemma 1.* When $f_l(v) > t + 2d$, then $\f(v') > t$ for any $v$ with
-$d(v,v')\leq d$.
+*Lemma 1.* When $h$ is admissible and $f(u) > t + 2D$, then $\f(u') > t$ when $d(u, u') \leq D$.
 
-*Proof TODO.*
+*Proof.*
+Since adjacent states differ in distance by $\{-1,0,+1\}$, we
+have $g(u') \geq g(u) - d(u,u') \geq g(u)-D$ and $\h(u') \geq \h(u') - d(u,u') \geq \h(u)-D$.
+Now suppose that $\f(u') \leq t$. Then $u'$ is fixed and we have $g(u') =
+\g(u')$, and since $h$ is admissible $h(u') \leq \h(u')$. Thus:
+\begin{align*}
+f(u)
+&=    g(u ) +  h(u)\\
+&\leq g(u ) + \h(u)
+\leq g(u') + \h(u')  + 2D\\
+&=   \g(u') + \h(u') + 2D
+=   \f(u') + 2D
+\leq t + 2D.
+\end{align*}
+This is in contradiction with $f(u) > t+2D$, so we must have $\f(u') > t$, as required.
+
+*Lemma 2.* When $h$ is admissible, $v$ is below the diagonal of a computed state
+$v$, and $f_l(v) = \g(u) + \cgap(u,v)+h(v) > t + 2D$, then $\f(v') > t$ when $d(v,v') \leq D$.
+
+*Proof.*
+We have $\cgap(u, v') \geq \cgap(u,v) - d(v,v') \geq \cgap(u,v)-D$, and $\h(v') \geq \h(v)-D$.
+From before we already know that $\g(u) + \cgap(u,v) \leq \g(v)$, and we still
+have $h(v) \leq \h(v)$ and $\g(v') \geq \g(v) - D$ and $\h(v') \geq \h(v) -D$.
+The result follows directly:
+\begin{align*}
+t <
+f_l(v) - 2D
+&=\g(u ) + \cgap(u,v) +  h(v) -2D\\
+&\leq \g(v) +  \h(v)-2D
+\leq \g(v') + \h(v') = \f(v').
+\end{align*}
+
+# TODO: end-of-proof box
 
 *Sparse fixed range.* To find the first row $j_{start}$ with $f(\st
 i{j_{start}})\leq t$, start with $j=r_{start}$, and increment $j$ by
 $\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$, since none of the intermediate
-states can lie on a path of length $\leq t$ by Lemma 1. The last row is found in the same
-way.  As seen in [[ranges]]b, this sparse variant significantly reduces the number
+states can lie on a path of length $\leq t$ by Lemma 2. The last row is found in the same
+way. As seen in [[ranges]]b, this sparse variant significantly reduces the number
 of evaluations of the heuristic in the right-most columns of each block.
 
 *Sparse end of computed range.*
@@ -1027,9 +1061,7 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 * TODO
 - Rerun with =debug = false=, =strip = true=, =lto = true=, =codegen-units=1=.
 - update tables
-- no 'cell'
 - subcaptions
-- range proofs
-- intro papers
+- Run BSAlign?
 
 #+print_bibliography:
