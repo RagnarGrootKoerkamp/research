@@ -1,4 +1,4 @@
-#+title: [WIP] A*PA2: 20x faster exact global alignment of long sequences
+#+title: [WIP] A*PA2: up to 20x faster exact global alignment
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
@@ -19,28 +19,27 @@
 \newcommand{\matches}{\mathcal M}
 \end{equation*}
 
-Preface: This is my work-in-progress draft for my paper on version 2 of A*PA.
-Code is done and works, but needs some cleanup and polishing. The API also needs
-work.
-
 * Abstract
 :PROPERTIES:
 :UNNUMBERED: t
 :END:
 
 *Methods.* We introduce A*PA2, an exact global pairwise aligner with respect to
-e Edlib, A*PA2 uses Ukkonen's band doubling in combination
-with Myers' bitpacking. A*PA2 1) extends this with SIMD, 2) uses large block
+edit distance. The goal of A*PA2 is to unify the near-linear runtime of A*PA on
+similar sequences with the efficiency of dynamic programming (DP) based methods.
+Like Edlib, A*PA2 uses Ukkonen's band doubling in combination
+with Myers' bitpacking. A*PA2 1) extends this with SIMD (single instruction,
+multiple data), 2) uses large block
 sizes inspired by Block Aligner, 3) avoids recomputation of states where
 possible as suggested before by Fickett, 4) introduces a new optimistic technique for
-traceback based on diagonal transition (WFA), and 5) applies the heuristics
+traceback based on diagonal transition, and 5) applies the heuristics
 developed in A*PA and improves them using /pre-pruning/.
 
 *Results.*
-The average runtime of A*PA2 is  $20\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
+The average runtime of A*PA2 is  $19\times$ faster than BiWFA and Edlib on $>500$kbp long ONT reads of a
 human genome having $6\%$ divergence on average. On shorter ONT reads of
- $10\%-12\%$ average divergence the speedup is $6.1\times$ (length $11$kbp),
-$3.7\times$ (length $4$kbp), and $0.96\times$ (length $800$bp).
+ $11\%$ average divergence the speedup is $5.6\times$ (avg. length $11$kbp)
+ and $0.81\times$ (avg. length $800$bp).
 
 *Availability.* [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner]]
 
@@ -51,36 +50,45 @@ $3.7\times$ (length $4$kbp), and $0.96\times$ (length $800$bp).
 The problem of /global pairwise alignment/ is to find the shortest sequence of
 edit operations (insertions, deletions, substitutions) to convert a string $A$
 into a second string $B$ [cite:@nw;@vintsyuk68], where the number of such
-operations is called the /Levenshtein distance/ or /edit distance/
+operations is called the /Levenshtein distance/ or /edit distance/ $s$
 [cite:@levenshtein;@wagner74].
 
 Over time, the length of genomic reads has increased from hundreds of basepairs
 to hundreds of thousands basepairs now. Meanwhile, the complexity of exact
 algorithms has not been improved by more than a constant factor since the
-introduction of the $O(s^2+n)$ diagonal transition algorithm [cite:@ukkonen85].
+introduction of the $O(s^2+n)$ diagonal transition algorithm [cite:@ukkonen85],
+where $n=|A|$ is the sequence length.
 
-In this work we introduce a new exact algorithm for global pairwise alignment
-building on the recently introduced A* heuristics of A*PA [cite:@astarpa], but
-instead of running A* we use a much more efficient DP-based algorithm.
-As [cite/t:@fickett84 p. 1] stated already 40 years ago,
+Our recent work A*PA [cite:@astarpa] uses the A* shortest path algorithm to
+speed up alignment and has near-linear runtime when divergence is low.  A
+drawback of A* is that it uses a queue and must store all computed distances,
+causing large overhead compared to methods based on dynamic programming (DP).
+
+This work introduces A*PA2, a method that unifies the heuristics and near-linear
+runtime of A*PA with the efficiency of DP based methods.
+
+As [cite/t:@fickett84 p. 1] stated 40 years ago and still true today,
 #+begin_quote
 at present one must choose between an algorithm which gives the best alignment
 but is expensive, and an algorithm which is fast but may not give the best
-alignment. In this paper we narrow the gap between these choices by showing how
-to get the optimal alignment much more quickly than before.
+alignment.
 #+end_quote
-
+In this paper we narrow this gap and show that A*PA2 is nearly as fast as
+approximate methods.
 
 ** Contributions
 We introduce A*PA2, an exactly pairwise global sequence aligner with respect to
 edit distance.
 
 In A*PA2 we combine multiple existing techniques and introduce a number of new
-ideas to obtain a $20\times$ speedup over existing single-threaded exact
-aligners.  As a starting point, we take the band doubling algorithm implemented
+ideas to obtain up to $19\times$ speedup over existing single-threaded exact
+aligners. Furthermore, A*PA2 is often faster and never much slower than
+approximate methods.
+
+As a starting point, we take the band doubling algorithm implemented
 by Edlib [cite:@edlib] using bitpacking [cite:@myers99].  First, we speed up the
 implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
-(points 4. and 5.).  Lastly, we apply A*.
+(points 4. and 5.).  Lastly, we apply A* (point 6.).
 
 1. *Block-based computation.* Edlib computes one column of the DP matrix at a
    time, and for each column decides which range (subset of rows) of states to
@@ -88,11 +96,12 @@ implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
    columns at a time ([[intro]]f), taking inspiration from Block aligner
    [cite:@block-aligner].  Correspondingly, we only store states of the
    DP-matrix at block boundaries, reducing memory usage.
-2. *SIMD.* We speed up the implementation using SIMD to compute each block,
+2. *SIMD.* We speed up the implementation using $256$bit SIMD to compute each block,
    allowing the processing of $4$ computer words in parallel.
 3. *Novel encoding.* We introduce a novel encoding of the input sequence to
-   speed up SIMD operations. This limits the current implementation to size-$4$
-   alphabets.
+   speed up SIMD operations by comparing characters bit-by-bit and avoiding slow
+   =gather= instructions.
+   This limits the current implementation to size-$4$ alphabets.
 4. *Incremental doubling.* Both the band doubling methods of [cite/t:@ukkonen85]
    and Edlib recompute states after doubling the threshold.  We avoid this by
    using the theory behind the A* algorithm, extending the incremental doubling
@@ -102,15 +111,15 @@ implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
    adaptive heuristic, falling back to a full recomputation of the block when
    needed.
 6. *A** *.* We apply the gap-chaining seed heuristic of A*PA [cite:@astarpa]
-   ([[intro]]gh), and improve it using /pre-pruning/. This technique discards most of
+   ([[intro]]fg), and improve it using /pre-pruning/. This technique discards most of
    the /spurious/ (off-path) matches ahead of time.
 
 #+name: intro
-#+caption: Alignment of two sequences of length $3000$bp with 25% errors using different algorithms.
+#+caption: Alignment of two sequences of length $3000$bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation.
 #+attr_html: :class equal-width
-| [[file:imgs/intro/2_dijkstra.png]] | [[file:imgs/intro/3_diagonal-transition.png]] | [[file:imgs/intro/0_gap-gap.png]] | [[file:imgs/intro/0_g-gap.png]] | [[file:imgs/intro/0_bitpacking.png]] | [[file:imgs/intro/6_astarpa2_simple.png]] | [[file:imgs/intro/7_astarpa2_full.png]]         | file:imgs/intro/5_astarpa-prune.png |
-|                                | + DT                                      | + band doubling               | $\g(v_s,u){+}\cgap(u,v_t)$  | +bitpacking                      | + blocks                              | + GCSH                                      |   A*                                |
-| Dijkstra                       | WFA                                       | Ukkonen                       |                             | Edlib                            | A*PA2-simple                          | A*PA2-full                                  | A*PA                                |
+| [[file:imgs/intro/2_dijkstra.png]] | [[file:imgs/intro/3_diagonal-transition.png]] | [[file:imgs/intro/0_gap-gap.png]] | [[file:imgs/intro/0_bitpacking.png]] | [[file:imgs/intro/6_astarpa2_simple.png]] | [[file:imgs/intro/7_astarpa2_full.png]] | file:imgs/intro/5_astarpa-prune.png |
+|                                | + DT                                      | + band doubling               | + gap heuristic and bitpacking   | + blocks                              | + GCSH                              | A*                                  |
+| Dijkstra                       | WFA                                       | Ukkonen                       | Edlib                            | A*PA2-simple                          | A*PA2-full                          | A*PA                                |
 
 
 ** Previous work
@@ -122,7 +131,7 @@ previous paper [cite/t:@astarpa].
 
 *** Needleman-Wunsch
 This problem has classically been approached as a dynamic
-programming (DP) problem. For string lengths $n$ and $m$, [cite/t:@nw]
+programming problem. For string lengths $n$ and $m$, [cite/t:@nw]
 introduced the first $O(n^2m)$ algorithm. [cite/t:@sellers] and
 [cite/t:@wagner74] improved this to what is now
 known as the $O(nm)$ /Needleman-Wunsch algorithm/, building on the quadratic algorithm for /longest common
@@ -138,9 +147,9 @@ taking $O(ns)$ time[fn::Although Ukkonen didn't realize this faster runtime and
 only gave a bound of $O(nm \log (nm))$.] ([[intro]]a), where $s$ is the edit distance between
 the two strings.  However, [cite/t:@myers86 p. 2] observes that
 #+begin_quote
-the resulting  algorithm involves a relatively complex discrete priority queue
-and this queue  may contain as many as O(ND) entries even in the case where just
-the length  of the [...] shortest edit script is being computed.
+the resulting algorithm involves a relatively complex discrete priority queue
+and this queue may contain as many as O(ns) entries even in the case where just
+the length of the [...] shortest edit script is being computed.
 #+end_quote
 [cite/t:@hadlock88detour] realized that Dijkstra's algorithm can be improved
 upon by using A* [cite:@astar-hart67], a more /informed/ algorithm that uses a
@@ -151,7 +160,7 @@ used /gap cost/ heuristic $h(u)=\cgap(u, v_t)$
 that simply uses the difference between the lengths of the suffixes as lower
 bound ([[intro]]d), and a new improved heuristic based on character frequencies in the two
 suffixes. A*PA [cite:@astarpa] improves the /seed heuristic/ [cite:@astarix-2] to the /gap-chaining seed heuristic/ with /pruning/
-to obtain near-linear runtime when errors are uniform random ([[intro]]h).
+to obtain near-linear runtime when errors are uniform random ([[intro]]g).
 Nevertheless, as [cite/t:@spouge91 p. 3] states:
 #+begin_quote
 Many algorithms for finding optimal paths in non-lattice graphs also exist
@@ -164,10 +173,12 @@ and further [cite:@spouge89 p. 4]:
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-In this work we follow this advice and replace the A* search in A*PA with a much
-more efficient DP based approach based on /computational volumes/.
+In this work we follow this advice and replace the plain A* search in A*PA with a much
+more efficient approach based on /computational volumes/ that merges DP and A*.
 
 *** Computational volumes
+TODO: REWRITE THIS TO SIMPLE NOTATION AND MOVE TO PRELIMS.
+
 [cite/t:@wilbur-lipman-83] is, to our knowledge, the first paper that speeds up
 the $O(nm)$ DP algorithm, by only considering states near diagonals with many
 /k-mer matches/, but at the cost of giving up the exactness of the method.
@@ -190,11 +201,11 @@ data being aligned, or as the length of a suboptimal alignment.  When
 $t=t_0$ turns out too small, a larger new bound $t_1$ can be chosen, and only
 states with distance in between $t_0$ and $t_1$ have to be computed.  This is
 implemented by keeping for each row the index of the first and last state with
-value at most $t_0$, and skipping over already computed states.  In the limit
+value at most $t_0$, and skipping over already computed states.  In the limit,
 where $t$ increases by $1$ in each iteration, this closely mirrors Dijkstra's algorithm.
 
 [cite/t:@ukkonen85] introduces a very similar idea, statically bounding the
-computation to only those states that can be on a path of length at most $t$
+computation to only those states that can be on a path of some small length at most $t$
 through the graph ([[intro]]c). When the sequences have the same length ($n=m$), this only
 considers diagonals $-t/2$ to $t/2$, where diagonal $0$ is the main diagonal of
 the DP-matrix.
@@ -225,9 +236,10 @@ discuss these in detail here [cite:@sw;@gotoh;@bergeron02;@suzuki-kasahara;@bsal
 The first technique in this direction is /microparallelism/ [cite:@alpern95],
 where each (64 bit) computer word is divided into multiple (e.g. 16 bit) parts,
 and word-size operations modify all (4) parts in parallel.
-This was then applied this with /inter-sequence parallelism/ to align a
+This was then applied with /inter-sequence parallelism/ to align a
 given query to multiple reference sequences in parallel
-[cite/t:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11].  [cite/t:@hughey96] was the first to note that
+[cite:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11].
+[cite/t:@hughey96] was the first to note that
 /anti-diagonals/ of the DP matrix are independent and can be computed in parallel, and
 [cite/t:@wozniak97] applied SIMD for this purpose.
 
@@ -244,10 +256,10 @@ interleaved with each other. A*PA2 does not use this, but for example
 
 [cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
 for edit distance ([[intro]]f). It bit-encodes the differences between $w=64$ states in a
-column into two computer words, and an efficient algorithm to operate on them ([[myers]]).
+column into two computer words, and an efficient algorithm to operate on them.
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative bitpacking scheme based on a
 slightly different bit-encoding, but as both methods end up using $20$
-instructions (see [[*BitPAl]]) we did not pursue this further.
+instructions (see [[*Bitpacking]]) we did not pursue this further.
 
 
 *** Tools
@@ -260,7 +272,7 @@ techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], SWIPE [cite:
 Dedicated global alignment implementations implementing band-doubling are much rarer.
 Edlib [cite:@edlib] implements the band doubling of [cite/t:@ukkonen85] using
 the $\g(u)+\cgap(u, v_t)\leq t$ computational volume of [cite/t:@spouge91] and
-the bitpacking of [cite/t:@myers99] ([[intro]]e).
+the bitpacking of [cite/t:@myers99] ([[intro]]d).
 WFA and BiWFA [cite:@wfa;@biwfa] implement the $O(n+s^2)$ expected time /diagonal transition/
 algorithm [cite:@ukkonen85;@myers86] ([[intro]]b).
 Block aligner [cite:@block-aligner] is an approximate aligner that can handle
@@ -272,17 +284,25 @@ Lastly, A*PA [cite:@astarpa] directly implements A* on the alignment graph using
 the gap-chaining seed heuristic.
 
 * Preliminaries
+
+#+name: edit-graph
+#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite/t:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix.
+[[file:./edit-graph.drawio.svg]]
+
 *Edit graph.* We take as input two zero-indexed sequences $A$ and $B$ over an alphabet of size
-$4$ of lengths $n$ and $m$.  The /edit graph/ contains /states/ $\st ij$ ($0\leq
+$4$ of lengths $n$ and $m$.  The /edit graph/ ([[edit-graph]]) contains /states/ $\st ij$ ($0\leq
 i\leq n$, $0\leq j\leq m$) as vertices. It further contains directed insertion and
 deletion edges $\st ij \to \st i{j+1}$ and $\st ij \to \st {i+1}j$ of cost $1$,
 and diagonal edges $\st ij\to \st{i+1}{j+1}$ of cost $0$ when $A_i = B_i$ and
 substitution cost $1$ otherwise.  The shortest path from $v_s:=\st 00$ to $v_t :=
 \st nm$ in the edit graph corresponds to an alignment of $A$ and $B$.
-We write $d(u,v)$ for the distance from $u$ to
-$v$, $\g(u) := d(v_s, u)$ for the distance from the start, $\h(u) := d(u, v_t)$
-for the distance to the end, and $\f(u) := \g(u) + \h(u)$ for the length of the
-shortest path through $u$.
+The /distance/ $d(u,v)$ from $u$ to $v$ is the length of the shortest (minimal
+cost) path from $u$ to $v$, and we use /distance/, /length/, and /cost/ interchangeably.
+Further we write
+$\g(u) := d(v_s, u)$ for the distance from the start,
+$\h(u) := d(u, v_t)$
+for the distance to the end, and $\f(u) := \g(u) + \h(u)$ for the minimal cost
+of a path through $u$.
 
 *A** is a shortest path algorithm based on a /heuristic/ function $h(u)$ [cite:@astar-hart67]. A
 heuristic is called /admissible/ when $h(u)$ underestimates the distance to the
@@ -298,10 +318,10 @@ computational volumes are:
 2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
    [cite/t:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
 3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
-   of length $\leq t$ ([[intro]]cd) [cite:@ukkonen85].
-4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]def) [cite:@edlib;@spouge91;@papamichail2009].
+   of cost $\leq t$ ([[intro]]c) [cite:@ukkonen85].
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]de) [cite:@edlib;@spouge91;@papamichail2009].
 5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$, which we will
-   use as is similar to A* ([[intro]]gh).
+   use and is similar to A* ([[intro]]fg).
 
 
 *Band-doubling* is the following algorithm by [cite/t:@ukkonen85], that depends on the choice of
@@ -309,7 +329,7 @@ computational volume being used.
 1. Start with edit-distance threshold $t=1$.
 2. Loop over columns $i$ from $0$ to $n$.
 3. For each column, determine the range of rows $[j_{start}, j_{end}]$ to be
-   computed according the computational volume that's being used.
+   computed according to the computational volume that's being used.
    a. If this range is empty or does not contain a state at distance $\leq t$, double $t$ and go back to step 1.
    b. Otherwise, compute the distance to the states in the range, and continue
       with the next column.
@@ -329,8 +349,7 @@ is always in $\{-1,0,+1\}$ [cite:@myers99]. The method bit-encodes $w=64$ differ
 adjacent states in a columns in two
 indicator words, indicating positions where the difference is $+1$ and $-1$ respectively.
 Given also the similarly encoded difference along the top, a $1\times w$
-rectangle can be computed in only $20$ bit operations ([[myers]]).
-[[*BitPAl]] contains similar code for BitPAL, which also uses $20$ instructions.
+rectangle can be computed in only $20$ bit operations ([[*Bitpacking]]).
 We call each consecutive non-overlapping chunk of $64$ rows a /lane/, so that
 there are $\lceil m/64\rceil$ lanes, where the last lane may be padded.
 Note that this method originally only uses $17$ instructions, but some additional
@@ -338,8 +357,8 @@ instructions are needed to support multiple lanes when $m>w$.
 
 *Profile.* Instead of computing each substitution score $S[A_i][B_j] = [A_i\neq
 B_j]$ for the $64$ states in a word one by one, Myers' algorithm first builds a
-/profile/ [cite:@rognes00].  For each character $c$, $Eq[c][j]$ stores a bitvector indicating
-which characters of $B$ equal $c$.  This way, adjacent equalities in a columns
+/profile/ [cite:@rognes00].  For each character $c$, $Eq[c]$ stores a bitvector indicating
+which characters of $B$ equal $c$.  This way, adjacent scores in a column
 are simply found as $Eq[A_i][j \dots j']$.
 
 *Edlib* implements band doubling using the $\g(u) + \cgap(u, v_t)\leq t$ computational
@@ -362,20 +381,16 @@ alignments, at the cost of larger precomputation time to build the heuristic.
 ** Band-doubling
 A*PA2 uses band-doubling with the $\g(u) + h(u) \leq t$ computational volume.
 That is, in each iteration of $t$ we compute the distance to all states with
-$\g(u) + h(u) \leq t$.  In its simple form, we use $h(u) =\cgap(u, v_t)$ like
-Edlib does.  As initial guess $t_0$ for $t$ we use $h(v_s)=h\st 00$.  Instead of
-doubling $t$ itself, we double the increment, so that initially we stay close to
-$t_0$. Additionally we start with a small offset to compensate for the block
-sizes and bitpacking (see below), so that the $t_i$ we try are
-$$
-t_i := h\st 00 + B \cdot 2^i.
-$$
+$\g(u) + h(u) \leq t$.  In its simple form, we use $h(u) =\cgap(u, v_t)$, like
+Edlib does. We start doubling at $h(v_s)=h(\st 00)$, so that $t_i := h(\st 00) +
+B\cdot 2^i$, where $B$ is the block size introduced below.
 
 ** Blocks
 Instead of determining the range of rows to be computed for each column
 individually, we determine it once per /block/ and then reuse it for $B=256$
-consecutive columns.  This computes some extra states, but reduces the overhead
-by a lot.
+consecutive columns. This computes some extra states, but reduces the overhead
+by a lot. (From here on, $B$ stands for the block size, and not for the sequence
+$B$ to be aligned.)
 
 Within each block, we iterate over the /lanes/ of $w=64$ rows at a time, and for
 each lane compute all $B$ columns before moving on to the next lane.
@@ -393,38 +408,6 @@ column.  This simplifies the traceback method (see [[*Traceback]]), and has
 sufficiently small memory usage to be practical.
 
 ** SIMD
-
-#+name: myers
-#+caption: *Myers' bitpacking.* Rust code for SIMD version of Myers' bitpacking algorithm. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
-#+begin_src rust
-pub fn compute_block_simd_myers(
-    hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates +1 difference on top.
-    hm0: &mut Simd<u64, 4>,  // 0 or 1. Indicates -1 difference on top.
-    vp: &mut Simd<u64, 4>,  // 64-bit indicator of +1 differences on left.
-    vm: &mut Simd<u64, 4>,  // 64-bit indicator of -1 differences on left.
-    eq: Simd<u64, 4>,  // 64-bit indicator which characters equal the top char.
-) {
-    let vx = eq | *vm;
-    let eq = eq | *hm0;
-    // The addition carries information between rows.
-    let hx = (((eq & *vp) + *vp) ^ *vp) | eq;
-    let hp = *vm | !(hx | *vp);
-    let hm = *vp & hx;
-    // Extract the high bit as bottom horizontal difference.
-    let right_shift = Simd::<u64,4>::splat(63);   // Shift each lane by 63.
-    let hpw = hp >> right_shift;
-    let hmw = hm >> right_shift;
-    // Insert the top horizontal difference.
-    let left_shift = Simd::<u64,4>::splat(1);     // Shift each lane by 1.
-    let hp = (hp << left_shift) | *hp0;
-    let hm = (hm << left_shift) | *hm0;
-    // Update the input-output parameters.
-    ,*hp0 = hpw;
-    ,*hm0 = hmw;
-    ,*vp = hm | !(vx | hp);
-    ,*vm = hp & vx;
-}
-#+end_src
 
 #+name: simd
 #+caption: *SIMD* processing of two times 4 lanes in parallel. This example uses 4-row (instead of 64-row) lanes. First the top-left triangle is computed lane by lane, and then 8-lane diagonals are computed by using two 4-lane SIMD vectors in parallel.
@@ -453,27 +436,13 @@ required by incremental doubling [[*Incremental doubling]]), we
 can not use padding and instead fall back to trying a $4$-lane SIMD ($\ell\geq 4$),
 a $2$-lane SIMD ($\ell\geq 2$), and lastly a scalar iteration ($\ell\geq 1$).
 
-# TODO: How about padding upwards?
 
 ** SIMD-friendly sequence profile
-
-#+name: profile
-#+caption: *Sequence profile.* Character equality check for the SIMD-friendly sequence profile.
-#+begin_src rust
-/// `ca`: Exploded bit-encoding of single char `c` of `a`.
-///   e.g.  c=1: (11...11, 00...00)
-/// 64-char packed *negated* bit-encoding of 64 chars of `b`.
-///   e.g. bj=1: (...0..., ...1...)
-/// Returns a mask which chars of `b` equal the char of `a`.
-fn eq(ca: &(u64, u64), profile_b: &(u64, u64)) -> u64 {
-    (ca.0 ^ profile_b.0) & (ca.1 ^ profile_b.1)
-}
-#+end_src
 
 A drawback of anti-diagonal tiling is that each column contains its own
 character $a_i$ that needs to be looked up in the profile $Eq[a_i][j]$. While SIMD can do multiple
 lookups in parallel using =gather= instructions, these instructions are
-not always efficient. Thus, we introduce the following alternative scheme.
+not always efficient. Thus, we introduce the following alternative scheme:
 
 Let $b = \lceil \log_2(\sigma)\rceil$ be the number of bits needed to encode
 each character, with $b=2$ for DNA.
@@ -484,10 +453,20 @@ To check which characters in lane $\ell$ contain character $c$ with bit represen
 $\overline{c_{b-1}\dots c_{0}}$, we precompute $b$ words $C_0 =
 \overline{c_0\dots c_0}$ to
 $C_{b-1}=\overline{c_{b-1}\dots c_{b-1}}$ and then compute
-$$(C_0 \xor Eq'[\ell][0]) \and \dots \and (C_{b-1} \xor Eq'[\ell][b-1]),$$
-see [[profile]].
+$\bigwedge_{j=0}^{b-1}(C_j \oplus Eq'[\ell][j])$, where $\oplus$ denotes the xor operation.
+As an example take $b=2$ and a lane with $w=8$ characters $(0,1,2,2,3,3,3,3)$.
+Then $Eq'[\ell][0]=\overline{00001101}$ and $Eq'[\ell][1]=\overline{00000011}$,
+keeping in mind that bits are shown in reverse order in this notation.
+If the column now contains character $c=2=\overline{10}$ we initialize
+$C_0=\overline{00000000}$ and $C_1=\overline{11111111}$ and compute
+$$
+(C_0 \oplus Eq'[\ell][0]) \wedge (C_1\oplus Eq'[\ell][1]) =
+\overline{00001101}\wedge\overline{11111100} = \overline{00001100},
+$$
+indicating
+that $0$-based positions $2$ and $3$ contain character $2$.
 This naturally extends to SIMD vectors, where each lane is initialized with its
-own constants $C_i$.
+own constants.
 
 ** Traceback
 
@@ -497,7 +476,7 @@ own constants $C_i$.
 
 The traceback stage takes as input the computed vertical differences at
 the end of each block of columns. We iteratively work backwards through the
-blocks. In each step, we know the distances $g\st ij$ to
+blocks. In each step, we know the distances $g(\st ij)$ to
 the states in column $i$ and the state $u=\st{i+B}j$ in column $i+B$
 that is on the optimal path and has distance $\g(u)$.
 The goal is to find an optimal path from column $i$ to $u$.
@@ -529,7 +508,7 @@ We then know that $v$ lies on a shortest path and can find the path from $v$ to
 $u$ by a usual traceback on the diagonal transition algorithm.
 
 As an optimization, when no suitable $v$ is found after trying all states at
-distance $\leq 40$, we abort the DT trace fall back to the block doubling described above.
+distance $\leq 40$, we abort the DTT and fall back to the block doubling described above.
 Another optimization is the WF-adaptive heuristic introduced by WFA: all states
 that lag more than $10$ behind the furthest reaching diagonal are dropped.
 Lastly, we abort early when after reaching distance $20=40/2$, less than half
@@ -583,8 +562,8 @@ heuristic, making the heuristic more accurate.
 
 More generally, we try to extend each match $m$ into an alignment covering seeds
 $s_i$ up to (but excluding) $s_{i+q}$ for all $q\leq p=14$. If any of these
-extensions has cost at least $q$, that means $m$ falsely promised that $s_i$ to
-$s_{i+q}$ can be crossed for cost $<q$, and we /pre-prune/ (remove) $m$.
+extensions has cost at least $q$, i.e. $m$ falsely promised that $s_i$ to
+$s_{i+q}$ can be crossed for cost $<q$, we /pre-prune/ (remove) $m$.
 
 We try to extend each match by running the diagonal transition algorithm
 from the end of each match, and dropping any furthest reaching points that are
@@ -625,7 +604,7 @@ bottom-most fixed state in column $i$ with distance $\leq t$.  Let $v =
 \st{i'}{j'}$ be a state in the current block ($i\leq i'\leq i+B$) that is below
 the diagonal of $u$. Suppose $v$ lies on a path of length $\leq t$. This path
 most cross column $i$ in or above $u$, since states $u'$ below $u$ have $\f(u')>t$.
-The distance to $v$ is now at least $\min_{j\leq j_{end}} \g\st ij + \cgap(\st
+The distance to $v$ is now at least $\min_{j\leq j_{end}} \g(\st ij) + \cgap(\st
 ij, v) \geq \g(u) + \cgap(u, v)$, and thus we define
 $$
 f_l(v) := \g(u) + \cgap(u,v) + h(v)
@@ -654,7 +633,7 @@ the bottommost green (fixed) state $u$ at the end of the preceding black, and th
 | [[./imgs/ranges/full.png]] Simple | [[./imgs/ranges/sparse.png]] Sparse |
 
 *** Sparse heuristic invocation
-A drawback of the previous method is that it require a large number of
+A drawback of the previous method is that it requires a large number of
 calls to $f$ and hence the heuristic $h$: roughly one per column and one per row.
 Here we present a /sparse/ version that uses fewer calls to $f$, based on two
 similar lemmas.
@@ -678,7 +657,7 @@ f(u)
 This is in contradiction with $f(u) > t+2D$, so we must have $\f(u') > t$, as required.
 
 *Lemma 2.* When $h$ is admissible, $v$ is below the diagonal of a computed state
-$v$, and $f_l(v) = \g(u) + \cgap(u,v)+h(v) > t + 2D$, then $\f(v') > t$ when $d(v,v') \leq D$.
+$u$, and $f_l(v) = \g(u) + \cgap(u,v)+h(v) > t + 2D$, then $\f(v') > t$ when $d(v,v') \leq D$.
 
 *Proof.*
 We have $\cgap(u, v') \geq \cgap(u,v) - d(v,v') \geq \cgap(u,v)-D$, and $\h(v') \geq \h(v)-D$.
@@ -693,17 +672,16 @@ f_l(v) - 2D
 \leq \g(v') + \h(v') = \f(v').
 \end{align*}
 
-# TODO: end-of-proof box
 
 *Sparse fixed range.* To find the first row $j_{start}$ with $f(\st
 i{j_{start}})\leq t$, start with $j=r_{start}$, and increment $j$ by
 $\lceil(f(v)-t)/2\rceil$ as long as $f(v)>t$, since none of the intermediate
-states can lie on a path of length $\leq t$ by Lemma 2. The last row is found in the same
+states can lie on a path of length $\leq t$ by Lemma 1. The last row is found in the same
 way. As seen in [[ranges]]b, this sparse variant significantly reduces the number
 of evaluations of the heuristic in the right-most columns of each block.
 
 *Sparse end of computed range.*
-Lemma 1 inspires the following algorithm ([[ranges]]b). Instead of considering
+Lemma 2 inspires the following algorithm ([[ranges]]b). Instead of considering
 one column at a time, we now first make a big just down and then jump to the right.
 1. Start with $v = \st{i'}{j'} = u+\st{1}{B+1} = \st{i+1}{j_{end} + B+1}$.
 2. If $f_l(v) \leq t$, increase $j'$ (go down) by $8$.
@@ -759,19 +737,20 @@ techniques we introduced, and measure time and memory usage.
 
 ** Setup
 *Datasets.* We benchmark on six datasets containing real sequences of varying
-length and divergence, as listed in detail in [[*Comparison with other aligners]].
+length and divergence, as listed in detail in [[#app-comparison]].
 They can be downloaded from
 [[https://github.com/pairwise-alignment/pa-bench/releases/tag/datasets][github.com/pairwise-alignment/pa-bench/releases/tag/datasets]].
 
-Five datasets containing ONT reads are reused from the WFA, BiWFA, and A*PA
-evaluations [cite:@wfa;@biwfa;@astarpa]. Of these, the '>500kbp' and '>500kbp with
-genetic variation' datasets have divergence $6-7\%$, while three datasets
-filtered for sequences of length <1kbp, <10kbp, and <50kbp have divergence $10-12\%$ and
-average sequence length $800$bp, $4$kbp, and $11$kbp.
+Four datasets containing Oxford Nanopore Technologies (ONT) reads are reused
+from the WFA, BiWFA, and A*PA evaluations [cite:@wfa;@biwfa;@astarpa]. Of these,
+the '>500kbp' and '>500kbp with genetic variation' datasets have divergence
+$6-7\%$, while two '1kbp' and '10kbp' datasets are filtered for sequences of
+length <1kbp and <50kbp have average divergence $11\%$ and average sequence length
+$800$bp and $11$kbp.
 
 A SARS-CoV-2 dataset was newly generated by downloading 500MB of viral sequences
 from the COVID-19 Data Portal, [[https://www.covid19dataportal.org/][covid19dataportal.org]] [cite:@covid19portal],
-filtering out non-ACTG characters, and selecting 10000 random pairs. This
+filtering out non-ACTG characters, and selecting $10000$ random pairs. This
 dataset has average divergence $1.5\%$ and length $30$kbp.
 
 For each set, we sorted all sequence pairs by edit distance and split them
@@ -780,22 +759,29 @@ $2\%$ of pairs with the lowest divergence. Reported results are averaged over
 the sequences in each file.
 
 *Algorithms and aligners.*
-We benchmark two versions of A*PA2 against state-of-the-art aligners Edlib,
-BiWFA, and A*PA.
-Version /A*PA2-simple/ uses all engineering optimizations (bitpacking, SIMD,
+We benchmark A*PA2 against state-of-the-art exact aligners Edlib,
+BiWFA, and A*PA. We further compare against the approximate aligners
+WFA-Adaptive [cite:@wfa] and Block Aligner.
+For WFA-Adaptive we use default parameters $(10, 50, 10)$, dropping states that lag behind by more than $50$.
+For Block Aligner we use block sizes from $0.1\%$ to $1\%$ of the input size.
+Block Aligner only supports affine costs so we use gap-open cost $1$ instead of $0$.
+
+We compare two versions of A*PA2.
+/A*PA2-simple/ uses all engineering optimizations (bitpacking, SIMD,
 blocks, new traceback) and uses the simple gap-heuristic.
 /A*PA2-full/ additionally uses more complicated techniques:
 incremental-doubling, and the gap-chaining seed heuristic introduced by
 A*PA with pre-pruning.
 
+
 *Parameters.*
 For A*PA2, we fix block size $B=256$. For A*PA2-full, we use the gap-chaining seed
 heuristic (GCSH) of A*PA with exact matches ($r=1$) and seed length $k=12$. We
 pre-prune matches by looking ahead up to $p=14$ seeds.
-A detailed parameter comparison can be found in [[*Comparison with other aligners]].
+A detailed parameter comparison can be found in [[#app-comparison]].
 For A*PA, we use inexact matches ($r=2$) with seed length $k=15$ by default, and
-only change this for the low-divergence SARS-CoV-2 dataset, where we use exact
-matches ($r=1$) intead.
+only change this for the low-divergence SARS-CoV-2 dataset and $4\%$ divergence
+synthetic data, where we use exact matches ($r=1$) instead.
 
 *Execution.*
 We ran all benchmarks using PaBench ([[https://github.com/pairwise-alignment/pa-bench][github.com/pairwise-alignment/pa-bench]]) on
@@ -808,37 +794,37 @@ data from disk. For A*PA2-full, reported times do include the time to find match
 initialize the heuristic.
 
 ** Comparison with other aligners
+
 *Speedup on real data.*
-[[real-summary]] compares the running time of aligners on real datasets, and
-[[real-table]] shows average running times more precisely.
-For long ONT reads, with $6\%-7\%$ divergence, A*PA2-full is $20\times$ faster
+[[real-summary]] compares the running time of aligners on real datasets.
+[[#app-comparison]] contains a corresponding table of average runtimes.
+For long ONT reads, with $6\%-7\%$ divergence, A*PA2-full is $19\times$ faster
 than Edlib, BiWFA, and A*PA in average running time, and using the gap-chaining
 seed heuristic in A*PA2-full provides speedup over A*PA2-simple.
 
 On shorter sequences, the overhead of initializing the heuristic in A*PA2-full is large, and
-A*PA2-simple is faster. For the <10kbp and <50kbp datasets ($4$kbp and $11$kbp
-average length), A*PA2-simple is $3.7\times$ and $6.1\times$ faster than other methods.
+A*PA2-simple is faster. For the 10kbp dataset, A*PA2-simple is $5.6\times$
+faster than other exat methods.
 For the shortest (<1kbp ONT reads) and most similar sequences (SARS-CoV-2
 with $1\%$ divergence), BiWFA is usually faster than Edlib and A*PA2-simple. In these cases,
 the overhead of using $256$ wide blocks is relatively large compared to the
 edit distance $s\leq 500$ in combination with BiWFAs $O(s^2+n)$ expected running time.
 
 #+name: real-summary
-#+caption: *Runtime comparison (log).* Each dot shows the running time of a single alignment (right two plots) or the average runtime over $2\%$ of the input pairs (left four plots). Box plots show the three quartiles, and the red circled dot shows the average running time over all alignments. Dots on the red line indicate timeouts. On the >500kbp reads, A*PA2-full is $20\times$ faster than other methods.
+#+caption: *Runtime comparison (log).* Each dot shows the running time of a single alignment (right two plots) or the average runtime over $2\%$ of the input pairs (left four plots). Box plots show the three quartiles, and the red circled dot shows the average running time over all alignments. For A*PA, exact matches ($r=1$) are used for the SARS-CoV-2 dataset, some alignments $\geq10$kbp time out, and the shown average is a lower bound on the true average. Approximate aligners WFA Adaptive and Block Aligner are indicated with a triangle. On the >500kbp reads, A*PA2-full is $20\times$ faster than other methods.
 #+attr_html: :class inset large
 [[file:plots/real-summary.svg]]
 
-#+name: real-table
-#+caption: *Average runtime per sequence* of each aligner on each dataset. Cells marked with $>$ are a lower bound due to timeouts. Speedup is reported as the fastest A*PA2 variant compared to the fastest of Edlib, BiWFA, and A*PA.
-#+attr_html: :class small
-|              | SARS-CoV-2 pairs (ms) | <1kbp ONT reads  (ms) | <10kbp ONT reads  (ms) | <50kbp ONT reads  (ms) | >500kbp ONT reads (s) | >500kbp ONT reads + gen.var. (s) |
-|--------------+-----------------------+-----------------------+------------------------+------------------------+-----------------------+-------------------------------------------|
-| Edlib        |                 11.56 |                 0.122 |                   1.17 |                    8.2 |                  3.72 |                                      5.17 |
-| BiWFA        |                  1.51 |                 0.049 |                   1.02 |                   12.9 |                  6.29 |                                      9.71 |
-| A*PA         |                  6.84 |                 0.546 |                  15.22 |                  203.2 |                 14.14 |                                     13.53 |
-| A*PA2 simple |                  0.85 |                 0.051 |                   0.27 |                    1.3 |                  0.52 |                                      0.69 |
-| A*PA2 full   |                  1.98 |                 0.082 |                   0.40 |                    1.6 |                  0.19 |                                      0.25 |
-| Speedup      |             1.8\times |            0.96\times |              3.7\times |              6.1\times |              20\times |                                  21\times |
+*Comparison with approximate aligners.*
+For the smallest datasets, BiWFA is about as fast as the approximate methods WFA
+Adaptive and Block Aligner, while for the largest datasets A*PA2-full is
+significantly faster. Only for the set of $10$kbp ONT reads is Block Aligner
+significantly ($\approx 2\times$) faster than the fastest exact method.  For the
+two smallest datasets, approximate aligners do not significantly improve on
+BiWFA.
+Only on the $10$kbp ONT reads dataset is Block Aligner $1.6\times$ faster than
+A*PA2, but it only reports $53\%$ of the alignments correctly. All accuracy
+numbers can be found in [[#app-comparison]].
 
 *Scaling with divergence.*
 [[scaling-e]] compares the runtime of aligners on synthetic sequences of increasing
@@ -856,25 +842,41 @@ For a fixed number of doublings of the threshold, A*PA2 is faster for higher
 divergence because too low thresholds are rejected more quickly.
 
 
-On real data, A*PA and BiWFA slow down as divergence goes up, while Edlib and
-A*PA2 are much less sensitive to this for sequences of length <50kbp, as shown
-in [[*Comparison with other aligners]].
+# On real data, A*PA and BiWFA slow down as divergence goes up, while Edlib and
+# A*PA2 are much less sensitive to this for sequences of length <50kbp, as shown
+# in [[#app-comparison]].
 
 #+name: scaling-e
 #+caption: *Runtime scaling with divergence.* Average running time of aligners over $10$ sequences of length $100$kbp with varying uniform divergence. The right plot is the same but zoomed in.
 #+attr_html: :class inset large
-| [[file:plots/scaling_e.svg]] | [[file:plots/scaling_e_zoom.svg]] |
+| [[file:plots/scaling_e.labels.svg]] | [[file:plots/scaling_e_zoom.labels.svg]] |
 
+*Scaling with length.*
+[[scaling-n]] compares the runtime of aligners on synthetic random sequences of increasing
+length and constant uniform divergence.
+BiWFA's runtime is quadratic and is fast for sequences up to $3000$bp.
+As expected, A*PA2-simple has very similar scaling to Edlib but is faster by a
+constant factor. A*PA2-full includes the gap-chaining seed heuristic used by
+A*PA, resulting in comparable speed and near-linear scaling for both of them
+when $d=4\%$. For more divergent sequences, A*PA2-full is faster than A*PA since
+initializing the A*PA heuristic with inexact matches is relatively slow.
+The reason A*PA2-full is slower than A*PA for sequences of length $10$Mbp is
+that A*PA2-full uses seed length $k=12$ instead of $k=15$, causing the number of matches
+to explode when $n$ approaches $4^{12}\approx 16 \cdot 10^6$.
 
-*Memory usage* of A*PA2 is around $30$MB on average and at most
-$200$MB when aligning >500kbp sequences, and always less than $10$MB for all
-shorter sequences ([[*Comparison with other aligners]]).
+#+name: scaling-n
+#+caption: *Runtime scaling with length.* Log-log plot of average running time of aligners on synthetic sequences of increasing length with $4\%$ divergence (left) and $12\%$ divergence (right). A*PA uses exact matches ($r=1$) for $d=4\%$ and inexact matches ($r=2$) for $d=12\%$. For sequences of length $n$, averages are over $10^7/n$ pairs. Lines are fitted in the log-log domain. The region between linear and quadratic growth is shaded in grey.
+#+attr_html: :class inset large
+| [[file:plots/scaling_n_e0.05.labels.svg]] | [[file:plots/scaling_n_e0.15.labels.svg]] |
+
+*Memory usage* of A*PA2 on >500kbp sequences is at most $200$MB and $30$MB in
+median. For shorter sequences, memory usage is always less than $10$MB ([[#app-comparison]]).
 
 ** Effects of methods
 
 *Incremental improvements.*
 [[real-incremental]] shows the effect of one-by-one adding improvements to A*PA2 on
->500kbp long sequences, starting with Ukkonens band-doubling method using Myers'
+>500kbp long sequences, starting with Ukkonen's band-doubling method using Myers'
 bitpacking. We first change to the $\g(u) + \cgap(u, v_t)$ domain, making it
 comparable to Edlib. Then we process blocks of $256$ columns at a time and only
 store differences at block boundaries giving $\approx 2\times$ speedup. Adding
@@ -889,7 +891,7 @@ Incremental doubling (ID), the gap-chaining seed heuristic (GCSH), pre-pruning
 $3\times$ speedup in the first quantile.
 
 #+name: real-incremental
-#+caption: *Effect of adding features.* Box plots showing the performance improvements of A*PA2 when incrementally adding new methods one-by-one. A*PA2-simple corresponds to teh rightmost red columns, and A*PA2-full corresponds to the rightmost blue column.
+#+caption: *Effect of adding features.* Box plots showing the performance improvements of A*PA2 when incrementally adding new methods one-by-one. A*PA2-simple corresponds to the rightmost red columns, and A*PA2-full corresponds to the rightmost blue column.
 #+attr_html: :class inset large
 [[file:plots/real-incremental.svg]]
 
@@ -901,16 +903,24 @@ used, and for very short sequences <10kbp, up to half the time is spent on
 tracing the optimal alignment.
 
 #+name: real-timing
-#+caption: *Runtime distribution per stage of A*PA2,* using A*PA2-full for >500kbp sequences in the left two plots and A*PA2-simple in the remaining four plots. Each column corresponds to a (set of) alignment(s), which are sorted by total runtime. /Overhead/ is the part of the runtime not measured in one of the other parts and includes the time to build the profile.
+#+caption: *Runtime distribution per stage of A*PA2,* using A*PA2-simple for short sequences and A*PA2-full for the two rightmost >500kbp datasets. Each column corresponds to a (set of) alignment(s), which are sorted by total runtime. /Overhead/ is the part of the runtime not measured in one of the other parts and includes the time to build the profile.
 #+attr_html: :class inset large
 [[file:plots/real-timing.svg]]
+
 * Discussion
-We have shown that A*PA2 is over $20\times$ faster than other methods when aligning $>500$kbp
-ONT reads with $6\%$ divergence, $2$ to $6\times$ faster for sequences of length
-$4$ kbp to $50$ kbp, and only slightly slower than BiWFA for very short ($<1000$ bp) and
-very similar ($<2\%$ divergence) sequences.
-A*PA2 achieves this by building on Edlib, using bitpacking, blocks, SIMD, the
-gap-chaining seed heuristic, and pre-pruning.
+We have shown that A*PA2 is $19\times$ faster than other methods when
+aligning $>500$kbp ONT reads with $6\%$ divergence, $5.6\times$ faster for
+sequences of average length $11$kbp, and only slightly slower than BiWFA for
+very short ($<1000$ bp) and very similar ($<2\%$ divergence) sequences.
+A*PA2's speed is also comparable to approximate aligners, and is faster for long
+sequences, nearly closing the gap between approximate and exact methods.
+A*PA2
+achieves this by building on Edlib, using band doubling, bitpacking, blocks,
+SIMD, the gap-chaining seed heuristic, and pre-pruning. The effect of this is
+that A*PA2-simple has similar scaling behaviour as Edlib in both length and
+divergence, but with a significantly better constant.  A*PA2-full additionally
+includes the A*PA heuristics and achieves the best of both worlds:
+the near-linear scaling with length of A*PA when divergence is small, and the efficiency of Edlib.
 
 *Limitations.*
 1. The main limitation of A*PA2-full is that the heuristic requires finding all
@@ -938,7 +948,7 @@ gap-chaining seed heuristic, and pre-pruning.
    SIMD-based methods for affine costs.
 5. Lastly, TALCO (Tiling ALignment using COnvergence of traceback pointers,
    https://turakhia.ucsd.edu/research/) provides an interesting idea: it may be
-   possible start traceback while still computing blocks, saving memory.
+   possible start traceback while still computing blocks, thereby saving memory.
 
 * Acknowledgements
 :PROPERTIES:
@@ -946,25 +956,62 @@ gap-chaining seed heuristic, and pre-pruning.
 :END:
 
 I am grateful to Daniel Liu for discussions, feedback, and suggesting additional
-papers relating to this topic, to Andrea Guarracino and Santiago Marco-Sola for
-sharing the WFA and BiWFA benchmark datasets, and to Gary Benson for help with
-debugging the BitPAl bitpacking code.  RGK is financed by ETH Research Grant
-ETH-1721-1 to Gunnar Rätsch.
+related papers, to André Kahles, Harun Mustafa, and Gunnar Rätsch for feedback
+on the manuscript, to Andrea Guarracino and Santiago Marco-Sola for sharing the
+WFA and BiWFA benchmark datasets, and to Gary Benson for help with debugging the
+BitPAl bitpacking code.  RGK is financed by ETH Research Grant ETH-1721-1 to
+Gunnar Rätsch.
 
 * Conflict of interest
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
 None declared.
 
 * Appendix
-** BitPAl
+** Bitpacking
+[[myers]] shows a SIMD version of Myers' bitpacking algorithm, and
 [[bitpal]] shows a SIMD version of the edit distance bitpacking scheme explained
-in the supplement of [cite/t:@bitpal]. Like Myers method it requires $20$ instructions.
+in the supplement of [cite/t:@bitpal]. Both methods require $20$ instructions.
 
-We note that the method in BitPAl is reported as requiring $15$ instructions,
-but those exclude the shifting out of the bottom horizontal difference (four
-instructions) and the initialization of the carry (one operation). We require
+Both methods are usually reported to use fewer than $20$ instructions,
+but exclude the shifting out of the bottom horizontal difference (four
+instructions) and the initialization of the carry for BitPAl (one operation). We require
 these additional outputs/inputs since we want to align multiple $64$bit lanes
 below each other, and the horizontal difference in between must be carried
 through.
+
+#+name: myers
+#+caption: *Myers' bitpacking.* Rust code for SIMD version of Myers' bitpacking algorithm. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
+#+begin_src rust
+pub fn compute_block_simd_myers(
+    hp0: &mut Simd<u64, 4>,  // 0 or 1. Indicates +1 difference on top.
+    hm0: &mut Simd<u64, 4>,  // 0 or 1. Indicates -1 difference on top.
+    vp: &mut Simd<u64, 4>,  // 64-bit indicator of +1 differences on left.
+    vm: &mut Simd<u64, 4>,  // 64-bit indicator of -1 differences on left.
+    eq: Simd<u64, 4>,  // 64-bit indicator which characters equal the top char.
+) {
+    let vx = eq | *vm;
+    let eq = eq | *hm0;
+    // The addition carries information between rows.
+    let hx = (((eq & *vp) + *vp) ^ *vp) | eq;
+    let hp = *vm | !(hx | *vp);
+    let hm = *vp & hx;
+    // Extract the high bit as bottom horizontal difference.
+    let right_shift = Simd::<u64,4>::splat(63);   // Shift each lane by 63.
+    let hpw = hp >> right_shift;
+    let hmw = hm >> right_shift;
+    // Insert the top horizontal difference.
+    let left_shift = Simd::<u64,4>::splat(1);     // Shift each lane by 1.
+    let hp = (hp << left_shift) | *hp0;
+    let hm = (hm << left_shift) | *hm0;
+    // Update the input-output parameters.
+    ,*hp0 = hpw;
+    ,*hm0 = hmw;
+    ,*vp = hm | !(vx | hp);
+    ,*vm = hp & vx;
+}
+#+end_src
 
 #+name: bitpal
 #+caption: Rust code for SIMD version of BitPAl's bitpacking. Computes four independent words on an antidiagonal in parallel in $20$ instructions.
@@ -1001,6 +1048,9 @@ pub fn compute_block_simd_bitpal(
 #+end_src
 
 ** Comparison with other aligners
+:PROPERTIES:
+:CUSTOM_ID: app-comparison
+:END:
 Here we provide further results on the comparison of aligners.
 
 *Dataset statistics.* Detailed statistics on the datasets are provided in [[statistics]].
@@ -1018,27 +1068,63 @@ The SARS-CoV-2 dataset stands out for having only $1.5\%$ divergence.
 | ONT >500k            | A*PA   |     50 |     500 |      594 |     849 |     2.7 |      6.1 |    16.7 |          0.1 |         1.3 |
 | ONT >500k + gen.var. | BiWFA  |     48 |     502 |      632 |    1053 |     4.3 |      7.2 |    18.2 |        *1.9* |          42 |
 
-*Real data scaling by divergence.* [[real-summary-scatter]] shows the same data as [[real-summary]], but split out by divergence.
+*Runtime comparison on real data.* [[real-table]] shows the numeric value of the average runtime of each aligner in [[real-summary]].
+#+name: real-table
+#+caption: *Average runtime per sequence* of each aligner on each dataset. Cells marked with $>$ are a lower bound due to timeouts. Speedup is reported as the fastest A*PA2 variant compared to the fastest of Edlib, BiWFA, and A*PA.
+#+attr_html: :class small
+|               | SARS-CoV-2 pairs (ms) | 1kbp ONT reads (ms) | 10kbp ONT reads (ms) | >500kbp ONT reads (s) | >500kbp ONT reads + gen.var. (s) |
+|---------------+-----------------------+---------------------+----------------------+-----------------------+----------------------------------|
+| Edlib         |                 11.14 |               0.110 |                  8.0 |                  3.74 |                             5.20 |
+| BiWFA         |                  1.13 |               0.042 |                  9.3 |                  4.47 |                             6.96 |
+| A*PA          |                  6.25 |               0.514 |               >190.1 |                >14.01 |                           >12.92 |
+| WFA Adaptive  |                  0.85 |               0.038 |                  3.0 |                  1.04 |                             0.81 |
+| Block Aligner |                  2.35 |               0.038 |                  0.9 |                  0.63 |                             0.68 |
+| A*PA2 simple  |                  0.89 |               0.052 |                  1.4 |                  0.58 |                             0.78 |
+| A*PA2 full    |                  2.00 |               0.083 |                  1.7 |                  0.20 |                             0.27 |
+| Speedup       |             1.3\times |          0.81\times |            5.6\times |            18.8\times |                       19.0\times |
 
-#+name: real-summary-scatter
-#+caption: Scatter plot of runtime of aligners. Each dot shows the average divergence and runtime of the corresponding set of sequences.
-#+attr_html: :class inset large
-[[file:plots/real-summary-scatter.svg]]
+*Approximate aligner accuracy.* [[accuracy]] shows the percentage of alignments in
+each dataset for which approximate methods report the correct distance.
+The accuracy of WFA Adaptive drops a lot for the >500kbp dataset with genetic
+variation, since these alignments contain gaps of thousands of basepairs, much
+larger than the $50$bp cutoff after which trailing diagonals are dropped.
+
+#+name: accuracy
+#+caption: *Percentage of correctly aligned reads* for approximate aligners.
+#+attr_html: :class small
+|               |   SARS-CoV-2 pairs |   1kbp ONT reads |   10kbp ONT reads |   >500kbp ONT reads |   >500kbp ONT reads + gen.var. |
+|---------------+--------------------+------------------+-------------------+---------------------+--------------------------------|
+| WFA Adaptive  |                 92 |               93 |                49 |                  60 |                              4 |
+| Block Aligner |                 34 |               85 |                53 |                  96 |                             50 |
+
+| WFA Adaptive  | 92 | 93 | 49 | 60 |  4 |
+| Block Aligner | 34 | 85 | 53 | 96 | 50 |
+# *Real data scaling by divergence.* [[real-summary-scatter]] shows the same data as [[real-summary]], but split out by divergence.
+
+# #+name: real-summary-scatter
+# #+caption: Scatter plot of runtime of aligners. Each dot shows the average divergence and runtime of the corresponding set of sequences.
+# #+attr_html: :class inset large
+# [[file:plots/real-summary-scatter.svg]]
 
 *Memory usage.* [[real-memory]] shows the memory usage of all compared aligners.
 
 #+name: real-memory
-#+caption: Memory usage of aligners, measured as the increase in =max_rss= before and after aligning a pair of sequences. These measurements are rather unstable, so should only be taken as an indication of the order of magnitude.
+#+caption: Memory usage of aligners, measured as the increase in =max_rss= before and after aligning a pair of sequences.
 #+attr_html:
-| Memory [MB]  |   SARS-CoV-2 pairs Median |   SARS-CoV-2 pairs Max |   <1kbp ONT reads Median |   <1kbp ONT reads Max |   <10kbp ONT reads Median |   <10kbp ONT reads Max |   <50kbp ONT reads Median |   <50kbp ONT reads Max |   >500kbp ONT reads Median |   >500kbp ONT reads Max |   >500kbp ONT reads + gen.var. Median |   >500kbp ONT reads + gen.var. Max |
-|--------------+---------------------------+------------------------+--------------------------+-----------------------+---------------------------+------------------------+---------------------------+------------------------+----------------------------+-------------------------+---------------------------------------+------------------------------------|
-| Edlib        |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                          0 |                       0 |                                     0 |                                  0 |
-| BiWFA        |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                          5 |                      12 |                                     0 |                                  0 |
-| A*PA         |                         0 |                    237 |                        0 |                     0 |                         0 |                     43 |                       181 |                    873 |                         85 |                    3454 |                                   160 |                               6870 |
-| A*PA2 simple |                         2 |                      5 |                        0 |                     0 |                         0 |                      0 |                         4 |                      6 |                          0 |                      57 |                                     4 |                                166 |
-| A*PA2 full   |                         0 |                      0 |                        0 |                     0 |                         0 |                      0 |                         0 |                      0 |                         31 |                      83 |                                     7 |                                143 |
+| Memory [MB] |   SARS-CoV-2 pairs Median |   SARS-CoV-2 pairs Max |   1kbp ONT reads Median |   1kbp ONT reads Max |   10kbp ONT reads Median |   10kbp ONT reads Max |   >500kbp ONT reads Median |   >500kbp ONT reads Max |   >500kbp ONT reads + gen.var. Median |   >500kbp ONT reads + gen.var. Max |
+|---------------+---------------------------+------------------------+-------------------------+----------------------+--------------------------+-----------------------+----------------------------+-------------------------+---------------------------------------+------------------------------------|
+| Edlib         |                         0 |                      0 |                       0 |                    0 |                        0 |                     0 |                          0 |                       0 |                                     0 |                                  0 |
+| BiWFA         |                         0 |                      0 |                       0 |                    0 |                        0 |                     0 |                          4 |                      11 |                                     0 |                                  2 |
+| A*PA          |                         0 |                    236 |                       0 |                    0 |                      228 |                   873 |                         84 |                    3453 |                                   158 |                               6868 |
+| WFA Adaptive  |                         0 |                     11 |                       0 |                    0 |                        0 |                     0 |                          0 |                       0 |                                     0 |                                  0 |
+| Block Aligner |                         0 |                     16 |                       0 |                    0 |                        0 |                     3 |                        583 |                    1189 |                                   610 |                               2171 |
+| A*PA2 simple  |                         2 |                      5 |                       0 |                    0 |                        4 |                     6 |                          0 |                      55 |                                     2 |                                164 |
+| A*PA2 full    |                         0 |                      0 |                       0 |                    0 |                        0 |                     0 |                         30 |                      82 |                                     6 |                                141 |
 
 ** Effects of methods
+:PROPERTIES:
+:CUSTOM_ID: app-effects
+:END:
 *Ablation.* [[real-ablation]] shows how the performance of A*PA2 changes as individual features are removed.
 #+name: real-ablation
 #+caption: *Ablation.* Box plots showing how the performance of A*PA2-simple and A*PA2-full changes when removing features.
@@ -1059,9 +1145,14 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 [[file:plots/real-params.svg]]
 
 * TODO
-- Rerun with =debug = false=, =strip = true=, =lto = true=, =codegen-units=1=.
-- update tables
+- General: it looks like "Previous work" was written before the previous parts of the intro since a lot of terms are defined here that should be defined earlier in the intro.
+- Intro:
+  - the first time you mention it, say that DP stands for dynamic programming. give a brief introduction into what it is to remind the reader what a DP matrix is (needed for later)
+  - Try to replace quoted text with shorter paraphrases
+  - When bringing up new methods, try to give pros and cons for each one.
 - subcaptions
-- Run BSAlign?
+# Run BSAlign
+# How about padding upwards?
+# end-of-proof box
 
 #+print_bibliography:
