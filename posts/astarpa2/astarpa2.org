@@ -1,11 +1,11 @@
-#+title: [WIP] A*PA2: up to 20x faster exact global alignment
+#+title: A*PA2: up to 20x faster exact global alignment
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: paper-draft
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+date: <2024-02-29>
+#+date: <2024-03-23>
 #+author: Ragnar Groot Koerkamp
 
 \begin{equation*}
@@ -908,12 +908,13 @@ tracing the optimal alignment.
 [[file:plots/real-timing.svg]]
 
 * Discussion
-We have shown that A*PA2 is $19\times$ faster than other methods when
-aligning $>500$kbp ONT reads with $6\%$ divergence, $5.6\times$ faster for
-sequences of average length $11$kbp, and only slightly slower than BiWFA for
+We have shown that by incorporating many existing techniques and by writing highly
+performant code, A*PA2 achieves $19\times$ speedup over other methods when
+aligning $>500$kbp ONT reads with $6\%$ divergence, $5.6\times$ speedup for
+sequences of average length $11$kbp, and only a slight slowdown over BiWFA for
 very short ($<1000$ bp) and very similar ($<2\%$ divergence) sequences.
 A*PA2's speed is also comparable to approximate aligners, and is faster for long
-sequences, nearly closing the gap between approximate and exact methods.
+sequences, thereby nearly closing the gap between approximate and exact methods.
 A*PA2
 achieves this by building on Edlib, using band doubling, bitpacking, blocks,
 SIMD, the gap-chaining seed heuristic, and pre-pruning. The effect of this is
