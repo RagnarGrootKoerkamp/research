@@ -48,16 +48,15 @@ human genome having $6\%$ divergence on average. On shorter ONT reads of
 * Introduction
 
 The problem of /global pairwise alignment/ is to find the shortest sequence of
-edit operations (insertions, deletions, substitutions) to convert a string $A$
-into a second string $B$ [cite:@nw;@vintsyuk68], where the number of such
-operations is called the /Levenshtein distance/ or /edit distance/ $s$
+edit operations (insertions, deletions, substitutions) to convert a string
+into a second string [cite:@nw;@vintsyuk68], where the number of such
+operations is called the /Levenshtein distance/ or /edit distance/
 [cite:@levenshtein;@wagner74].
 
 Over time, the length of genomic reads has increased from hundreds of basepairs
 to hundreds of thousands basepairs now. Meanwhile, the complexity of exact
 algorithms has not been improved by more than a constant factor since the
-introduction of the $O(s^2+n)$ diagonal transition algorithm [cite:@ukkonen85],
-where $n=|A|$ is the sequence length.
+introduction of the diagonal transition algorithm [cite:@ukkonen85;@myers86].
 
 Our recent work A*PA [cite:@astarpa] uses the A* shortest path algorithm to
 speed up alignment and has near-linear runtime when divergence is low.  A
@@ -127,46 +126,43 @@ implementation (points 1., 2., and 3.).  Then, we reduce the amount of work done
 In the following, we give a brief recap of developments that this work builds
 on, in chronological order per approach.  See also e.g. the reviews by
 [cite/t:@kruskal83] and [cite/t:@navarro01], and the introduction of our
-previous paper [cite/t:@astarpa].
+previous paper [cite/t:@astarpa]. [[*Preliminaries]] covers relevant topics more formally.
 
 *** Needleman-Wunsch
-This problem has classically been approached as a dynamic
-programming problem. For string lengths $n$ and $m$, [cite/t:@nw]
-introduced the first $O(n^2m)$ algorithm. [cite/t:@sellers] and
-[cite/t:@wagner74] improved this to what is now
-known as the $O(nm)$ /Needleman-Wunsch algorithm/, building on the quadratic algorithm for /longest common
-subsequence/ by [cite/t:@sankoff].
+Pairwise alignment has classically been approached as a dynamic programming
+problem. For input strings of lengths $n$ and $m$, this method creates a $(n+1)\times
+(m+1)$ table that is filled cell by cell using a recursive formula.
+[cite/t:@nw] gave the first $O(n^2m)$ algorithm, and [cite/t:@sellers] and
+[cite/t:@wagner74] improved this to what is now known as the $O(nm)$
+/Needleman-Wunsch algorithm/, building on the quadratic algorithm for /longest
+common subsequence/ by [cite/t:@sankoff].
 
 *** Graph algorithms
-It was already realized early on that this problem
-corresponds to finding the shortest path from $v_s$ to $v_t$ in the /alignment
-graph/, which is also called /edit graph/ or /dependency graph/
-[cite:@vintsyuk68;@ukkonen85]. Both [cite/t:@ukkonen85] and [cite/t:@myers86]
+It was already realized early on that an optimal alignment
+corresponds to a shortest path in the /edit graph/
+[cite:@vintsyuk68;@ukkonen85] (see [[*Preliminaries]]). Both [cite/t:@ukkonen85] and [cite/t:@myers86]
 remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
-taking $O(ns)$ time[fn::Although Ukkonen didn't realize this faster runtime and
-only gave a bound of $O(nm \log (nm))$.] ([[intro]]a), where $s$ is the edit distance between
-the two strings.  However, [cite/t:@myers86 p. 2] observes that
+taking $O(ns)$ time ([[intro]]a), where $s$ is the edit distance between
+the two strings and is typically much smaller than the string length.
+(Although Ukkonen only gave a bound of $O(nm \log (nm))$.)  However, [cite/t:@myers86 p. 2] observes that
 #+begin_quote
 the resulting algorithm involves a relatively complex discrete priority queue
-and this queue may contain as many as O(ns) entries even in the case where just
+and this queue may contain as many as $O(ns)$ entries even in the case where just
 the length of the [...] shortest edit script is being computed.
 #+end_quote
 [cite/t:@hadlock88detour] realized that Dijkstra's algorithm can be improved
 upon by using A* [cite:@astar-hart67], a more /informed/ algorithm that uses a
-/heuristic/ function $h(u)$ that gives a lower bound on the edit distance
-$\h(u)$ between the suffixes following DP state $u$. He uses two heuristics, the widely
-used /gap cost/ heuristic $h(u)=\cgap(u, v_t)$
+/heuristic/ function $h$ that gives a lower bound on the remaining edit distance
+between two suffixes. He uses two heuristics, the widely
+used /gap cost/ heuristic
 [cite:@ukkonen85;@hadlock88detour;@wu90-O-np;@spouge89;@spouge91;@papamichail2009;]
 that simply uses the difference between the lengths of the suffixes as lower
 bound ([[intro]]d), and a new improved heuristic based on character frequencies in the two
-suffixes. A*PA [cite:@astarpa] improves the /seed heuristic/ [cite:@astarix-2] to the /gap-chaining seed heuristic/ with /pruning/
+suffixes. A*PA [cite:@astarpa] improves the /seed heuristic/ of [cite/t:@astarix-2] to the /gap-chaining seed heuristic/ with /pruning/
 to obtain near-linear runtime when errors are uniform random ([[intro]]g).
-Nevertheless, as [cite/t:@spouge91 p. 3] states:
+Nevertheless, as [cite/t:@spouge91 p. 3] states,
 #+begin_quote
-Many algorithms for finding optimal paths in non-lattice graphs also exist
-[cite:@dijkstra59; @astar-hart67; @rubin74], but algorithms exploiting the
-lattice structure of an alignment graph are usually faster. In molecular
-biology, speed is important, ...
+algorithms exploiting the lattice structure of an alignment graph are usually faster.
 #+end_quote
 and further [cite:@spouge89 p. 4]:
 #+begin_quote
@@ -177,48 +173,29 @@ In this work we follow this advice and replace the plain A* search in A*PA with 
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
 *** Computational volumes
-TODO: REWRITE THIS TO SIMPLE NOTATION AND MOVE TO PRELIMS.
-
 [cite/t:@wilbur-lipman-83] is, to our knowledge, the first paper that speeds up
 the $O(nm)$ DP algorithm, by only considering states near diagonals with many
 /k-mer matches/, but at the cost of giving up the exactness of the method.
-[cite/t:@fickett84 p. 177] notes that for $t\geq s$ only those DP-states with
-cost $\g(u)$ at most $t$ need to be computed:
-#+begin_quote
-However it is possible to fill the matrix in many different orders, the only
-restriction being that the calculation of any given $d_{ij}$ depends on already
-having the values of the three elements up and to the left of it.
-
-[...]
-
-But the only alignments of subsequences which are relevant are ones at least as
-good (distance at least as small) as the overall one. I.e. one really only needs
-those $d_{ij}$ which are below a fixed bound.
-#+end_quote
-This only requires $O(nt)$ time, which is fast when $t$ is an accurate bound on
-the distance $s$. For example $t$ can be set as an upper bound for the
+[cite/t:@fickett84] notes that for some chosen parameter $t$ that is at
+least the edit distance $s$, only those DP-states with cost at most $t$ need to
+computed. This only requires $O(nt)$ time, which is fast when $t$ is an accurate bound on
+the distance $s$. For example $t$ can be set as a known upper bound for the
 data being aligned, or as the length of a suboptimal alignment.  When
 $t=t_0$ turns out too small, a larger new bound $t_1$ can be chosen, and only
-states with distance in between $t_0$ and $t_1$ have to be computed.  This is
-implemented by keeping for each row the index of the first and last state with
-value at most $t_0$, and skipping over already computed states.  In the limit,
-where $t$ increases by $1$ in each iteration, this closely mirrors Dijkstra's algorithm.
+states with distance in between $t_0$ and $t_1$ have to be computed.
+When $t$ increases by $1$ in each iteration, this closely mirrors Dijkstra's algorithm.
 
 [cite/t:@ukkonen85] introduces a very similar idea, statically bounding the
-computation to only those states that can be on a path of some small length at most $t$
-through the graph ([[intro]]c). When the sequences have the same length ($n=m$), this only
-considers diagonals $-t/2$ to $t/2$, where diagonal $0$ is the main diagonal of
-the DP-matrix.
-
-On top of this, [cite/t:@ukkonen85] introduces /band doubling/: $t_0=1$ can be
-/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$, so that
-the alignment can be found in $O(ns)$ time.
+computation to only those states that can be contained in a path of length at most $t$
+from the start to the end of the graph ([[intro]]c).
+On top of this, Ukkonen introduces /band doubling/: $t_0=1$ can be
+/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$.
+This find the alignment in $O(ns)$ time.
 
 [cite/t:@spouge89] unifies the methods of
-[cite/t:@fickett84] and [cite/t:@ukkonen85] in /computational volumes/
-(see [[*Preliminaries]]): subgraphs of the full edit graph that are guaranteed to
-contain the shortest paths that are much smaller and can hence be computed faster.
-As [cite/t:@spouge89 p. 1559] notes:
+Fickett and Ukkonen in /computational volumes/
+(see [[*Preliminaries]]): small subgraphs of the full edit graph that are guaranteed to
+contain the shortest paths. As Spouge notes:
 #+begin_quote
 The order of computation (row major, column major or antidiagonal) is just a
 minor detail in most algorithms.
@@ -226,22 +203,24 @@ minor detail in most algorithms.
 But this is exactly what was investigated a lot in the search for more efficient implementations.
 
 *** Parallelism
-In the 1990s, the focus shifted from
-reducing the number of computed states to computing states faster through
-advancements in implementation and hardware. This resulted in a plethora of new
-methods. We focus here on methods for edit distance.
-Many recent methods optimize for arbitrary scoring schemes and affine costs, but we do not
-discuss these in detail here [cite:@sw;@gotoh;@bergeron02;@suzuki-kasahara;@bsalign].
+In the 1990s, the focus shifted from reducing the number of computed states to
+computing states faster through advancements in implementation and hardware.
+This resulted in a plethora of new methods.  While there many recent methods
+optimizing the computation of arbitrary scoring schemes and affine costs
+[cite:@sw;@gotoh;@bergeron02;@suzuki-kasahara;@bsalign], here we focus on
+methods for computing edit distance.
 
 The first technique in this direction is /microparallelism/ [cite:@alpern95],
-where each (64 bit) computer word is divided into multiple (e.g. 16 bit) parts,
-and word-size operations modify all (4) parts in parallel.
+also called SWAR (SIMD within a register),
+where each ($64$ bit) computer word is divided into multiple (e.g. $16$ bit) parts,
+and word-size operations modify all ($4$) parts in parallel.
 This was then applied with /inter-sequence parallelism/ to align a
 given query to multiple reference sequences in parallel
 [cite:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11].
-[cite/t:@hughey96] was the first to note that
-/anti-diagonals/ of the DP matrix are independent and can be computed in parallel, and
-[cite/t:@wozniak97] applied SIMD for this purpose.
+[cite/t:@hughey96] notes that /anti-diagonals/ of the DP matrix are independent
+and can be computed in parallel, to speed up single alignments. [cite/t:@wozniak97] applied SIMD (single
+instruction, multiple data) for this purpose, which are special CPU instructions
+that operate on multiple (currently up to $8$, for AVX-512) computer words at a time.
 
 [cite/t:@rognes00 p. 702] also use microparallelism, but use /vertical/
 instead of anti-diagonal vectors:
@@ -254,40 +233,39 @@ To work around these dependencies, [cite/t:@farrar] introduces an alternative /s
 interleaved with each other. A*PA2 does not use this, but for example
 [cite/t:@bsalign] does.
 
-[cite/t:@myers99] introduces a /bitpacking/ algorithm specifically
-for edit distance ([[intro]]f). It bit-encodes the differences between $w=64$ states in a
-column into two computer words, and an efficient algorithm to operate on them.
-BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative bitpacking scheme based on a
-slightly different bit-encoding, but as both methods end up using $20$
-instructions (see [[*Bitpacking]]) we did not pursue this further.
-
+[cite/t:@myers99] introduces a /bitpacking/ algorithm specifically for edit
+distance ([[intro]]f). It bit-encodes the differences between $w=64$ states in a
+column into two computer words and gives an efficient algorithm to operate on
+them. This provides a significant speedup over previous methods.  The supplement of
+BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative scheme for edit
+distance based on a different bit-encoding, but as both methods end up using
+$20$ instructions (see [[*Bitpacking]]) we did not pursue this further.
 
 *** Tools
-There are multiple semi-global aligners that implement $O(nm)$ (semi)-global
+There are many semi-global aligners that implement $O(nm)$ (semi)-global
 alignment using numerous of the aforementioned implementation
 techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], SWIPE [cite:@rognes11], Opal
 [cite:@opal], libssa [cite:@libssa],  SWPS3
-[cite:@swps3], SSW library [cite:@ssw-library] ([[https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library][link]]), and KSW2 [cite:@suzuki-kasahara;@minimap2].
+[cite:@swps3], SSW library [cite:@ssw-library] ([[https://github.com/mengyao/Complete-Striped-Smith-Waterman-Library][link]]).
 
 Dedicated global alignment implementations implementing band-doubling are much rarer.
-Edlib [cite:@edlib] implements the band doubling of [cite/t:@ukkonen85] using
-the $\g(u)+\cgap(u, v_t)\leq t$ computational volume of [cite/t:@spouge91] and
-the bitpacking of [cite/t:@myers99] ([[intro]]d).
+Edlib [cite:@edlib] implements $O(ns)$ band doubling and Myers' bitpacking ([[intro]]d).
+KSW2 implements band doubling for affine costs [cite:@suzuki-kasahara;@minimap2].
 WFA and BiWFA [cite:@wfa;@biwfa] implement the $O(n+s^2)$ expected time /diagonal transition/
 algorithm [cite:@ukkonen85;@myers86] ([[intro]]b).
 Block aligner [cite:@block-aligner] is an approximate aligner that can handle
 position-specific scoring matrices whose main novelty is to divide the
-computation into blocks.
-Recently [cite/t:@bsalign] provided a new implementation of band doubling that
-also supports edit distance.
+computation into larger blocks.
+Recently [cite/t:@bsalign] provided a new implementation of band doubling based
+on Farrar's striped method that focusses on affine costs but also supports edit distance.
 Lastly, A*PA [cite:@astarpa] directly implements A* on the alignment graph using
 the gap-chaining seed heuristic.
 
 * Preliminaries
 
 #+name: edit-graph
-#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite/t:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix.
-[[file:./edit-graph.drawio.svg]]
+#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite/t:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. All edges are directed from the top-left to the bottom-right. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state.
+[[file:./edit-graph2.drawio.svg]]
 
 *Edit graph.* We take as input two zero-indexed sequences $A$ and $B$ over an alphabet of size
 $4$ of lengths $n$ and $m$.  The /edit graph/ ([[edit-graph]]) contains /states/ $\st ij$ ($0\leq
@@ -299,9 +277,9 @@ substitution cost $1$ otherwise.  The shortest path from $v_s:=\st 00$ to $v_t :
 The /distance/ $d(u,v)$ from $u$ to $v$ is the length of the shortest (minimal
 cost) path from $u$ to $v$, and we use /distance/, /length/, and /cost/ interchangeably.
 Further we write
-$\g(u) := d(v_s, u)$ for the distance from the start,
+$\g(u) := d(v_s, u)$ for the distance from the start to $u$,
 $\h(u) := d(u, v_t)$
-for the distance to the end, and $\f(u) := \g(u) + \h(u)$ for the minimal cost
+for the distance from $u$ to the end, and $\f(u) := \g(u) + \h(u)$ for the minimal cost
 of a path through $u$.
 
 *A** is a shortest path algorithm based on a /heuristic/ function $h(u)$ [cite:@astar-hart67]. A
@@ -911,7 +889,7 @@ tracing the optimal alignment.
 We have shown that by incorporating many existing techniques and by writing highly
 performant code, A*PA2 achieves $19\times$ speedup over other methods when
 aligning $>500$kbp ONT reads with $6\%$ divergence, $5.6\times$ speedup for
-sequences of average length $11$kbp, and only a slight slowdown over BiWFA for
+sequences of average length $11$ kbp, and only a slight slowdown over BiWFA for
 very short ($<1000$ bp) and very similar ($<2\%$ divergence) sequences.
 A*PA2's speed is also comparable to approximate aligners, and is faster for long
 sequences, thereby nearly closing the gap between approximate and exact methods.
@@ -1146,14 +1124,12 @@ smaller block sizes ($B=128$ and $B=64$), which induce more overhead.
 [[file:plots/real-params.svg]]
 
 * TODO
-- General: it looks like "Previous work" was written before the previous parts of the intro since a lot of terms are defined here that should be defined earlier in the intro.
-- Intro:
-  - the first time you mention it, say that DP stands for dynamic programming. give a brief introduction into what it is to remind the reader what a DP matrix is (needed for later)
-  - Try to replace quoted text with shorter paraphrases
-  - When bringing up new methods, try to give pros and cons for each one.
+- latex
 - subcaptions
+
 # Run BSAlign
 # How about padding upwards?
 # end-of-proof box
+# clean API, create astarpa2::simple and astarpa2::full functions.
 
 #+print_bibliography:
