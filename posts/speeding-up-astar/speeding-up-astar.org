@@ -1,4 +1,4 @@
-#+title: Speeding up A*: computational volumes and pre-pruning
+#+title: Speeding up A*: computational volumes and path-pruning
 #+HUGO_TAGS: pairwise-alignment diagonal-transition astar gpu
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
@@ -40,7 +40,7 @@ input. It may be found via any approximate alignment method. Especially when
 $\pi$ happens to already be an optimal alignment this new method should be an
 efficient way to prove that $\pi$ is optimal indeed.
 
-Instead of /match-pruning/ the heuristic on the fly, we /pre-prune/ the
+Instead of /match-pruning/ the heuristic on the fly, we /path-prune/ the
 the matches on $\pi$ up-front. Then, instead of doing A*, we do
 WFA, but only on those states that satisfy $f(u) = g(u) + h(u) \leq t$.
 The simplest way to do this is to simply trim from the ends of each wavefront
@@ -128,7 +128,7 @@ A match is pruned once the state at its start is expanded. After pruning, the
 heuristic typically increases for most states preceding the match. When processing states
 column-by-column, this means that all states that could have been skipped
 because of pruning have already been computed anyway. The solution is to prune
-matches right from the start: /pre-pruning/.
+matches right from the start: /path-pruning/.
 
 *Assume we already have a candidate alignment $\pi^*$ of cost $s$.*
 For now, let's additionally assume that $\pi^*$ is an optimal alignment, as
@@ -169,7 +169,7 @@ $\pi$ is not optimal!
 ** Thoughts on more aggressive pruning
 /This subsection is speculative./
 
-*Full pruning.* Maybe it's even possibly to pre-prune *all* matches on the guessed path. That
+*Full pruning.* Maybe it's even possibly to path-prune *all* matches on the guessed path. That
 makes the heuristic inadmissible, but my feeling is that as long as we make sure
 to expand the start of all pruned matches at some point, this still works. Proof needed.
 
@@ -220,7 +220,7 @@ When the input $\pi$ is optimal, this algorithm should have the complexity of A*
 * Results
 
 For now, I only did one small experiment on this where I compared A*PA to a
-non-optimized (read: very slow) implementation of WFA with a pre-pruned
+non-optimized (read: very slow) implementation of WFA with a path-pruned
 heuristic, and the WFA version was $3$ times faster that the A* version.
 I expect my WFA implementation to improve at least $10\times$ after I optimize
 it for SIMD, so this sounds promising.
@@ -278,18 +278,18 @@ doubles in size.
 
 To implement this, we keep all fronts in memory and simply grow them whenever needed.
 
-*And pruning?* I think this can also work with a pre-pruned heuristic,
+*And pruning?* I think this can also work with a path-pruned heuristic,
 but we need to be careful since $h$ is not consistent. That means that after
 growing a front, we may need to update already computed states of next fronts.
 But since we make sure to at least double the size of each front, just
 recomputing the entire next front doesn't hurt the complexity.
 
-I'm also hopeful that a fully pre-pruned heuristic (i.e. with /all/ matches on
+I'm also hopeful that a fully path-pruned heuristic (i.e. with /all/ matches on
 the path removed) can work here. The most important requirement is that we need
 to make sure that eventually all states at the start of a pruned match are
 indeed expanded. Otherwise it wouldn't have been allowed to prune the match at all.
 
-Maybe a middle-ground between online and pre-pruning is possible:
+Maybe a middle-ground between online and path-pruning is possible:
 Once a path to a match has been found, we prune it from that point onward. For
 all future band-doublings we will take into account the pruned match. A
 drawback here is that the pruning only happens /after/ the current doubling of the band.
