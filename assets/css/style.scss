@@ -61,6 +61,12 @@ table th {
   border-bottom-style: solid;
 }
 
+/* Equal width table cells */
+.ox-hugo-table.equal-width td,
+.ox-hugo-table.equal-width th {
+  max-width: 0;
+}
+
 /* table may be wider than text */
 table {
   min-width: 90rem;
@@ -115,17 +121,17 @@ div.canvas canvas {
   float: right;
   clear: right;
   margin: 2rem;
-  margin-right: max(-35% - 2rem, -50vw + 50% + 2rem);
+  margin-right: calc(max(-35% - 2rem, -50vw + 50% + 2em));
   max-width: 35%;
 }
 
 .content figure.medium {
-  margin-right: max(-45% - 2rem, -50vw + 50% + 2rem);
+  margin-right: calc(max(-45% - 2rem, -50vw + 50% + 2rem));
   max-width: 45%;
 }
 
 .content figure.large {
-  margin-right: max(-60% - 2rem, -50vw + 50% + 2rem);
+  margin-right: calc(max(-60% - 2rem, -50vw + 50% + 2rem));
   max-width: 60%;
 }
 
@@ -178,7 +184,7 @@ div.canvas canvas {
   position: sticky;
   float: left;
   top: 0;
-  margin-left: max(-60% - 2rem, -50vw + 50% + 2rem);
+  margin-left: calc(max(-60% - 2rem, -50vw + 50% + 2rem));
   max-width: calc(50vw - 45rem);
   font-size: 14px;
   line-height: 20px;
@@ -280,4 +286,50 @@ mjx-container {
 }
 a.footnote-ref:hover + span.fn-tooltip {
   display: inline-block;
+}
+
+// Styling for homepage decription lists.
+.list {
+  dl {
+    margin: 0.5em 0 0.5em 0;
+    display: grid;
+    grid-template-columns: 20% auto;
+    font-size: 1.8rem;
+
+    @media only screen and (max-width: 768px) {
+      grid-template-columns: 100%;
+    }
+
+    dt {
+      grid-column: 1;
+      text-align: right;
+      margin-right: 3rem;
+
+      @media only screen and (max-width: 768px) {
+        display: block;
+        text-align: left;
+      }
+    }
+
+    dd {
+      grid-column: 2;
+
+      font-weight: 700;
+
+      p:first-child {
+        font-weight: normal;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      @media only screen and (max-width: 768px) {
+        margin: 0 0 1.6rem 0;
+        grid-column: 1;
+      }
+
+      margin-inline-start: 0;
+    }
+  }
 }
