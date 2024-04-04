@@ -10,23 +10,33 @@
 
 This posts discusses some variants of minimizers, inspired by the previous post on [[file:../bd-anchors/bd-anchors.org][bidirectional anchors]].
 
-The final goal is to introduce variations of minimizers and evaluate their
-density. It will turn out that 'reduced minimizers' have density very close to
-some lower bound.
+The final goal is to introduce two new variations of minimizers and evaluate
+their density. It will turn out that 'reduced minimizers' have density very
+close to some lower bound for $k \geq 1.25 w$.
 
 Minimizer schemes take an $\ell = k+w-1$ mer, and select a substring of
 length $k$ in a deterministic way, in such a way that consecutive $\ell$-mers
 are likely to share their chosen $k$-mer.
 
+The rest of this post:
+1. first lists some applications,
+2. then introduces some existing minimizer schemes,
+3. then introduces some new ideas,
+4. and lastly evaluates all schemes on random data.
+
+* Applications
+
 Minimizers can be used for various purposes, such as:
 - Compressing sequences, such as in minimizer-space De Bruijn graphs [cite:@mdbg].
-- /Locality preserving hashing/ of kmers [cite:@sshash;@lphash].
-  - Here a large $k \geq \log_\sigma N$ is used so that minimizers are unique keys.
-  - The objective is to have as few minimizers as possible in any sequence, to
-    reduce the number of cache-misses due to non-locality.
-- Similarity estimation [cite:@minimap].
-  - Here the goal is to cluster similar reads. Ideally reads with a few small
-    mutations have the same minimizer.
+- Similarity estimation,
+- /Locality preserving hashing/ of kmers for different types of /clustering/.
+  1. [cite:@sshash;@lphash].
+     - Here a large $k \geq \log_\sigma N$ is used so that minimizers are unique keys.
+     - The objective is to have as few minimizers as possible in any sequence, to
+       reduce the number of cache-misses due to non-locality.
+  2. Similarity estimation [cite:@minimap].
+     - Here the goal is to cluster similar reads. Ideally reads with a few small
+       mutations have the same minimizer.
 
 Locality preserving hashing and similarity estimation both cluster kmers on
 similarity, but there are some differences:
@@ -35,13 +45,6 @@ similarity, but there are some differences:
 - In similarity estimation, we want /similar/ kmers to share a minimizer, where
   /similar/ explicitly includes small mutations. I.e. we want to partition the
   De Bruijn graph into 'blobs' covering many variants.
-
-A critical property is the /density/: the proportion of positions that is chosen
-as the start of a minimizer. Fewer chosen positions means better compression and better
-locality of hashing.
-
-I will first discuss some types of minimizers and introduce some new variants,
-and then experimentally evaluate their density on random strings.
 
 * Background
 Related but out of scope topics are:
@@ -76,6 +79,8 @@ candidate minimizer kmers:
 
 *Density:* By definition, minimizers sample at least one in every $w$ positions, so
 trivially have a /density/ of at least $1/w$.
+For locality preserving hashing applications, lower density is better since this
+means larger clusters and fewer cache misses.
 - [cite/t:@winnowing] prove that on random strings, any minimizer scheme has a
   density at least $$\frac{1.5+\frac{1}{2w}}{w+1}\geq \frac{1.5}{w+1}.$$
   - [cite/t:@asymptotic-optimal-minimizers] contradict that theorem by
@@ -245,14 +250,14 @@ l=10, k=7, r=3
 lmer:
  **********
 minimizers (*), and extracted keys (*=)
- ***----
-  ***----
-   ***----
-    ***----
- ----***
-  ----***
-   ----***
-    ----***
+ ***====
+  ***====
+   ***====
+    ***====
+ ====***
+  ====***
+   ====***
+    ====***
 #+end_src
 
 And here is a 3-way split example that additionally includes extension around the middle.
@@ -283,6 +288,9 @@ Here are some quick results.
 - Code is at https://github.com/RagnarGrootKoerkamp/minimizers.
 - PASHA is excluded -- even though it's very good, it's too much effort to download
   $k$mers to quickly benchmark it.
+- For methods taking a parameter $k_0$ or $r$, I did a brute-force search from
+  $0$ to $10$ (as long as they are valid), or around $k-w$ in case that is
+  larger than $10$.
 
 #+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale. Black lines indicate $(1.5+2/w)/(w+1)$.
 #+attr_html: :class inset large
@@ -313,9 +321,302 @@ bound of $(1.5+1/2w)/(w+1)$ that holds for random minimizers.
 *TODO*
 - Make an explicit experiment for $k=21$, $w=10$, $\ell=31$.
 - Compare to PASHA?
-- Analyzer robust minimizers formally.
-- See if robust minimizers can be improved for small $k < 1.25w$.
-- Implement 3-way split for robust minimizers.
+- Analyze reduced minimizers formally.
+  - Why are they so bad for small $k$? What's going on there?
+  - Why do they only work for $k_0 = k-w$? I would expect OK results for all
+    small $k_0$.
+- See if reduced minimizers can be improved for small $k < 1.25w$.
+- Implement 3-way split for reduced minimizers.
+-
 - Plots on distribution of distance between adjacent selected positions.
+- Why is
+
+* Large k
+For $k/w\to\infty$, the best we can do is density $1/w$, and in the limit
+this is equal to the lower bound, so this case is 'solved'. Both the scheme
+introduced in [cite:@asymptotic-optimal-minimizers] and the new mod-minimizers
+achieve this $1/w$ density in the limit, but mod-minimizers converge much faster.
+
+- TODO Mod-minimizers are also an instance of a minimizer scheme w.r.t. a
+  specific order, namely: the hash of a kmer is the minimal hash over the tmers
+  occuring in a position $0 \mod w$.
+- In the large-$k$ limit, the minimizer-forward scheme-local scheme hierarchy
+  collapses: minimizers already achieve the lower bound that holds for local schemes.
+- Schleimer's bound is only shown for forward schemes, but why does is not
+  extend to local schemes?
+- Similarly, Marcais' fixed bound is only for forward schemes, but could also be
+  extended to local schemes?
+
+
+* Small k
+This leaves the case of small $k$, where the best schemes have density
+close to $2/(w+1)$, but the lower bound is only around $1/w$.
+
+- For $w=1$, it is clear that density $2/(w+1)=1$ is the best we can do.
+- TODO For $k=1$, minimizer schemes are boring, but forward/local schemes TODO
+- For alphabet size $\sigma=1$, everything is trivial.
+
+Thus, we start our search at parameters $k=w=\sigma=2$. For each set of
+parameters, we bruteforce search three schemes:
+- the best minimizer scheme,
+- the best forward scheme,
+- the best local scheme.
+
+The question is:
+- Are forward schemes better than minimizer schemes?
+  - Answer: YES. But so far, only in the following way: where minimizer schemes
+    always select the leftmost occurrence in case of ties, optimal forward
+    schemes switch between leftmost and rightmost occurrences.
+
+    It's open whether there are more interesting differences.
+- Are local schemes better than forward schemes?
+  - [cite/t:@asymptotic-optimal-minimizers] mentions that using ILP they found
+    an example for $w=4$, $k=2$ where a non-forward scheme is better than a
+    forward scheme, but they do not give the example nor explain details on how
+    it's found. For $\sigma=2$ I can not reproduce this, so probably $\sigma=4$
+    was used.
+
+** Search methods
+- Minimizer scheme bruteforce :: Iterate over all $\sigma^k$ orders, evaluate density on a De Bruijn word of
+order $\sigma^(k+w)$.
+- ILP :: We set up an Integer Linear Program.
+  - For each of $\sigma^\ell$ l-mers, we create $w$ binary variables indicating
+    which kmer in $[w]$ is chosen.
+  - We construct a DeBruijn word of order $k+w=\ell+1$, and create a variable
+    for each contained $k$-mer.
+  - For each $l$-mer in the text, we add an inequality that if a position in the
+    l-mer is selected, the corresponding position in the text must also be selected.
+  - For forward schemes, we add additional inequalities ensuring forwardness.
+
+Note: for $w=2$, every local scheme is also a forward scheme.
+
+** $k=w=\sigma=2$
+*Minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 22 / 32
+  density  : 0.6875
+  best perm: [0, 3, 1, 2]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 20 / 32
+  density  : 0.625
+  best perm: [(2, Leftmost), (0, Leftmost), (3, Leftmost), (1, Rightmost)]
+#+end_src
+
+*Forward/Local:*
+#+begin_src txt
+#vars: 40
+#constraints: 70
+#selected: 20
+  best cnt : 20 / 32
+  density  : 0.625
+  best map: [0, 1, 0, 0, 1, 1, 0, 1]
+#+end_src
+
+** $w=3$
+*Minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 32 / 64
+  density  : 0.5
+  best perm: [1, 0, 2, 3]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 30 / 64
+  density  : 0.46875
+  best perm: [(1, Rightmost), (3, Leftmost), (0, Leftmost), (2, Leftmost)]
+#+end_src
+
+*Forward:*
+#+begin_src txt
+#vars: 80
+#constraints: 263
+#selected: 30
+  best cnt : 30 / 64
+  density  : 0.46875
+  best map: [0, 2, 1, 1, 0, 2, 0, 0, 1, 2, 1, 1, 2, 2, 1, 2]
+#+end_src
+
+*Local:*
+#+begin_src txt
+#vars: 80
+#constraints: 202
+#selected: 30
+  best cnt : 30 / 64
+  density  : 0.46875
+  best map: [0, 2, 1, 1, 0, 0, 0, 0, 1, 2, 1, 1, 2, 2, 0, 1]
+#+end_src
+
+** $w=4$
+*Minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 50 / 128
+  density  : 0.390625
+  best perm: [2, 0, 1, 3]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 4!
+  best cnt : 48 / 128
+  density  : 0.375
+  best perm: [(1, Leftmost), (0, Leftmost), (3, Leftmost), (2, Rightmost)]
+#+end_src
+
+*Forward:* (3.5s)
+#+begin_src txt
+#vars: 160
+#constraints: 780
+#selected: 48
+  best cnt : 48 / 128
+  density  : 0.375
+  best map: [0, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 2, 2, 1, 1, 1, 1, 2, 3, 2, 2, 0, 3, 1, 2]
+#+end_src
+
+*Local:* (4.5s)
+#+begin_src txt
+#vars: 160
+#constraints: 532
+#selected: 48
+  best cnt : 48 / 128
+  density  : 0.375
+  best map: [3, 2, 3, 1, 2, 2, 3, 3, 1, 1, 3, 1, 2, 2, 3, 2, 0, 0, 0, 0, 0, 2, 3, 0, 1, 1, 3, 1, 2, 2, 3, 1]
+#+end_src
+
+** $w=2$, $\sigma=3$
+*Minimizer:*
+#+begin_src txt
+Num permutations: 9!
+  best cnt : 155 / 243
+  density  : 0.63786006
+  best perm: [4, 0, 7, 5, 8, 6, 3, 1, 2]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 9! * 2^9 = 185794560
+  best cnt : 152 / 243
+  density  : 0.6255144
+  best perm: [(1, Rightmost), (4, Leftmost), (5, Leftmost), (0, Leftmost), (7, Leftmost), (2, Leftmost), (6, Leftmost), (8, Leftmost), (3, Rightmost)]
+#+end_src
+
+*Forward/Local:*
+#+begin_src txt
+#vars: 270
+#constraints: 511
+#selected: 152
+  best cnt : 152 / 243
+  density  : 0.6255144
+  best map: [1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1]
+#+end_src
+
+** $w=2$, $\sigma=4$
+*Minimizer:*
+#+begin_src txt
+TODO
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+TODO
+#+end_src
+
+*Forward/Local:*
+#+begin_src txt
+#vars: 1088
+#constraints: 2110
+#selected: 635
+  best cnt : 635 / 1024
+  density  : 0.6201172
+  best map: [1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1]
+#+end_src
+
+This is a directed minimizer scheme!
+
+** $w=\sigma=3$
+*Minimizer:*
+#+begin_src
+Num permutations: 9!
+  best cnt : 338 / 729
+  density  : 0.46364883
+  best perm: [5, 0, 2, 3, 7, 6, 8, 1, 4]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 9! * 2^9 = 185794560
+  best cnt : 331 / 729
+  density  : 0.45404664
+  best perm: [(3, Rightmost), (7, Leftmost), (2, Rightmost), (0, Leftmost), (5, Leftmost), (1, Leftmost), (6, Leftmost), (8, Leftmost), (4, Rightmost)]
+#+end_src
+
+*Forward:* (scip: 1000s, highs: 1600s, gurobi: 164s*5)
+#+begin_src txt
+#vars: 810
+#constraints: 2988
+#selected: 331
+  best cnt : 331 / 729
+  density  : 0.45404664
+  best map: [2, 1, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 2, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 0, 2, 1, 1, 2]
+  best map: [2, 1, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 0, 0, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 2]
+#+end_src
+
+*Local:* (scip: 4400s, gurobi: 1000s)
+#+begin_src txt
+#vars: 810
+#constraints: 2262
+#selected: 331
+  best cnt : 331 / 729
+  density  : 0.45404664
+  best map: [2, 1, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 0, 2, 1, 1, 2]
+  best map: [2, 1, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 0, 0, 2, 2, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 2]
+#+end_src
+
+** $w4$, $\sigma=3$
+*Minimizer:*
+#+begin_src
+Num permutations: 9!
+  best cnt : 793 / 2187
+  density  : 0.36259717
+  best perm: [4, 0, 2, 8, 7, 5, 6, 1, 3]
+#+end_src
+
+*Directed minimizer:*
+#+begin_src txt
+Num permutations: 9! * 2^9 = 185794560
+  best cnt : 786 / 2187
+  density  : 0.35939643
+  best perm: [(3, Rightmost), (6, Leftmost), (1, Leftmost), (2, Leftmost), (5, Leftmost), (0, Leftmost), (8, Leftmost), (7, Leftmost), (4, Rightmost)]
+#+end_src
+
+*Forward:*
+#+begin_src txt
+TODO
+#+end_src
+
+*Local:*
+#+begin_src txt
+TODO
+#+end_src
+
+** Directed minimizer
+It appears all optimal local schemes found above have slightly lower density
+than corresponding minimizer schemes. But in fact the local schemes are very
+similar to minimizer schemes. They are all instances of '/directional
+minimizers/', a small generalization of minimizers that explicitly handles ties:
+
+*Directional Minimizer.* Given is an order $O$ on $k$-mers, and for each $k$-mer a
+boolean indicating whether the leftmost or rightmost instance should be
+selected.
+Then the directional minimizer of an $l$-mer is the $k$-mer that is minimal
+according to $O$, and in case of ties, the leftmost or rightmost is selected as required.
 
 #+print_bibliography:
