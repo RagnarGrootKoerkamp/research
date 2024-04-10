@@ -79,6 +79,11 @@
 <section class="container list">
   {{ .Content }} {{ range $type := (slice "posts" "notes") }}
   <h2>{{ $type | humanize }}</h2>
+  <p>
+    {{ if eq $type "posts" }} Summaries and ideas on various topics. {{ end }}
+    {{ if eq $type "notes" }} Thoughts and ideas mostly written down for myself
+    for future reference. {{ end }}
+  </p>
   <ul>
     {{ range (where site.RegularPages ".Type" $type) }}
     <li>
