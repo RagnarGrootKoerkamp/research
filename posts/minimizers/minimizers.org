@@ -8,6 +8,11 @@
 #+date: <2024-01-18 Thu><>
 #+author: Ragnar Groot Koerkamp
 
+$$
+\newcommand{\d}{\mathrm{d}}
+\newcommand{\L}{\mathcal{L}}
+$$
+
 This posts discusses some variants of minimizers, inspired by the previous post on [[file:../bd-anchors/bd-anchors.org][bidirectional anchors]].
 
 The final goal is to introduce two new variations of minimizers and evaluate
@@ -390,223 +395,6 @@ order $\sigma^(k+w)$.
 
 Note: for $w=2$, every local scheme is also a forward scheme.
 
-** $k=w=\sigma=2$
-*Minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 22 / 32
-  density  : 0.6875
-  best perm: [0, 3, 1, 2]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 20 / 32
-  density  : 0.625
-  best perm: [(2, Leftmost), (0, Leftmost), (3, Leftmost), (1, Rightmost)]
-#+end_src
-
-*Forward/Local:*
-#+begin_src txt
-#vars: 40
-#constraints: 70
-#selected: 20
-  best cnt : 20 / 32
-  density  : 0.625
-  best map: [0, 1, 0, 0, 1, 1, 0, 1]
-#+end_src
-
-** $w=3$
-*Minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 32 / 64
-  density  : 0.5
-  best perm: [1, 0, 2, 3]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 30 / 64
-  density  : 0.46875
-  best perm: [(1, Rightmost), (3, Leftmost), (0, Leftmost), (2, Leftmost)]
-#+end_src
-
-*Forward:*
-#+begin_src txt
-#vars: 80
-#constraints: 263
-#selected: 30
-  best cnt : 30 / 64
-  density  : 0.46875
-  best map: [0, 2, 1, 1, 0, 2, 0, 0, 1, 2, 1, 1, 2, 2, 1, 2]
-#+end_src
-
-*Local:*
-#+begin_src txt
-#vars: 80
-#constraints: 202
-#selected: 30
-  best cnt : 30 / 64
-  density  : 0.46875
-  best map: [0, 2, 1, 1, 0, 0, 0, 0, 1, 2, 1, 1, 2, 2, 0, 1]
-#+end_src
-
-** $w=4$
-*Minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 50 / 128
-  density  : 0.390625
-  best perm: [2, 0, 1, 3]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 4!
-  best cnt : 48 / 128
-  density  : 0.375
-  best perm: [(1, Leftmost), (0, Leftmost), (3, Leftmost), (2, Rightmost)]
-#+end_src
-
-*Forward:* (3.5s)
-#+begin_src txt
-#vars: 160
-#constraints: 780
-#selected: 48
-  best cnt : 48 / 128
-  density  : 0.375
-  best map: [0, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 2, 2, 1, 1, 1, 1, 2, 3, 2, 2, 0, 3, 1, 2]
-#+end_src
-
-*Local:* (4.5s)
-#+begin_src txt
-#vars: 160
-#constraints: 532
-#selected: 48
-  best cnt : 48 / 128
-  density  : 0.375
-  best map: [3, 2, 3, 1, 2, 2, 3, 3, 1, 1, 3, 1, 2, 2, 3, 2, 0, 0, 0, 0, 0, 2, 3, 0, 1, 1, 3, 1, 2, 2, 3, 1]
-#+end_src
-
-** $w=2$, $\sigma=3$
-*Minimizer:*
-#+begin_src txt
-Num permutations: 9!
-  best cnt : 155 / 243
-  density  : 0.63786006
-  best perm: [4, 0, 7, 5, 8, 6, 3, 1, 2]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 9! * 2^9 = 185794560
-  best cnt : 152 / 243
-  density  : 0.6255144
-  best perm: [(1, Rightmost), (4, Leftmost), (5, Leftmost), (0, Leftmost), (7, Leftmost), (2, Leftmost), (6, Leftmost), (8, Leftmost), (3, Rightmost)]
-#+end_src
-
-*Forward/Local:*
-#+begin_src txt
-#vars: 270
-#constraints: 511
-#selected: 152
-  best cnt : 152 / 243
-  density  : 0.6255144
-  best map: [1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1]
-#+end_src
-
-** $w=2$, $\sigma=4$
-*Minimizer:*
-#+begin_src txt
-TODO
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-TODO
-#+end_src
-
-*Forward/Local:*
-#+begin_src txt
-#vars: 1088
-#constraints: 2110
-#selected: 635
-  best cnt : 635 / 1024
-  density  : 0.6201172
-  best map: [1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1]
-#+end_src
-
-This is a directed minimizer scheme!
-
-** $w=\sigma=3$
-*Minimizer:*
-#+begin_src
-Num permutations: 9!
-  best cnt : 338 / 729
-  density  : 0.46364883
-  best perm: [5, 0, 2, 3, 7, 6, 8, 1, 4]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 9! * 2^9 = 185794560
-  best cnt : 331 / 729
-  density  : 0.45404664
-  best perm: [(3, Rightmost), (7, Leftmost), (2, Rightmost), (0, Leftmost), (5, Leftmost), (1, Leftmost), (6, Leftmost), (8, Leftmost), (4, Rightmost)]
-#+end_src
-
-*Forward:* (scip: 1000s, highs: 1600s, gurobi: 164s*5)
-#+begin_src txt
-#vars: 810
-#constraints: 2988
-#selected: 331
-  best cnt : 331 / 729
-  density  : 0.45404664
-  best map: [2, 1, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 2, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 0, 2, 1, 1, 2]
-  best map: [2, 1, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 0, 0, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 2]
-#+end_src
-
-*Local:* (scip: 4400s, gurobi: 1000s)
-#+begin_src txt
-#vars: 810
-#constraints: 2262
-#selected: 331
-  best cnt : 331 / 729
-  density  : 0.45404664
-  best map: [2, 1, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 2, 1, 1, 1, 1, 1, 2, 2, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 0, 2, 1, 1, 2]
-  best map: [2, 1, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 0, 0, 2, 2, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 2]
-#+end_src
-
-** $w4$, $\sigma=3$
-*Minimizer:*
-#+begin_src
-Num permutations: 9!
-  best cnt : 793 / 2187
-  density  : 0.36259717
-  best perm: [4, 0, 2, 8, 7, 5, 6, 1, 3]
-#+end_src
-
-*Directed minimizer:*
-#+begin_src txt
-Num permutations: 9! * 2^9 = 185794560
-  best cnt : 786 / 2187
-  density  : 0.35939643
-  best perm: [(3, Rightmost), (6, Leftmost), (1, Leftmost), (2, Leftmost), (5, Leftmost), (0, Leftmost), (8, Leftmost), (7, Leftmost), (4, Rightmost)]
-#+end_src
-
-*Forward:*
-#+begin_src txt
-TODO
-#+end_src
-
-*Local:*
-#+begin_src txt
-TODO
-#+end_src
-
 ** Directed minimizer
 It appears all optimal local schemes found above have slightly lower density
 than corresponding minimizer schemes. But in fact the local schemes are very
@@ -619,6 +407,59 @@ selected.
 Then the directional minimizer of an $l$-mer is the $k$-mer that is minimal
 according to $O$, and in case of ties, the leftmost or rightmost is selected as required.
 
+** $k=1$, $w=2$
 
+Proven lower bound on local: $\d(\L)\geq 1/3 + 1/(12s^2)$, much better than
+previous bound of $1.5/(k+w-0.5) = 1.5/2.5 = 0.6$, and correct for $s=1$ and $s\to\infty$.
+
+Random mini for $s\to\infty$: $2/(w+1) = 2/3$, which is optimal.
+
+Best possible density. Forward and local schemes are the same for $w=2$.
+| alg \ s       | $2$          | $3$            | $4$              | $5$            |
+| mini          | $12/16=0.75$ | $57/81=0.7037$ | $176/256=0.6875$ | $425/625=0.68$ |
+| directed mini | same         | same           | same             | same           |
+| forward=local | same         | same           | same             | same           |
+| bound         | same         | less           | less             | less           |
+
+(I suspect I made some inefficiency in the bound proof and it should be
+identical everywhere.)
+
+** $k=2$, $w=2$
+
+Best lower bound so far: $1.5/(k+w-0.5) = 1.5/3.5 = 0.4285$.
+
+Hypothesis: best is $3/5=0.6$.
+
+Random mini for $s\to\infty$: $2/(w+1) = 2/3$, which is not optimal!
+
+Again, forward and local are the same.
+
+| alg \ s       | $2$            | $3$              | $4$               |
+| mini          | $22/32=0.6875$ | $156/243=0.6419$ | -                 |
+| directed mini | $20/32=0.625$  | -                | -                 |
+| forward=local | same           | $153/243=0.6296$ | $636/1024=0.6210$ |
+
+** $k=2$, $w=4$
+
+- Local scheme beats forward here!
+- But differences are only in tie-breaking between equal kmers.
+
+| alg \ s       | $2$              | $3$ |
+| mini          | $50/128=0.3906$  | $795/2187=0.3635$ |
+| directed mini | $48/128=0.375$   | -   |
+| forward       | same             | -   |
+| local         | $190/512=0.3710$ | -   |
+
+** Notes
+- *Hypothesis:* For $k$ large enough so that all kmers are distinct, minimizers,
+  forward, and local schemes are equally good.
+- Local can be strict better than forward.
+- Forward can be strict better than directed mini ($k=1$, $w=4$).
+- Directed mini can be strict better than mini.
+
+** Reading list
+- minimizer-review
+- masked-minimizers
+- small-window-decycling
 
 #+print_bibliography:
