@@ -71,66 +71,66 @@ cost of zero [cite:@wfalm].
 
 ** DFS
 
-- this is basically just greedy extension observed and used before. I think
-  /Depth first alignment of exact matches/ is not an ideal name. To me, DFS
-  implies more than simply greedy extension of cost-0 matches.
-  This should be more precise, since one can't do greedy extension into
-  branches. It could be that the best branch happens to have a mismatch in the
-  first character, even though another branch has a matching first character.
-  And even then, it would be good to prove that this is allowed within unitigs.
+this is basically just greedy extension observed and used before. I think
+/Depth first alignment of exact matches/ is not an ideal name. To me, DFS
+implies more than simply greedy extension of cost-0 matches.
+This should be more precise, since one can't do greedy extension into
+branches. It could be that the best branch happens to have a mismatch in the
+first character, even though another branch has a matching first character.
+And even then, it would be good to prove that this is allowed within unitigs.
 
-  Let's do some citation hunting for who proved it first in the linear case.
-  - In [cite/t:@astarpa] we cite [cite/t:@allison92] and [cite/t:@astarix-1],
-    but don't do any proofs ourselves.
-  - [cite:@wfa] uses this in diagonal transition, but DT is slightly different
-    from greedy extension itself.
-  - [cite/t:@astarix-1] cites [cite/t:@allison92] as using it and
-    [cite/t:@sellers74algorithm] for the proof. This also mentions the [cite/t:@dox18] thesis.
+Let's do some citation hunting for who proved it first in the linear case.
+- In [cite/t:@astarpa] we cite [cite/t:@allison92] and [cite/t:@astarix-1],
+  but don't do any proofs ourselves.
+- [cite:@wfa] uses this in diagonal transition, but DT is slightly different
+  from greedy extension itself.
+- [cite/t:@astarix-1] cites [cite/t:@allison92] as using it and
+  [cite/t:@sellers74algorithm] for the proof. This also mentions the [cite/t:@dox18] thesis.
 
-    Note that it only applies this if a graph node only has a /single/ outgoing
-    edge that is a match, and doesn't provide a proof specific for the case of graphs.
-  - [cite/t:@dox18]: Section 5.6 cites [cite/t:@allison92] for the result.
-  - [cite/t:@allison92] mentions in the introduction that if two strings start with the same letter,
-    they can be matched and no mutation is needed, but does not give a proof or
-    cite anyone.
-    Afterwards it does some optimizations (that I don't fully
-    understand) to an implementation of edit distance in a (lazy) functional
-    language so that (I think) it effectively becomes equivalent to an $O(ns)$
-    banded algorithm or Dijkstra..
-  - [cite/t:@sellers74algorithm] does not seem to mention greedy extension at all.
+  Note that it only applies this if a graph node only has a /single/ outgoing
+  edge that is a match, and doesn't provide a proof specific for the case of graphs.
+- [cite/t:@dox18]: Section 5.6 cites [cite/t:@allison92] for the result.
+- [cite/t:@allison92] mentions in the introduction that if two strings start with the same letter,
+  they can be matched and no mutation is needed, but does not give a proof or
+  cite anyone.
+  Afterwards it does some optimizations (that I don't fully
+  understand) to an implementation of edit distance in a (lazy) functional
+  language so that (I think) it effectively becomes equivalent to an $O(ns)$
+  banded algorithm or Dijkstra..
+- [cite/t:@sellers74algorithm] does not seem to mention greedy extension at all.
 
-  Either way, my conclusion here:
-  - It would be good for there to be a dedicated proof that greedy extension is
-    allowed.
-  - A proof that this is still allowed in the graph setting is definitely required.
+Either way, my conclusion here:
+- It would be good for there to be a dedicated proof that greedy extension is
+  allowed.
+- A proof that this is still allowed in the graph setting is definitely required.
 
-  POASTA writes:
-  #+begin_quote
+POASTA writes:
+#+begin_quote
 In the presence of an unvisited match, we can ignore insertion edge .. and
 deletion edge ...
-  #+end_quote
-  Instead, Astarix only applies this in non-branching nodes, which sounds much safer.
-  A proof is needed that the POASTA way is correct. In particular, from this statement it seems
-  POASTA /does/ consider substitution edges to other branches, which is
-  important and should be remarked explicitly.
+#+end_quote
+Instead, Astarix only applies this in non-branching nodes, which sounds much safer.
+A proof is needed that the POASTA way is correct. In particular, from this statement it seems
+POASTA /does/ consider substitution edges to other branches, which is
+important and should be remarked explicitly.
 
-  #+begin_quote
+#+begin_quote
 We assess whether a successor state $\langle v, i+1\rangle \forall v: (u,v)\in E$ is a match; if it is, we push it on the
 stack to be processed in the next DFS iteration; when there is a mismatch, we
 append it to the A* queue. In the latter case, we no longer can ignore the
 insertion and deletion edges, so we additional queue insertion state [..] and
 deletion state [..].
-  #+end_quote
-  This is unclear: 'whether a successor state is a match' can mean 'whether
-  there exists a successor state that is a match' or 'whether a given
-  successor state is a match'. (The '$\forall$' is confusing.)
+#+end_quote
+This is unclear: 'whether a successor state is a match' can mean 'whether
+there exists a successor state that is a match' or 'whether a given
+successor state is a match'. (The '$\forall$' is confusing.)
 
-  In case a match and a non-match exists, the substitution to go into the
-  non-matching branch must also be tried, and indeed this is done, looking at
-  figure 2.
+In case a match and a non-match exists, the substitution to go into the
+non-matching branch must also be tried, and indeed this is done, looking at
+figure 2.
 
-  What if there are multiple outgoing substitution edges? Is the
-  insertion state $\langle u, i+1\rangle$ pushed multiple times?
+What if there are multiple outgoing substitution edges? Is the
+insertion state $\langle u, i+1\rangle$ pushed multiple times?
 
 ** Supplementary methods
 - Proof of minimum number of indel edges seems somewhat redundant IMO.
