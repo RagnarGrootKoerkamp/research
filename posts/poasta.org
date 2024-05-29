@@ -1,0 +1,214 @@
+#+title: Thoughts on POASTA
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: POA MSA review
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{} num:f
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-05-28 Tue>
+#+author: Ragnar Groot Koerkamp
+
+Here are some thoughts on POASTA [cite:@poasta], a recent affine-cost
+sequence-to-DAG (POA) aligner inspired by WFA and using A*.
+
+* Summary
+- Take a query and a directed acyclic graph (DAG).
+- Align the query to the *full* DAG. It's like global alignment for graphs.
+  - In fact I think the graph doesn't actually have to be acyclic, as long as it has
+    a start and end. (When there is a cycle, the maximum remaining path length
+    is simply $\infty$.)
+- Do greedy extension of matches, similar to WFA and A*PA.
+  - Note that this is not as strong as full diagonal transition as done by WFA
+    and [[https://github.com/lh3/gwfa][gWFA]] (graph WFA for unit costs only), which only consider farthest reaching states.
+- In fact, this is *the first* implementation of affine-cost WFA!
+- It also uses A* with the classic gap-cost heuristic extended to graphs.
+  - For each point in the graph the minimal and maximal remaining distance is
+    computed, and if the remaining query length is outside this range, the
+    difference to get into the range is a lowerbound on number of indels.
+- Greedy extension is applied (although this is inherent when using WFA).
+- Suboptimal states in superbubbles are pruned using additional logic.
+  - TODO
+
+* Background
+- Daniel: why is nobody doing exact banded alignment, i.e., simple band
+  doubling, for exact DP-based alignment. We are still not convinced that A*/WFA
+  is faster than DP, especially when divergence is not super low ($<1\%$).
+
+* Review comments
+- Fig 1 confuses me: (partly Daniel)
+  - What /exactly/ does the y-axis mean? Is it like a TODO
+  - Why horizontal stripes but no vertical stripes? (Because there are many
+    vertical edges but few horizontal edges?)
+  - What causes the bold triangles?
+  - Why is the bottom 250 rows of the graph so different? A vertical plot of the
+    graph structure feels needed to parse this.
+- Figs 1 and 2 should mention the cost model parameters.
+- Fig 2:
+  - a: the top left doesn't make sense. Only the main diagonal should have cost
+    0; those 1 off have the same colour which doesn't make sense.
+- Match costs are restricted to be $0$. That's fine, but for sequence-to-graph
+  alignment this *is* a restriction. The argument
+  #+begin_quote
+a cost model with non-zero match cost can be reformulated into one with a match
+cost of zero [cite:@wfalm].
+  #+end_quote
+  is false. The argument only works for global sequence-to-sequence alignment
+  and requires that the total number of matches/mismatches/indels is known,
+  which it is not for sequence-to-graph alignment.
+- Instead of $\Delta_x,\Delta_o,\Delta_g>0$ it's more accurate to say $\Delta_o\geq 0$ since POASTA
+  do linear-cost alignment as well.
+- I wish I could read the supplement somewhere :)
+- Def 1: feels cleaner to redefine $d^{min,max}$ one smaller so the $-1$ isn't needed.
+- Def 2: maybe remark again that this omits a $+\Delta_o$ for affine cost
+  alignment?
+- *DFS*: this is basically just greedy extension observed and used before. I think
+  /Depth first alignment of exact matches/ is not an ideal name. To me, DFS
+  implies more than simply greedy extension of cost-0 matches.
+  This should be more precise, since one can't do greedy extension into
+  branches. It could be that the best branch happens to have a mismatch in the
+  first character, even though another branch has a matching first character.
+  And even then, it would be good to prove that this is allowed within unitigs.
+
+  Let's do some citation hunting for who proved it first in the linear case.
+  - In [cite/t:@astarpa] we cite [cite/t:@allison92] and [cite/t:@astarix-1],
+    but don't do any proofs ourselves.
+  - [cite:@wfa] uses this in diagonal transition, but DT is slightly different
+    from greedy extension itself.
+  - [cite/t:@astarix-1] cites [cite/t:@allison92] as using it and
+    [cite/t:@sellers74algorithm] for the proof. This also mentions the [cite/t:@dox18] thesis.
+
+    Note that it only applies this if a graph node only has a /single/ outgoing
+    edge that is a match, and doesn't provide a proof specific for the case of graphs.
+  - [cite/t:@dox18]: Section 5.6 cites [cite/t:@allison92] for the result.
+  - [cite/t:@allison92] mentions in the introduction that if two strings start with the same letter,
+    they can be matched and no mutation is needed, but does not give a proof or
+    cite anyone.
+    Afterwards it does some optimizations (that I don't fully
+    understand) to an implementation of edit distance in a (lazy) functional
+    language so that (I think) it effectively becomes equivalent to an $O(ns)$
+    banded algorithm or Dijkstra..
+  - [cite/t:@sellers74algorithm] does not seem to mention greedy extension at all.
+
+  Either way, my conclusion here:
+  - It would be good for there to be a dedicated proof that greedy extension is
+    allowed.
+  - A proof that this is still allowed in the graph setting is definitely required.
+
+  POASTA writes:
+  #+begin_quote
+In the presence of an unvisited match, we can ignore insertion edge .. and
+deletion edge ...
+  #+end_quote
+  Instead, Astarix only applies this in non-branching nodes, which sounds much safer.
+  A proof is needed that the POASTA way is correct. In particular, from this statement it seems
+  POASTA /does/ consider substitution edges to other branches, which is
+  important and should be remarked explicitly.
+
+  #+begin_quote
+We assess whether a successor state $\langle v, i+1\rangle \forall v: (u,v)\in E$ is a match; if it is, we push it on the
+stack to be processed in the next DFS iteration; when there is a mismatch, we
+append it to the A* queue. In the latter case, we no longer can ignore the
+insertion and deletion edges, so we additional queue insertion state [..] and
+deletion state [..].
+  #+end_quote
+  This is unclear: 'whether a successor state is a match' can mean 'whether
+  there exists a successor state that is a match' or 'whether a given
+  successor state is a match'. (The '$\forall$' is confusing.)
+
+  In case a match and a non-match exists, the substitution to go into the
+  non-matching branch must also be tried, and indeed this is done, looking at
+  figure 2.
+
+  What if there are multiple outgoing substitution edges? Is the
+  insertion state $\lange u, i+1\rangle$ pushed multiple times?
+
+- Pruning around bubbles is cool! This sounds like the equivalent of the
+  deduplication WFA does along diagonals, but extended to graphs. I did not
+  verify the mathematical details yet.
+
+- A* in WFA space: there's a difference between actually computing farthest
+  reaching points, and only doing A* with greedy matching. Without dedupping
+  f.r. points, some redundant work is done.
+
+** Supplementary methods
+- Proof of minimum number of indel edges seems somewhat redundant IMO.
+- Gap-affine gap-cost heuristic looks good.
+- Implementation details of supperbubble-informed pruning:
+  - Supp. Figure 3 is not very clear to me, or at least doesn't seem to add much
+    over 2c and 3e from the main text. (Those are quite good and I was able to 'get' the
+    idea from them quite quickly. But what remains now is to very precisely
+    understand the details.)
+  - Figure 3 and the corresponding text could be more precise/expanded a bit. Pseudocode would
+    be great if manageable.
+  - (I'm just thinking aloud here.)
+    A* roughly visits states in increasing
+    order of distance from the start. In the seq-to-seq case, any two states on
+    the same diagonal have the same heuristic value.
+
+    Now consider the seq-to-DAG case with linear gap-cost, with a state $V=\langle v,i\rangle$ that can
+    reach states $T_\cdot = \langle t, \{j_1, j_2, ...\}\rangle$ without indels. (I'm being a bit more
+    precise rather than taking just the min and max $j_\cdot$.)
+
+    First assume we're not using the gap-heuristic. If all $T_\cdot$ have been
+    computed and $d(V) \geq d(T_x)$ for all $x$, than we can prune $V$.
+    If some $T_\cdot$ is not yet computed or $d(V)\leq d(T_x)$ for some $x$,
+    then going through $v$ may be optimal to that $T_x$.
+    Since Dijkstra computes states in order of $d$, if we prioritize states
+    closer to the end, it is sufficient to simply check if all of the $T_x$ are
+    computed. Because we order by distance, they will all have distance at most
+    $d(V)$ automatically, and we can skip $V$. If one of the $T_x$ is not yet
+    computed, compute $V$ and do not prune it.
+    This is very similar to classic diagonal transition: if there is a
+    farther point on 'the' (here: all) same diagonal(s), then we can skip $V$.
+
+    When the gap-heuristic is used, $h(V)$ is the minimum over all $h(T_x)$.
+    - If $T_x$ is expanded, $d(T_x) + h(T_x) \leq d(V) + h(V) \leq d(V) +
+      d(T_X)$ (first equality because of A* order, second by definition of
+      $h(V)$), so $d(T_x) \leq d(V)$ and we do not need $V$.
+    - Otherwise $T_x$ is not expanded, so $d(T_x) + h(T_x) > d(V) +h(V)$. That can mean two things:
+      - When $h(T_x) = h(V)$, the logic from before works, and this means that we
+        must compute $V$ since it gives a potentially optimal path to $T_x$.
+      - When $h(T_x) > h(V)$, in particular $h(T_x)>0$. This means that if we
+        consider /neighbours/ with the same $t$ but different $j$, in one
+        direction (farther away from the target diagonal) $h$ will go up by the gap cost for every step in that direction,
+        which means that even if some $T_y$ was computed there, that would
+        imply $T_x$ would also have been computed. I.e., this won't happen.
+        (Suppose $y$ with $h(T_y) > h(T_x)$ had been computed, then $d(T_x)+h(T_x) =
+        d(T_y) + h(T_y) \leq d(V) + h(V)$.)
+
+        So, we only have to consider 'the other' direction, where a state $y$ closer
+        to the main diagonal (i.e., with $h(T_y) < h(T_x)$) was already computed.
+        I /think/ (TODO: but have to think more) that in this case the check
+        (comparing with indels via $T_y$) as proposed is necessary to know
+        whether $V$ has to be computed. But I think we only have to
+        do this 'later': we can increase $h(V)$ to the smallest $h(T_x)$ of an
+        uncomputed $T_x$, so that the check is effectively postponed and really
+        only done when absolutely necessary.
+
+** Evals
+- Ablation:
+  How much performance do you gain with each of the optimizations? Or equivalent, how much is
+  lost if you disable them?
+  - Without greedy matching? (Although this is such a simple thing to do there
+    isn't really a good reason not to do it.)
+  - Without the heuristic?
+  - Without the super-bubble pruning? (Does this still work/make sense when not
+    using the heuristic?)
+- Compare against Astarix? Which uses the seed heuristic instead of gap-cost heuristic.
+  (But I'm not sure Astarix has a global alignment mode.)
+- Daniel: Compare against abPOA? With 10% banding that should be great.
+  - In fact, it sounds like it should be straightforward to implement band
+    doubling on top of abPOA. Would be good to compare to that as well. (Simply
+    keep doubling the band
+- My standard benchmarking questions:
+  - Were any other programs running on the CPU?
+  - Did the CPU run at a constant clock frequency? I.e., no throttling and/or boosting.
+
+** Discussion
+- Indeed in my experience, A* is up to $500$ to $1000\times$ slower than
+  DP-based methods. This is why it would be good to compare to a DP-based
+  band-doubling approach.
+
+** TODO Code & repo
+
+#+print_bibliography:
