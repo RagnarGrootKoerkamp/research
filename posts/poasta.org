@@ -61,7 +61,17 @@ cost of zero [cite:@wfalm].
 - Def 1: feels cleaner to redefine $d^{min,max}$ one smaller so the $-1$ isn't needed.
 - Def 2: maybe remark again that this omits a $+\Delta_o$ for affine cost
   alignment?
-- *DFS*: this is basically just greedy extension observed and used before. I think
+- Pruning around bubbles is cool! This sounds like the equivalent of the
+  deduplication WFA does along diagonals, but extended to graphs. I did not
+  verify the mathematical details yet.
+
+- A* in WFA space: there's a difference between actually computing farthest
+  reaching points, and only doing A* with greedy matching. Without dedupping
+  f.r. points, some redundant work is done.
+
+** DFS
+
+- this is basically just greedy extension observed and used before. I think
   /Depth first alignment of exact matches/ is not an ideal name. To me, DFS
   implies more than simply greedy extension of cost-0 matches.
   This should be more precise, since one can't do greedy extension into
@@ -120,70 +130,62 @@ deletion state [..].
   figure 2.
 
   What if there are multiple outgoing substitution edges? Is the
-  insertion state $\lange u, i+1\rangle$ pushed multiple times?
-
-- Pruning around bubbles is cool! This sounds like the equivalent of the
-  deduplication WFA does along diagonals, but extended to graphs. I did not
-  verify the mathematical details yet.
-
-- A* in WFA space: there's a difference between actually computing farthest
-  reaching points, and only doing A* with greedy matching. Without dedupping
-  f.r. points, some redundant work is done.
+  insertion state $\langle u, i+1\rangle$ pushed multiple times?
 
 ** Supplementary methods
 - Proof of minimum number of indel edges seems somewhat redundant IMO.
 - Gap-affine gap-cost heuristic looks good.
-- Implementation details of supperbubble-informed pruning:
-  - Supp. Figure 3 is not very clear to me, or at least doesn't seem to add much
-    over 2c and 3e from the main text. (Those are quite good and I was able to 'get' the
-    idea from them quite quickly. But what remains now is to very precisely
-    understand the details.)
-  - Figure 3 and the corresponding text could be more precise/expanded a bit. Pseudocode would
-    be great if manageable.
-  - (I'm just thinking aloud here.)
-    A* roughly visits states in increasing
-    order of distance from the start. In the seq-to-seq case, any two states on
-    the same diagonal have the same heuristic value.
+** Details of pruning
+- Supp. Figure 3 is not very clear to me, or at least doesn't seem to add much
+  over 2c and 3e from the main text. (Those are quite good and I was able to 'get' the
+  idea from them quite quickly. But what remains now is to very precisely
+  understand the details.)
+- Figure 3 and the corresponding text could be more precise/expanded a bit. Pseudocode would
+  be great if manageable.
+- (I'm just thinking aloud here.)
+  A* roughly visits states in increasing
+  order of distance from the start. In the seq-to-seq case, any two states on
+  the same diagonal have the same heuristic value.
 
-    Now consider the seq-to-DAG case with linear gap-cost, with a state $V=\langle v,i\rangle$ that can
-    reach states $T_\cdot = \langle t, \{j_1, j_2, ...\}\rangle$ without indels. (I'm being a bit more
-    precise rather than taking just the min and max $j_\cdot$.)
+  Now consider the seq-to-DAG case with linear gap-cost, with a state $V=\langle v,i\rangle$ that can
+  reach states $T_\cdot = \langle t, \{j_1, j_2, ...\}\rangle$ without indels. (I'm being a bit more
+  precise rather than taking just the min and max $j_\cdot$.)
 
-    First assume we're not using the gap-heuristic. If all $T_\cdot$ have been
-    computed and $d(V) \geq d(T_x)$ for all $x$, than we can prune $V$.
-    If some $T_\cdot$ is not yet computed or $d(V)\leq d(T_x)$ for some $x$,
-    then going through $v$ may be optimal to that $T_x$.
-    Since Dijkstra computes states in order of $d$, if we prioritize states
-    closer to the end, it is sufficient to simply check if all of the $T_x$ are
-    computed. Because we order by distance, they will all have distance at most
-    $d(V)$ automatically, and we can skip $V$. If one of the $T_x$ is not yet
-    computed, compute $V$ and do not prune it.
-    This is very similar to classic diagonal transition: if there is a
-    farther point on 'the' (here: all) same diagonal(s), then we can skip $V$.
+  First assume we're not using the gap-heuristic. If all $T_\cdot$ have been
+  computed and $d(V) \geq d(T_x)$ for all $x$, than we can prune $V$.
+  If some $T_\cdot$ is not yet computed or $d(V)\leq d(T_x)$ for some $x$,
+  then going through $v$ may be optimal to that $T_x$.
+  Since Dijkstra computes states in order of $d$, if we prioritize states
+  closer to the end, it is sufficient to simply check if all of the $T_x$ are
+  computed. Because we order by distance, they will all have distance at most
+  $d(V)$ automatically, and we can skip $V$. If one of the $T_x$ is not yet
+  computed, compute $V$ and do not prune it.
+  This is very similar to classic diagonal transition: if there is a
+  farther point on 'the' (here: all) same diagonal(s), then we can skip $V$.
 
-    When the gap-heuristic is used, $h(V)$ is the minimum over all $h(T_x)$.
-    - If $T_x$ is expanded, $d(T_x) + h(T_x) \leq d(V) + h(V) \leq d(V) +
-      d(T_X)$ (first equality because of A* order, second by definition of
-      $h(V)$), so $d(T_x) \leq d(V)$ and we do not need $V$.
-    - Otherwise $T_x$ is not expanded, so $d(T_x) + h(T_x) > d(V) +h(V)$. That can mean two things:
-      - When $h(T_x) = h(V)$, the logic from before works, and this means that we
-        must compute $V$ since it gives a potentially optimal path to $T_x$.
-      - When $h(T_x) > h(V)$, in particular $h(T_x)>0$. This means that if we
-        consider /neighbours/ with the same $t$ but different $j$, in one
-        direction (farther away from the target diagonal) $h$ will go up by the gap cost for every step in that direction,
-        which means that even if some $T_y$ was computed there, that would
-        imply $T_x$ would also have been computed. I.e., this won't happen.
-        (Suppose $y$ with $h(T_y) > h(T_x)$ had been computed, then $d(T_x)+h(T_x) =
-        d(T_y) + h(T_y) \leq d(V) + h(V)$.)
+  When the gap-heuristic is used, $h(V)$ is the minimum over all $h(T_x)$.
+  - If $T_x$ is expanded, $d(T_x) + h(T_x) \leq d(V) + h(V) \leq d(V) +
+    d(T_X)$ (first equality because of A* order, second by definition of
+    $h(V)$), so $d(T_x) \leq d(V)$ and we do not need $V$.
+  - Otherwise $T_x$ is not expanded, so $d(T_x) + h(T_x) > d(V) +h(V)$. That can mean two things:
+    - When $h(T_x) = h(V)$, the logic from before works, and this means that we
+      must compute $V$ since it gives a potentially optimal path to $T_x$.
+    - When $h(T_x) > h(V)$, in particular $h(T_x)>0$. This means that if we
+      consider /neighbours/ with the same $t$ but different $j$, in one
+      direction (farther away from the target diagonal) $h$ will go up by the gap cost for every step in that direction,
+      which means that even if some $T_y$ was computed there, that would
+      imply $T_x$ would also have been computed. I.e., this won't happen.
+      (Suppose $y$ with $h(T_y) > h(T_x)$ had been computed, then $d(T_x)+h(T_x) =
+      d(T_y) + h(T_y) \leq d(V) + h(V)$.)
 
-        So, we only have to consider 'the other' direction, where a state $y$ closer
-        to the main diagonal (i.e., with $h(T_y) < h(T_x)$) was already computed.
-        I /think/ (TODO: but have to think more) that in this case the check
-        (comparing with indels via $T_y$) as proposed is necessary to know
-        whether $V$ has to be computed. But I think we only have to
-        do this 'later': we can increase $h(V)$ to the smallest $h(T_x)$ of an
-        uncomputed $T_x$, so that the check is effectively postponed and really
-        only done when absolutely necessary.
+      So, we only have to consider 'the other' direction, where a state $y$ closer
+      to the main diagonal (i.e., with $h(T_y) < h(T_x)$) was already computed.
+      I /think/ (TODO: but have to think more) that in this case the check
+      (comparing with indels via $T_y$) as proposed is necessary to know
+      whether $V$ has to be computed. But I think we only have to
+      do this 'later': we can increase $h(V)$ to the smallest $h(T_x)$ of an
+      uncomputed $T_x$, so that the check is effectively postponed and really
+      only done when absolutely necessary.
 
 ** Evals
 - Ablation:
