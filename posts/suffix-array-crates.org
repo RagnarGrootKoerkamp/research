@@ -1,0 +1,29 @@
+#+title: Crates for suffix array construction
+#+HUGO_SECTION: notes
+#+HUGO_TAGS: pairwise-alignment
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-06-13 Thu>
+#+author: Ragnar Groot Koerkamp
+
+Popular C libraries are:
+- [[https://github.com/y-256/libdivsufsort][divsufsort]]
+- [[https://github.com/IlyaGrebnov/libsais][libsais]]
+Both have a ~..64~ variant that supports input strings longer than =2GB=.
+
+Rust wrappers:
+- [[https://crates.io/crates/divsufsort][divsufsort]]: rust reimplementation, does not support large inputs.
+- [[https://crates.io/crates/cdivsufsort][cdivsufsort]]: c-wrapper, does not support large inputs
+- [[https://crates.io/crates/libdivsufsort-rs][livdivsufsort-rs]]: c-wrapper, *does* support large inputs
+- [[https://crates.io/crates/sais][sais]]: unrelated to the original library; does not implement a linear time
+  algorithm anyway
+- [[https://github.com/Daniel-Liu-c0deb0t/libsais-rs][libsais-rs]]: Daniel Liu's fork-of-fork of [[https://github.com/hucsmn/libsais-rs][the original]], but not on crates.io. Supports multithreading
+  using OpenMP and wraps both the original and 64bit version.
+- [[https://github.com/Daniel-Liu-c0deb0t/simple-saca][simple-saca]]: Daniel Liu's bounded-context suffix array construction that is
+  faster than divsufsort and libsais, but does not return a true fully sorted
+  suffix array.
+
+
+#+print_bibliography:
