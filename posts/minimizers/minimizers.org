@@ -1,4 +1,4 @@
-#+title: Minimizers and variations
+#+title: Mod-minimizers and other minimizers
 #+HUGO_SECTION: posts
 #+HUGO_TAGS: minimizers
 #+HUGO_LEVEL_OFFSET: 1
@@ -13,11 +13,15 @@ $$
 \newcommand{\L}{\mathcal{L}}
 $$
 
-This posts discusses some variants of minimizers, inspired by the previous post on [[file:../bd-anchors/bd-anchors.org][bidirectional anchors]].
+This post introduces some background for minimizers and some
+experiments for a new minimizer variant. That new variant is now called the /mod-minimizer/ and available as a [[https://doi.org/10.1101/2024.05.25.595898][preprint]] at bioRxiv [cite:@modmini]. This
+preprint also includes a review of existing methods, including pseudocode for
+most of the methods covered below.
 
-The final goal is to introduce two new variations of minimizers and evaluate
-their density. It will turn out that 'reduced minimizers' have density very
-close to some lower bound for $k \geq 1.25 w$.
+---
+
+
+This posts discusses some variants of minimizers, inspired by the previous post on [[file:../bd-anchors/bd-anchors.org][bidirectional anchors]].
 
 Minimizer schemes take an $\ell = k+w-1$ mer, and select a substring of
 length $k$ in a deterministic way, in such a way that consecutive $\ell$-mers
@@ -28,6 +32,7 @@ The rest of this post:
 2. then introduces some existing minimizer schemes,
 3. then introduces some new ideas,
 4. and lastly evaluates all schemes on random data.
+5. Finally, there are a bunch of experiments logs for small $k$.
 
 * Applications
 
@@ -54,11 +59,11 @@ similarity, but there are some differences:
 * Background
 Related but out of scope topics are:
 - universal minimizers: not really a local sampling scheme;
-- spaced minimizers/syncmers/strobemers: used for similarity
+- spaced minimizers/strobemers: used for similarity
   search methods, but not used for locality sensitive hashing.
 
 ** Minimizers
-*Minimizers:* Minimizers were introduced independently
+Minimizers were introduced independently
 by [cite/t:@minimizers] and [cite/t:@winnowing]: Given a
 $(k+w-1)$-mer, consider the $w$ contained $k$-mers.  The (rightmost) $k$-mer with minimal
 hash (for some given hash function $h$) is the minimizer.
@@ -82,26 +87,26 @@ candidate minimizer kmers:
      ***** // minimizer
 #+end_src
 
-*Density:* By definition, minimizers sample at least one in every $w$ positions, so
+** Density bounds
+By definition, minimizers sample at least one in every $w$ positions, so
 trivially have a /density/ of at least $1/w$.
 For locality preserving hashing applications, lower density is better since this
 means larger clusters and fewer cache misses.
-- [cite/t:@winnowing] prove that on random strings, any minimizer scheme has a
-  density at least $$\frac{1.5+\frac{1}{2w}}{w+1}\geq \frac{1.5}{w+1}.$$
-  - [cite/t:@asymptotic-optimal-minimizers] contradict that theorem by
-    constructing a universal minimizer with lower density, and remark that the
-    previous result only applies to 'randomized local schemes'.
-    - Note: I am quite unsure what is the current status of this $1.5/(w+1)$
-      lower bound.
-  - Instead they prove that density is at least
-    $$\frac{1.5 + \frac{1}{2w} + \max(0, \lfloor \frac{k-w}{w}\rfloor)}{w+k}.$$
 - Random minimizers have a density of $2/(w+1) + o(1/w)$
   when $k > (3+\epsilon) \log_\sigma (w+1)$ [cite:@miniception;@improved-minimizers].
+- [cite/t:@winnowing] prove that on random strings, any minimizer scheme has a
+  density at least $$\frac{1.5+\frac{1}{2w}}{w+1}\geq \frac{1.5}{w+1},$$
+  but this lower bound is *false*, or at least, makes overly strong assumptions.
+- [cite/t:@asymptotic-optimal-minimizers] contradict that theorem by
+  constructing a universal minimizer with lower density, and remark that the
+  previous result only applies to 'randomized local schemes'.
+  - Instead they prove that density is at least
+    $$\frac{1.5 + \frac{1}{2w} + \max(0, \lfloor \frac{k-w}{w}\rfloor)}{w+k}.$$
+  - In the mod-minimizer paper, we simplify and improve this to:
+    $$\frac{1.5}{w+k-0.5},$$
+    and show that it holds not only for forward schemes but also for local schemes.
 
-  This is only $33\%$ above the lower bound!
-  - *Is $(3+\epsilon)$ tight?*
-
-*** Robust minimizers
+** Robust minimizers
 To reduce the density, [cite/t:@winnowing] suggest the
 following: when the minimizer of the preceding k-mer is still a minimizer, reuse
 it, even when it is not rightmost.
@@ -127,7 +132,7 @@ of them is selected. Although unlikely, this is not good for downstream
 applications. To prevent this, minimizers $x$ could be ordered by $(h(x), x)$
 instead of just $h(x)$.
 
-*** PASHA
+** PASHA
 PASHA [cite:@pasha] is another minimizer selection algorithm based on a
 universal hitting set. It works as follows:
 1. Start with a complete De Bruijn graph of order $k$, i.e., containing all
@@ -140,25 +145,45 @@ PASHAs main contribution is a considerable speedup over DOCKS. It still remains
 slow and has to process the full $4^k$ graph, limiting it to $k\leq 16$, but has
 the lower density.
 
-*** Miniception
-Miniception [cite:@miniception] is a specific minimizer selection algorithm. It
-works using an additional parameter $k_0$ around $3\cdot \log_\sigma(k)$.
+** Miniception
+Miniception [cite:@miniception] is another minimizer selection algorithm. It
+works using an additional parameter $k_0\leq k$ around $3\cdot \log_\sigma(k)$.
 It [[https://github.com/Kingsford-Group/miniception/issues/1][additionally requires]] $k_0 \geq k-w$, although I do not think this is
 explicitly mentioned in the paper.
 
 For a window $T$ of length $\ell = k+w-1$ characters, Miniception selects a minimizer as follows:
-1. Set $w_0 = k-k_0$ and find all $(k_0, w_0)$ minimizers under some hash $h_0$.
-2. Out of the $w$ $k$-mers in $T$, keep only those:
-   - whose prefix $k_0$-mer is a $(k_0, w_0)$ minimizer of $T$, or
-   - whose suffix $k_0$-mer is a $(k_0, w_0)$ minimizer of $T$.
-   This is equivalent to saying that the minimal $k_0$-mer in the $k$-mer is
-   its prefix or suffix.
-3. From the filtered $k$-mers, select the one with minimal hash $h$.
+1. Find all kmers whose minimal contained $k0$-mer is at its start or end.
+2. In case there are multiple (or none), break ties using random order on kmers.
 
 In the limit, it achieves density down to $1.67/w$ for $w\sim k$.
 
 Sadly the preprint [cite:@miniception-preprint] has a typo in
 Figure 6, making the results hard to interpret.
+
+** Closed syncmers
+Given $k$ and $s\leq k$, a kmer is a /closed syncmer/ [cite:@syncmers] when its minimal contained
+$s$-mer is at its start or end. This guarantees that in each window of $w=k-s$
+kmers at least one kmer is chosen, so $s$ should be set to $k-w$. So this only
+works for $k\geq w$.
+
+Note that closed syncmers are not directly a sampling scheme, since each kmer is
+independently determined to be a closed syncmer or not.
+This can be fixed by using an order on kmers to break ties, like miniception does.
+
+Closed syncmers are very similar to miniception. In fact, miniception is more
+general since it's parameter $k0$ is chosen freely, rather than (implictly)
+restricting to $s=k-w$.
+
+Quote:
+#+begin_quote
+Density is not the appropriate optimization metric
+
+Several recent papers have focused on minimizing the density of minimizers for given k
+and w; see (Zheng, Kingsford & Marçais, 2020) and references therein. This would be
+an appropriate optimization strategy if submers were used to find identical longer
+substrings in different sequences, but this is rarely the primary goal of an application
+and other methods are better suited to this task (e.g., Burrows–Wheeler indexes).
+#+end_quote
 
 ** Bd-anchors
 *Bidirectional anchors* (bd-anchors) are a variant on minimizers that take the minimal
@@ -194,35 +219,7 @@ we don't need to two suffix arrays over /all/ bd-anchors:
   the right half of some $\ell$-mer.
 This makes things slightly sparser.
 
-* New ideas
-
-** Biminimizers
-Here is an idea I had and that was also tried by Giulio for SSHash [cite:@sshash].
-Surely there is some literature on this but I'm at a loss to find it. Please let me know.
-
-In short: use robust minimizers, but always use at least two candidate positions.
-For this, we can use two hash functions and take the minimizer for $h_1$ and
-$h_2$. Or we can consider the /bottom two/ minimizers with lowest score for $h$.
-(The latter performs slightly better in evals so is what I'll go with.)
-
-This also generalizes to /t-minimizers/, where we robustly choose the rightmost
-of $t$ candidates generated either by $t$ hash functions or the bottom-$t$ of a
-single hash function.
-
-A new example:
-#+begin_src txt
- 8336192     // hashes
-     | |     // bottom two minimal hashes
-       ***** // biminimizer
-#+end_src
-
-Like robust minimizers, this has one big drawback: *Minimizers are not
-deterministic.* Downstream applications will likely have to make two queries to
-locate the minimizer. But this may be worth the tradeoff compared to the space savings.
-
-** Reduced minimizers
-/(Naming suggestions welcome.)/
-
+* New: Mod-minimizers
 Bidirectional anchors have a benefit over minimizers since they always use
 $r=O(\log_\sigma (\ell))$ instead of possibly much larger $k$. This means their
 average density $2/(\ell+1-r)$ can be lower than $2/(w+1) = 2/(\ell-k+2)$.
@@ -237,55 +234,59 @@ It seems that two conceptually distinct parameters are merged:
 - The length $k_0=r+1$ of the minimizer, which we would like to be small.
 - The length $k$ of the key we want to extract, which we would like to be larger.
 
-Inspired by previous methods, here is a new sampling scheme.
-1. First, find a minimizer of length $k_0=1+3 \log_\sigma w$, say at position $0\leq i < w =
-   \ell - k_0 + 1$.
-2. Extract a key of length $k\leq (\ell+k_0)/2$:
-   - If $i \leq (w-1)/2$, /extend right/, i.e. extract $Q_{i..i+k}$. This is in bounds because:
-     $$i+k \leq (w-1)/2 + (\ell+k_0)/2 = (\ell-k_0)/2 + (\ell +k_0)/2 = \ell.$$
-   - If $i \geq (w-1)/2$, /extend left/, i.e. extract $Q_{i+k_0-k..i+k_0}$. This is in bounds because:
-     $$i+k_0-k \geq (w-1)/2 - (\ell+k_0)/2 = (\ell-k_0)/2 - (\ell +k_0)/2 = 0.$$
+Inspired by previous methods, here is a new sampling scheme, *mod-sampling*.
+1. First, choose a small parameter $t = k\bmod w$, but large enough to prevent
+   duplicate $k$-mers.
+2. Find the position $x$ of the smallest $t$-mer in the $\ell$-mer window.
+3. Sample the kmer at position $p=x \bmod w$.
 
-  TODO: Split into three cases for larger $k$.
+We define two specific cases:
+- The *lr-minimizer* uses $t = k - w$ for $k>w$.
+- The *mod-minimizer* uses $t = (k-r)\% w + r$ for $k>r$, where $r=4$ ensures
+  that $t$ is not too small.
 
-Here is an example for $\ell \geq 2k-3-1$. Stars indicate the candidate
-$k_0$-minimizers, and the dashes indicate the extension to a $k$-mer key.
+Here is an example for $k=7$, $w=4$, $t=7\%4=3$. Stars indicate the candidate
+$t$-mer minimizers, and the dashes indicate the corresponding sampled $k$-mers.
 #+begin_src txt
-l=10, k=7, r=3
+k=7, w=4, l=10, t=3
 lmer:
  **********
 minimizers (*), and extracted keys (*=)
- ***====
-  ***====
-   ***====
-    ***====
- ====***
-  ====***
-   ====***
-    ====***
+ ***====       x=0 p=0
+  ***====      x=1 p=1
+   ***====     x=2 p=2
+    ***====    x=3 p=3
+ ====***       x=4 p=0
+  ====***      x=5 p=1
+   ====***     x=6 p=2
+    ====***    x=7 p=3
 #+end_src
 
-And here is a 3-way split example that additionally includes extension around the middle.
+*NOTE:* As it turns out, lr-minimizers are very similar to closed syncmers. In
+particular compare the figure above with figure 1b in [cite:@syncmers]. The main
+difference is that lr-minimizers are context aware and break ties by the value
+of the chosen $t$-mer, whereas closed syncmers are not 'filtered down' to have
+only one sample per window.
+
+Here is an example with a $3$-way split.
 #+begin_src txt
-l=10, k=8, r=3
+k=8, w=3, l=10, t=2
 lmer:
  ***********
 minimizers (*), and keys (*=)
- ***=====
-  ***=====
-   ***=====
- ===***==
-  ===***==
-   ===***==
-  =====***
-   =====***
+ **======
+  **======
+   **======
+ ===**===
+  ===**===
+   ===**===
+ ======**
+  ======**
+   ======**
 #+end_src
 
-It seems that this scheme performs well when $k$ is around $\ell/2$, say $\ell/3 < k < 2\ell/3$.
-
-*TODO:* There are cases where we can be flexible in the exact point where we switch
-from extending left to extending right. Should we switch around the middle? Or
-better make one of the runs as long as possible?
+Mod-minimizers have low density when $k$ is large compared to $w$. When $w$ is
+fixed and $k\to\infty$, they approach the asymptotically optimal density of $1/w$.
 
 * Experiments
 Here are some quick results.
@@ -297,21 +298,14 @@ Here are some quick results.
   $0$ to $10$ (as long as they are valid), or around $k-w$ in case that is
   larger than $10$.
 
-#+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale. Black lines indicate $(1.5+2/w)/(w+1)$.
+#+caption: Density for various minimizer types, for alphabet size $4$ and string length $n=10^5$. All of $k$, $w$, and density are in log scale. Black lines indicate $2/(w+1)$ and $1/w$.
 #+attr_html: :class inset large
 [[file:results_4.json.svg][file:./results_4.json.svg]]
 
-#+caption: Optimal choice of $r$ or $k_0$. $k$ and $w$ are log scale.
-#+attr_html: :class inset large
-[[file:results_4.json_params.svg][file:./results_4.json_params.svg]]
-
 Note:
-- bd-anchors depend only on $\ell = w+k-1$, and hence density decreases in $k$.
-- Biminimizers are best for $k\leq w$ (but have drawbacks).
+- bd-anchors (not shown) depend only on $\ell = w+k-1$, and hence density decreases in $k$.
 - Miniception is always better than vanilla minimizers.
-- Reduced minimizers are terrible for $k\leq w$, but best for $k>1.25 w$.
-  - They get _very_ close to $(1.5+2/w)/(w+1)$.
-  - Why are they bad?
+- Mod-minimizers don't do anything for $k\leq w$, but are best for $k\geq w$.
   - Can we optimize them more? By using more ideas from miniception?
 - Can we optimize miniception by introducing a third layer of minimizers??
   - Or what if we sort filtered kmers by their contained k0-mer before comparing
@@ -320,40 +314,23 @@ Note:
   but bd-anchors have slightly lower density.
 
 * Conclusion
-For $k \geq 1.25 w$, reduced minimizers achieve density very close to the lower
-bound of $(1.5+1/2w)/(w+1)$ that holds for random minimizers.
-
-*TODO*
-- Make an explicit experiment for $k=21$, $w=10$, $\ell=31$.
-- Compare to PASHA?
-- Analyze reduced minimizers formally.
-  - Why are they so bad for small $k$? What's going on there?
-  - Why do they only work for $k_0 = k-w$? I would expect OK results for all
-    small $k_0$.
-- See if reduced minimizers can be improved for small $k < 1.25w$.
-- Implement 3-way split for reduced minimizers.
--
-- Plots on distribution of distance between adjacent selected positions.
-- Why is
-
-* Large k
-For $k/w\to\infty$, the best we can do is density $1/w$, and in the limit
-this is equal to the lower bound, so this case is 'solved'. Both the scheme
+For $k \geq w$, mod-minimizers achieve density that asymptotically approaches
+the lower bound of $1/w$. So the large-$k$ case is 'solved'. Both the scheme
 introduced in [cite:@asymptotic-optimal-minimizers] and the new mod-minimizers
 achieve this $1/w$ density in the limit, but mod-minimizers converge much faster.
 
-- TODO Mod-minimizers are also an instance of a minimizer scheme w.r.t. a
+- Mod-minimizers are also an instance of a minimizer scheme w.r.t. a
   specific order, namely: the hash of a kmer is the minimal hash over the tmers
-  occuring in a position $0 \mod w$.
-- In the large-$k$ limit, the minimizer-forward scheme-local scheme hierarchy
+  occurring in a position $0 \mod w$.
+- In the large-$k$ limit, the minimizer schem - forward scheme - local scheme hierarchy
   collapses: minimizers already achieve the lower bound that holds for local schemes.
-- Schleimer's bound is only shown for forward schemes, but why does is not
-  extend to local schemes?
-- Similarly, Marcais' fixed bound is only for forward schemes, but could also be
-  extended to local schemes?
 
+---
 
-* Small k
+* Small k experiments
+From here onward, this is a 'lab-log', primarily intended for preserving some of
+my notes/thoughts, not for easy reading.
+
 This leaves the case of small $k$, where the best schemes have density
 close to $2/(w+1)$, but the lower bound is only around $1/w$.
 
