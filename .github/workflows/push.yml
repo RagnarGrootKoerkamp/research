@@ -13,5 +13,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd /srv/nginx/curiouscoding.nl/ && git pull https://${GITHUB_TOKEN}@github.com/ragnargrootkoerkamp/research.git && git submodule update
-          cd /srv/nginx/curiouscoding.nl/ && make build
+          cd /srv/nginx/curiouscoding.nl/ \
+          && git fetch https://${GITHUB_TOKEN}@github.com/ragnargrootkoerkamp/research.git \
+          && git reset --hard FETCH_HEAD \
+          && git submodule update \
+          && make build
