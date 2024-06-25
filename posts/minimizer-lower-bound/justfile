@@ -1,0 +1,8 @@
+# Shrink data.json
+clean:
+    jq -c 'map(del(.dists, .transfer, .positions))' data.json > data_clean.json
+    mv data_clean.json data.json
+
+# Build plots
+plot:
+    python3 plot.py

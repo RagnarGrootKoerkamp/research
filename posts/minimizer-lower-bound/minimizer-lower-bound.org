@@ -1,0 +1,200 @@
+#+title: A near-tight lower bound on minimizer density
+#+HUGO_SECTION: posts
+#+HUGO_TAGS: minimizers
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-06-25 Tue>
+#+author: Ragnar Groot Koerkamp
+
+In this post I will prove a new lower bound on the density of any
+minimizer or forward sampling scheme:
+$$
+d(f) \geq \frac{\lceil\frac{w+k}{w}\rceil}{w+k} =
+\frac{\lceil\frac{\ell+1}{w}\rceil}{\ell+1}.
+$$
+
+* Succinct background
+
+For more background, see either my previous [[../minimizers/minimizers.org][post]] on minimizers, or the mod-minimizer paper [cite:@modmini].
+
+** Definitions
+
+For given parameters $k$ and $w$, a *local sampling scheme* is a function
+$f: \Sigma^{k+w-1}\to [w] = \{0, \dots, w-1\}$.
+We set $\ell = k+w-1$. An $\ell$-mer is also called a /window/ and consists of
+$w$ consecutive $k$-mers. Given a window $W$, $f$ is said to /sample/ the
+$k$-mer $W[f(w)..f(w)+k)$ at position $f(W)$ in $W$.
+
+A sampling scheme is *forward* when the position of the sampled $k$-mer never
+jumps backwards.
+
+The *density* $d(f)$ of a sampling scheme $f$ is the expected fraction of sampled
+$k$-mers on an infinitely long random string.
+
+*Random minimizers* hash each $k$-mer in a window and select the one with the
+minimal hash. They have a density of $2/(w+1)$.
+
+*Mod-minimizers* set $t=((k-r)\bmod w) + r$ (for a small $r$). They then compute
+the position $x$ of the smallest $t$-mer and sample the $k$-mer at position
+$x\bmod w$. For fixed $w$, they have density $1/w$ in the $k\to\infty$ limit,
+and 'locally optimal' density $\frac{2+(k-1)/w}{w+k}$ when $r=1$ and $k\equiv
+1\pmod w$ and $\sigma \gg k+w$ (the bottom-left minima in [[background]]).
+
+
+** Lower bounds
+
+Any sampling scheme must sample at least one out of every $w$ $k$-mers, so $1/w$
+is a trivial lower bound on the density.
+
+[cite/t:@asymptotic-optimal-minimizers] have shown an improved lower bound for
+forward schemes of
+$$
+d(f) \geq \frac{1.5 + \max(0, \lfloor \frac{k-w}w\rfloor) + \frac 1{2w}}{w+k}.
+$$
+In [cite/t:@modmini], we extended it to /all/ local sampling schemes, including
+non-forward ones, and simplified and improved it slightly to
+$$
+d(f) \geq \frac{1.5}{w+k-0.5},
+$$
+
+#+name: background
+#+caption: Density of some sampling schemes for $w=24$ and alphabet size $\sigma=256$, and the mentioned lower bounds.
+#+attr_html: :class inset large
+[[./background.svg][file:./background.svg]]
+
+Note that there is a large gap between the current lower bounds and the best
+known schemes. Clearly, this is unsatisfying and needs resolving.
+
+* A new lower bound
+
+*Theorem 1.* For any forward sampling scheme $f$,
+$$
+d(f) \geq \frac{\lceil\frac{w+k}{w}\rceil}{w+k}.
+$$
+
+*Proof.*
+Consider a circular string (that 'wraps around' at the end) of
+length $\ell+1 = w+k$. This circular string has $w+k$ $k$-mers (one starting at
+each position), and since at least one $k$-mer is sampled every $w$ positions,
+at least $\lceil\frac{w+k}{w}\rceil$ $k$-mers in the circular string must be
+sampled. Thus, the density on the circular string is at least
+$\lceil\frac{w+k}{w}\rceil/(w+k)$.
+
+Each $(w+k)$-mer contains exactly two $\ell$-mers, a left and a right one. When
+the right $\ell$-mer samples a different $k$-mer than the left $\ell$-mer, we
+say this $(w+k)$-mer is /charged/. Thus, out of the $w+k$ $(w+k)$-mers
+in the circular string, at least $\lceil\frac{w+k}{w}\rceil$ of them are charged.
+
+Now, consider the complete De Bruijn graph of order $w+k$, i.e., the graph whose
+vertices are $(w+k)$-mers, and whose edges connect $(w+k)$-mers that overlap in $w+k-1$ positions.
+This graph can be partitioned into /pure/ cycles of length (a divisor of) $w+k$: for
+each $(w+k)$-mer vertex, simply consider the cycle induced by the rotations of
+the $(w+k)$-mer
+[cite:Lemma 2 @minimum-decycling-set].
+
+/Side note:/ This idea of partitioning the De Bruijn graph goes back to [cite/t:@mykkeltveit],
+who showed that it is possible to /decycle/ the graph by removing one vertex
+from every cycle, creating a set of 'density' $1/w$.
+DOCKS [cite:@docks], PASHA [cite:@pasha], and decycling-based minimizers [cite:@minimum-decycling-set] all take
+this set as a starting point to create a universal hitting set.
+
+By the argument above, along each non-degenerate (length $w+k$) cycle there are at least
+$\lceil\frac{w+k}{w}\rceil$ charged $(w+k)$-mers, i.e., the density of charged
+$(w+k)$-mers on each non-degenerate cycle is at least $\lceil\frac{w+k}{w}\rceil
+/ (w+k)$. For degenerate cycles of
+length $(w+k)/p$ (for some divisor $p>1$ of $w+k$), we can 'unwrap' the cycle $p$
+times into a cycle of length $w+k$ to see that the overall density must still be
+at least $\lceil\frac{w+k}{w}\rceil / (w+k)$.
+
+Thus, we partitioned the vertices of the order $w+k$ De Bruijn graph into parts
+(pure cycles) such that each
+part has density of charged $(w+k)$-mers at least $\lceil\frac{w+k}{w}\rceil /
+(w+k)$, and thus this is also a lower bound on the overall density of charged
+$(w+k)$-mers in the full graph.
+
+Since each $(w+k)$-mer is equally likely to appear at any position in an
+infinitely long string, we conclude that this is indeed a lower bound on the
+density of any forward sampling scheme. $\blacksquare$
+
+*Non-forward schemes.*
+Note that this proof does not directly work for any /local/, non-forward,
+scheme, since a $(w+k)$-mer may be charged but 'jump backwards' to a $k$-mer
+that was already sampled before. This may be fixable by considering a De Bruijn
+graph of order $2w+k-2$ instead [cite:@improved-minimizers;@asymptotic-optimal-minimizers].
+
+#+name: new-bound
+#+caption: The new lower bound (blue) and its continuation (purple).
+#+attr_html: :class inset large
+[[./new-bound.svg][file:./new-bound.svg]]
+
+* Discussion
+As can be seen in [[new-bound]], this new lower bound is much stronger than the
+previous one. It is the first bound to imply that density $2/(w+1)$ is optimal
+for $k=1$, and /exactly/ coincides with the density of mod-minimizers when
+$k\equiv 1\pmod w$, showing that mod-minimizers are not just optimal in the
+$k\to\infty$ limit, but also locally optimal. Indeed, when $r=1$ and $k\equiv
+1\pmod w$, the density of mod-minimizers exactly matches the lower bound:
+$$
+\frac{2+\lfloor\frac{k-1}{w}\rfloor}{w+\lfloor\frac{k-1}{w}\rfloor w+1}
+= \frac{2+\frac{k-1}{w}}{w+\frac{k-1}{w} w+1}
+= \frac{\frac{k+2w-1}w}{k+w}
+= \frac{\lceil\frac{k+w}w\rceil}{k+w}.
+$$
+
+It remains to show some 'continuation' of the bound, shown in purple in
+[[new-bound]]
+$$
+\frac{\lceil\frac{k+w}w\rceil}{k+w}
+=\frac{\lfloor\frac{k+2w-1}w\rfloor}{k+w}
+\sim\frac{\frac{k+2w-1}w}{k+w}
+=\frac 1w + \frac 1{k+w} - \frac1{w(k+w)}.
+$$
+But we can already see that double decycling based minimizers
+[cite:@minimum-decycling-set] break this continuation, so we should expect some
+tricky cases along the way.
+
+* Postscriptum
+
+It really took a long time to discover this proof. In the sense that, it was
+always there, ready to be found, but nobody did. Schleimers' original bound
+[cite:@winnowing] is already 20 years old and only
+[cite/t:@asymptotic-optimal-minimizers] improved it.
+It really feels like this proof has been staring us in the face while we didn't
+see it for quite some time. Especially given that it's so simple, and all parts
+were hinted at:
+- The density of a forward scheme can be evaluated by considering a De Bruijn
+  sequence of order $w+k$, so looking at an order $w+k$ De Bruijn graph should
+  be necessary and sufficient.
+- Partitioning the De Bruijn graph has been done before, to show a density lower
+  bound of $1/w$.
+- The density of random minimizers for $k=1$ is $2/(w+1)$, which, in hindsight,
+  /very/ much reads like /at least $2$ samples are needed in every cycle of
+  length $w+1$./
+
+*Story time.* Let me briefly write down how I came up with this for my own fun
+:) It's in a very very roundabout way:
+1. In the mod-minimizer paper we show a lower bound of $1.5/(k+w-0.5)$. But in
+   practice no scheme achieves anything close to this.
+2. For $k=1$, we expect a new sample roughly every $\ell/2$ positions. Thus
+   instead of tiling $\ell$-mers back-to-back, maybe we should tile them with
+   $\ell/2$ overlap.
+3. That didn't really go anywhere, since the sampled positions don't align with
+   these staggered windows.
+4. What if we take an $\ell$-mer $B$, consider its sampled position $i$, and
+   then consider $\ell$-mers $A$ and $C$ that end just before position $i$ and
+   start just after position $i$.
+5. Well this is still annoying since now $A$ and $C$ have some 'dangling ends'.
+   It's hard to say things about strings that have a fixed prefix and random
+   suffix (or reversed).
+6. Hmm but we can make the prefix of $A$ equal to the prefix of $C$, and the
+   suffix of $C$ equal to the prefix of $A$.
+7. Ah now we just get a cyclic $\ell+1$-mer, from which at least $2$ positions
+   must be sampled!
+8. The only step left is to look at charged $\ell+1$-mers in the $\ell+1$-order
+   DBg, rather than $\ell$-mers that introduce new samples in the $\ell$-order DBg.
+9. Anyway, here things clicked into place and the connection with previous DBg
+   partitioning becomes clear.
+
+#+print_bibliography:
