@@ -15,6 +15,9 @@ d(f) \geq \frac{\lceil\frac{w+k}{w}\rceil}{w+k} =
 \frac{\lceil\frac{\ell+1}{w}\rceil}{\ell+1}.
 $$
 
+In particular, this implies that when $k=1$, any forward sampling scheme has density at
+least $2/(w+1)$, and thus that random minimizers are optimal in this case.
+
 * Succinct background
 
 For more background, see either my previous [[../minimizers/minimizers.org][post]] on minimizers, or the mod-minimizer paper [cite:@modmini].
@@ -154,8 +157,15 @@ $$
 But we can already see that double decycling based minimizers
 [cite:@minimum-decycling-set] break this continuation, so we should expect some
 tricky cases along the way.
+Nevertheless, this formula has a nice interpretation:
+- We need density at least $1/w$ as a baseline.
+- Every $(k+w)/2$ steps, 'coherence'/'synchronization' is lost, and with
+  probability $1/2$ a gap of size $\geq w$ must be filled by a new sample.
+- With probability $1/(w(k+w))$, two consecutive but non-coherent windows sample
+  two kmers at distance $1/w$ anyway, and are 'accidentally coherent'. (Thanks
+  Daniel for this point.)
 
-* Postscriptum
+* Post scriptum
 
 It really took a long time to discover this proof. In the sense that, it was
 always there, ready to be found, but nobody did. Schleimers' original bound
@@ -196,5 +206,9 @@ were hinted at:
    DBg, rather than $\ell$-mers that introduce new samples in the $\ell$-order DBg.
 9. Anyway, here things clicked into place and the connection with previous DBg
    partitioning becomes clear.
+
+* Acknowledgement
+Thanks to both [[https://twitter.com/daniel_c0deb0t][Daniel Liu]] and [[https://twitter.com/giulio_pibiri][Giulio Ermanno Pibiri]] for many discussions and
+for suggesting improvements to this text.
 
 #+print_bibliography:
