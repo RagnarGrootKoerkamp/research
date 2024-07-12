@@ -263,7 +263,144 @@ rnd/ext_daniel          time:   [9.2473 ms 9.2487 ms 9.2507 ms]
 We see that =minimizer-iter= is quite a bit faster than our methods, and
 Daniel's code is another two times faster. So let's get to work :)
 
-* TODO The first step: a deque
+* Sliding window minimum
+After hashing all k-mers, we basically have a sequence of $n-k+1$ pseudo-random
+integers, and we would like to find the position of the leftmost minimum in each
+window of $w$ of those integers. Thus, we can model the problem using the
+following trait:
+#+caption: Trait for the sliding window minimimum problem.
+#+begin_src rust
+pub trait SlidingMin<V> {
+    /// Initialize a new datastructure with window size `w`.
+    fn new(w: usize) -> Self;
+    /// Push a new value, starting at position 0.
+    /// Return the pos and value of the minimum of the last w elements.
+    fn push(&mut self, val: V) -> Elem<V>;
+}
+
+#[derive(Clone, Copy)]
+pub struct Elem<Val> {
+    pub pos: usize,
+    pub val: Val,
+}
+#+end_src
+
+** The queue
+
+Your first idea may be to simply keep a rolling prefix-minimum that tracks the
+lowest hash/value seen so far. When $w=3$ and the hashes are $[10,9,8,7,6,...]$,
+the rolling prefix minimum is exactly also the minimum of each window of size
+$3$ (like $[8,7,6]$).
+But alas, this won't work for increasing sequences:
+when the hashes are $[1,2,3,4,5,...]$ and the window shifts to $[2,3,4]$, the $1$ at index $0$ is not a minimum of that
+window anymore, and the minimum goes up to $2$.
+
+As the window slides right, each time we see a new value that's smaller than
+everything in the window, we can basically 'forget' about all existing values
+and just keep that one in memory. Otherwise, we can sill forget about all values
+in the window larger than the value that is shifted in.
+
+This is formalized by using a *queue* of increasing values in the window. At
+each step, the minimum of the window is the value at the front of the queue. It's
+probably best explained using an example. Suppose the hashes are
+$[4,7,3,6,9,6,4,8]$ and $w=4$.
+1. The queue starts empty: $[]$.
+2. We push $4$: $[4]$.
+3. We push $7$. There are no smaller values, so we get $[4, 7]$.
+4. We push $3$. This is a new minimum, so forget everything: $[3]$.
+5. Push $6$: $[3,6]$.
+6. Push $9$: $[3,6,9,6]$. We don't have to pop the $4$ anymore since it's
+   already gone.
+7. Push $6$. This drops the $9$ that is now useless: $[3,6,6]$.  We must keep
+   both $6$'es for when the first $6$ eventually drops.
+8. Push the $4$, and drop the preceding sixes, since $4$ is better: $[3,4]$. At
+   this point, the window of the last $w=4$ is $[6,9,6,4]$, and the $3$ at the
+   front of the queue drops out, so we get $[4]$.
+9. Lastly we push the $8$: $[4, 8]$.
+In order to know when to /pop/ elements from the front, we don't just store
+values in this queue, but also the positions of all elements in the original text.
+
+In code, it looks like this:
+#+caption: A simple 'monotone queue' implementation. (TODO commit)
+#+begin_src rust
+pub struct MonotoneQueue<Val: Ord> {
+    w: usize,
+    pos: usize,
+    /// A queue of (pos, val) objects.
+    /// Both pos and val values are always increasing, so that the smallest
+    /// value is always at the front.
+    q: VecDeque<Elem<Val>>,
+}
+
+impl<Val: Ord + Copy> SlidingMin<Val> for MonotoneQueue<Val> {
+    fn new(w: usize) -> Self {
+        assert!(w > 0);
+        Self {
+            w,
+            pos: 0,
+            q: VecDeque::new(),
+        }
+    }
+
+    fn push(&mut self, val: Val) -> Elem<Val> {
+        // Strictly larger preceding `k` are removed, so that the queue remains
+        // non-decreasing.
+        while let Some(back) = self.q.back() {
+            if back.val > val {
+                self.q.pop_back();
+            } else {
+                break;
+            }
+        }
+        self.q.push_back(Elem { pos: self.pos, val });
+        let front = self.q.front().unwrap(); // Safe, because we just pushed.
+        if self.pos - front.pos >= self.w {
+            self.q.pop_front();
+        }
+        self.pos += 1;
+        *self.q.front().unwrap() // Safe, because w > 0.
+    }
+}
+#+end_src
+
+*Analysis:* Since each element is pushed once and popped once, each call to
+=push= takes amortized constant $O(1)$ time!
+
+** A minimizer using the queue
+It's now trivial to implement an $O(n)$ minimizer scheme using this queue:
+#+caption: v3: using a queue for sliding window minimum.
+#+begin_src rust
+pub struct V3Queue {
+    pub w: usize,
+    pub k: usize,
+}
+
+impl Minimizer for V3Queue {
+    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
+        let mut q = MonotoneQueue::new(self.w);
+        let mut kmers = text.windows(self.k);
+        // Inset the first w-1 k-mers, that do not yet form a full window.
+        for kmer in kmers.by_ref().take(self.w - 1) {
+            q.push(fxhash::hash(kmer));
+        }
+        kmers.map(|kmer| q.push(fxhash::hash(kmer)).pos).collect()
+    }
+}
+#+end_src
+
+How does it do?
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.309 ms 87.315 ms 87.321 ms]
+rnd/1_naive_fx          time:   [69.089 ms 69.121 ms 69.147 ms]
+rnd/2_naive_wy          time:   [96.830 ms 96.842 ms 96.854 ms]
+rnd/ext_minimizer_iter  time:   [20.001 ms 20.007 ms 20.012 ms]
+rnd/3_queue             time:   [23.952 ms 24.512 ms 25.095 ms]
+#+end_src
+
+Great! Already very close to the =minimizer-iter= crate, and we didn't even
+write much code yet.
+From now on, I'll leave out the naive $O(wn)$ implementations.
 
 * TODO Away with the deque
 
