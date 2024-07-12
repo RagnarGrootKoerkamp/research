@@ -1,0 +1,277 @@
+#+title: Fast minimizers
+#+HUGO_SECTION: posts
+#+HUGO_TAGS: hpc minimizer
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+PROPERTY: header-args :eval never-export
+#+date: <2024-07-12 Fri>
+#+author: Ragnar Groot Koerkamp
+
+In this post, we will develop a fast implementation of random minimizers.
+
+* Random minimizers
+
+Many tools in bioinformatics rely on /k-mers/.
+Given a string/text/DNA sequence ~t: &[u8]~ of length $n$, the /k-mers/ of ~t~ are all the
+length-$k$ substrings. There are $n-k+1$ of them$.
+
+In order to speed up processing, and since consecutive k-mers are overlapping
+and contain redundancy, it is common to /subsample/ the k-mers. This should be
+done in a deterministic way, so that similar but slightly distinct sequences
+still sample mostly the same k-mers. One such way is /random minimizers/:
+1. First, a /window size/ $w$ is chosen, which will guarantee that at least one
+   k-mer is sampled every $w$ positions of $t$, to prevent long gaps between
+   consecutive k-mers.
+2. Then, every k-mer is hashed using a pseudo-random hash function $h$, and in
+   each /window/ of $w$ consecutive k-mers (of length $\ell=w+k-1$), the *leftmost* one with the smallest
+   hash is selected.[fn::Some foreshadowing here..]
+Consecutive windows (that overlap in $w-1$ k-mers) often sample the same k-mer,
+so that the total number of sampled k-mers is much smaller than $n-k+1$. In
+fact, random minimizers have a /density/ of $2/(w+1)$ and thus sample
+approximately two k-mers per window.
+
+My [[../minimizers/minimizers.org][previous post]] on minimizers gives more background on density and other
+sampling schemes. One such alternative scheme is the mod-minimizer
+[cite:@modmini], that has low density when $w$ is large compared to $k$. That
+paper also contains a review of methods and pseudocode for them.
+
+* Setting up benchmarking
+** Adding criterion
+Before we start our implementation, let's set up a benchmark so we can easily
+compare them. We will use [[https://crates.io/crates/criterion][criterion]], together with the [[https://crates.io/crates/cargo-criterion][cargo-criterion]] helper.
+First we add =criterion= as a dev-dependency to =Cargo.toml=, and set up a stub
+benchmark.
+
+The code can be found at [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]], mostly in the
+=benches/= folder. The change below is [[https://github.com/RagnarGrootKoerkamp/minimizers/commit/e758f20e94e7a65c4acd93a5c39a3a9362994fe9][this commit]].
+
+#+begin_src toml
+[dev-dependencies]
+criterion = "*"
+
+# Do not build the library as a benchmarking target.
+[lib]
+bench = false
+
+[[bench]]
+name = "bench"
+harness = false
+#+end_src
+
+We add =benches/bench.rs= which looks like this:
+#+begin_src rust
+use criterion::{criterion_group, criterion_main, Criterion};
+
+/// Generate a random string of length `n` over an alphabet of size `sigma`.
+pub fn generate_random_string(n: usize, sigma: usize) -> Vec<u8> {
+    (0..n)
+        .map(|_| (rand::random::<usize>() % sigma) as u8)
+        .collect()
+}
+
+/// Benchmark some functions.
+fn bench(c: &mut Criterion) {
+    let string = generate_random_string(1000000, 256);
+    c.bench_function("sum of chars", |b| {
+        b.iter(|| string.iter().map(|&c| c as usize).sum::<usize>() as usize);
+    });
+    c.bench_function("sum of squares", |b| {
+        b.iter(|| string.iter().map(|&c| (c as usize).pow(2)).sum::<usize>() as usize);
+    });
+}
+
+// Criterion setup.
+criterion_group!(name = group; config = Criterion::default(); targets = bench);
+criterion_main!(group);
+#+end_src
+
+If we run this using =cargo criterion=, we get:
+#+begin_export html
+<script src="https://asciinema.org/a/qXoOOXgGstEoNXyiT3HtzHgBL.js" id="asciicast-qXoOOXgGstEoNXyiT3HtzHgBL" async="true"></script>
+#+end_export
+Running it again, we get a nice diff with the difference in how long the run
+took compared to before.
+#+begin_export html
+<script src="https://asciinema.org/a/ZuPOAKYv3grH65vJxB8sivgyh.js" id="asciicast-ZuPOAKYv3grH65vJxB8sivgyh" async="true"></script>
+#+end_export
+
+
+** Making it faster
+As you can see, this is quite slow. That's for a couple of reasons:
+- Before each benchmark, a 3 second warmup is done.
+- Each benchmark is 5 seconds.
+- After each benchmark, some plots are generated.
+- At the end, some HTML reports are generated.
+I'm impatient, and all this waiting *really* impacts my iteration time, so let's
+make it faster (commit TODO):
+- Reduce warmup time to 0.5s.
+- Reduce benchmark time to 2s, and only take 10 samples (otherwise slow cases
+  are slow).
+- Disable plots and html generation.
+The first two are done from code (TODO commit):
+#+begin_src diff
+-    config = Criterion::default();
++    config = Criterion::default()
++        .warm_up_time(Duration::from_millis(500))
++        .measurement_time(Duration::from_millis(2000))
++        .sample_size(10);
+#+end_src
+The last is best done by adding the ~--plotting-backend disabled~ flag. For
+convenience, we add this rule to the =justfile= so we can /just/ do =just
+bench=. I'm also adding =quiet= to hide the comparison between runs to simplify presentation.
+#+begin_src make
+bench:
+    cargo criterion --plotting-backend disabled --output-format quiet
+#+end_src
+#+begin_export html
+<script src="https://asciinema.org/a/EQtJkYBEXYzHsEBnhrMLOp29l.js" id="asciicast-EQtJkYBEXYzHsEBnhrMLOp29l" async="true"></script>
+#+end_export
+Much better.
+
+** A note on CPU frequency
+
+Most consumer CPUs support turboboost to increase the clock frequency for short
+periods of time. That's nice, but not good for stable measurements. Thus, I
+always pin the frequency of my =i7-10750H= to the default ~2.6GHz~:
+#+begin_src sh
+sudo cpupower frequency-set --governor powersave -d 2.6GHz -u 2.6GHz
+#+end_src
+This usually results in quite stable measurements.
+
+Similarly, I have hyper threading disabled.
+
+* Baselines
+With that out of the way, let's write some code.
+But actually, we should first decide what exactly we are benchmarking.
+For now, let's keep things simple: we would like to obtain a vector that
+contains for each of the $n-w+1$ windows the absolute position of the minimal k-mer in
+that window:
+#+begin_src rust
+pub trait Minimizer {
+    fn minimizers(&self, text: &[u8]) -> Vec<usize>;
+}
+#+end_src
+
+** Bruteforce
+
+Here is a naive $O(|t| \cdot w)$ implementation that iterates over the
+windows, hashes each k-mer, and finds the position of the minimum. (While
+hashing each k-mer is technically not $O(1)$, we will assume that $k$ is small
+enough compared to the word size that this holds in practice.)
+
+#+caption: V0: a naive implementation of lexicographic minimizers. (TODO commit)
+#+begin_src rust
+pub struct V0NaiveLex {
+    pub w: usize,
+    pub k: usize,
+}
+
+impl Minimizer for V0NaiveLex {
+    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
+        // Iterate over the windows of size l=w+k-1.
+        text.windows(self.w + self.k - 1)
+            .enumerate()
+            // For each window, starting at pos j, find the lexicographically smallest k-mer.
+            .map(|(j, window)| {
+                j + window
+                    .windows(self.k)
+                    .enumerate()
+                    .min_by_key(|(_idx, kmer)| *kmer)
+                    .unwrap()
+                    .0
+            })
+            .collect()
+    }
+}
+#+end_src
+
+Let's also already add in two versions that use =fxhash= and =wyhash= already,
+two very simple and fast hash functions.
+#+caption: V1 and V2. (TODO commit)
+#+begin_src diff
+V1NaiveFx:
+- .min_by_key(|(_idx, kmer)| *kmer)
++ .min_by_key(|(_idx, kmer)| fxhash::hash64(kmer))
+V2NaiveWy:
+- .min_by_key(|(_idx, kmer)| *kmer)
++ .min_by_key(|(_idx, kmer)| wyhash::wyhash(kmer, 0))
+#+end_src
+
+The benchmark now looks like this. I changed to a /benchmark group/ since this
+gives slightly more compact output, and tells criterion that the functions belong
+together and benchmark the same thing.
+#+begin_src rust
+fn bench(c: &mut Criterion) {
+    let mut g = c.benchmark_group("randmini");
+    let text = &generate_random_string(1000000, 256);
+    let w = 20;
+    let k = 20;
+
+    g.bench_function("0_naive_lex", |b| {
+        let m = V0NaiveLex { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+    g.bench_function("1_naive_fx", |b| {
+        let m = V1NaiveFx { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+    g.bench_function("2_naive_wy", |b| {
+        let m = V2NaiveWy { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+}
+#+end_src
+First results:
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
+rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
+rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+#+end_src
+Observe:
+- Measurements between runs are very stable.
+- FxHash is fastest. It's just one multiply-add per 8 bytes of kmer.
+- WyHash is actually slower than lexicographic comparison in this case!
+
+** Other crates
+Let's also compare with some external implementations.
+- [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is one baseline implementation. It returns an iterator over all
+  distinct minimizers.
+  #+begin_src rust
+    g.bench_function("ext_minimizer_iter", |b| {
+        b.iter(|| {
+            minimizer_iter::MinimizerBuilder::<u64>::new()
+                .minimizer_size(k)
+                .width(w as u16)
+                .iter_pos(text)
+                .collect_vec()
+        });
+    });
+  #+end_src
+- Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]], to which we'll come back in more detail later.
+
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
+rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
+rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+rnd/ext_minimizer_iter  time:   [19.958 ms 19.960 ms 19.961 ms]
+rnd/ext_daniel          time:   [9.2473 ms 9.2487 ms 9.2507 ms]
+#+end_src
+We see that =minimizer-iter= is quite a bit faster than our methods, and
+Daniel's code is another two times faster. So let's get to work :)
+
+* TODO The first step: a deque
+
+* TODO Away with the deque
+
+* TODO NtHash: a rolling kmer hash
+
+* TODO Sliding window minimum revisited
+
+* TODO SIMD, SIMD everywhere
+
+
+#+print_bibliography:
