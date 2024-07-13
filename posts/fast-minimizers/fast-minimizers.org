@@ -11,6 +11,10 @@
 
 In this post, we will develop a fast implementation of random minimizers.
 
+Code for this post is in the =benches/= directory of
+[[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]]. The unpolished experiments are in the
+=playground= branch.
+
 * Random minimizers
 
 Many tools in bioinformatics rely on /k-mers/.
@@ -178,6 +182,7 @@ impl Minimizer for V0NaiveLex {
                 j + window
                     .windows(self.k)
                     .enumerate()
+                    // min_by_key returns the leftmost minimum.
                     .min_by_key(|(_idx, kmer)| *kmer)
                     .unwrap()
                     .0
@@ -231,6 +236,8 @@ rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
 rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
 #+end_src
 Observe:
+- Each method takes 50-100ms to process 1 million characters. That would be
+  50-100s for 1Gbp.
 - Measurements between runs are very stable.
 - FxHash is fastest. It's just one multiply-add per 8 bytes of kmer.
 - WyHash is actually slower than lexicographic comparison in this case!
@@ -395,6 +402,7 @@ rnd/0_naive_lex         time:   [87.309 ms 87.315 ms 87.321 ms]
 rnd/1_naive_fx          time:   [69.089 ms 69.121 ms 69.147 ms]
 rnd/2_naive_wy          time:   [96.830 ms 96.842 ms 96.854 ms]
 rnd/ext_minimizer_iter  time:   [20.001 ms 20.007 ms 20.012 ms]
+rnd/ext_daniel          time:   [9.2662 ms 9.2696 ms 9.2735 ms]
 rnd/3_queue             time:   [23.952 ms 24.512 ms 25.095 ms]
 #+end_src
 
@@ -402,7 +410,203 @@ Great! Already very close to the =minimizer-iter= crate, and we didn't even
 write much code yet.
 From now on, I'll leave out the naive $O(wn)$ implementations.
 
-* TODO Away with the deque
+** Profiling what we have
+We're already close to the reference implementation, but not quite there yet.
+Let's do some profiling. For this, we can pass ~--profile-time 5~ to
+~criterion~, so that instead of the usual benchmarking, it just runs the
+selected benchmarks for 5 seconds. We start with a flamegraph of the v3 method above.
+#+begin_src just
+flame test='':
+    cargo flamegraph --bench bench --open -- --bench --profile-time 2 {{test}}
+#+end_src
+
+#+caption: A flamegraph made using =just flame 3_queue= showing that some time is spent in the warm-up, some in main loop, and that most time is spent in the =push= function.
+#+attr_html: :class inset
+[[./3_flame.svg][file:3_flame.svg]]
+
+This is not yet super insightful though. It's pretty much expected that most
+time is in the =push= function anyway. Let's get some more statistics using
+=perf stat=:
+#+begin_src just
+stat test='':
+    cargo build --profile bench --benches
+    perf stat -d cargo criterion -- --profile-time 2 {{test}}
+#+end_src
+#+begin_src txt
+          2,380.66 msec task-clock:u                     #    1.005 CPUs utilized
+                 0      context-switches:u               #    0.000 /sec
+                 0      cpu-migrations:u                 #    0.000 /sec
+            22,675      page-faults:u                    #    9.525 K/sec
+     5,873,141,947      cycles:u                         #    2.467 GHz
+    13,624,513,378      instructions:u                   #    2.32  insn per cycle
+     1,893,102,104      branches:u                       #  795.201 M/sec
+        77,266,703      branch-misses:u                  #    4.08% of all branches
+     2,960,654,139      L1-dcache-loads:u                #    1.244 G/sec
+        19,781,179      L1-dcache-load-misses:u          #    0.67% of all L1-dcache accesses
+         1,659,216      LLC-loads:u                      #  696.957 K/sec
+           269,546      LLC-load-misses:u                #   16.25% of all LL-cache accesses
+#+end_src
+
+There is still nothing that stands out as very bad. 2.3 instructions per cycle
+is not great, but still reasonable. (It can go up to 4 for my processor, and
+above 3 is good usually.) Maybe $4\%$ of branch misses is a problem though.
+Let's dive deeper and look at =perf record=:
+#+begin_src just
+perf test='':
+    cargo build --profile bench --benches
+    perf record cargo criterion -- --profile-time 2 {{test}}
+    perf report
+#+end_src
+#+caption: =just perf 3_queue=
+#+begin_src txt
+  65.79%  <bench::randmini::sliding_min::MonotoneQueue<Val> as bench::randmini::sliding_min::SlidingMin<Val>>::push
+  22.15%  <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::fold
+  ...
+#+end_src
+
+Now the problem is clear! The =push= function is not inlined. Let's fix that.
+(TODO commit)
+#+begin_src diff
++#[inline(always)]
+ fn new(w: usize) -> Self {
+
++#[inline(always)]
+ fn push(&mut self, val: Val) -> Elem<Val> {
+#+end_src
+#+begin_src txt
+rnd/ext_minimizer_iter  time:   [20.023 ms 20.092 ms 20.206 ms]
+rnd/ext_daniel          time:   [9.2619 ms 9.4479 ms 9.6512 ms]
+rnd/3a_queue            time:   [23.936 ms 23.948 ms 23.964 ms]
+rnd/3b_inlined_queue    time:   [22.786 ms 22.874 ms 22.988 ms]
+#+end_src
+
+A well, forgive me my optimism. Either way, this is decently close to the baseline
+version. Let's look in slightly more detail at the =perf report=:
+
+#+begin_src asm
+  1.02 │2f0:   lea    (%rdx,%rax,1),%rdi  ; start of the while pop-back loop.
+  0.58 │       cmp    %rcx,%rdi
+  1.41 │       mov    $0x0,%edi
+  0.67 │       cmovae %rcx,%rdi
+  0.35 │       shl    $0x4,%rdi
+  0.59 │       mov    %rsi,%r8
+  1.28 │       sub    %rdi,%r8
+  1.74 │    ┌──cmp    %r12,(%r8)              ; Is back > val?
+  1.91 │    ├──jbe    321                     ; -> NO, pop it.
+ *9.08*│    │  dec    %rax
+  3.41 │    │  mov    %rax,0x18(%rbx)
+  0.35 │    │  add    $0xfffffffffffffff0,%rsi
+  0.10 │    │  test   %rax,%rax
+  0.33 │    │↑ jne    2f0                 ; jumps back to the top
+  0.28 │    │  xor    %eax,%eax
+       │    │self.q.push_back(Elem { pos: self.pos, val });
+*12.02*│321:└─→mov    0x28(%rbx),%r13         ; -> YES, stop.
+#+end_src
+We can see that a lot of time, 21% of the total, is spent on the two
+instructions right after the branch. Indeed, this branch checks whether the
+previous element is larger than the current one, and that is basically 50-50
+random, as bad as it can be.
+
+Thus, we would like a less branchy and more predictable method for sliding windows.
+
+* Re-scanning: Away with the queue
+One way to simplify all these queue operations is by just dropping the queue
+completely. I learned of this method via Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
+but I believe it is folklore[fn::Citation needed, both for it being folklore and
+for the original idea.].
+Instead of being smart and incrementally keeping track of all the elements in
+the queue, we can simply only track the minimum after all ;)
+But then when 'the minimum falls out of the window', we have a problem. We solve
+this by simply re-scanning the entire window for the new minimum. Thus, we keep
+a cyclic buffer of the last $w$ values, and scan it as needed. One point of attention
+is that we need the /leftmost/ minimal value, but as the buffer is cyclic, that
+is not the first minimum in the buffer. Thus, we partition the scan into two
+parts, and prefer minima in the second (older) half.
+
+#+caption: =Rescan= implementation of =SlidingMin=.
+#+begin_src rust
+pub struct Rescan<Val: Ord> {
+    w: usize,
+    /// Position of next element.
+    pos: usize,
+    /// Index in `vals` of next element.
+    idx: usize,
+    /// Position of the smallest element in the last window.
+    min_pos: usize,
+    /// Value of the smallest element in the last window.
+    min_val: Val,
+    vals: Vec<Val>,
+}
+
+impl<Val: Ord + Copy + Max> SlidingMin<Val> for Rescan<Val> {
+    #[inline(always)]
+    fn new(w: usize) -> Self {
+        assert!(w > 0);
+        Self {
+            w,
+            pos: 0,
+            idx: 0,
+            min_pos: 0,
+            min_val: Val::MAX,
+            vals: vec![Val::MAX; w],
+        }
+    }
+
+    #[inline(always)]
+    fn push(&mut self, val: Val) -> Elem<Val> {
+        self.vals[self.idx] = val;
+        if val < self.min_val {
+            self.min_val = val;
+            self.min_pos = self.pos;
+        }
+        if self.pos - self.min_pos == self.w {
+            // Find the position of the minimum, preferring older elements that
+            // come *after* self.idx.
+            let p1 = self.vals[self.idx + 1..].iter().position_min();
+            let p2 = self.vals[..=self.idx].iter().position_min().unwrap();
+            (self.min_val, self.min_pos) = if let Some(p1) = p1 {
+                let p1 = self.idx + 1 + p1;
+                if self.vals[p1] <= self.vals[p2] {
+                    (self.vals[p1], self.pos - self.idx + p1 - self.w)
+                } else {
+                    (self.vals[p2], self.pos - self.idx + p2)
+                }
+            } else {
+                (self.vals[p2], self.pos - self.idx + p2)
+            };
+        }
+        self.pos += 1;
+        self.idx += 1;
+        if self.idx == self.w {
+            self.idx = 0;
+        }
+
+        return Elem {
+            pos: self.min_pos,
+            val: self.min_val,
+        };
+    }
+}
+#+end_src
+
+As before, the corresponding minimizer scheme is trivial to implement:
+#+caption: v4: rescan
+#+begin_src diff
+-pub struct V3Queue  {..}
++pub struct V4Rescan {..}
+ ...
+-    let mut q = MonotoneQueue::new(self.w);
++    let mut q = Rescan::new(self.w);
+#+end_src
+The result is *fast*: almost twice as fast as the previous best! Also close to
+Daniel's version, but not quite there yet.
+#+begin_src txt
+rnd/ext_minimizer_iter  time:   [26.950 ms 27.139 ms 27.399 ms]
+rnd/ext_daniel          time:   [9.2476 ms 9.2497 ms 9.2532 ms]
+rnd/3a_queue            time:   [23.686 ms 23.692 ms 23.699 ms]
+rnd/3b_inlined_queue    time:   [22.620 ms 22.631 ms 22.641 ms]
+rnd/4_rescan            time:   [10.876 ms 10.882 ms 10.894 ms]
+#+end_src
 
 * TODO NtHash: a rolling kmer hash
 
