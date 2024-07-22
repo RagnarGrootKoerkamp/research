@@ -1,6 +1,6 @@
-#+title: Fast minimizers
+#+title: [WIP] Computing minimizers, fast
 #+HUGO_SECTION: posts
-#+HUGO_TAGS: hpc minimizer
+#+HUGO_TAGS: hpc minimizer wip
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{} num:
 #+hugo_front_matter_key_replace: author>authors
@@ -158,12 +158,17 @@ pub trait Minimizer {
 }
 #+end_src
 
-** Bruteforce
+** Naive brute force
 
-Here is a naive $O(|t| \cdot w)$ implementation that iterates over the
+A naive $O(|t| \cdot w)$ algorithm iterates over the
 windows, hashes each k-mer, and finds the position of the minimum. (While
 hashing each k-mer is technically not $O(1)$, we will assume that $k$ is small
 enough compared to the word size that this holds in practice.)
+
+It looks like this:
+#+caption: Illustration of the naive algorithm for a sequence of 8 kmers and $w=4$. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window of length $w$, finds the element with the smallest hash. The orange colour indicates that for each window, we iterate over all hashes. The minimum has a bold outline.
+#+attr_html: :class inset
+[[file:./naive.svg]]
 
 #+caption: V0: a naive implementation of lexicographic minimizers. (TODO commit)
 #+begin_src rust
@@ -275,7 +280,7 @@ After hashing all k-mers, we basically have a sequence of $n-k+1$ pseudo-random
 integers, and we would like to find the position of the leftmost minimum in each
 window of $w$ of those integers. Thus, we can model the problem using the
 following trait:
-#+caption: Trait for the sliding window minimimum problem.
+#+caption: Trait for the sliding window minimum problem.
 #+begin_src rust
 pub trait SlidingMin<V> {
     /// Initialize a new datastructure with window size `w`.
@@ -304,26 +309,17 @@ window anymore, and the minimum goes up to $2$.
 
 As the window slides right, each time we see a new value that's smaller than
 everything in the window, we can basically 'forget' about all existing values
-and just keep that one in memory. Otherwise, we can sill forget about all values
+and just keep that one in memory. Otherwise, we can still forget about all values
 in the window larger than the value that is shifted in.
 
 This is formalized by using a *queue* of increasing values in the window. At
 each step, the minimum of the window is the value at the front of the queue. It's
-probably best explained using an example. Suppose the hashes are
-$[4,7,3,6,9,6,4,8]$ and $w=4$.
-1. The queue starts empty: $[]$.
-2. We push $4$: $[4]$.
-3. We push $7$. There are no smaller values, so we get $[4, 7]$.
-4. We push $3$. This is a new minimum, so forget everything: $[3]$.
-5. Push $6$: $[3,6]$.
-6. Push $9$: $[3,6,9,6]$. We don't have to pop the $4$ anymore since it's
-   already gone.
-7. Push $6$. This drops the $9$ that is now useless: $[3,6,6]$.  We must keep
-   both $6$'es for when the first $6$ eventually drops.
-8. Push the $4$, and drop the preceding sixes, since $4$ is better: $[3,4]$. At
-   this point, the window of the last $w=4$ is $[6,9,6,4]$, and the $3$ at the
-   front of the queue drops out, so we get $[4]$.
-9. Lastly we push the $8$: $[4, 8]$.
+probably best explained using an example.
+
+#+caption: The queue method: In each step, we add the new hash value to the right/back of the queue that is shown in blue. Any preceding values in the queue that are larger are dropped (red). The smallest element of the window is on the left/front of the queue. In the second to last window, the leading $3$ is dropped from the queue as well because it falls out of the window.
+#+attr_html: :class inset
+[[file:./queue.svg]]
+
 In order to know when to /pop/ elements from the front, we don't just store
 values in this queue, but also the positions of all elements in the original text.
 
@@ -410,7 +406,174 @@ Great! Already very close to the =minimizer-iter= crate, and we didn't even
 write much code yet.
 From now on, I'll leave out the naive $O(wn)$ implementations.
 
-** Profiling what we have
+* Re-scanning: Away with the queue
+We would like to find some middle ground between keeping the queue of possible
+minima and rescanning every window. A first idea is this: Once we find the
+minimizer of some window, we can jump to the first window after that position to
+find the next minimizer. This
+finds all distinct minimizers, although it does not compute the minimizer for each window individually.
+
+#+caption: Each time a minimizer (green) is found, jump to the window starting right after to find the next minimizer. (The leading $4$ and final $8$ are minimizers of a prefix/suffix of the sequence.)
+#+attr_html: :class inset
+[[file:./jump.svg]]
+
+Since the expected distance between random minimizers is $(w+1)/2$, we expect to
+scan each position just under two times.
+
+I learned of an improved method via Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
+but I believe it is folklore[fn::Citation needed, both for it being folklore and
+for the original idea.].
+This is a slightly improved variant of the method above, where we don't consider
+all windows independently, but still keep track of a rolling minimum.
+Only when 'the minimum falls out of the window' a re-scan is done.
+
+#+caption: Keep a rolling minimum (green) of the lowest hash seen so far by comparing each new element (orange) to the minimum. Only when the minimum falls outside the window, recompute the minimum for the entire window (yellow row).
+#+attr_html: :class inset
+[[file:./rescan.svg]]
+
+TODO: I believe this only does $\approx 1.5$ comparisons per element instead of $2$.
+
+Thus, we keep
+a cyclic buffer of the last $w$ values, and scan it as needed. One point of attention
+is that we need the /leftmost/ minimal value, but as the buffer is cyclic, that
+is not the first minimum in the buffer. Thus, we partition the scan into two
+parts, and prefer minima in the second (older) half.
+
+#+caption: =Rescan= implementation of =SlidingMin=.
+#+begin_src rust
+pub struct Rescan<Val: Ord> {
+    w: usize,
+    /// Position of next element.
+    pos: usize,
+    /// Index in `vals` of next element.
+    idx: usize,
+    /// Position of the smallest element in the last window.
+    min_pos: usize,
+    /// Value of the smallest element in the last window.
+    min_val: Val,
+    vals: Vec<Val>,
+}
+
+impl<Val: Ord + Copy + Max> SlidingMin<Val> for Rescan<Val> {
+    #[inline(always)]
+    fn new(w: usize) -> Self {
+        assert!(w > 0);
+        Self {
+            w,
+            pos: 0,
+            idx: 0,
+            min_pos: 0,
+            min_val: Val::MAX,
+            vals: vec![Val::MAX; w],
+        }
+    }
+
+    #[inline(always)]
+    fn push(&mut self, val: Val) -> Elem<Val> {
+        self.vals[self.idx] = val;
+        if val < self.min_val {
+            self.min_val = val;
+            self.min_pos = self.pos;
+        }
+        if self.pos - self.min_pos == self.w {
+            // Find the position of the minimum, preferring older elements that
+            // come *after* self.idx.
+            let p1 = self.vals[self.idx + 1..].iter().position_min();
+            let p2 = self.vals[..=self.idx].iter().position_min().unwrap();
+            (self.min_val, self.min_pos) = if let Some(p1) = p1 {
+                let p1 = self.idx + 1 + p1;
+                if self.vals[p1] <= self.vals[p2] {
+                    (self.vals[p1], self.pos - self.idx + p1 - self.w)
+                } else {
+                    (self.vals[p2], self.pos - self.idx + p2)
+                }
+            } else {
+                (self.vals[p2], self.pos - self.idx + p2)
+            };
+        }
+        self.pos += 1;
+        self.idx += 1;
+        if self.idx == self.w {
+            self.idx = 0;
+        }
+
+        return Elem {
+            pos: self.min_pos,
+            val: self.min_val,
+        };
+    }
+}
+#+end_src
+
+As before, the corresponding minimizer scheme is trivial to implement:
+#+caption: v4: rescan
+#+begin_src diff
+-pub struct V3Queue  {..}
++pub struct V4Rescan {..}
+ ...
+-    let mut q = MonotoneQueue::new(self.w);
++    let mut q = Rescan::new(self.w);
+#+end_src
+The result is *fast*: almost twice as fast as the previous best! Also close to
+Daniel's version, but not quite there yet.
+#+begin_src txt
+rnd/ext_minimizer_iter  time:   [26.950 ms 27.139 ms 27.399 ms]
+rnd/ext_daniel          time:   [9.2476 ms 9.2497 ms 9.2532 ms]
+rnd/3a_queue            time:   [23.686 ms 23.692 ms 23.699 ms]
+rnd/3b_inlined_queue    time:   [22.620 ms 22.631 ms 22.641 ms]
+rnd/4_rescan            time:   [10.876 ms 10.882 ms 10.894 ms]
+#+end_src
+
+
+* TODO Sliding window: away with branch-misses
+
+#+caption: Split algorithm: after each $w$ rows, we compute and store reverse suffix-minima (blue, bottom left) of the preceding slice of $w$ values and use those together with the forward rolling minimum to find the minimum of each window. The memory after each iteration is shown on the right, with updated values in orange.
+#+attr_html: :class inset
+[[file:./split.svg]]
+* TODO NtHash: a rolling kmer hash
+One problem with =fxhash= and =wyhash= is that they hash strings of arbitrary
+length, and hence generate a lot of code to handle all length modulo $8$ efficiently.
+In practice, we've only been using $k=21$ so far, but this still requires
+iterating over three $8$ byte words. Instead, a rolling hash only has to handle
+the first and last character of each string, regardless of the length of the
+string. We will use ntHash [cite:@nthash] (see also [[../nthash.org][this post]]). This assigns a random value $h(c)$ to
+each DNA character $c$, and computes the hash of a string as $x$ as
+\begin{equation}
+h(x) = \bigoplus_{i=0}^{k-1} rot^i(h(x_i)),
+\end{equation}
+where $rot^i$ does a $64$-bit rotate, and $\oplus$ is the xor operation.
+This can be efficiently computed incrementally by rotating the hash $1$, then
+xor'ing in $h(x_k)$, and then xor'ing out $rot^{k}(h(x_0))$.
+
+Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementation is simple:
+#+begin_src rust
+pub struct V5RescanNtHash {
+    pub w: usize,
+    pub k: usize,
+}
+
+impl Minimizer for V5RescanNtHash {
+    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
+        let mut q = Rescan::new(self.w);
+        let mut kmer_hashes = nthash::NtHashForwardIterator::new(text, self.k).unwrap();
+        for h in kmer_hashes.by_ref().take(self.w - 1) {
+            q.push(h);
+        }
+        kmer_hashes.map(|h| q.push(h).pos).collect()
+    }
+}
+#+end_src
+
+Unfortunately, it's slower than before:
+#+begin_src txt
+g/ext_daniel            time:   [8.9199 ms 8.9300 ms 8.9405 ms]
+g/4_rescan              time:   [10.557 ms 10.562 ms 10.574 ms]
+g/5_rescan_nthash       time:   [12.964 ms 12.980 ms 12.992 ms]
+#+end_src
+
+* TODO Optimizing what we have
+
+** Optimizing the queue
 We're already close to the reference implementation, but not quite there yet.
 Let's do some profiling. For this, we can pass ~--profile-time 5~ to
 ~criterion~, so that instead of the usual benchmarking, it just runs the
@@ -509,109 +672,95 @@ random, as bad as it can be.
 
 Thus, we would like a less branchy and more predictable method for sliding windows.
 
-* Re-scanning: Away with the queue
-One way to simplify all these queue operations is by just dropping the queue
-completely. I learned of this method via Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
-but I believe it is folklore[fn::Citation needed, both for it being folklore and
-for the original idea.].
-Instead of being smart and incrementally keeping track of all the elements in
-the queue, we can simply only track the minimum after all ;)
-But then when 'the minimum falls out of the window', we have a problem. We solve
-this by simply re-scanning the entire window for the new minimum. Thus, we keep
-a cyclic buffer of the last $w$ values, and scan it as needed. One point of attention
-is that we need the /leftmost/ minimal value, but as the buffer is cyclic, that
-is not the first minimum in the buffer. Thus, we partition the scan into two
-parts, and prefer minima in the second (older) half.
+** Optimizing the rescan
 
-#+caption: =Rescan= implementation of =SlidingMin=.
-#+begin_src rust
-pub struct Rescan<Val: Ord> {
-    w: usize,
-    /// Position of next element.
-    pos: usize,
-    /// Index in `vals` of next element.
-    idx: usize,
-    /// Position of the smallest element in the last window.
-    min_pos: usize,
-    /// Value of the smallest element in the last window.
-    min_val: Val,
-    vals: Vec<Val>,
-}
+If we look at the generated assembly, we can see it is quite branchy. In an
+attempt to fix this, we can replace all array indexing by =unsafe {v.get_unchecked(idx) }=.
+But it turns out doing so gives only negligible performance gains.
 
-impl<Val: Ord + Copy + Max> SlidingMin<Val> for Rescan<Val> {
-    #[inline(always)]
-    fn new(w: usize) -> Self {
-        assert!(w > 0);
-        Self {
-            w,
-            pos: 0,
-            idx: 0,
-            min_pos: 0,
-            min_val: Val::MAX,
-            vals: vec![Val::MAX; w],
-        }
-    }
-
-    #[inline(always)]
-    fn push(&mut self, val: Val) -> Elem<Val> {
-        self.vals[self.idx] = val;
-        if val < self.min_val {
-            self.min_val = val;
-            self.min_pos = self.pos;
-        }
-        if self.pos - self.min_pos == self.w {
-            // Find the position of the minimum, preferring older elements that
-            // come *after* self.idx.
-            let p1 = self.vals[self.idx + 1..].iter().position_min();
-            let p2 = self.vals[..=self.idx].iter().position_min().unwrap();
-            (self.min_val, self.min_pos) = if let Some(p1) = p1 {
-                let p1 = self.idx + 1 + p1;
-                if self.vals[p1] <= self.vals[p2] {
-                    (self.vals[p1], self.pos - self.idx + p1 - self.w)
-                } else {
-                    (self.vals[p2], self.pos - self.idx + p2)
-                }
-            } else {
-                (self.vals[p2], self.pos - self.idx + p2)
-            };
-        }
-        self.pos += 1;
-        self.idx += 1;
-        if self.idx == self.w {
-            self.idx = 0;
-        }
-
-        return Elem {
-            pos: self.min_pos,
-            val: self.min_val,
-        };
-    }
-}
+One other thing that stands out in the =perf= is this:
+#+begin_src asm
+       │    ┌──cmp    0x38(%r15),%rdx
+       │    │if val < self.min_val {
+       │    ├──jae    300
+       │    │self.min_val = val;
+  5.61 │    │  mov    %rdx,0x38(%r15)
+       │    │self.min_pos = self.pos;
+       │    │  mov    0x20(%r15),%rdx
+  0.38 │    │  mov    %rdx,0x30(%r15)
 #+end_src
-
-As before, the corresponding minimizer scheme is trivial to implement:
-#+caption: v4: rescan
+5% of the time is spend on the case where the =self.min_val= is updated,
+because of branch mispredictions. It would be better to avoid the branch by
+using =cmov= instead:
 #+begin_src diff
--pub struct V3Queue  {..}
-+pub struct V4Rescan {..}
+-            if val < self.min_val {
+-                self.min_val = val;
+-                self.min_pos = self.pos;
+-            }
++            (self.min_val, self.min_pos) = if val < self.min_val {
++                (val, self.pos)
++            } else {
++                (self.min_val, self.min_pos)
++            };
+#+end_src
+This indeed lowers the runtime by 3% to =10.5s=.
+
+Now, 5% of time is spent on the branch miss when the minimum falls out of the
+window, since this happens at random times. But first, we improve the hash function.
+
+** Making ntHash fast
+One reason is that the =next= function on the iterator is [[https://github.com/luizirber/nthash/pull/13][not inlined]].
+Updating to the git version brings it down from 12.9ms to 12.7ms, a whole 2%
+faster:
+#+begin_src diff
+-nthash = "0.5.1"
++nthash = { git = "https://github.com/luizirber/nthash" }
+#+end_src
+But actually the function still isn't inlined anyway. Enabling link-time optimization:
+#+begin_src diff
+ [profile.release]
+ debug = true
++lto = true
+#+end_src
+brings the runtime down to 11.3ms, but now the build is very slow, and actually
+still not all functions are inlined. I'm not quite sure why this is. I tried
+inlining the closure:
+#+begin_src diff
+ kmer_hashes.map(
++    #[inline(always)]
+     |h| q.push(h).pos).collect()
+ )
+#+end_src
+but that also didn't help.
+
+Instead, we'll just optimize the nthash library itself. For convenience we first
+copy the source to our repo.
+First, let's remove the check that all characters are =ACGT=:
+#+begin_src diff
+ fn h(c: u8) -> u64 {
+     let val = H_LOOKUP[c as usize];
+-    if val == 1 {
+-        panic!("Non-ACGTN nucleotide encountered! {}", c as char)
+-    }
+     val
+ }
+#+end_src
+Runtime goes to 11.1s.
+
+Next, we sprinkle in some =get_unchecked=:
+#+begin_src diff
+-let val = H_LOOKUP[c as usize];
  ...
--    let mut q = MonotoneQueue::new(self.w);
-+    let mut q = Rescan::new(self.w);
+-let seqi = self.seq[i];
++let seqi = unsafe { *self.seq.get_unchecked(i) };
+-let seqk = self.seq[i + self.k];
++let seqk = unsafe { *self.seq.get_unchecked(i + self.k) };
 #+end_src
-The result is *fast*: almost twice as fast as the previous best! Also close to
-Daniel's version, but not quite there yet.
-#+begin_src txt
-rnd/ext_minimizer_iter  time:   [26.950 ms 27.139 ms 27.399 ms]
-rnd/ext_daniel          time:   [9.2476 ms 9.2497 ms 9.2532 ms]
-rnd/3a_queue            time:   [23.686 ms 23.692 ms 23.699 ms]
-rnd/3b_inlined_queue    time:   [22.620 ms 22.631 ms 22.641 ms]
-rnd/4_rescan            time:   [10.876 ms 10.882 ms 10.894 ms]
-#+end_src
+and runtime goes down to 10.7s.
 
-* TODO NtHash: a rolling kmer hash
-
-* TODO Sliding window minimum revisited
-
+It's not exactly clear to me why this is not as fast as Daniel's original
+version. Probably it's still because things aren't inlined, and I don't understand why
+that's not happening.
 * TODO SIMD, SIMD everywhere
 
 
