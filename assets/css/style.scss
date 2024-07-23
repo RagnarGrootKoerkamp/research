@@ -1,3 +1,6 @@
+$highlight: #ffc107 !default;
+$background: #f8f4d7 !default;
+
 body {
   line-height: 1.5em;
 }
@@ -252,6 +255,19 @@ mjx-container {
 .about .google-scholar:hover {
   filter: initial;
 }
+
+.list ul li .title,
+.centered .about ul li a,
+.centered .about ul li a,
+.navigation a {
+  transition: initial;
+  &:hover,
+  &:focus {
+    color: $highlight;
+    text-decoration: none;
+  }
+}
+
 .footer .links a {
   padding-left: 0.5em;
   padding-right: 0.5em;
@@ -343,9 +359,23 @@ a.footnote-ref:hover + span.fn-tooltip {
   }
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  .section-num {
+    color: $highlight;
+  }
+}
+
+// Customize headings
 h1 {
   font-size: 3.2rem;
   line-height: 3.6rem;
+  // text-decoration: underline;
+  // border-bottom: 5px solid $highlight;
 
   @media only screen and (max-width: 768px) {
     font-size: 3rem;
@@ -356,7 +386,7 @@ h1 {
 h2 {
   font-size: 2.8rem;
   line-height: 3.2rem;
-  border-bottom: 2px solid black;
+  border-bottom: 3px solid $highlight;
 
   @media only screen and (max-width: 768px) {
     font-size: 2.6rem;
@@ -365,27 +395,29 @@ h2 {
 }
 
 h3 {
-  font-size: 2.2rem;
-  line-height: 2.6rem;
+  font-size: 2.4rem;
+  line-height: 2.8rem;
   text-decoration: underline;
+  text-decoration-color: $highlight;
+  text-decoration-thickness: 2px;
   margin-top: 2rem;
   margin-bottom: 0.75rem;
 
   @media only screen and (max-width: 768px) {
-    font-size: 2rem;
-    line-height: 2.4rem;
+    font-size: 2.2rem;
+    line-height: 2.6rem;
   }
 }
 
 h4 {
-  font-size: 1.8rem;
-  line-height: 2.2rem;
+  font-size: 2rem;
+  line-height: 2.4rem;
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
 
   @media only screen and (max-width: 768px) {
-    font-size: 1.6rem;
-    line-height: 2rem;
+    font-size: 1.8rem;
+    line-height: 2.2rem;
   }
 }
 
@@ -411,4 +443,100 @@ h6 {
     font-size: 1.2rem;
     line-height: 1.2rem;
   }
+}
+
+// Customize code style
+.highlight > div,
+.highlight > pre {
+  margin: 1rem 0rem 0 0rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid $highlight;
+  border-bottom: 2px solid $highlight;
+  min-width: calc(100% - 4rem);
+  max-width: calc(100vw - 8rem);
+  overflow-x: auto;
+  width: fit-content;
+  left: 50%;
+  transform: translateX(-50%);
+  position: relative;
+}
+.highlight {
+  // display: flex;
+  // justify-content: center;
+}
+
+pre {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 400;
+  line-height: 1.8rem;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0;
+
+  // Code block
+  code {
+    font-size: 1.4rem;
+    font-weight: 400;
+    border-radius: 0.6rem;
+    padding: 0;
+
+    display: inline-block;
+    background-color: inherit;
+    color: inherit;
+    border: none;
+  }
+}
+
+// Inline code
+code {
+  font-size: 1.5rem;
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.3rem;
+  background: $background;
+  border: 1px solid #highlight;
+}
+
+blockquote {
+  border-left: 2px solid $highlight;
+  padding-left: 2rem;
+  line-height: 2.2rem;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.chroma table {
+  min-width: initial;
+  max-width: 100%;
+  position: initial;
+}
+
+// Customize code captions to look like figure captions.
+.src-block-caption,
+figcaption p,
+.table-caption {
+  .src-block-number,
+  .figure-number,
+  .table-number {
+    a {
+      font-weight: inherit;
+      color: inherit;
+    }
+    font-weight: 700;
+  }
+
+  text-align: center;
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.org-todo {
+  color: red;
+  font-weight: normal;
+}
+.org-done {
+  color: green;
+  font-weight: normal;
 }
