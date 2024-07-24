@@ -78,24 +78,20 @@
 
 <section class="container list">
   {{ .Content }} {{ range $type := (slice "posts") }}
-  <h2>{{ $type | humanize }}</h2>
-  <p>
-    {{ if eq $type "posts" }} Summaries and ideas on various topics. {{ end }}
-    {{ if eq $type "notes" }} Thoughts and ideas mostly written down for myself
-    for future reference. {{ end }}
-  </p>
+  <h2>Highlighted posts</h2>
   <ul>
-    {{ range (where site.RegularPages ".Type" $type) }}
+    {{ range (where site.RegularPages ".Type" "posts") }} {{ if in .Params.Tags
+    "highlight" }}
     <li>
       <span class="date">
-        {{ if ne $type "pages" }} {{ .Date.Format (.Site.Params.dateFormat |
-        default "January 2006" ) }} {{ end }}
+        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
       </span>
       <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
         >{{ .Title }}</a
       >
+      {{ with .Params.Tags }}{{ partial "taxonomy/tags.html" . }}{{ end }}
     </li>
-    {{ end }}
+    {{ end }} {{ end }}
   </ul>
   {{ end }}
 </section>
