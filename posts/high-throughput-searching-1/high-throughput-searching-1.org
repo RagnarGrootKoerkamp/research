@@ -1,6 +1,6 @@
 #+title: High throughput searching - Part 1
 #+HUGO_SECTION: posts
-#+HUGO_TAGS: hpc
+#+filetags: hpc
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{} num:
 #+hugo_front_matter_key_replace: author>authors
@@ -100,6 +100,11 @@ notes-to-self. Google is your friend to learn more about details of any of these
   Each core has 10 /line fill buffers/ (Intel) or /miss address buffer/ (AMD):
   separate 64 byte buffers that are reserved for pending requests to L2/L3/RAM
   for cache lines that are not in L1 yet.
+- Cache associativity ::
+- Eviction policies ::
+  W
+  It's generally hard to find information on what cache eviction policies are
+  used
 
 Understanding and predicting the behaviour of CPUs and the memory system appears to be
 complex, given that many details are only known (it seems) through reverse
@@ -353,5 +358,29 @@ Based on this evaluation, we will from now on use:
 - Experiments that maximize single-threaded random memory access throughput.
 - Generalize to multithreaded setting, see how close 1 thread is to saturating
   the full bandwidth.
+
+* NOTES
+- L3 is typically inclusive of L1 and L2
+  https://community.intel.com/t5/Software-Tuning-Performance/cache-eviction-policy-of-Intel-newer-CPUs/m-p/922774#M1359
+
+- L2 is typically not inclusive nor exclusive of L1; they just do their own thing and may overlap.
+
+  https://stackoverflow.com/a/59847035/2716069
+
+-
+
+
+* TODO
+- https://book.easyperf.net/perf_book
+- https://stackoverflow.com/questions/22597324/what-cache-invalidation-algorithms-are-used-in-actual-cpu-caches
+- https://github.com/travisdowns/uarch-bench/wiki/How-much-bandwidth-does-the-L2-have-to-give,-anyway%3F
+- https://travisdowns.github.io/blog/2020/05/18/icelake-zero-opt.html#fn:l1port
+- https://travisdowns.github.io/blog/2020/05/13/intel-zero-opt.html#fnref:melty
+- https://travisdowns.github.io/blog/2019/06/11/speed-limits.html#fnref:rmwnote
+
+- Investigate the branch predictor state size.
+  - https://en.wikipedia.org/wiki/Branch_predictor
+  - https://blog.cloudflare.com/branch-predictor
+  - https://www.cs.umd.edu/~meesh/411/CA-online/chapter/dynamic-branch-prediction/index.html
 
 #+print_bibliography:
