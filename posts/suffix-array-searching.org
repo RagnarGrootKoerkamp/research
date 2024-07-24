@@ -1,0 +1,45 @@
+#+title: Tools for suffix array searching
+#+filetags: note suffix-array
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-06-14 Fri>
+#+author: Ragnar Groot Koerkamp
+
+Let's summarize some tools for efficiently searching suffix arrays.
+
+** Sapling
+
+Sapling [cite:@sapling] works as follows:
+1. Choose a parameter $p$ store for each of the $2^p$ *$p$-bit prefixes* the
+   corresponding position in the suffix array.
+2. When querying, first find the bucket for the query prefix. Then do a *linear
+   interpolation* inside the bucket.
+3. Search the area $[-E, +E]$ around the interpolated position, where $E$ is a
+   bound on the error of the linear approximation. In practice $E$ is only a
+   $95\%$-confidence bound, and if the true value is not in the range, a linear
+   search with steps of size $E$ is done.
+The paper also introduces a neural network approach to approximating buckets,
+but this takes over a day to learn and is slower to query in practice.
+
+*Results:*
+- The prefix table gives up to $3\times$ speedup over plain binary search.
+- The binary search implementation is relatively native and extends/compares one
+  character at a time.
+  - Currently the [[https://github.com/mkirsche/sapling/blob/4bbe08ecabd2d7d05f0c7ad1369fef7d0de8cc85/src/binarysearch.cpp#L25][LCP function]] takes a ~string~ instead of a ~string&~, although
+    the copy is surely optimized away.
+  - A non-recursive version could be faster, but may just be equivalent to the
+    tail-recursive version.
+
+
+** PLA-Index
+
+The PLA-Index [cite:@pla-complexity] takes the ideas from Sapling a step
+further.
+- Sapling's interpolation can fail when the suffix distribution is very skewed.
+- Thus, the PLA-index uses variable x-coordinates.
+
+** LISA: learned index
+https://www.biorxiv.org/content/10.1101/2020.12.22.423964v3
+#+print_bibliography:
