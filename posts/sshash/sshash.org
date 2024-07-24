@@ -1,0 +1,75 @@
+#+title: Notes on SsHash
+#+HUGO_SECTION: posts
+#+filetags: note mphf
+#+HUGO_LEVEL_OFFSET: 1
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-01-15 Mon>
+#+author: Ragnar Groot Koerkamp
+
+$$\newcommand{\S}{\mathcal{S}}$$
+
+* Paper summary
+
+** Intro
+
+SsHash [cite:@sshash] is a datastructure for indexing kmers.
+Given a set of kmers $\S$, it supports two operations:
+- $Lookup(g)$ :: return the unique id $i\in [|\S|]$ of the kmer $g$.
+- $Access(i)$ :: return the kmer corresponding to id $i$.
+It also supports /streaming/ queries, looking up all kmers from a longer string
+consecutively, by expoiting the overlap between them.
+
+Construction of $\S$: extract paths from the De Bruijn graph.
+
+Existing methods:
+- FM index :: compact, but slow to query in practice
+- Hashing based :: fast, but not compact.
+
+SsHash exploits:
+- /Sparse/ :: Dictionary is keyed by super-k-mers, not kmers.
+- /Skew/ :: Most kmers occur very infrequent, while only few appear many times.
+
+** Prelims
+- /node-disjoint path cover/ :: Covers each node (kmer) of the DBg exactly once.
+  Called $\S'$. Made from /unitigs/ or /stitched unitigs/ [cite:@spss], also
+  known as /simplitigs/ [cite:@simplitigs].
+- /minimizer/ :: An $m$-mer substring of a $k$-mer with minimal hash.
+- /super-k-mer/ :: A maximal sequence of consecutive k-mers with the same minimizer.
+- /minimal perfect hashing/ (MPHF) :: A bijective map between a set $\mathcal X$
+  of size $n$ and $[n]$. Requires at least $\log_2 e = 1.44$ bits per element,
+  and can be constructed fast using PTHash [cite:@pthash] and other methods in
+  around $3$ bits.
+- /Elias-Fano encoding/ :: Compresses a non-decreasing sequence of values $0\leq
+  a_1 \leq \dots \leq a_n \leq A$ in $n\cdot (2+\lceil \log_2(A/n)\rceil)$ bits [cite:@elias;@fano].
+  (Only around $2$ bits worse than the theoretical lower bound.)
+** Related work
+
+- Bifrost :: stores minimizers in the position directly corresponding to their
+  value. Dynamic, but not compact. [cite:@bifrost]
+- Pufferfish :: MPHF mapping kmers to their position in unitig. Also sparse
+  version. [cite:@pufferfish]
+- Blight :: All kmers with same minimizer are grouped, and an MPHF is built for
+  each partition. [cite:@blight]
+
+** Sparse and skew hashing
+
+* Remarks
+- How much is DBg construction and SPSS computation a bottleneck in SsHash construction time?
+- TODO: Read up on Pufferfish and Blight [cite:@pufferfish;@blight]
+
+* Ideas
+- Streaming FM index queries: drop character from searched string in O(1)?
+- Double-robust-minimizer: compute two minimizers and take the rightmost one in
+  case of jump.
+- distance distribution plot for 'robust minimizers'
+  - Do some mathematical analysis.
+  - Understand PASHA (universal) and miniception
+- minimizer: Is there bias in the position of the kmer? or always uniform for
+  all schemes?
+- Sample every kth position as minimizer, build PTHash index on it, and then
+  query all m-mers of query independently.
+- rank select mutable bitmasks
+
+#+print_bibliography:
