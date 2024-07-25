@@ -1,5 +1,5 @@
 #+title: Reducing A* memory usage using fronts
-#+filetags: note astar layers fronts
+#+filetags: @ideas note astar
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{}
 #+hugo_front_matter_key_replace: author>authors
@@ -12,14 +12,14 @@ Here is an idea to reduce the memory usage of A* by only storing one /front/ at
 a time, similar to what Edlib and WFA do. Note that for now this *will not
 work*, but I'm putting this online anyway.
 
-** Motivation
+* Motivation
 
 In our [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][implementation]] of A*PA, we use a hashmap to store the value of $g$ of all
 visited (explored/expanded) states by A*. This can take up a lot of memory and
 simply reading/writing $g$ in the hashmap can take over half the total execution
 time.
 
-** Parititioning A* memory by fronts
+* Parititioning A* memory by fronts
 
 Needleman-Wunsch and WFA have a similar problem of requiring quadratic ($O(n^2)$
 resp. $O(s^2)$) memory to store all their history.
@@ -53,18 +53,18 @@ losing the information of previous fronts would mean that A* revisits those
 already computed states.
 
 
-*** Non-consistent heuristics
+** Non-consistent heuristics
 
 When $h$ is not consistent, $f$ can drop. In our case, it drops by at most $1$
 or $2$. Also $h$ is only 'locally' inconsistent: after a short greedy
 exploration $f$ will go back up again.
 
-*** Front indexing
+** Front indexing
 In NW and WFA, each front has a nice structure: it contains one state per column
 or diagonal respectively. When doing A*, this is not necessarily true anymore.
 Still, more efficient indexing/addressing scheme than simple hashmaps may be possible.
 
-** Tracing back the path
+* Tracing back the path
 
 I'm skipping over the issue of tracing back the final alignment path for now.
 Edlib and WFA solve this by doing Hirschberg's divide-and-conquer approach, but
