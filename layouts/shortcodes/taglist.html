@@ -1,0 +1,16 @@
+{{ $type := .Get 0 }}
+<div class="taxonomy {{ $type }}">
+<ul>
+  {{ range $key, $value := (index .Site.Taxonomies $type).ByCount }}
+    {{ $name := .Name }}
+    {{ $count := .Count }}
+      <li>
+        <span class="taxonomy-element {{$type | singularize}}" data-tag="{{.Name | urlize}}">
+          <a href="/{{$type}}/{{$name|urlize}}/">{{ .Name }}:
+          <span class="taxonomy-count">{{ $count }}</span>
+          </a>
+        </span>
+      </li>
+  {{ end }}
+</ul>
+</div>
