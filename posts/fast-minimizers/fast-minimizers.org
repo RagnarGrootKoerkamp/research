@@ -1,6 +1,7 @@
 #+title: [WIP] Computing minimizers, fast
-#+filetags: @results @lablog hpc minimizers wip nthash
-#+OPTIONS: ^:{} num:
+#+filetags: @results @lablog hpc minimizers nthash wip
+#+HUGO_LEVEL_OFFSET: 0
+#+OPTIONS: ^:{} num:2 H:4
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
@@ -12,163 +13,178 @@ Code for this post is in the =benches/= directory of
 [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]]. The unpolished experiments are in the
 =playground= branch.
 
-* Random minimizers
+Contents[fn::Read this on a wide screen to see the table of contents on the
+left, and footnotes on the right.]:
+- [[*Random minimizers][Background]]
+- [[*Algorithms][Overview of algorithms]]
+- [[*Optimizing][Optimizing the implementation]]
+  - [[*Setting up benchmarking][Benchmarking]]
 
+* Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
 Given a string/text/DNA sequence ~t: &[u8]~ of length $n$, the /k-mers/ of ~t~ are all the
-length-$k$ substrings. There are $n-k+1$ of them$.
+length-$k$ substrings. There are $n-k+1$ of them.
 
 In order to speed up processing, and since consecutive k-mers are overlapping
 and contain redundancy, it is common to /subsample/ the k-mers. This should be
 done in a deterministic way, so that similar but slightly distinct sequences
-still sample mostly the same k-mers. One such way is /random minimizers/:
+still mostly sample the same k-mers. One such way is /random minimizers/,
+introduced in parallel by [cite/t:@winnowing] and [cite/t:@minimizers]:
 1. First, a /window size/ $w$ is chosen, which will guarantee that at least one
    k-mer is sampled every $w$ positions of $t$, to prevent long gaps between
    consecutive k-mers.
 2. Then, every k-mer is hashed using a pseudo-random hash function $h$, and in
-   each /window/ of $w$ consecutive k-mers (of length $\ell=w+k-1$), the *leftmost* one with the smallest
-   hash is selected.[fn::Some foreshadowing here..]
+   each /window/ of $w$ consecutive k-mers (of total length $\ell=w+k-1$), the /leftmost/[fn::Some foreshadowing here..] one with the smallest
+   hash is selected.
 Consecutive windows (that overlap in $w-1$ k-mers) often sample the same k-mer,
 so that the total number of sampled k-mers is much smaller than $n-k+1$. In
 fact, random minimizers have a /density/ of $2/(w+1)$ and thus sample
 approximately two k-mers per window.
 
-My [[../minimizers/minimizers.org][previous post]] on minimizers gives more background on density and other
+My [[../mod-minimizers/mod-minimizers.org][previous post]] on minimizers gives more background on density and other
 sampling schemes. One such alternative scheme is the mod-minimizer
 [cite:@modmini], that has low density when $w$ is large compared to $k$. That
 paper also contains a review of methods and pseudocode for them.
+In this post, I will focus on the most widely used random minimizers.
 
-* Setting up benchmarking
-** Adding criterion
-Before we start our implementation, let's set up a benchmark so we can easily
-compare them. We will use [[https://crates.io/crates/criterion][criterion]], together with the [[https://crates.io/crates/cargo-criterion][cargo-criterion]] helper.
-First we add =criterion= as a dev-dependency to =Cargo.toml=, and set up a stub
-benchmark.
+* Algorithms
+** Problem statement
+Before going into algorithms to compute random minimizers, let's first precisely state the
+problem itself. In fact, we'll state three versions of the problem, that each
+include slightly more additional information in the output.
 
-The code can be found at [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]], mostly in the
-=benches/= folder. The change below is [[https://github.com/RagnarGrootKoerkamp/minimizers/commit/e758f20e94e7a65c4acd93a5c39a3a9362994fe9][this commit]].
+*** Problem A: Only the set of minimizers
+The most basic form of computing minimizers is to simply return the list of
+minimizer kmers and their positions. This information is sufficient to /sketch/
+the sequence.
 
-#+begin_src toml
-[dev-dependencies]
-criterion = "*"
-
-# Do not build the library as a benchmarking target.
-[lib]
-bench = false
-
-[[bench]]
-name = "bench"
-harness = false
-#+end_src
-
-We add =benches/bench.rs= which looks like this:
-#+begin_src rust
-use criterion::{criterion_group, criterion_main, Criterion};
-
-/// Generate a random string of length `n` over an alphabet of size `sigma`.
-pub fn generate_random_string(n: usize, sigma: usize) -> Vec<u8> {
-    (0..n)
-        .map(|_| (rand::random::<usize>() % sigma) as u8)
-        .collect()
-}
-
-/// Benchmark some functions.
-fn bench(c: &mut Criterion) {
-    let string = generate_random_string(1000000, 256);
-    c.bench_function("sum of chars", |b| {
-        b.iter(|| string.iter().map(|&c| c as usize).sum::<usize>() as usize);
-    });
-    c.bench_function("sum of squares", |b| {
-        b.iter(|| string.iter().map(|&c| (c as usize).pow(2)).sum::<usize>() as usize);
-    });
-}
-
-// Criterion setup.
-criterion_group!(name = group; config = Criterion::default(); targets = bench);
-criterion_main!(group);
-#+end_src
-
-If we run this using =cargo criterion=, we get:
-#+begin_export html
-<script src="https://asciinema.org/a/qXoOOXgGstEoNXyiT3HtzHgBL.js" id="asciicast-qXoOOXgGstEoNXyiT3HtzHgBL" async="true"></script>
-#+end_export
-Running it again, we get a nice diff with the difference in how long the run
-took compared to before.
-#+begin_export html
-<script src="https://asciinema.org/a/ZuPOAKYv3grH65vJxB8sivgyh.js" id="asciicast-ZuPOAKYv3grH65vJxB8sivgyh" async="true"></script>
-#+end_export
-
-
-** Making it faster
-As you can see, this is quite slow. That's for a couple of reasons:
-- Before each benchmark, a 3 second warmup is done.
-- Each benchmark is 5 seconds.
-- After each benchmark, some plots are generated.
-- At the end, some HTML reports are generated.
-I'm impatient, and all this waiting *really* impacts my iteration time, so let's
-make it faster (commit TODO):
-- Reduce warmup time to 0.5s.
-- Reduce benchmark time to 2s, and only take 10 samples (otherwise slow cases
-  are slow).
-- Disable plots and html generation.
-The first two are done from code (TODO commit):
-#+begin_src diff
--    config = Criterion::default();
-+    config = Criterion::default()
-+        .warm_up_time(Duration::from_millis(500))
-+        .measurement_time(Duration::from_millis(2000))
-+        .sample_size(10);
-#+end_src
-The last is best done by adding the ~--plotting-backend disabled~ flag. For
-convenience, we add this rule to the =justfile= so we can /just/ do =just
-bench=. I'm also adding =quiet= to hide the comparison between runs to simplify presentation.
-#+begin_src make
-bench:
-    cargo criterion --plotting-backend disabled --output-format quiet
-#+end_src
-#+begin_export html
-<script src="https://asciinema.org/a/EQtJkYBEXYzHsEBnhrMLOp29l.js" id="asciicast-EQtJkYBEXYzHsEBnhrMLOp29l" async="true"></script>
-#+end_export
-Much better.
-
-** A note on CPU frequency
-
-Most consumer CPUs support turboboost to increase the clock frequency for short
-periods of time. That's nice, but not good for stable measurements. Thus, I
-always pin the frequency of my =i7-10750H= to the default ~2.6GHz~:
-#+begin_src sh
-sudo cpupower frequency-set --governor powersave -d 2.6GHz -u 2.6GHz
-#+end_src
-This usually results in quite stable measurements.
-
-Similarly, I have hyper threading disabled.
-
-* Baselines
-With that out of the way, let's write some code.
-But actually, we should first decide what exactly we are benchmarking.
-For now, let's keep things simple: we would like to obtain a vector that
-contains for each of the $n-w+1$ windows the absolute position of the minimal k-mer in
-that window:
+#+name: problem-a
+#+caption: A trait that defines Problem A and returns the set of kmers of the input.
 #+begin_src rust
 pub trait Minimizer {
-    fn minimizers(&self, text: &[u8]) -> Vec<usize>;
+    /// Problem A: The absolute positions of all minimizers in the text.
+    fn minimizer_positions(&self, text: &[u8]) -> Vec<usize>;
 }
 #+end_src
 
-** Naive brute force
+*** Problem B: The minimizer of each window
+When building datastructures on top on a sequence, such as SSHash
+[cite:@sshash], just the set of k-mers is not sufficient. Each window should be
+mapped to its minimizer, but there could be multiple minimizers in a single
+window. Thus, in this version of the problem, we return the minimizer of each window.
 
-A naive $O(|t| \cdot w)$ algorithm iterates over the
-windows, hashes each k-mer, and finds the position of the minimum. (While
-hashing each k-mer is technically not $O(1)$, we will assume that $k$ is small
-enough compared to the word size that this holds in practice.)
+Note that while in [[*Problem A: Only the set of minimizers][Problem A]] we return one result per minimizer, here we return
+one result per window (roughly, per character). This difference can have
+implications for the optimal algorithm implementation, since it's not unlikely
+that the main loop of the optimal solution has /exactly/ one iteration per
+returned element.
 
-It looks like this:
-#+caption: Illustration of the naive algorithm for a sequence of 8 kmers and $w=4$. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window of length $w$, finds the element with the smallest hash. The orange colour indicates that for each window, we iterate over all hashes. The minimum has a bold outline.
+#+name: problem-b
+#+caption: A trait for Problem B that returns the minimizer of each window.
+#+begin_src rust
+pub trait Minimizer {
+    ...
+
+    /// Problem B: For each window, the absolute position in the text of its minimizer.
+    fn window_minimizers(&self, text: &[u8]) -> Vec<usize>;
+}
+#+end_src
+
+*** Problem C: Super-k-mers
+We can implement SSHash and other indexing datastructures using the output of [[*Problem B: The minimizer of each window][Problem B]],
+but in most such applications, it is probably more natural to directly iterate over the /super-k-mers/: the longest substrings such that all contained windows have the same
+minimizer. This can easily be obtained from the output of Problem B by
+/grouping/ consecutive windows that share the minimal k-mer.
+
+Note that here the result is again an iterator over /minimizers/, like in
+[[*Problem A: Only the set of minimizers][Problem A]] rather than /windows/ as in [[*Problem B: The minimizer of each window][Problem B]].
+
+#+name: problem-c
+#+caption: A trait that defines Problem C and returns the set of super-k-mers.
+#+begin_src rust
+struct SuperKmer {
+    /// The absolute position in the text where this super-k-mer starts.
+    /// The end of the super-k-mer can be inferred from the start of the next super-k-mer.
+    start_pos: usize,
+    /// The absolute position in the text of the minimizer of this super-k-mer.
+    minimizer_pos: usize,
+}
+
+pub trait Minimizer {
+    ...
+
+    /// Problem C: The super-k-mers of the text.
+    fn super_kmers(&self, text: &[u8]) -> Vec<SuperKmer>;
+}
+#+end_src
+
+*** Which problem to solve
+In the remainder, we mostly focus on [[*Problem B: The minimizer of each window][Problem B]], since that is what I initially
+started with. However, some methods more naturally lean themselves to solve the
+other variants. We will benchmark each method on whichever of the problems it
+runs fastest, and postpone optimizing a solution for each specific problem until
+later.
+
+Most likely though, solving [[*Problem C: Super-k-mers][Problem C]] will yield the most useful tool for end
+users. I plan to revisit this at the end of this post.
+
+Regardless, for convenience we can implement solutions to A and C in terms of
+ B.[fn::Consider not skipping the code blocks. I made quite some effort to make
+ them clean and readable. Most code is fairly straightforward assuming you're
+ comfortable reading Rust code.]
+#+caption: Implementing =minimizer_positions= and =super_kmers= in terms of =window_minimizers=.
+#+begin_src rust
+pub trait Minimizer {
+    /// Problem A: The absolute positions of all minimizers in the text.
+    fn minimizer_positions(&self, text: &[u8]) -> Vec<usize> {
+        let mut minimizers = self.window_minimizers(text);
+        minimizers.dedup();
+        minimizers
+    }
+
+    /// Problem B: For each window, the absolute position in the text of its minimizer.
+    fn window_minimizers(&self, text: &[u8]) -> Vec<usize>;
+
+    /// Problem C: The super-k-mers of the text.
+    fn super_kmers(&self, text: &[u8]) -> Vec<SuperKmer> {
+        self.window_minimizers(text)
+            .into_iter()
+            .enumerate()
+            .group_by(|(_idx, minimizer_pos)| *minimizer_pos)
+            .into_iter()
+            .map(|(minimizer_pos, mut group)| SuperKmer {
+                start_pos: group.next().unwrap().0,
+                minimizer_pos,
+            })
+            .collect()
+    }
+}
+#+end_src
+
+*** Canonical k-mers
+In actual bioinformatics applications, it is common to consider /canonical
+k-mers/ and corresponding /canonical minimizers/. These are defined such that
+the canonical k-mer of a string and its reverse complement are the same.
+This will significantly impact the complexity of our code, and hence we also
+postpone this for later.
+
+
+** The naive algorithm
+
+The naive $O(|t| \cdot w)$ method simply finds the minimum of each window independently.
+
+It looks like this:[fn::*Legend*:\\
+Orange: processed state,\\
+Bold: minimum of the window.]
+#+caption: Illustration of the naive algorithm for a sequence of 8 kmers and window size /w=4/. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window, finds the element with the smallest hash. The orange colour indicates that for each window, all hashes are checked. The minimum is shown in bold.
 #+attr_html: :class inset
 [[file:./naive.svg]]
 
+In code, it looks like this.
+
 #+caption: V0: a naive implementation of lexicographic minimizers. (TODO commit)
 #+begin_src rust
+// TODO: Not lex
 pub struct V0NaiveLex {
     pub w: usize,
     pub k: usize,
@@ -185,6 +201,7 @@ impl Minimizer for V0NaiveLex {
                     .windows(self.k)
                     .enumerate()
                     // min_by_key returns the leftmost minimum.
+                    // TODO: Hash the kmer.
                     .min_by_key(|(_idx, kmer)| *kmer)
                     .unwrap()
                     .0
@@ -194,93 +211,36 @@ impl Minimizer for V0NaiveLex {
 }
 #+end_src
 
-Let's also already add in two versions that use =fxhash= and =wyhash= already,
-two very simple and fast hash functions.
-#+caption: V1 and V2. (TODO commit)
-#+begin_src diff
-V1NaiveFx:
-- .min_by_key(|(_idx, kmer)| *kmer)
-+ .min_by_key(|(_idx, kmer)| fxhash::hash64(kmer))
-V2NaiveWy:
-- .min_by_key(|(_idx, kmer)| *kmer)
-+ .min_by_key(|(_idx, kmer)| wyhash::wyhash(kmer, 0))
-#+end_src
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: naive-performance
+:END:
 
-The benchmark now looks like this. I changed to a /benchmark group/ since this
-gives slightly more compact output, and tells criterion that the functions belong
-together and benchmark the same thing.
-#+begin_src rust
-fn bench(c: &mut Criterion) {
-    let mut g = c.benchmark_group("randmini");
-    let text = &generate_random_string(1000000, 256);
-    let w = 20;
-    let k = 20;
+Let us already have a quick loot at the performance of this (and upcoming)
+methods, to get a quick feeling for how well the perform and how they compare
+against each other. We will cover the benchmarking setup in
+[[*Setting up benchmarking]], and will then also compare the methods in more detail
+for varying $k$ and $w$.
 
-    g.bench_function("0_naive_lex", |b| {
-        let m = V0NaiveLex { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-    g.bench_function("1_naive_fx", |b| {
-        let m = V1NaiveFx { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-    g.bench_function("2_naive_wy", |b| {
-        let m = V2NaiveWy { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-}
-#+end_src
-First results:
+This algorithm runs in TODO.
+#+caption: Performance of the naive random minimizer implementation for /k=TODO/ /w=TODO/.
 #+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
-rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
-rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+TODO
 #+end_src
-Observe:
-- Each method takes 50-100ms to process 1 million characters. That would be
-  50-100s for 1Gbp.
-- Measurements between runs are very stable.
-- FxHash is fastest. It's just one multiply-add per 8 bytes of kmer.
-- WyHash is actually slower than lexicographic comparison in this case!
 
-** Other crates
-Let's also compare with some external implementations.
-- [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is one baseline implementation. It returns an iterator over all
-  distinct minimizers.
-  #+begin_src rust
-    g.bench_function("ext_minimizer_iter", |b| {
-        b.iter(|| {
-            minimizer_iter::MinimizerBuilder::<u64>::new()
-                .minimizer_size(k)
-                .width(w as u16)
-                .iter_pos(text)
-                .collect_vec()
-        });
-    });
-  #+end_src
-- Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]], to which we'll come back in more detail later.
-
-#+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
-rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
-rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
-rnd/ext_minimizer_iter  time:   [19.958 ms 19.960 ms 19.961 ms]
-rnd/ext_daniel          time:   [9.2473 ms 9.2487 ms 9.2507 ms]
-#+end_src
-We see that =minimizer-iter= is quite a bit faster than our methods, and
-Daniel's code is another two times faster. So let's get to work :)
-
-* Sliding window minimum
+** Sliding window minimum
 After hashing all k-mers, we basically have a sequence of $n-k+1$ pseudo-random
-integers, and we would like to find the position of the leftmost minimum in each
-window of $w$ of those integers. Thus, we can model the problem using the
-following trait:
+integers. We would like to find the position of the leftmost minimum in each
+window of $w$ of those integers.
+Thus, the problem of finding random minimizers reduces to computing the sliding
+window minima.
+We can model this problem using the following trait:
 #+caption: Trait for the sliding window minimum problem.
 #+begin_src rust
+// TODO: V is the element type.
 pub trait SlidingMin<V> {
     /// Initialize a new datastructure with window size `w`.
+    // TODO: Initialize with the first w-1 elements already.
     fn new(w: usize) -> Self;
     /// Push a new value, starting at position 0.
     /// Return the pos and value of the minimum of the last w elements.
@@ -288,37 +248,73 @@ pub trait SlidingMin<V> {
 }
 
 #[derive(Clone, Copy)]
+// TODO: Val -> V
 pub struct Elem<Val> {
     pub pos: usize,
     pub val: Val,
 }
 #+end_src
 
+Below is a simple implementation that recomputes the minimum for each window. It
+tracks the $w$ most recent values in a buffer of size $w$, and recomputes the
+minimum on each call to $w$.
+
+#+caption: A =SlidingMin= implementation that buffers the last $w$ values and recomputes the minimum on each =push=.
+#+begin_src rust
+TODO
+#+end_src
+
+Using this trait, we can clean up the implementation of the naive minimizer from
+before to this:
+
+#+caption: The naive implementation using the =SlidingMin= trait.
+#+begin_src rust
+TODO
+#+end_src
+
+As can be seen, all the logic is now abstracted away, and we can consider a more
+general function that defines a minimizer scheme using only an implementation of
+the =SlidingMin= problem.
+#+name: queue-wrapper
+#+caption: A general minimizer build on top of =SlidingMin=.
+#+begin_src rust
+TODO
+#+end_src
+
 ** The queue
+Let's try to improve this somewhat inefficient $O(|t|\cdot w)$ algorithm.  A first
+idea is to simply keep a rolling prefix-minimum that tracks the lowest
+value seen so far. For example, when $w=3$ and the hashes are
+$[10,9,8,7,6,...]$, the rolling prefix minimum is exactly also the minimum of
+each window.  But alas, this won't work for
+increasing sequences: when the hashes are $[1,2,3,4,5,...]$ and the window
+shifts from $[1,2,3]$ to $[2,3,4]$, the prefix minimum is $1$ (at index $0$),
+but it is not a minimum of the new window anymore, which instead goes up to $2$.
 
-Your first idea may be to simply keep a rolling prefix-minimum that tracks the
-lowest hash/value seen so far. When $w=3$ and the hashes are $[10,9,8,7,6,...]$,
-the rolling prefix minimum is exactly also the minimum of each window of size
-$3$ (like $[8,7,6]$).
-But alas, this won't work for increasing sequences:
-when the hashes are $[1,2,3,4,5,...]$ and the window shifts to $[2,3,4]$, the $1$ at index $0$ is not a minimum of that
-window anymore, and the minimum goes up to $2$.
-
-As the window slides right, each time we see a new value that's smaller than
+Nevertheless, as the window slides right, each time we see a new value that's smaller than
 everything in the window, we can basically 'forget' about all existing values
-and just keep that one in memory. Otherwise, we can still forget about all values
-in the window larger than the value that is shifted in.
+and just keep the new smaller value in memory. Otherwise, we can still forget
+about all values in the window larger than the value that is shifted in.
 
-This is formalized by using a *queue* of increasing values in the window. At
-each step, the minimum of the window is the value at the front of the queue. It's
-probably best explained using an example.
+This is formalized by using a *queue* of non-decreasing values in the window.
+More precisely, each queue element will be smaller than all values in the window
+coming after it.
+At each step, the minimum of the window is the value at the front of the queue.
+Let's look at our example again.[fn::*Legend*:\\
+Orange: processed state,\\
+Bold: minimum of the window,\\
+Blue: state in memory in the queue,\\
+Red: state removed from the queue.]
 
-#+caption: The queue method: In each step, we add the new hash value to the right/back of the queue that is shown in blue. Any preceding values in the queue that are larger are dropped (red). The smallest element of the window is on the left/front of the queue. In the second to last window, the leading $3$ is dropped from the queue as well because it falls out of the window.
+#+caption: The queue method: In each step, we push the new value (orange) to the right/back of the queue. States stored in the queue are blue. Any preceding values in the queue that are larger than the new element are dropped (red). The smallest element of the window is on the left/front of the queue. In the second to last window, the leading $3$ is dropped from the front queue as well because it falls out of the window.
 #+attr_html: :class inset
 [[file:./queue.svg]]
 
-In order to know when to /pop/ elements from the front, we don't just store
-values in this queue, but also the positions of all elements in the original text.
+We see that there are two reasons elements can be removed from the queue:
+1. a smaller element is pushed,
+2. the window shifts so far that the leftmost/smallest element falls outside it.
+To handle this second case, we don't just store values in this queue, but also
+their position in the original text, so that we can pop them when needed.
 
 In code, it looks like this:
 #+caption: A simple 'monotone queue' implementation. (TODO commit)
@@ -335,6 +331,7 @@ pub struct MonotoneQueue<Val: Ord> {
 impl<Val: Ord + Copy> SlidingMin<Val> for MonotoneQueue<Val> {
     fn new(w: usize) -> Self {
         assert!(w > 0);
+        // TODO: single line
         Self {
             w,
             pos: 0,
@@ -358,57 +355,43 @@ impl<Val: Ord + Copy> SlidingMin<Val> for MonotoneQueue<Val> {
             self.q.pop_front();
         }
         self.pos += 1;
-        *self.q.front().unwrap() // Safe, because w > 0.
+        ,*self.q.front().unwrap() // Safe, because w > 0.
     }
 }
 #+end_src
 
-*Analysis:* Since each element is pushed once and popped once, each call to
-=push= takes amortized constant $O(1)$ time!
-
-** A minimizer using the queue
-It's now trivial to implement an $O(n)$ minimizer scheme using this queue:
-#+caption: v3: using a queue for sliding window minimum.
+It's now trivial to implement an $O(n)$ minimizer scheme using this queue by
+using our earlier defined wrapper ([[queue-wrapper]]).
+#+caption: TODO
 #+begin_src rust
-pub struct V3Queue {
-    pub w: usize,
-    pub k: usize,
-}
-
-impl Minimizer for V3Queue {
-    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
-        let mut q = MonotoneQueue::new(self.w);
-        let mut kmers = text.windows(self.k);
-        // Inset the first w-1 k-mers, that do not yet form a full window.
-        for kmer in kmers.by_ref().take(self.w - 1) {
-            q.push(fxhash::hash(kmer));
-        }
-        kmers.map(|kmer| q.push(fxhash::hash(kmer)).pos).collect()
-    }
-}
+TODO
 #+end_src
 
-How does it do?
-#+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.309 ms 87.315 ms 87.321 ms]
-rnd/1_naive_fx          time:   [69.089 ms 69.121 ms 69.147 ms]
-rnd/2_naive_wy          time:   [96.830 ms 96.842 ms 96.854 ms]
-rnd/ext_minimizer_iter  time:   [20.001 ms 20.007 ms 20.012 ms]
-rnd/ext_daniel          time:   [9.2662 ms 9.2696 ms 9.2735 ms]
-rnd/3_queue             time:   [23.952 ms 24.512 ms 25.095 ms]
-#+end_src
 
-Great! Already very close to the =minimizer-iter= crate, and we didn't even
-write much code yet.
-From now on, I'll leave out the naive $O(wn)$ implementations.
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: queue-performance
+:END:
+Since each element is pushed once and popped once, each call to
+=push= takes amortized constant $O(1)$ time, so that the total runtime is
+$O(|t|)$ (assuming that hashing each k-mer takes constant time).
 
-* Re-scanning: Away with the queue
-We would like to find some middle ground between keeping the queue of possible
-minima and rescanning every window. A first idea is this: Once we find the
+
+Thus, a drawback of the queue algorithm is that it contains some very
+unpredictable branches, which hurts pipelining/instruction level parallelism (ILP). Thus, while its complexity is
+good, its practical performance is suboptimal.
+** Jumping: Away with the queue
+As we saw, while the queue algorithm is nice in theory, in practice it is not
+ideal. Thus, we would like to find some middle ground between keeping this queue
+and the naive approach of rescanning every window. A first idea is this: Once we find the
 minimizer of some window, we can jump to the first window after that position to
 find the next minimizer. This
-finds all distinct minimizers, although it does not compute the minimizer for each window individually.
+finds all distinct minimizers, although it does not compute the minimizer for
+each window individually. Thus, it solves [[*Problem A: Only the set of
+minimizers][Problem A]] instead of [[*Problem B: The minimizer of each
+window][Problem B]].[fn::*Legend*:\\
+Orange: processed state,\\
+Bold: minimum of the window.]
 
 #+caption: Each time a minimizer (green) is found, jump to the window starting right after to find the next minimizer. (The leading $4$ and final $8$ are minimizers of a prefix/suffix of the sequence.)
 #+attr_html: :class inset
@@ -417,14 +400,36 @@ finds all distinct minimizers, although it does not compute the minimizer for ea
 Since the expected distance between random minimizers is $(w+1)/2$, we expect to
 scan each position just under two times.
 
-I learned of an improved method via Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
+#+caption: Solving Problem A by jumping to the window after the previous minimizer.
+#+begin_src rust
+TODO
+#+end_src
+
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: queue-performance
+:END:
+
+One benefit of ths method is that it is completely branchless. Each iteration of
+the loop corresponds to exactly one output. The only unpredictable step is which
+element of a window is the minimizer, since that determines which is the next
+window to scan. Thus, even though it is branchless, consecutive iterations
+depend on each other and ILP (instruction level parallelism, aka pipelining) may only have a limited effect.
+
+** Re-scan
+I learned of an improved method via [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
 but I believe it is folklore[fn::Citation needed, both for it being folklore and
 for the original idea.].
-This is a slightly improved variant of the method above, where we don't consider
-all windows independently, but still keep track of a rolling minimum.
-Only when 'the minimum falls out of the window' a re-scan is done.
+This is a slightly improved variant of the method above. Above, we do a new scan
+for each new minimizer, but it turns out this can sometimes be avoided.
+Now, we will only re-scan when a previous minimum falls outside the window, and
+the minimum of the window goes up.[fn::*Legend*:\\
+Orange: processed state,\\
+Bold: minimum of the window,\\
+Green: running minimum.]
 
-#+caption: Keep a rolling minimum (green) of the lowest hash seen so far by comparing each new element (orange) to the minimum. Only when the minimum falls outside the window, recompute the minimum for the entire window (yellow row).
+
+#+caption: Keep a rolling minimum (green) of the lowest hash seen so far by comparing each new element (orange) to the minimum. Only when the minimum falls outside the window, recompute the minimum for the entire window (second to last yellow row).
 #+attr_html: :class inset
 [[file:./rescan.svg]]
 
@@ -511,6 +516,12 @@ As before, the corresponding minimizer scheme is trivial to implement:
 -    let mut q = MonotoneQueue::new(self.w);
 +    let mut q = Rescan::new(self.w);
 #+end_src
+
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: rescan-performance
+:END:
+
 The result is *fast*: almost twice as fast as the previous best! Also close to
 Daniel's version, but not quite there yet.
 #+begin_src txt
@@ -521,13 +532,328 @@ rnd/3b_inlined_queue    time:   [22.620 ms 22.631 ms 22.641 ms]
 rnd/4_rescan            time:   [10.876 ms 10.882 ms 10.894 ms]
 #+end_src
 
+While fast, this method is not fully predictable and will have some branch
+misses, since we need to re-scan a window at unpredictable times. As we will see
+later, this causes a branch miss roughly every $w$ positions (TODO).
 
-* TODO Sliding window: away with branch-misses
+** Sliding window: away with branch-misses
+In an ideal world, we would use a fully predictable algorithm, i.e., an
+algorithm without any data-dependent branches/if-statements.[fn::I'm not
+counting the for loop that iterates up to the variable length of the string as a
+branch miss, because that will only be a single branch-miss at the end, not
+$O(1)$ per iteration.]
 
-#+caption: Split algorithm: after each $w$ rows, we compute and store reverse suffix-minima (blue, bottom left) of the preceding slice of $w$ values and use those together with the forward rolling minimum to find the minimum of each window. The memory after each iteration is shown on the right, with updated values in orange.
+With some [[https://www.google.com/search?q=sliding%20window%20minimum][Googling]][fn::It's the third result.] I found [[https://codeforces.com/blog/entry/71687][this codeforces blog]] on
+computing sliding window minima. In the post, the idea is presented using two
+queues. My explanation below goes in a slightly different direction, but in the
+end it comes down to the same.
+
+*Aside: Accumulating non-invertible functions.*
+So, as we saw, most methods keep some form of rolling prefix minimum that is
+occasionally 'reset', since 'old' small elements should not affect the current
+window.
+This all has to do with the fact that the =min= operation is not /invertible/:
+knowing only the maximum of a set $S$ is not sufficient to know the maximum of
+$S - \{x\}$.
+This is unlike for example addition: sliding window sums are easy by just adding
+the new value to the sum and subtracting the value that falls out of the window.
+
+This distinction is also exactly the difference between /segment trees/ and
+/Fenwick trees/[fn::Feel free to skip this paragraph in case you are not
+familiar with segment and Fenwick trees.]: a Fenwick tree computes some function
+$f$ on a range $[l, r)$ by removing $f(a_0, \dots, a_{l-1})$ from $f(a_0, \dots, a_{r-1})$, by
+decomposing both ranges into intervals with power-of-$2$ lengths corresponding
+to the binary representation of their length. But this only works if $f$ is
+invertible. If that is not the case, a segment tree must be used, which
+partitions the interval $[l, r)$ itself, without going 'outside' it.
+
+*The algorithm.*
+Based on this, we would also like to partition our windows such that we can
+compute their minimum as a minimum over the different parts. It turns out that
+this is possible, and in a very clean way as well!
+
+First, we conceptually chunk the input sequence into parts with length $w$, as
+shown in the top row of [[fig-queue]] for $w=4$. Then, each window of length $w$ is
+either exactly such a chunk, or overlaps with two consecutive chunks. In that
+case, it covers a suffix of chunk $i$ and a prefix of chunk $i+1$. Thus, to
+compute the minimum of all windows, we need to compute the prefix and suffix
+minima of all chunks. We could do that as a separate pass over the data in a
+pre-processing step, but it can also be done on the fly:
+
+1. Each time a new kmer is processed, its hash is written to a size-$w$ buffer.
+   (The orange values in the top-right of [[fig-queue]].)
+2. After processing the window corresponding to a chunk, the buffer contains
+   exactly the hashes of the chunk. (Fourth row.)
+3. Then, we compute the suffix-minima of the buffer, which correspond to
+   suffix-minima of the chunk. (Fifth row.)
+4. For the next $w-1$ windows, we intialise a new rolling prefix minimum in the
+   new chunk (green outline).
+5. The minimum of each window is the minimum between the rolling prefix minimum
+   in chunk $i+1$, and the suffix minimum in chunk $i$ that we computed in the buffer.[fn::*Legend*:\\
+  Orange: processed state,\\
+  Bold outline: minimum of the prefix/suffix,\\
+  Bold character: minimum of the window,\\
+  Blue: state in memory in the queue,\\
+  Green: running prefix minimum.]
+
+#+name: fig-queue
+#+caption: Split algorithm: for each chunk, we compute and store suffix-minima of the preceding chunk (orange row). We also track a rolling prefix minimum in the next chunk (green). Taking the minimum of that with the stored suffix-minimum gives the minimum of the window. The memory after each iteration is shown on the right, with updated values in orange.
 #+attr_html: :class inset
 [[file:./split.svg]]
-* TODO NtHash: a rolling kmer hash
+
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: split-perfomance
+:END:
+
+The big benefit of this algorithm is that its execution is completely deterministic, similar
+to the [[*Jumping: Away with the queue][jump algorithm]]: every $w$ iterations we compute the suffix-minima, and
+then we continue again with the rolling prefix minimum. Since this 'side loop'
+is taken exactly once in every $w$ iterations, the corresponding branch is easy
+to predict and does not cause branch-misses.
+
+
+** Bounded queue
+
+Finally, for theoretical purposes, I would like to introduce a variant of the [[*The queue][queue]] method that uses a
+/bounded queue/ that can only store $B$ values.[fn::[[https://twitter.com/tbrekaloxyz][Tvrtko Brekalo]] also
+suggested this for $B=2$.]
+In each step, it tries to push the new value onto the queue, but if the queue
+would exceed $B$ elements, the push is skipped. This can lead to the queue
+becoming empty, in which case the entire window is re-scanned.
+When $B=0$, this is equivalent to the [[*Naive brute force][naive method]],
+when $B=1$, this is equivalent to the [[*Re-scan][re-scan method]], and
+when $B\geq w$, this is equivalent to the original queue method.
+The interesting cases are $B=2$ and $B=3$, where one would hope that it is rare
+for the queue to become empty and reduce to number of push and pop operations on
+the queue.
+
+*** TODO Performance
+:PROPERTIES:
+:CUSTOM_ID: bounded-queue-performance
+:END:
+
+#+begin_src txt
+TODO
+#+end_src
+
+** TODO Analysis: Counting comparisons
+
+* Optimizing
+** Setting up benchmarking
+*** Adding criterion
+Before we start our implementation, let's set up a benchmark so we can easily
+compare them. We will use [[https://crates.io/crates/criterion][criterion]], together with the [[https://crates.io/crates/cargo-criterion][cargo-criterion]] helper.
+First we add =criterion= as a dev-dependency to =Cargo.toml=, and set up a stub
+benchmark.
+
+The code can be found at [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]], mostly in the
+=benches/= folder. The change below is [[https://github.com/RagnarGrootKoerkamp/minimizers/commit/e758f20e94e7a65c4acd93a5c39a3a9362994fe9][this commit]].
+
+#+begin_src toml
+[dev-dependencies]
+criterion = "*"
+
+# Do not build the library as a benchmarking target.
+[lib]
+bench = false
+
+[[bench]]
+name = "bench"
+harness = false
+#+end_src
+
+We add =benches/bench.rs= which looks like this:
+#+begin_src rust
+use criterion::{criterion_group, criterion_main, Criterion};
+
+/// Generate a random string of length `n` over an alphabet of size `sigma`.
+pub fn generate_random_string(n: usize, sigma: usize) -> Vec<u8> {
+    (0..n)
+        .map(|_| (rand::random::<usize>() % sigma) as u8)
+        .collect()
+}
+
+/// Benchmark some functions.
+fn bench(c: &mut Criterion) {
+    let string = generate_random_string(1000000, 256);
+    c.bench_function("sum of chars", |b| {
+        b.iter(|| string.iter().map(|&c| c as usize).sum::<usize>() as usize);
+    });
+    c.bench_function("sum of squares", |b| {
+        b.iter(|| string.iter().map(|&c| (c as usize).pow(2)).sum::<usize>() as usize);
+    });
+}
+
+// Criterion setup.
+criterion_group!(name = group; config = Criterion::default(); targets = bench);
+criterion_main!(group);
+#+end_src
+
+If we run this using =cargo criterion=, we get:
+#+begin_export html
+<script src="https://asciinema.org/a/qXoOOXgGstEoNXyiT3HtzHgBL.js" id="asciicast-qXoOOXgGstEoNXyiT3HtzHgBL" async="true"></script>
+#+end_export
+Running it again, we get a nice diff with the difference in how long the run
+took compared to before.
+#+begin_export html
+<script src="https://asciinema.org/a/ZuPOAKYv3grH65vJxB8sivgyh.js" id="asciicast-ZuPOAKYv3grH65vJxB8sivgyh" async="true"></script>
+#+end_export
+
+
+*** Making it faster
+As you can see, this is quite slow. That's for a couple of reasons:
+- Before each benchmark, a 3 second warmup is done.
+- Each benchmark is 5 seconds.
+- After each benchmark, some plots are generated.
+- At the end, some HTML reports are generated.
+I'm impatient, and all this waiting *really* impacts my iteration time, so let's
+make it faster (commit TODO):
+- Reduce warmup time to 0.5s.
+- Reduce benchmark time to 2s, and only take 10 samples (otherwise slow cases
+  are slow).
+- Disable plots and html generation.
+The first two are done from code (TODO commit):
+#+begin_src diff
+-    config = Criterion::default();
++    config = Criterion::default()
++        .warm_up_time(Duration::from_millis(500))
++        .measurement_time(Duration::from_millis(2000))
++        .sample_size(10);
+#+end_src
+The last is best done by adding the ~--plotting-backend disabled~ flag. For
+convenience, we add this rule to the =justfile= so we can /just/ do =just
+bench=. I'm also adding =quiet= to hide the comparison between runs to simplify presentation.
+#+begin_src make
+bench:
+    cargo criterion --plotting-backend disabled --output-format quiet
+#+end_src
+#+begin_export html
+<script src="https://asciinema.org/a/EQtJkYBEXYzHsEBnhrMLOp29l.js" id="asciicast-EQtJkYBEXYzHsEBnhrMLOp29l" async="true"></script>
+#+end_export
+Much better.
+
+*** A note on CPU frequency
+
+Most consumer CPUs support turboboost to increase the clock frequency for short
+periods of time. That's nice, but not good for stable measurements. Thus, I
+always pin the frequency of my =i7-10750H= to the default ~2.6GHz~:
+#+begin_src sh
+sudo cpupower frequency-set --governor powersave -d 2.6GHz -u 2.6GHz
+#+end_src
+This usually results in quite stable measurements.
+
+Similarly, I have hyper threading disabled.
+
+** Baselines
+With that out of the way, let's write some code.
+But actually, we should first decide what exactly we are benchmarking.
+For now, let's keep things simple: we would like to obtain a vector that
+contains for each of the $n-w+1$ windows the absolute position of the minimal k-mer in
+that window:
+#+begin_src rust
+pub trait Minimizer {
+    fn minimizers(&self, text: &[u8]) -> Vec<usize>;
+}
+#+end_src
+*** Naive brute force
+
+Let's also already add in two versions that use =fxhash= and =wyhash= already,
+two very simple and fast hash functions.
+#+caption: V1 and V2. (TODO commit)
+#+begin_src diff
+V1NaiveFx:
+- .min_by_key(|(_idx, kmer)| *kmer)
++ .min_by_key(|(_idx, kmer)| fxhash::hash64(kmer))
+V2NaiveWy:
+- .min_by_key(|(_idx, kmer)| *kmer)
++ .min_by_key(|(_idx, kmer)| wyhash::wyhash(kmer, 0))
+#+end_src
+
+The benchmark now looks like this. I changed to a /benchmark group/ since this
+gives slightly more compact output, and tells criterion that the functions belong
+together and benchmark the same thing.
+#+begin_src rust
+fn bench(c: &mut Criterion) {
+    let mut g = c.benchmark_group("randmini");
+    let text = &generate_random_string(1000000, 256);
+    let w = 20;
+    let k = 20;
+
+    g.bench_function("0_naive_lex", |b| {
+        let m = V0NaiveLex { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+    g.bench_function("1_naive_fx", |b| {
+        let m = V1NaiveFx { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+    g.bench_function("2_naive_wy", |b| {
+        let m = V2NaiveWy { w, k };
+        b.iter(|| m.minimizers(text));
+    });
+}
+#+end_src
+First results:
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
+rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
+rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+#+end_src
+Observe:
+- Each method takes 50-100ms to process 1 million characters. That would be
+  50-100s for 1Gbp.
+- Measurements between runs are very stable.
+- FxHash is fastest. It's just one multiply-add per 8 bytes of kmer.
+- WyHash is actually slower than lexicographic comparison in this case!
+
+*** TODO: move the below.
+How does it do?
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.309 ms 87.315 ms 87.321 ms]
+rnd/1_naive_fx          time:   [69.089 ms 69.121 ms 69.147 ms]
+rnd/2_naive_wy          time:   [96.830 ms 96.842 ms 96.854 ms]
+rnd/ext_minimizer_iter  time:   [20.001 ms 20.007 ms 20.012 ms]
+rnd/ext_daniel          time:   [9.2662 ms 9.2696 ms 9.2735 ms]
+rnd/3_queue             time:   [23.952 ms 24.512 ms 25.095 ms]
+#+end_src
+
+Great! Already very close to the =minimizer-iter= crate, and we didn't even
+write much code yet.
+From now on, I'll leave out the naive $O(wn)$ implementations.
+
+
+*** Other crates
+Let's also compare with some external implementations.
+- [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is one baseline implementation. It returns an iterator over all
+  distinct minimizers.
+  #+begin_src rust
+    g.bench_function("ext_minimizer_iter", |b| {
+        b.iter(|| {
+            minimizer_iter::MinimizerBuilder::<u64>::new()
+                .minimizer_size(k)
+                .width(w as u16)
+                .iter_pos(text)
+                .collect_vec()
+        });
+    });
+  #+end_src
+- Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]], to which we'll come back in more detail later.
+
+#+begin_src txt
+                                 -stddev    mean     +stddev
+rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
+rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
+rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+rnd/ext_minimizer_iter  time:   [19.958 ms 19.960 ms 19.961 ms]
+rnd/ext_daniel          time:   [9.2473 ms 9.2487 ms 9.2507 ms]
+#+end_src
+We see that =minimizer-iter= is quite a bit faster than our methods, and
+Daniel's code is another two times faster. So let's get to work :)
+
+** TODO NtHash: a rolling kmer hash
 One problem with =fxhash= and =wyhash= is that they hash strings of arbitrary
 length, and hence generate a lot of code to handle all length modulo $8$ efficiently.
 In practice, we've only been using $k=21$ so far, but this still requires
@@ -567,8 +893,6 @@ g/ext_daniel            time:   [8.9199 ms 8.9300 ms 8.9405 ms]
 g/4_rescan              time:   [10.557 ms 10.562 ms 10.574 ms]
 g/5_rescan_nthash       time:   [12.964 ms 12.980 ms 12.992 ms]
 #+end_src
-
-* TODO Optimizing what we have
 
 ** Optimizing the queue
 We're already close to the reference implementation, but not quite there yet.
@@ -758,7 +1082,8 @@ and runtime goes down to 10.7s.
 It's not exactly clear to me why this is not as fast as Daniel's original
 version. Probably it's still because things aren't inlined, and I don't understand why
 that's not happening.
-* TODO SIMD, SIMD everywhere
+** TODO SIMD, SIMD everywhere
 
+* TODO Super-k-mers and canonical kmers
 
 #+print_bibliography:
