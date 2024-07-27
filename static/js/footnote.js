@@ -9,6 +9,10 @@ var fnTooltip = function () {
     }
     outer = document.createElement("span");
     outer.className = "fn-tooltip";
+    number = document.createElement("span");
+    number.className = "fn-number";
+    number.append(ref.innerHTML);
+    outer.append(number);
     inner = document.createElement("span");
     inner.className = "fn-text";
     inner.append(footnote.cloneNode(true));

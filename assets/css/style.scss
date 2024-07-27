@@ -313,25 +313,58 @@ mjx-container {
 }
 
 .fn-tooltip {
-  display: none;
-  position: absolute;
-  bottom: 2em;
-  left: -2em;
-}
-.fn-tooltip .fn-text {
-  display: block;
-  padding: 0.3em;
-  margin-left: auto;
-  margin-right: auto;
-  background: lightgrey;
-  border: 1px black solid;
-  border-radius: 5px;
-  width: max-content;
-  max-width: 400px;
+  margin: 0.5rem;
+  background: white;
+  border: 1px white solid;
+  border-left-color: $highlight;
+  border-left-width: 2px;
   line-height: initial;
+
+  .fn-number {
+    display: block;
+    float: left;
+    line-height: initial;
+    padding: 0.5rem 1rem;
+    font-weight: 700;
+  }
+
+  .fn-text {
+    display: block;
+    padding: 0.5rem 1rem;
+    padding-left: 3.5rem;
+    p {
+      display: inline;
+      margin: 0;
+    }
+  }
+  @media only screen and (width > 1500px) {
+    float: right;
+    clear: right;
+    margin-right: calc(-50vw + 45rem);
+    width: calc(50vw - 45rem - 2rem);
+  }
+
+  @media only screen and (max-width: 1500px) {
+    display: none;
+    position: absolute;
+    bottom: 1em;
+    left: -2em;
+    border: 1px $highlight solid;
+    border-radius: 5px;
+    .fn-text {
+      width: max-content;
+      max-width: 400px;
+    }
+  }
 }
+
 a.footnote-ref:hover + span.fn-tooltip {
-  display: inline-block;
+  @media only screen and (max-width: 1500px) {
+    display: inline-block;
+  }
+  @media only screen and (width > 1500px) {
+    border-color: $highlight;
+  }
 }
 
 // Styling for homepage decription lists.
