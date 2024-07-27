@@ -4,7 +4,7 @@ let observer = new IntersectionObserver(handler, {
 let paragraphs = [...document.querySelectorAll("article > div > *")];
 let submenu = [...document.querySelectorAll(".toc a")];
 function previousHeaderId(p) {
-  while (p && !p.matches("h2, h3, h4")) {
+  while (p && !p.matches("h1, h2, h3, h4")) {
     p = p.previousElementSibling;
   }
   return p?.id;
