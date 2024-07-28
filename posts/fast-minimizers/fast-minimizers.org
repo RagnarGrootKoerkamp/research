@@ -5,6 +5,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
+#+hugo_paired_shortcodes: notice
 #+date: <2024-07-12 Fri>
 
 In this post, we will develop a fast implementation of random minimizers.
@@ -17,7 +18,7 @@ Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
 - [[*Random minimizers][Background]]
 - [[*Algorithms][Overview of algorithms]]
-- TODO: [[*Optimizing][Optimizing the implementation]]
+- TODO: [[#Optimizing][Optimizing the implementation]]
   - TODO: [[*Setting up benchmarking][Benchmarking]]
 
 * Random minimizers
@@ -133,7 +134,7 @@ Regardless, for convenience we can implement solutions to A and C in terms of
  them clean and readable. Most code is fairly straightforward assuming you're
  comfortable reading Rust code.]
 #+caption: Implementing =minimizer_positions= and =super_kmers= in terms of =window_minimizers=.
-#+include: "code/minimizer.rs" src rust :lines "11-"
+#+include: "code/blog/minimizer.rs" src rust :lines "11-"
 
 *** Canonical k-mers
 In actual bioinformatics applications, it is common to consider /canonical
@@ -163,24 +164,26 @@ It looks like this:[fn:legend:*Legend*:\\
 In code, it looks like this.
 
 #+caption: An implementation of the naive algorithm. Note that hashes are recomputed for each window.
-#+include: "code/naive.rs" src rust :lines "3-26"
+#+include: "code/blog/naive.rs" src rust :lines "3-29"
 
-*** Performance
+*** Performance characteristics
 :PROPERTIES:
 :CUSTOM_ID: naive-performance
 :END:
 
-Let us already have a quick loot at the performance of this (and upcoming)
-methods, to get a quick feeling for how well the perform and how they compare
-against each other. We will cover the benchmarking setup using =criterion= in detail in
-[[*Setting up benchmarking]], and will then also compare the methods in more detail
-for varying $k$ and $w$. Here, we use $k=21$, $w=11$, and measure the time it
-takes to find the minimizers in a text of length $10^6$ characters.
+I was planning to show some preliminary performance numbers here, to give some
+intuition about the relative performance of this and upcoming methods.
+Unfortunately though (and not completely surprising), performance depends
+heavily on small details of how the code is written. I could provide a
+comparison between the methods as-is, but the numbers would be hard to interpret.
+Instead, let's consider some high level expectations of this algorithm for now,
+and postpone the quantitive comparison until later.
 
-#+caption: For /k=21/ and /w=11/, the naive buffered implementation runs in /55ms/ on a text of length 1 million characters, or /55ns/ per character. The three reported numbers are the low end of the confidence interval, the average measured time, and the high end of the confidence interval.
-#+begin_src txt
-g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
-#+end_src
+Since there are no =if= statements, the code should be highly predictable. Thus,
+we expect:
+- few branch misses,
+- high instructions per cycle,
+- and generally running times linear in $w$.
 
 ** Sliding window minimum
 After hashing all k-mers, we basically have a sequence of $n-k+1$ pseudo-random
@@ -190,17 +193,17 @@ Thus, the problem of finding random minimizers reduces to computing the sliding
 window minima.
 We can model this problem using the following trait:
 #+caption: Trait for the sliding window minimum problem.
-#+include: "code/sliding_min.rs" src rust :lines "2-16"
+#+include: "code/blog/sliding_min.rs" src rust :lines "2-16"
 
 A first implementation could simply store the last $w$ hashes in a =RingBuffer=,
 and in each step recompute the minimum. The boiler plate for the ring buffer is simple:
 #+caption: A simple ring buffer.
-#+include: "code/ringbuf.rs" src rust :lines "1-"
+#+include: "code/blog/ringbuf.rs" src rust :lines "1-34"
 
 And then a sliding window implementation also becomes trivial:
 
 #+caption: The =BufferedSlidingMin= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
-#+include: "code/naive.rs" src rust :lines "27-"
+#+include: "code/blog/naive.rs" src rust :lines "30-"
 
 Using this trait, we can clean up the implementation of the naive minimizer from
 before. In fact, we can now generically implement a minimizer scheme using any
@@ -208,7 +211,7 @@ implementation of the sliding window algorithm.
 
 #+name: queue-wrapper
 #+caption: A generic minimizer algorithm using any solution to the sliding window minimum problem, and the corresponding =Buffered= minimizer.
-#+include: "code/sliding_min.rs" src rust :lines "46-"
+#+include: "code/blog/sliding_min.rs" src rust :lines "46-"
 
 ** The queue
 Let's try to improve this somewhat inefficient $O(|t|\cdot w)$ algorithm.  A first
@@ -244,30 +247,25 @@ their position in the original text, so that we can pop them when needed.
 
 In code, it looks like this:
 #+caption: An implementaion of the =MonotoneQueue= and the corresponding =QueueMinimizer=.
-#+include: "code/queue.rs" src rust :lines "2-"
+#+include: "code/blog/queue.rs" src rust :lines "2-"
 
-*** Performance
+*** Performance characteristics
 :PROPERTIES:
 :CUSTOM_ID: queue-performance
 :END:
 Since each element is pushed once and popped once, each call to
 =push= takes amortized constant $O(1)$ time, so that the total runtime is
 $O(|t|)$ (assuming that hashing each k-mer takes constant time).
-
-#+caption: For /w=11/, the =Queue= method is /2.5/ times faster than the =Buffered= method.
-#+begin_src txt
-g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
-g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
-#+end_src
-
-One might expect a $w=11$ times speedup over the buffered method, but this is
-not the case. This is due to the high number of unpredictable branches,
+We may expect a $w=11$ times speedup over the buffered method, but most likely
+this will not be the case.
+This is due to the high number of unpredictable branches,
 which hurts pipelining/instruction level parallelism (ILP). Thus, while the
-complexity of the =Queue= algorithm is good, its practical performance is suboptimal.
+complexity of the =Queue= algorithm is good, its practical performance may not be optimal.
 
 ** Jumping: Away with the queue
-As we saw, while the queue algorithm is nice in theory, in practice it is not
-ideal. Thus, we would like to find some middle ground between keeping this queue
+While the queue algorithm is nice in theory, in practice it is not ideal due to
+the branch-misses.
+Thus, we would like to find some middle ground between keeping this queue
 and the naive approach of rescanning every window. A first idea is this: Once we find the
 minimizer of some window, we can jump to the first window after that position to
 find the next minimizer. This
@@ -284,25 +282,18 @@ Since the expected distance between random minimizers is $(w+1)/2$, we expect to
 scan each position just under two times.
 
 #+caption: Solving Problem A by jumping to the window after the previous minimizer. Note that this first computes all hashes in a separate pass.
-#+include: "code/jumping.rs" src rust :lines "2-"
+#+include: "code/blog/jumping.rs" src rust :lines "2-"
 
-*** Performance
+*** Performance characteristics
 :PROPERTIES:
 :CUSTOM_ID: queue-performance
 :END:
 
-One benefit of ths method is that it is completely branchless. Each iteration of
+One benefit of this method is that it is completely branchless. Each iteration of
 the loop corresponds to exactly one output. The only unpredictable step is which
 element of a window is the minimizer, since that determines which is the next
 window to scan. Thus, even though it is branchless, consecutive iterations
 depend on each other and ILP (instruction level parallelism, aka pipelining) may only have a limited effect.
-
-#+caption: As predicted, =Jumping= is much faster than the previous methods, since it outputs less information.
-#+begin_src txt
-g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
-g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
-g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
-#+end_src
 
 ** Re-scan
 I learned of an improved method via [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
@@ -318,8 +309,6 @@ the minimum of the window goes up.[fn:legend]
 #+attr_html: :class inset
 [[file:./rescan.svg]]
 
-TODO: I believe this only does $\approx 1.5$ comparisons per element instead of $2$.
-
 Thus, we keep
 a cyclic buffer of the last $w$ values, and scan it as needed. One point of attention
 is that we need the /leftmost/ minimal value, but as the buffer is cyclic, that
@@ -327,27 +316,15 @@ is not the first minimum in the buffer. Thus, we partition the scan into two
 parts, and prefer minima in the second (older) half.
 
 #+caption: =Rescan= implementation of =SlidingMin=.
-#+include: "code/rescan.rs" src rust :lines "2-"
+#+include: "code/blog/rescan.rs" src rust :lines "2-"
 
-*** Performance
+*** Performance characteristics
 :PROPERTIES:
 :CUSTOM_ID: rescan-performance
 :END:
-
-The result is quite good: almost twice as fast as the queue, although not as
-fast as the =Jumping= method, which gets away with doing less work!
-
-#+caption: =Rescan= is much faster than the =Queue= method, but not as fast as =Jumping=.
-#+begin_src txt
-g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
-g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
-g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
-g/Rescan                time:   [14.174 ms 14.176 ms 14.178 ms]
-#+end_src
-
-While fast, this method is not fully predictable and will have some branch
-misses, since we need to re-scan a window at unpredictable times. As we will see
-later, this causes a branch miss roughly every $w$ positions.
+This method should have much fewer branch-misses than the queue, since we rescan
+a full window of size $w$ at a time. Nevertheless, these re-scans occur at
+somewhat random moments, so some branch-misses around this are still to be expected.
 
 ** Split windows
 In an ideal world, we would use a fully predictable algorithm, i.e., an
@@ -412,9 +389,9 @@ pre-processing step, but it can also be done on the fly:
 [[file:./split.svg]]
 
 #+caption: Code for the =Split= algorithm, that computes the suffix minima for each chunk exactly every $w$ iterations.
-#+include: "code/split.rs" src rust :lines "2-"
+#+include: "code/blog/split.rs" src rust :lines "2-"
 
-*** Performance
+*** Performance characteristics
 :PROPERTIES:
 :CUSTOM_ID: split-perfomance
 :END:
@@ -423,29 +400,11 @@ The big benefit of this algorithm is that its execution is completely determinis
 to the [[*Jumping: Away with the queue][jump algorithm]]: every $w$ iterations we compute the suffix-minima, and
 then we continue again with the rolling prefix minimum. Since this 'side loop'
 is taken exactly once in every $w$ iterations, the corresponding branch is easy
-to predict and does not cause branch-misses.
+to predict and does not cause branch-misses. Thus, we expect nearly $0\%$ of
+branch-misses, and up to $4$ instructions per cycle.
 
-#+caption: The current implementation of =Split= is slightly faster than =Rescan=.
-#+begin_src txt
-g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
-g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
-g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
-g/Rescan                time:   [14.174 ms 14.176 ms 14.178 ms]
-g/Split                 time:   [13.961 ms 13.962 ms 13.964 ms]
-#+end_src
-
-
-# ** TODO Rescan2
-
-# [[https://twitter.com/tbrekaloxyz][Tvrtko Brekalo]] suggested another variant, that I will call =Rescan2=[fn::Better
-# name needed] for now. It behaves similar to the [[*Re-scan][Rescan]] method, but it attempts
-# to reduce the overlap of the rescan step by tracking the smallest value after
-# the minimum, and only starting the rescan from there.
-
-# #+caption: Implementation of =Rescan2= that tracks both the minimum and second smallest value succeeding it.
-# #+include: "code/rescan2.rs" src rust :lines "2-"
-
-** Analysis: Counting comparisons
+* Analysing what we have so far
+** Counting comparisons
 
 Before we look at runtime performance, let's have a more theoretical look at the
 number of comparisons each method makes.
@@ -488,20 +447,13 @@ better than $2-2/(w+1)$ expected comparisons per element to compute the random
 minimizer of all windows, and similarly it would be nice to have a lower bound
 on the minimal number of comparisons needed to only compute the positions of the minimizers.
 
-
-* TODO Optimizing
-NOTE: Everything below here is old and needs revising and reordering based on
-the latest algorithms section.
 ** Setting up benchmarking
 *** Adding criterion
 Before we start our implementation, let's set up a benchmark so we can easily
 compare them. We will use [[https://crates.io/crates/criterion][criterion]], together with the [[https://crates.io/crates/cargo-criterion][cargo-criterion]] helper.
-First we add =criterion= as a dev-dependency to =Cargo.toml=, and set up a stub
-benchmark.
+First we add =criterion= as a dev-dependency to =Cargo.toml=.
 
-The code can be found at [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]], mostly in the
-=benches/= folder. The change below is [[https://github.com/RagnarGrootKoerkamp/minimizers/commit/e758f20e94e7a65c4acd93a5c39a3a9362994fe9][this commit]].
-
+#+caption: =Cargo.toml= changes to set up =criterion=.
 #+begin_src toml
 [dev-dependencies]
 criterion = "*"
@@ -516,194 +468,235 @@ harness = false
 #+end_src
 
 We add =benches/bench.rs= which looks like this:
-#+begin_src rust
-use criterion::{criterion_group, criterion_main, Criterion};
+@@html:<details><summary>Click to show code</summary>@@
+#+caption: A basic criterion benchmark for the comparison so far.
+#+include: "code/bench.rs" src rust :lines "19-53"
+@@html:</details>@@
 
-/// Generate a random string of length `n` over an alphabet of size `sigma`.
-pub fn generate_random_string(n: usize, sigma: usize) -> Vec<u8> {
-    (0..n)
-        .map(|_| (rand::random::<usize>() % sigma) as u8)
-        .collect()
-}
-
-/// Benchmark some functions.
-fn bench(c: &mut Criterion) {
-    let string = generate_random_string(1000000, 256);
-    c.bench_function("sum of chars", |b| {
-        b.iter(|| string.iter().map(|&c| c as usize).sum::<usize>() as usize);
-    });
-    c.bench_function("sum of squares", |b| {
-        b.iter(|| string.iter().map(|&c| (c as usize).pow(2)).sum::<usize>() as usize);
-    });
-}
-
-// Criterion setup.
-criterion_group!(name = group; config = Criterion::default(); targets = bench);
-criterion_main!(group);
-#+end_src
-
-If we run this using =cargo criterion=, we get:
-#+begin_export html
-<script src="https://asciinema.org/a/qXoOOXgGstEoNXyiT3HtzHgBL.js" id="asciicast-qXoOOXgGstEoNXyiT3HtzHgBL" async="true"></script>
-#+end_export
-Running it again, we get a nice diff with the difference in how long the run
-took compared to before.
-#+begin_export html
-<script src="https://asciinema.org/a/ZuPOAKYv3grH65vJxB8sivgyh.js" id="asciicast-ZuPOAKYv3grH65vJxB8sivgyh" async="true"></script>
-#+end_export
-
-
-*** Making it faster
-As you can see, this is quite slow. That's for a couple of reasons:
+*** Making criterion fast
+By default, the benchmarks are quite slow. That's for a couple of reasons:
 - Before each benchmark, a 3 second warmup is done.
 - Each benchmark is 5 seconds.
 - After each benchmark, some plots are generated.
 - At the end, some HTML reports are generated.
 I'm impatient, and all this waiting *really* impacts my iteration time, so let's
-make it faster (commit TODO):
+make it faster:
 - Reduce warmup time to 0.5s.
-- Reduce benchmark time to 2s, and only take 10 samples (otherwise slow cases
-  are slow).
+- Reduce benchmark time to 2s, and only take 10 samples.
 - Disable plots and html generation.
-The first two are done from code (TODO commit):
-#+begin_src diff
--    config = Criterion::default();
-+    config = Criterion::default()
-+        .warm_up_time(Duration::from_millis(500))
-+        .measurement_time(Duration::from_millis(2000))
-+        .sample_size(10);
+The first two are done from code:
+#+caption: Initializing =criterion= with reduced warmup and measurement time.
+#+begin_src rust
+criterion_group!(
+    name = group;
+    config = Criterion::default()
+        // Make sure that benchmarks are fast.
+        .warm_up_time(Duration::from_millis(500))
+        .measurement_time(Duration::from_millis(2000))
+        .sample_size(10);
+    targets = initial_runtime_comparison, count_comparisons_bench
+);
 #+end_src
 The last is best done by adding the ~--plotting-backend disabled~ flag. For
 convenience, we add this rule to the =justfile= so we can /just/ do =just
 bench=. I'm also adding =quiet= to hide the comparison between runs to simplify presentation.
+#+caption: Adding the =bench= rule to the =justfile=.
 #+begin_src make
 bench:
     cargo criterion --plotting-backend disabled --output-format quiet
 #+end_src
+
+When we now do =just bench=, we see this (TODO update):
+
 #+begin_export html
 <script src="https://asciinema.org/a/EQtJkYBEXYzHsEBnhrMLOp29l.js" id="asciicast-EQtJkYBEXYzHsEBnhrMLOp29l" async="true"></script>
 #+end_export
-Much better.
 
 *** A note on CPU frequency
 
 Most consumer CPUs support turboboost to increase the clock frequency for short
 periods of time. That's nice, but not good for stable measurements. Thus, I
 always pin the frequency of my =i7-10750H= to the default ~2.6GHz~:
+#+caption: Pinning CPU frequency to =2.6GHz=.
 #+begin_src sh
 sudo cpupower frequency-set --governor powersave -d 2.6GHz -u 2.6GHz
 #+end_src
-This usually results in quite stable measurements.
+This usually results in very stable measurements.
 
-Similarly, I have hyper threading disabled.
+Similarly, I have hyper threading disabled, so that each program has a full core
+to itself, without interference with other programs.
 
-** Baselines
-With that out of the way, let's write some code.
-But actually, we should first decide what exactly we are benchmarking.
-For now, let's keep things simple: we would like to obtain a vector that
-contains for each of the $n-w+1$ windows the absolute position of the minimal k-mer in
-that window:
-#+begin_src rust
-pub trait Minimizer {
-    fn minimizers(&self, text: &[u8]) -> Vec<usize>;
-}
-#+end_src
-*** Naive brute force
 
-Let's also already add in two versions that use =fxhash= and =wyhash= already,
-two very simple and fast hash functions.
-#+caption: V1 and V2. (TODO commit)
-#+begin_src diff
-V1NaiveFx:
-- .min_by_key(|(_idx, kmer)| *kmer)
-+ .min_by_key(|(_idx, kmer)| fxhash::hash64(kmer))
-V2NaiveWy:
-- .min_by_key(|(_idx, kmer)| *kmer)
-+ .min_by_key(|(_idx, kmer)| wyhash::wyhash(kmer, 0))
-#+end_src
+** TODO Runtime comparison with other implementations
+Let's compare the runtime of our method so far with
+two other Rust implementations:
+- [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is an implementation written by [[https://twitter.com/IgorMartayan][Igor Martayan]]. It returns an iterator over all
+  /distinct/ minimizers and uses the queue algorithm.
+- Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][implementation]] of the rescan algorithm.
 
-The benchmark now looks like this. I changed to a /benchmark group/ since this
-gives slightly more compact output, and tells criterion that the functions belong
-together and benchmark the same thing.
-#+begin_src rust
-fn bench(c: &mut Criterion) {
-    let mut g = c.benchmark_group("randmini");
-    let text = &generate_random_string(1000000, 256);
-    let w = 20;
-    let k = 20;
-
-    g.bench_function("0_naive_lex", |b| {
-        let m = V0NaiveLex { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-    g.bench_function("1_naive_fx", |b| {
-        let m = V1NaiveFx { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-    g.bench_function("2_naive_wy", |b| {
-        let m = V2NaiveWy { w, k };
-        b.iter(|| m.minimizers(text));
-    });
-}
-#+end_src
-First results:
+#+caption: Runtime comparison between our and other's implementations. TODO: more params, 10^6 text length.
 #+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
-rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
-rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
+g/naive                 time:   [64.399 ms 64.401 ms 64.404 ms]
+g/buffered              time:   [55.154 ms 55.160 ms 55.173 ms]
+g/queue                 time:   [22.305 ms 22.322 ms 22.335 ms]
+g/jumping               time:   [7.0913 ms 7.0969 ms 7.1042 ms]
+g/rescan                time:   [14.067 ms 14.071 ms 14.078 ms]
+g/split                 time:   [14.021 ms 14.023 ms 14.027 ms]
+g/queue_igor            time:   [26.680 ms 26.689 ms 26.700 ms]
+g/rescan_daniel         time:   [9.0335 ms 9.0340 ms 9.0349 ms]
 #+end_src
+
+Some initial observations:
+- Measurements between samples are very stable, varying less than $1\%$.
+- Each method takes 7-55ms to process 1 million characters. That's 7-55ns per
+  character, or 7s to 55s for 1Gbp.
+- Our queue implementation performs similar to the one in =minimizer-iter=.
+- Daniel's implementation of =Rescan= is around twice as fast as ours! Time to
+  start looking deeper into our code.
+
+Looking back at our expectations:
+- As expected, =Buffered= is the slowest method by far, but even for $w=11$, it
+  is only $2\times$ slower than the next-slowest method.
+- =Split= is about as fast as =Rescan=, and even a bit slower. We were expecting
+  a big speedup here, so something is weird.
+- =RescanDaniel= is even much faster than our =Split=, so clearly there must be
+  a lot of headroom.
+
+** Deeper inspection using =perf stat=
+Let's look some more at performance statistics using =perf stat=. We can reuse
+the benchmarks for this, and call =criterion= with the =--profile-time 2= flag,
+which simple runs a benchmark for $2$ seconds.
+
+#+caption: =just stat= will run a benchmark for 2 seconds under =perf stat=.
+#+begin_src just
+stat test='':
+    cargo build --profile bench --benches
+    perf stat -d cargo criterion -- --profile-time 2 {{test}}
+#+end_src
+
+The metrics that are relevant to us now are summarized in the following table.
+
+#+begin_src sh :exports none
+for alg in naive buffered queue\$ queue_igor jumping rescan\$ rescan_daniel split ; just stat-selection $alg ; end
+#+end_src
+
+#+caption: =perf stat= results for all methods so far.
+#+attr_html: :class small
+| metric         | Runtime (ns/char) | instructions/cycle (GHz) | branches/sec (M/sec) | branch misses % |
+| =Naive=        |                64 |                     4.13 |                 1743 |           0.11% |
+| =Buffered=     |                55 |                     2.17 |                  987 |           4.66% |
+| =Queue=        |                22 |                     2.29 |                  810 |           4.29% |
+| =QueueIgor=    |               7.1 |                     2.33 |                  662 |           4.29% |
+| =Jumping=      |                14 |                     3.89 |                 1459 |           0.13% |
+| =Rescan=       |                14 |                     3.02 |                 1116 |           2.26% |
+| =RescanDaniel= |                27 |                     3.21 |                 1410 |           0.85% |
+| =Split=        |               9.0 |                     3.37 |                 1116 |           1.55% |
+
 Observe:
-- Each method takes 50-100ms to process 1 million characters. That would be
-  50-100s for 1Gbp.
-- Measurements between runs are very stable.
-- FxHash is fastest. It's just one multiply-add per 8 bytes of kmer.
-- WyHash is actually slower than lexicographic comparison in this case!
+- =Naive= has an instructions per cycle (IPC) of over 4! I have never actually seen IPC that high.
+  It's not measurement noise, so most likely it comes from the fact that some
+  instructions such as compare followed by conditional jump are fused.
+- =Naive= also has pretty much no branch misses.
+- =Buffered= only has half the IPC of =Naive= but is still slightly faster since
+  it only hashes each kmer once. For some reason, there are a lot of branch
+  misses, which we'll have to investigate further.
+- The two =Queue= variants also have
+  relatively few instructions per cycle, and
+  also relatively a lot of branch misses. Here, the branch-misses are expected,
+  since the queue pushing and popping are inherently unpredictable.
+- In fact, I argued that the last element of the =Queue= is popped with
+  probability $50\%$. But even then, the branch predictor is able to get down to
+  $4\%$ of branch misses. Most likely there are correlations that make these
+  events somewhat predictable, and of course, there are also other easier
+  branches that count towards the total.
+- =Jumping= has an very good IPC of nearly $4$, as we somewhat hoped for, and
+  correspondingly has almost no branch misses.
+- The remaining methods all have a decent IPC just above $3$.
+- =RescanDaniel= has much fewer branch misses than =Rescan=. We should investigate this.
+- We argued that =Split= is completely predictable, but we see a good number of
+  branch misses anyway. Another thing to investigate.
 
-*** TODO: move the below.
-How does it do?
-#+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.309 ms 87.315 ms 87.321 ms]
-rnd/1_naive_fx          time:   [69.089 ms 69.121 ms 69.147 ms]
-rnd/2_naive_wy          time:   [96.830 ms 96.842 ms 96.854 ms]
-rnd/ext_minimizer_iter  time:   [20.001 ms 20.007 ms 20.012 ms]
-rnd/ext_daniel          time:   [9.2662 ms 9.2696 ms 9.2735 ms]
-rnd/3_queue             time:   [23.952 ms 24.512 ms 25.095 ms]
+** A first optimization pass
+It's finally time to do some actual optimizations!
+We'll go over each of the algorithms we saw and optimize them.
+This step is 'just' so we can make a fair benchmark between them, and in the end
+we will only optimize one of them further, so I will try to keep it short.
+The final optimized version of each algorithm can be found in the repository,
+but intermediate diffs are only shown here.
+*** Optimizing =Buffered=: reducing branch misses using forward minima
+Let's have a look at =perf record=:
+#+caption: =just perf buffered= shows very inefficient and branchy code. Lines marked with a =*= have over /5%/ of time spent in them. This pattern occurs multiple times due to loop unrolling.
+#+begin_src asm
+  1.16 │       cmp    %r8,%rbp          ; compare two values
+  0.92 │       setne  %r11b
+  0.70 │    ┌──jb     976               ; conditionally jump down
+ *6.15*│    │  mov    %r11b,%r13b       ; overwrite the minimum (I think)
+  0.02 │    │  mov    %r13d,%r12d       ; overwrite the position (I think)
+ *5.44*│976:└─→mov    0x8(%rdx),%r10    ; continue
 #+end_src
+Most of these branches come from the fact that computing the minimum of two
+=Elem { val: usize, pos: usize }= is very inefficient, since two comparisons are
+needed, and then the result is conditionally overwritten.
 
-Great! Already very close to the =minimizer-iter= crate, and we didn't even
-write much code yet.
-From now on, I'll leave out the naive $O(wn)$ implementations.
+The only reason we are storing an =Elem= that includes the position is that we
+must return the leftmost minimum. But since e.g. =position_min()= returns the
+leftmost minimum anyway, we can try to avoid storing the position and always
+iterate over values from left to right. We'll add a method to our =RingBuf= for this:
+#+caption: Split the =RingBuf= into two slices, such that the element of the first returned slice come before the second part.
+#+include: "code/blog/ringbuf.rs" src rust :lines "42-48"
 
+#+caption: =BufferedOpt= that only stores values and finds the minimum from left to right. Runs in =26ms=, down from =55ms=.
+#+include: "code/blog/naive.rs" src rust :lines "49-"
 
-*** Other crates
-Let's also compare with some external implementations.
-- [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is one baseline implementation. It returns an iterator over all
-  distinct minimizers.
-  #+begin_src rust
-    g.bench_function("ext_minimizer_iter", |b| {
-        b.iter(|| {
-            minimizer_iter::MinimizerBuilder::<u64>::new()
-                .minimizer_size(k)
-                .width(w as u16)
-                .iter_pos(text)
-                .collect_vec()
-        });
-    });
-  #+end_src
-- Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]], to which we'll come back in more detail later.
+The hot loop of the code looks much, much better now, using =cmov= instead of
+branches to overwrite the minimum.
 
-#+begin_src txt
-                                 -stddev    mean     +stddev
-rnd/0_naive_lex         time:   [87.264 ms 87.285 ms 87.308 ms]
-rnd/1_naive_fx          time:   [69.025 ms 69.032 ms 69.039 ms]
-rnd/2_naive_wy          time:   [99.193 ms 99.203 ms 99.215 ms]
-rnd/ext_minimizer_iter  time:   [19.958 ms 19.960 ms 19.961 ms]
-rnd/ext_daniel          time:   [9.2473 ms 9.2487 ms 9.2507 ms]
+@@html:<details><summary>New assembly</summary>@@
+#+caption: New hot-loop, using =cmov=, and very few branches.
+#+begin_src asm
+  1.59 │898:┌─→lea        0x8(%r14),%r13
+  4.85 │    │  mov        %rbx,0xe0(%rsp)
+  2.72 │    │  mov        %r9,0xf8(%rsp)
+  5.29 │    │  mov        %r13,0xf0(%rsp)
+  1.85 │    │  lea        0x1(%rax),%rbp
+  4.78 │    │  mov        %rbp,0x110(%rsp)
+ 11.20 │    │  mov        (%r14),%r14
+  7.24 │    │  cmp        %rcx,%r14       ; compare
+  3.41 │    │  cmovb      %rax,%r11       ; conditionally overwrite pos
+  4.04 │    │  cmovb      %r14,%rcx       ; conditionally overwrite min
+  2.50 │    │  mov        %rbp,%rax
+  5.19 │    │  mov        %r13,%r14
+  3.01 │8d4:│  test       %r14,%r14
+  0.92 │    │↓ je         8de
+  0.44 │    ├──cmp        %r9,%r14
+  3.90 │    └──jne        898          
 #+end_src
-We see that =minimizer-iter= is quite a bit faster than our methods, and
-Daniel's code is another two times faster. So let's get to work :)
+@@html:</details>@@
+
+Also the =perf stat= is great now: =4.23 IPC= and =0.13%= branch misses, so
+we'll leave it at this.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+- Compute minima from left to right to avoid comparing positions.
+- Prefer =cmov= over branches to compute minima.
+#+end_notice
+
+*** Optimizing =Queue=
+*** Optimizing =Jumping=
+*** Optimizing =Rescan=
+*** Optimizing =Split=
+* TODO Let the optimization begin
+:PROPERTIES:
+:CUSTOM_ID: Optimizing
+:END:
+Topics to cover, in some order:
+- Branch misses around =min= of =(val, pos)= pairs
+- unchecked indexing
+- wyhash
+- NtHash, and how to make an efficient implementation.
+- SIMD: processing 4/8/16(?) sequences in parallel.
+- Procomputing hashes, separate from ISMD
 
 ** TODO NtHash: a rolling kmer hash
 One problem with =fxhash= and =wyhash= is that they hash strings of arbitrary
@@ -934,7 +927,7 @@ and runtime goes down to 10.7s.
 It's not exactly clear to me why this is not as fast as Daniel's original
 version. Probably it's still because things aren't inlined, and I don't understand why
 that's not happening.
-** TODO SIMD, SIMD everywhere
+
 
 * TODO Super-k-mers and canonical kmers
 
