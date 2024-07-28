@@ -17,8 +17,8 @@ Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
 - [[*Random minimizers][Background]]
 - [[*Algorithms][Overview of algorithms]]
-- [[*Optimizing][Optimizing the implementation]]
-  - [[*Setting up benchmarking][Benchmarking]]
+- TODO: [[*Optimizing][Optimizing the implementation]]
+  - TODO: [[*Setting up benchmarking][Benchmarking]]
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
@@ -133,33 +133,7 @@ Regardless, for convenience we can implement solutions to A and C in terms of
  them clean and readable. Most code is fairly straightforward assuming you're
  comfortable reading Rust code.]
 #+caption: Implementing =minimizer_positions= and =super_kmers= in terms of =window_minimizers=.
-#+begin_src rust
-pub trait Minimizer {
-    /// Problem A: The absolute positions of all minimizers in the text.
-    fn minimizer_positions(&self, text: &[u8]) -> Vec<usize> {
-        let mut minimizers = self.window_minimizers(text);
-        minimizers.dedup();
-        minimizers
-    }
-
-    /// Problem B: For each window, the absolute position in the text of its minimizer.
-    fn window_minimizers(&self, text: &[u8]) -> Vec<usize>;
-
-    /// Problem C: The super-k-mers of the text.
-    fn super_kmers(&self, text: &[u8]) -> Vec<SuperKmer> {
-        self.window_minimizers(text)
-            .into_iter()
-            .enumerate()
-            .group_by(|(_idx, minimizer_pos)| *minimizer_pos)
-            .into_iter()
-            .map(|(minimizer_pos, mut group)| SuperKmer {
-                start_pos: group.next().unwrap().0,
-                minimizer_pos,
-            })
-            .collect()
-    }
-}
-#+end_src
+#+include: "code/minimizer.rs" src rust :lines "11-"
 
 *** Canonical k-mers
 In actual bioinformatics applications, it is common to consider /canonical
@@ -173,43 +147,24 @@ postpone this for later.
 
 The naive $O(|t| \cdot w)$ method simply finds the minimum of each window independently.
 
-It looks like this:[fn::*Legend*:\\
-Orange: processed state,\\
-Bold: minimum of the window.]
+It looks like this:[fn:legend:*Legend*:\\
+  @@html:<span style="color:orange">Orange</span>@@: processed state,\\
+  @@html:<span style="border:1px black solid">Bold outline</span>@@: minimum of
+  the prefix/suffix,\\
+  *Bold character*: minimum of the window,\\
+  @@html:<span style="color:blue">Blue</span>@@: state in memory,\\
+  @@html:<span style="color:red">Red</span>@@: state removed from the queue,\\
+  @@html:<span style="color:green">Green</span>@@: running prefix minimum.
+  ]
 #+caption: Illustration of the naive algorithm for a sequence of 8 kmers and window size /w=4/. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window, finds the element with the smallest hash. The orange colour indicates that for each window, all hashes are checked. The minimum is shown in bold.
 #+attr_html: :class inset
 [[file:./naive.svg]]
 
 In code, it looks like this.
 
-#+caption: V0: a naive implementation of lexicographic minimizers. (TODO commit)
-#+begin_src rust
-// TODO: Not lex
-pub struct V0NaiveLex {
-    pub w: usize,
-    pub k: usize,
-}
+#+caption: An implementation of the naive algorithm. Note that hashes are recomputed for each window.
+#+include: "code/naive.rs" src rust :lines "3-26"
 
-impl Minimizer for V0NaiveLex {
-    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
-        // Iterate over the windows of size l=w+k-1.
-        text.windows(self.w + self.k - 1)
-            .enumerate()
-            // For each window, starting at pos j, find the lexicographically smallest k-mer.
-            .map(|(j, window)| {
-                j + window
-                    .windows(self.k)
-                    .enumerate()
-                    // min_by_key returns the leftmost minimum.
-                    // TODO: Hash the kmer.
-                    .min_by_key(|(_idx, kmer)| *kmer)
-                    .unwrap()
-                    .0
-            })
-            .collect()
-    }
-}
-#+end_src
 
 *** TODO Performance
 :PROPERTIES:
@@ -236,50 +191,25 @@ Thus, the problem of finding random minimizers reduces to computing the sliding
 window minima.
 We can model this problem using the following trait:
 #+caption: Trait for the sliding window minimum problem.
-#+begin_src rust
-// TODO: V is the element type.
-pub trait SlidingMin<V> {
-    /// Initialize a new datastructure with window size `w`.
-    // TODO: Initialize with the first w-1 elements already.
-    fn new(w: usize) -> Self;
-    /// Push a new value, starting at position 0.
-    /// Return the pos and value of the minimum of the last w elements.
-    fn push(&mut self, val: V) -> Elem<V>;
-}
+#+include: "code/sliding_min.rs" src rust :lines "2-16"
 
-#[derive(Clone, Copy)]
-// TODO: Val -> V
-pub struct Elem<Val> {
-    pub pos: usize,
-    pub val: Val,
-}
-#+end_src
+A first implementation could simply store the last $w$ hashes in a =RingBuffer=,
+and in each step recompute the minimum. The boiler plate for the ring buffer is simple:
+#+caption: A simple ring buffer.
+#+include: "code/ringbuf.rs" src rust :lines "1-"
 
-Below is a simple implementation that recomputes the minimum for each window. It
-tracks the $w$ most recent values in a buffer of size $w$, and recomputes the
-minimum on each call to $w$.
+And then a sliding window implementation also becomes trivial:
 
-#+caption: A =SlidingMin= implementation that buffers the last $w$ values and recomputes the minimum on each =push=.
-#+begin_src rust
-TODO
-#+end_src
+#+caption: The =BufferedSlidingMin= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
+#+include: "code/naive.rs" src rust :lines "27-"
 
 Using this trait, we can clean up the implementation of the naive minimizer from
-before to this:
+before. In fact, we can now generically implement a minimizer scheme using any
+implementation of the sliding window algorithm.
 
-#+caption: The naive implementation using the =SlidingMin= trait.
-#+begin_src rust
-TODO
-#+end_src
-
-As can be seen, all the logic is now abstracted away, and we can consider a more
-general function that defines a minimizer scheme using only an implementation of
-the =SlidingMin= problem.
 #+name: queue-wrapper
-#+caption: A general minimizer build on top of =SlidingMin=.
-#+begin_src rust
-TODO
-#+end_src
+#+caption: A generic minimizer algorithm using any solution to the sliding window minimum problem, and the corresponding =Buffered= minimizer.
+#+include: "code/sliding_min.rs" src rust :lines "46-"
 
 ** The queue
 Let's try to improve this somewhat inefficient $O(|t|\cdot w)$ algorithm.  A first
@@ -300,12 +230,9 @@ This is formalized by using a *queue* of non-decreasing values in the window.
 More precisely, each queue element will be smaller than all values in the window
 coming after it.
 At each step, the minimum of the window is the value at the front of the queue.
-Let's look at our example again.[fn::*Legend*:\\
-Orange: processed state,\\
-Bold: minimum of the window,\\
-Blue: state in memory in the queue,\\
-Red: state removed from the queue.]
+Let's look at our example again.[fn:legend]
 
+#+name: fig-queue
 #+caption: The queue method: In each step, we push the new value (orange) to the right/back of the queue. States stored in the queue are blue. Any preceding values in the queue that are larger than the new element are dropped (red). The smallest element of the window is on the left/front of the queue. In the second to last window, the leading $3$ is dropped from the front queue as well because it falls out of the window.
 #+attr_html: :class inset
 [[file:./queue.svg]]
@@ -317,56 +244,8 @@ To handle this second case, we don't just store values in this queue, but also
 their position in the original text, so that we can pop them when needed.
 
 In code, it looks like this:
-#+caption: A simple 'monotone queue' implementation. (TODO commit)
-#+begin_src rust
-pub struct MonotoneQueue<Val: Ord> {
-    w: usize,
-    pos: usize,
-    /// A queue of (pos, val) objects.
-    /// Both pos and val values are always increasing, so that the smallest
-    /// value is always at the front.
-    q: VecDeque<Elem<Val>>,
-}
-
-impl<Val: Ord + Copy> SlidingMin<Val> for MonotoneQueue<Val> {
-    fn new(w: usize) -> Self {
-        assert!(w > 0);
-        // TODO: single line
-        Self {
-            w,
-            pos: 0,
-            q: VecDeque::new(),
-        }
-    }
-
-    fn push(&mut self, val: Val) -> Elem<Val> {
-        // Strictly larger preceding `k` are removed, so that the queue remains
-        // non-decreasing.
-        while let Some(back) = self.q.back() {
-            if back.val > val {
-                self.q.pop_back();
-            } else {
-                break;
-            }
-        }
-        self.q.push_back(Elem { pos: self.pos, val });
-        let front = self.q.front().unwrap(); // Safe, because we just pushed.
-        if self.pos - front.pos >= self.w {
-            self.q.pop_front();
-        }
-        self.pos += 1;
-        ,*self.q.front().unwrap() // Safe, because w > 0.
-    }
-}
-#+end_src
-
-It's now trivial to implement an $O(n)$ minimizer scheme using this queue by
-using our earlier defined wrapper ([[queue-wrapper]]).
-#+caption: TODO
-#+begin_src rust
-TODO
-#+end_src
-
+#+caption: An implementaion of the =MonotoneQueue= and the corresponding =QueueMinimizer=.
+#+include: "code/queue.rs" src rust :lines "2-"
 
 *** TODO Performance
 :PROPERTIES:
@@ -389,21 +268,17 @@ find the next minimizer. This
 finds all distinct minimizers, although it does not compute the minimizer for
 each window individually. Thus, it solves [[*Problem A: Only the set of
 minimizers][Problem A]] instead of [[*Problem B: The minimizer of each
-window][Problem B]].[fn::*Legend*:\\
-Orange: processed state,\\
-Bold: minimum of the window.]
+window][Problem B]].[fn:legend]
 
-#+caption: Each time a minimizer (green) is found, jump to the window starting right after to find the next minimizer. (The leading $4$ and final $8$ are minimizers of a prefix/suffix of the sequence.)
+#+caption: Each time a minimizer (green) is found, jump to the window starting right after to find the next minimizer. The last iteration is special and checks if possibly one more minimizer has to be added, which is not the case here.
 #+attr_html: :class inset
 [[file:./jump.svg]]
 
 Since the expected distance between random minimizers is $(w+1)/2$, we expect to
 scan each position just under two times.
 
-#+caption: Solving Problem A by jumping to the window after the previous minimizer.
-#+begin_src rust
-TODO
-#+end_src
+#+caption: Solving Problem A by jumping to the window after the previous minimizer. Note that this first computes all hashes in a separate pass.
+#+include: "code/jumping.rs" src rust :lines "2-"
 
 *** TODO Performance
 :PROPERTIES:
@@ -423,10 +298,7 @@ for the original idea.].
 This is a slightly improved variant of the method above. Above, we do a new scan
 for each new minimizer, but it turns out this can sometimes be avoided.
 Now, we will only re-scan when a previous minimum falls outside the window, and
-the minimum of the window goes up.[fn::*Legend*:\\
-Orange: processed state,\\
-Bold: minimum of the window,\\
-Green: running minimum.]
+the minimum of the window goes up.[fn:legend]
 
 
 #+caption: Keep a rolling minimum (green) of the lowest hash seen so far by comparing each new element (orange) to the minimum. Only when the minimum falls outside the window, recompute the minimum for the entire window (second to last yellow row).
@@ -442,80 +314,7 @@ is not the first minimum in the buffer. Thus, we partition the scan into two
 parts, and prefer minima in the second (older) half.
 
 #+caption: =Rescan= implementation of =SlidingMin=.
-#+begin_src rust
-pub struct Rescan<Val: Ord> {
-    w: usize,
-    /// Position of next element.
-    pos: usize,
-    /// Index in `vals` of next element.
-    idx: usize,
-    /// Position of the smallest element in the last window.
-    min_pos: usize,
-    /// Value of the smallest element in the last window.
-    min_val: Val,
-    vals: Vec<Val>,
-}
-
-impl<Val: Ord + Copy + Max> SlidingMin<Val> for Rescan<Val> {
-    #[inline(always)]
-    fn new(w: usize) -> Self {
-        assert!(w > 0);
-        Self {
-            w,
-            pos: 0,
-            idx: 0,
-            min_pos: 0,
-            min_val: Val::MAX,
-            vals: vec![Val::MAX; w],
-        }
-    }
-
-    #[inline(always)]
-    fn push(&mut self, val: Val) -> Elem<Val> {
-        self.vals[self.idx] = val;
-        if val < self.min_val {
-            self.min_val = val;
-            self.min_pos = self.pos;
-        }
-        if self.pos - self.min_pos == self.w {
-            // Find the position of the minimum, preferring older elements that
-            // come *after* self.idx.
-            let p1 = self.vals[self.idx + 1..].iter().position_min();
-            let p2 = self.vals[..=self.idx].iter().position_min().unwrap();
-            (self.min_val, self.min_pos) = if let Some(p1) = p1 {
-                let p1 = self.idx + 1 + p1;
-                if self.vals[p1] <= self.vals[p2] {
-                    (self.vals[p1], self.pos - self.idx + p1 - self.w)
-                } else {
-                    (self.vals[p2], self.pos - self.idx + p2)
-                }
-            } else {
-                (self.vals[p2], self.pos - self.idx + p2)
-            };
-        }
-        self.pos += 1;
-        self.idx += 1;
-        if self.idx == self.w {
-            self.idx = 0;
-        }
-
-        return Elem {
-            pos: self.min_pos,
-            val: self.min_val,
-        };
-    }
-}
-#+end_src
-
-As before, the corresponding minimizer scheme is trivial to implement:
-#+caption: v4: rescan
-#+begin_src diff
--pub struct V3Queue  {..}
-+pub struct V4Rescan {..}
- ...
--    let mut q = MonotoneQueue::new(self.w);
-+    let mut q = Rescan::new(self.w);
-#+end_src
+#+include: "code/rescan.rs" src rust :lines "2-"
 
 *** TODO Performance
 :PROPERTIES:
@@ -536,7 +335,7 @@ While fast, this method is not fully predictable and will have some branch
 misses, since we need to re-scan a window at unpredictable times. As we will see
 later, this causes a branch miss roughly every $w$ positions (TODO).
 
-** Sliding window: away with branch-misses
+** Split windows
 In an ideal world, we would use a fully predictable algorithm, i.e., an
 algorithm without any data-dependent branches/if-statements.[fn::I'm not
 counting the for loop that iterates up to the variable length of the string as a
@@ -553,7 +352,7 @@ So, as we saw, most methods keep some form of rolling prefix minimum that is
 occasionally 'reset', since 'old' small elements should not affect the current
 window.
 This all has to do with the fact that the =min= operation is not /invertible/:
-knowing only the maximum of a set $S$ is not sufficient to know the maximum of
+knowing only the minimum of a set $S$ is not sufficient to know the minimum of
 $S - \{x\}$.
 This is unlike for example addition: sliding window sums are easy by just adding
 the new value to the sum and subtracting the value that falls out of the window.
@@ -573,33 +372,33 @@ compute their minimum as a minimum over the different parts. It turns out that
 this is possible, and in a very clean way as well!
 
 First, we conceptually chunk the input sequence into parts with length $w$, as
-shown in the top row of [[fig-queue]] for $w=4$. Then, each window of length $w$ is
-either exactly such a chunk, or overlaps with two consecutive chunks. In that
+shown in the top row of [[fig-split]] for $w=4$. Then, each window of length $w$
+either
+exactly matches such a chunk, or overlaps with two consecutive chunks. In the latter
 case, it covers a suffix of chunk $i$ and a prefix of chunk $i+1$. Thus, to
-compute the minimum of all windows, we need to compute the prefix and suffix
+compute the minimum for all windows, we need to compute the prefix and suffix
 minima of all chunks. We could do that as a separate pass over the data in a
 pre-processing step, but it can also be done on the fly:
 
 1. Each time a new kmer is processed, its hash is written to a size-$w$ buffer.
-   (The orange values in the top-right of [[fig-queue]].)
+   (The orange values in the top-right of [[fig-split]].)
 2. After processing the window corresponding to a chunk, the buffer contains
    exactly the hashes of the chunk. (Fourth row.)
-3. Then, we compute the suffix-minima of the buffer, which correspond to
-   suffix-minima of the chunk. (Fifth row.)
-4. For the next $w-1$ windows, we intialise a new rolling prefix minimum in the
+3. Then, we compute the suffix-minima of the chunk by scanning the buffer
+   backwards. (Fifth row.)
+4. For the next $w$ windows, we intialise a new rolling prefix minimum in the
    new chunk (green outline).
 5. The minimum of each window is the minimum between the rolling prefix minimum
-   in chunk $i+1$, and the suffix minimum in chunk $i$ that we computed in the buffer.[fn::*Legend*:\\
-  Orange: processed state,\\
-  Bold outline: minimum of the prefix/suffix,\\
-  Bold character: minimum of the window,\\
-  Blue: state in memory in the queue,\\
-  Green: running prefix minimum.]
+   in chunk $i+1$ (green outline), and the suffix minimum in chunk $i$ that we computed in the
+   buffer (blue outline).[fn:legend]
 
-#+name: fig-queue
+#+name: fig-split
 #+caption: Split algorithm: for each chunk, we compute and store suffix-minima of the preceding chunk (orange row). We also track a rolling prefix minimum in the next chunk (green). Taking the minimum of that with the stored suffix-minimum gives the minimum of the window. The memory after each iteration is shown on the right, with updated values in orange.
 #+attr_html: :class inset
 [[file:./split.svg]]
+
+#+caption: Code for the =Split= algorithm, that computes the suffix minima for each chunk exactly every $w$ iterations.
+#+include: "code/split.rs" src rust :lines "2-"
 
 *** TODO Performance
 :PROPERTIES:
@@ -613,33 +412,61 @@ is taken exactly once in every $w$ iterations, the corresponding branch is easy
 to predict and does not cause branch-misses.
 
 
-** Bounded queue
+# ** TODO Rescan2
 
-Finally, for theoretical purposes, I would like to introduce a variant of the [[*The queue][queue]] method that uses a
-/bounded queue/ that can only store $B$ values.[fn::[[https://twitter.com/tbrekaloxyz][Tvrtko Brekalo]] also
-suggested this for $B=2$.]
-In each step, it tries to push the new value onto the queue, but if the queue
-would exceed $B$ elements, the push is skipped. This can lead to the queue
-becoming empty, in which case the entire window is re-scanned.
-When $B=0$, this is equivalent to the [[*Naive brute force][naive method]],
-when $B=1$, this is equivalent to the [[*Re-scan][re-scan method]], and
-when $B\geq w$, this is equivalent to the original queue method.
-The interesting cases are $B=2$ and $B=3$, where one would hope that it is rare
-for the queue to become empty and reduce to number of push and pop operations on
-the queue.
+# [[https://twitter.com/tbrekaloxyz][Tvrtko Brekalo]] suggested another variant, that I will call =Rescan2=[fn::Better
+# name needed] for now. It behaves similar to the [[*Re-scan][Rescan]] method, but it attempts
+# to reduce the overlap of the rescan step by tracking the smallest value after
+# the minimum, and only starting the rescan from there.
 
-*** TODO Performance
-:PROPERTIES:
-:CUSTOM_ID: bounded-queue-performance
-:END:
+# #+caption: Implementation of =Rescan2= that tracks both the minimum and second smallest value succeeding it.
+# #+include: "code/rescan2.rs" src rust :lines "2-"
 
+** Analysis: Counting comparisons
+
+Before we look at runtime performance, let's have a more theoretical look at the
+number of comparisons each method makes.
+We can do this by replacing the =u64= hash type by a wrapper type that increments a
+counter each time =.cmp()= or =.partial_cmp()= is called on it. I exclude
+comparisons with the =MAX= sentinel value since those could possibly be
+optimized away anyway.
+
+#+name: counts
+#+caption: The number of comparisons per character on a string of length $10^8$ for $w=11$.
 #+begin_src txt
-TODO
+Buffered: 9.000
+Queue:    1.818
+Jumping:  1.457
+Rescan:   1.818
+Split:    2.700
 #+end_src
 
-** TODO Analysis: Counting comparisons
+Observations:
+- =Buffered= Does $w-1$ comparisons for each window to find the max of $w$ elements.
+- =Queue= and =Rescan= both do exactly $2-2/(w+1)$ comparisons per element.
+- For =Queue=, each =pop_back= is preceded by a comparison, and each =push= has
+  one additional comparison with the last element in the queu that is smaller
+  than the new element. Only when the new element is minimal (probability
+  $1/(w+1)$), the queue becomes empty and that comparison doesn't happen. Also
+  when the smallest element is popped from the front (probability $1/(w+1)$), that means it won't be
+  popped from the back and hence also saves a comparison.
+- Unsurprisingly, the =Jumping= algorithm uses the fewest comparisons, since it also
+  returns strictly less information than the other methods.
+- The =Split= method, which seems very promising because of its
+  data-independence, actually uses around $50\%$ more comparisons ($3-3/w$, to be
+  precise), because for each window, a minimum must be taken between the suffix
+  and prefix.
 
-* Optimizing
+*** TODO Theoretical lower bounds
+
+It would be cool to have a formal analysis showing that we cannot do
+better than $2-2/(w+1)$ expected comparisons per element to compute the random
+minimizer of all windows.
+
+
+* TODO Optimizing
+NOTE: Everything below here is old and needs revising and reordering based on
+the latest algorithms section.
 ** Setting up benchmarking
 *** Adding criterion
 Before we start our implementation, let's set up a benchmark so we can easily
