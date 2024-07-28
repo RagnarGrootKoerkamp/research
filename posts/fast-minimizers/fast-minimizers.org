@@ -165,22 +165,21 @@ In code, it looks like this.
 #+caption: An implementation of the naive algorithm. Note that hashes are recomputed for each window.
 #+include: "code/naive.rs" src rust :lines "3-26"
 
-
-*** TODO Performance
+*** Performance
 :PROPERTIES:
 :CUSTOM_ID: naive-performance
 :END:
 
 Let us already have a quick loot at the performance of this (and upcoming)
 methods, to get a quick feeling for how well the perform and how they compare
-against each other. We will cover the benchmarking setup in
+against each other. We will cover the benchmarking setup using =criterion= in detail in
 [[*Setting up benchmarking]], and will then also compare the methods in more detail
-for varying $k$ and $w$.
+for varying $k$ and $w$. Here, we use $k=21$, $w=11$, and measure the time it
+takes to find the minimizers in a text of length $10^6$ characters.
 
-This algorithm runs in TODO.
-#+caption: Performance of the naive random minimizer implementation for /k=TODO/ /w=TODO/.
+#+caption: For /k=21/ and /w=11/, the naive buffered implementation runs in /55ms/ on a text of length 1 million characters, or /55ns/ per character. The three reported numbers are the low end of the confidence interval, the average measured time, and the high end of the confidence interval.
 #+begin_src txt
-TODO
+g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
 #+end_src
 
 ** Sliding window minimum
@@ -247,7 +246,7 @@ In code, it looks like this:
 #+caption: An implementaion of the =MonotoneQueue= and the corresponding =QueueMinimizer=.
 #+include: "code/queue.rs" src rust :lines "2-"
 
-*** TODO Performance
+*** Performance
 :PROPERTIES:
 :CUSTOM_ID: queue-performance
 :END:
@@ -255,10 +254,17 @@ Since each element is pushed once and popped once, each call to
 =push= takes amortized constant $O(1)$ time, so that the total runtime is
 $O(|t|)$ (assuming that hashing each k-mer takes constant time).
 
+#+caption: For /w=11/, the =Queue= method is /2.5/ times faster than the =Buffered= method.
+#+begin_src txt
+g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
+g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
+#+end_src
 
-Thus, a drawback of the queue algorithm is that it contains some very
-unpredictable branches, which hurts pipelining/instruction level parallelism (ILP). Thus, while its complexity is
-good, its practical performance is suboptimal.
+One might expect a $w=11$ times speedup over the buffered method, but this is
+not the case. This is due to the high number of unpredictable branches,
+which hurts pipelining/instruction level parallelism (ILP). Thus, while the
+complexity of the =Queue= algorithm is good, its practical performance is suboptimal.
+
 ** Jumping: Away with the queue
 As we saw, while the queue algorithm is nice in theory, in practice it is not
 ideal. Thus, we would like to find some middle ground between keeping this queue
@@ -280,7 +286,7 @@ scan each position just under two times.
 #+caption: Solving Problem A by jumping to the window after the previous minimizer. Note that this first computes all hashes in a separate pass.
 #+include: "code/jumping.rs" src rust :lines "2-"
 
-*** TODO Performance
+*** Performance
 :PROPERTIES:
 :CUSTOM_ID: queue-performance
 :END:
@@ -290,6 +296,13 @@ the loop corresponds to exactly one output. The only unpredictable step is which
 element of a window is the minimizer, since that determines which is the next
 window to scan. Thus, even though it is branchless, consecutive iterations
 depend on each other and ILP (instruction level parallelism, aka pipelining) may only have a limited effect.
+
+#+caption: As predicted, =Jumping= is much faster than the previous methods, since it outputs less information.
+#+begin_src txt
+g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
+g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
+g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
+#+end_src
 
 ** Re-scan
 I learned of an improved method via [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
@@ -316,24 +329,25 @@ parts, and prefer minima in the second (older) half.
 #+caption: =Rescan= implementation of =SlidingMin=.
 #+include: "code/rescan.rs" src rust :lines "2-"
 
-*** TODO Performance
+*** Performance
 :PROPERTIES:
 :CUSTOM_ID: rescan-performance
 :END:
 
-The result is *fast*: almost twice as fast as the previous best! Also close to
-Daniel's version, but not quite there yet.
+The result is quite good: almost twice as fast as the queue, although not as
+fast as the =Jumping= method, which gets away with doing less work!
+
+#+caption: =Rescan= is much faster than the =Queue= method, but not as fast as =Jumping=.
 #+begin_src txt
-rnd/ext_minimizer_iter  time:   [26.950 ms 27.139 ms 27.399 ms]
-rnd/ext_daniel          time:   [9.2476 ms 9.2497 ms 9.2532 ms]
-rnd/3a_queue            time:   [23.686 ms 23.692 ms 23.699 ms]
-rnd/3b_inlined_queue    time:   [22.620 ms 22.631 ms 22.641 ms]
-rnd/4_rescan            time:   [10.876 ms 10.882 ms 10.894 ms]
+g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
+g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
+g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
+g/Rescan                time:   [14.174 ms 14.176 ms 14.178 ms]
 #+end_src
 
 While fast, this method is not fully predictable and will have some branch
 misses, since we need to re-scan a window at unpredictable times. As we will see
-later, this causes a branch miss roughly every $w$ positions (TODO).
+later, this causes a branch miss roughly every $w$ positions.
 
 ** Split windows
 In an ideal world, we would use a fully predictable algorithm, i.e., an
@@ -400,7 +414,7 @@ pre-processing step, but it can also be done on the fly:
 #+caption: Code for the =Split= algorithm, that computes the suffix minima for each chunk exactly every $w$ iterations.
 #+include: "code/split.rs" src rust :lines "2-"
 
-*** TODO Performance
+*** Performance
 :PROPERTIES:
 :CUSTOM_ID: split-perfomance
 :END:
@@ -410,6 +424,15 @@ to the [[*Jumping: Away with the queue][jump algorithm]]: every $w$ iterations w
 then we continue again with the rolling prefix minimum. Since this 'side loop'
 is taken exactly once in every $w$ iterations, the corresponding branch is easy
 to predict and does not cause branch-misses.
+
+#+caption: The current implementation of =Split= is slightly faster than =Rescan=.
+#+begin_src txt
+g/Buffered              time:   [55.104 ms 55.115 ms 55.126 ms]
+g/Queue                 time:   [22.831 ms 22.840 ms 22.849 ms]
+g/Jumping               time:   [8.0336 ms 8.0557 ms 8.0838 ms]
+g/Rescan                time:   [14.174 ms 14.176 ms 14.178 ms]
+g/Split                 time:   [13.961 ms 13.962 ms 13.964 ms]
+#+end_src
 
 
 # ** TODO Rescan2
@@ -462,7 +485,8 @@ Observations:
 
 It would be cool to have a formal analysis showing that we cannot do
 better than $2-2/(w+1)$ expected comparisons per element to compute the random
-minimizer of all windows.
+minimizer of all windows, and similarly it would be nice to have a lower bound
+on the minimal number of comparisons needed to only compute the positions of the minimizers.
 
 
 * TODO Optimizing
