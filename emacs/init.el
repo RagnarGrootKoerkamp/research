@@ -11,10 +11,10 @@
 
 (require 'subr-x)
 
-; (toggle-debug-on-error)                                       ;; Show debug information as soon as error occurs.
+                                        ; (toggle-debug-on-error)                                       ;; Show debug information as soon as error occurs.
 (setq
  make-backup-files nil                                        ;; Disable "<file>~" backups.
-)
+ )
 
 (defconst base-dir
   (let* ((env-key "BASE_DIR")
@@ -56,17 +56,17 @@
 
 (setf org-hugo-base-dir base-dir)
 
-; Disable auto-inserting References section heading.
-; https://ox-hugo.scripter.co/doc/org-cite-citations/#org-radio--CSL-formatted-exports
-; https://github.com/kaushalmodi/ox-hugo/issues/679
+                                        ; Disable auto-inserting References section heading.
+                                        ; https://ox-hugo.scripter.co/doc/org-cite-citations/#org-radio--CSL-formatted-exports
+                                        ; https://github.com/kaushalmodi/ox-hugo/issues/679
 ;; (with-eval-after-load 'ox-hugo
 ;;   (plist-put org-hugo-citations-plist :bibliography-section-heading ""))
 
-; Auto-prefix type (figure/table) of links.
-; https://ox-hugo.scripter.co/doc/linking-numbered-elements/#fnref:1
+                                        ; Auto-prefix type (figure/table) of links.
+                                        ; https://ox-hugo.scripter.co/doc/linking-numbered-elements/#fnref:1
 (setq org-hugo-link-desc-insert-type t)
 
-; Use CSL by default
+                                        ; Use CSL by default
 (setq org-cite-export-processors '((t csl)))
 
 (setq org-cite-global-bibliography (list (expand-file-name "references.bib")))
@@ -80,10 +80,10 @@
   "Export all org-files (including nested) under base-org-files."
   (let ((search-path (file-name-as-directory base-dir)))
     (message (format "[build] Looking for files at %s" search-path))
-    (dolist (org-file (directory-files-recursively search-path "\.org$" nil (lambda (x) (not (string-match-p "emacs" x)))))
+    (dolist (org-file (directory-files-recursively search-path "\.org$" nil (lambda (x) (and (not (string-match-p "emacs" x)) (not (string-match-p "submodule" x))))))
       (with-current-buffer (find-file org-file)
-   (message (format "[build] Exporting %s" org-file))
-   (org-hugo-export-wim-to-md :all-subtrees nil nil nil)))
+        (message (format "[build] Exporting %s" org-file))
+        (org-hugo-export-wim-to-md :all-subtrees nil nil nil)))
     (message "Done!")))
 
 (provide 'build/export-all)
