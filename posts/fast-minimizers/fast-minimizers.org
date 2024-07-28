@@ -429,16 +429,17 @@ number of comparisons each method makes.
 We can do this by replacing the =u64= hash type by a wrapper type that increments a
 counter each time =.cmp()= or =.partial_cmp()= is called on it. I exclude
 comparisons with the =MAX= sentinel value since those could possibly be
-optimized away anyway.
+optimized away anyway. The code is not very interesting, but you can find it [[https://github.com/RagnarGrootKoerkamp/minimizers/blob/master/benches/blog/counting.rs][here]].
 
 #+name: counts
-#+caption: The number of comparisons per character on a string of length $10^8$ for $w=11$.
+#+caption: The number of comparisons per character on a string of length $10^8$ for $w=10$ and $w=20$.
 #+begin_src txt
-Buffered: 9.000
-Queue:    1.818
-Jumping:  1.457
-Rescan:   1.818
-Split:    2.700
+           w=10    w=20     formula
+Buffered:  9.000  19.000    w-1
+Queue:     1.818   1.905    2-2/(w+1)
+Jumping:   1.457   1.595    ?
+Rescan:    1.818   1.905    2-2/(w+1)
+Split:     2.700   2.850    3-3/w
 #+end_src
 
 Observations:
