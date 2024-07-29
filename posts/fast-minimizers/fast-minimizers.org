@@ -1,4 +1,4 @@
-#+title: [WIP] Computing minimizers, fast
+#+title: [WIP] Computing random minimizers, fast
 #+filetags: @results @lablog hpc minimizers nthash wip
 #+HUGO_LEVEL_OFFSET: 0
 #+OPTIONS: ^:{} num:2 H:4
@@ -23,12 +23,12 @@ left, and footnotes on the right.]:
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
-Given a string/text/DNA sequence ~t: &[u8]~ of length $n$, the /k-mers/ of ~t~ are all the
+Given a string/text/DNA sequence ~t: &[u8]~ of length $|t|=n$, the /k-mers/ of ~t~ are all the
 length-$k$ substrings. There are $n-k+1$ of them.
 
 In order to speed up processing, and since consecutive k-mers are overlapping
 and contain redundancy, it is common to /subsample/ the k-mers. This should be
-done in a deterministic way, so that similar but slightly distinct sequences
+done in a deterministic way, so that similar but slightly distinct text
 still mostly sample the same k-mers. One such way is /random minimizers/,
 introduced in parallel by [cite/t:@winnowing] and [cite/t:@minimizers]:
 1. First, a /window size/ $w$ is chosen, which will guarantee that at least one
@@ -44,7 +44,7 @@ approximately two k-mers per window.
 
 My [[../mod-minimizers/mod-minimizers.org][previous post]] on minimizers gives more background on density and other
 sampling schemes. One such alternative scheme is the mod-minimizer
-[cite:@modmini], that has low density when $w$ is large compared to $k$. That
+[cite:@modmini], that has low density when $k$ is large compared to $w$. That
 paper also contains a review of methods and pseudocode for them.
 In this post, I will focus on the most widely used random minimizers.
 
@@ -57,7 +57,7 @@ include slightly more additional information in the output.
 *** Problem A: Only the set of minimizers
 The most basic form of computing minimizers is to simply return the list of
 minimizer kmers and their positions. This information is sufficient to /sketch/
-the sequence.
+the text.
 
 #+name: problem-a
 #+caption: A trait that defines Problem A and returns the set of kmers of the input.
@@ -69,7 +69,7 @@ pub trait Minimizer {
 #+end_src
 
 *** Problem B: The minimizer of each window
-When building datastructures on top on a sequence, such as SSHash
+When building datastructures on top of a sequence, such as SSHash
 [cite:@sshash], just the set of k-mers is not sufficient. Each window should be
 mapped to its minimizer, but there could be multiple minimizers in a single
 window. Thus, in this version of the problem, we return the minimizer of each window.
@@ -146,7 +146,7 @@ postpone this for later.
 
 ** The naive algorithm
 
-The naive $O(|t| \cdot w)$ method simply finds the minimum of each window independently.
+The naive $O(n \cdot w)$ method simply finds the minimum of each window independently.
 
 It looks like this:[fn:legend:*Legend*:\\
   @@html:<span style="color:orange">Orange</span>@@: processed state,\\
@@ -157,7 +157,7 @@ It looks like this:[fn:legend:*Legend*:\\
   @@html:<span style="color:red">Red</span>@@: state removed from the queue,\\
   @@html:<span style="color:green">Green</span>@@: running prefix minimum.
   ]
-#+caption: Illustration of the naive algorithm for a sequence of 8 kmers and window size /w=4/. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window, finds the element with the smallest hash. The orange colour indicates that for each window, all hashes are checked. The minimum is shown in bold.
+#+caption: Illustration of the naive algorithm for a text of 8 kmers and window size /w=4/. Hashes of the kmers are shown at the top. This method iterates over all windows, and for each window, finds the element with the smallest hash. The orange colour indicates that for each window, all hashes are checked. The minimum is shown in bold.
 #+attr_html: :class inset
 [[file:./naive.svg]]
 
@@ -165,6 +165,9 @@ In code, it looks like this.
 
 #+caption: An implementation of the naive algorithm. Note that hashes are recomputed for each window.
 #+include: "code/blog/naive.rs" src rust :lines "3-29"
+
+Note that we assume that hashing each k-mer takes constant time. This is
+reasonable in practice, since most hash functions hash many characters at once.
 
 *** Performance characteristics
 :PROPERTIES:
@@ -185,28 +188,30 @@ we expect:
 - high instructions per cycle,
 - and generally running times linear in $w$.
 
-** Sliding window minimum
+** Rephrasing as sliding window minimum
 After hashing all k-mers, we basically have a sequence of $n-k+1$ pseudo-random
 integers. We would like to find the position of the leftmost minimum in each
 window of $w$ of those integers.
-Thus, the problem of finding random minimizers reduces to computing the sliding
+
+Thus, the problem of finding random minimizers can be reformulated in terms of the sliding
 window minima.
 We can model this problem using the following trait:
 #+caption: Trait for the sliding window minimum problem.
 #+include: "code/blog/sliding_min.rs" src rust :lines "2-16"
 
-A first implementation could simply store the last $w$ hashes in a =RingBuffer=,
+A first implementation that mirrors the =Naive= implementation above could simply store the last $w$ hashes in a =RingBuffer=,
 and in each step recompute the minimum. The boiler plate for the ring buffer is simple:
 #+caption: A simple ring buffer.
 #+include: "code/blog/ringbuf.rs" src rust :lines "3-36"
 
 And then a sliding window implementation also becomes trivial:
 
-#+caption: The =BufferedSlidingMin= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
+#+caption: The =Buffered= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
 #+include: "code/blog/naive.rs" src rust :lines "30-"
 
-Using this trait, we can clean up the implementation of the naive minimizer from
-before. In fact, we can now generically implement a minimizer scheme using any
+Using this trait, we can clean up the implementation of the =Naive= minimizer from
+before[fn::In fact, the =Buffered= implementation is slightly more efficient
+since it stores hashes instead of recomputing them $w$ times.]. In fact, we can now generically implement a minimizer scheme using any
 implementation of the sliding window algorithm.
 
 #+name: queue-wrapper
@@ -214,7 +219,7 @@ implementation of the sliding window algorithm.
 #+include: "code/blog/sliding_min.rs" src rust :lines "46-"
 
 ** The queue
-Let's try to improve this somewhat inefficient $O(|t|\cdot w)$ algorithm.  A first
+Let's try to improve this somewhat inefficient $O(n\cdot w)$ algorithm.  A first
 idea is to simply keep a rolling prefix-minimum that tracks the lowest
 value seen so far. For example, when $w=3$ and the hashes are
 $[10,9,8,7,6,...]$, the rolling prefix minimum is exactly also the minimum of
@@ -255,7 +260,7 @@ In code, it looks like this:
 :END:
 Since each element is pushed once and popped once, each call to
 =push= takes amortized constant $O(1)$ time, so that the total runtime is
-$O(|t|)$ (assuming that hashing each k-mer takes constant time).
+$O(n)$.
 We may expect a $w=11$ times speedup over the buffered method, but most likely
 this will not be the case.
 This is due to the high number of unpredictable branches,
@@ -310,10 +315,11 @@ the minimum of the window goes up.[fn:legend]
 [[file:./rescan.svg]]
 
 Thus, we keep
-a cyclic buffer of the last $w$ values, and scan it as needed. One point of attention
-is that we need the /leftmost/ minimal value, but as the buffer is cyclic, that
-is not the first minimum in the buffer. Thus, we partition the scan into two
-parts, and prefer minima in the second (older) half.
+a ring buffer of the last $w$ values, and scan it as needed. One point of attention
+is that we need the /leftmost/ minimal value, but since the buffer is cyclic,
+the leftmost element in the buffer is not necessarily the leftmost one in the
+original text. Thus, we don't only store elements but also their positions,
+and break ties by position.
 
 #+caption: =Rescan= implementation of =SlidingMin=.
 #+include: "code/blog/rescan.rs" src rust :lines "2-"
@@ -362,7 +368,7 @@ Based on this, we would also like to partition our windows such that we can
 compute their minimum as a minimum over the different parts. It turns out that
 this is possible, and in a very clean way as well!
 
-First, we conceptually chunk the input sequence into parts with length $w$, as
+First, we conceptually chunk the input text into parts with length $w$, as
 shown in the top row of [[fig-split]] for $w=4$. Then, each window of length $w$
 either
 exactly matches such a chunk, or overlaps with two consecutive chunks. In the latter
@@ -828,7 +834,8 @@ for alg in naive buffered\$ buffered_opt queue\$ queue_igor jumping rescan\$ res
 | =SplitOpt=     |              *11* |                   *3.47* |               *1410* |         *0.63%* |
 
 Note how =BufferedOpt= is now almost as fast as =Queue=, even though it's
-$O(nw)$ instead of $O(n)$. Also, =RescanOpt= is now nearly as fast as
+$O(nw)$ instead of $O(n)$. Unpredictable branches really are terrible. Also,
+=RescanOpt= is now nearly as fast as
 =RescanDaniel=, although =Jumping= is still quite a bit faster.
 For reasons I do not understand =SplitOpt= is still not faster than =RescanOpt=,
 but we'll have to leave it at this.
