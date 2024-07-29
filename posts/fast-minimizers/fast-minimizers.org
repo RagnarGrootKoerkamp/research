@@ -5,7 +5,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
-#+hugo_paired_shortcodes: notice
+#+hugo_paired_shortcodes: notice details
 #+date: <2024-07-12 Fri>
 
 In this post, we will develop a fast implementation of random minimizers.
@@ -198,7 +198,7 @@ We can model this problem using the following trait:
 A first implementation could simply store the last $w$ hashes in a =RingBuffer=,
 and in each step recompute the minimum. The boiler plate for the ring buffer is simple:
 #+caption: A simple ring buffer.
-#+include: "code/blog/ringbuf.rs" src rust :lines "1-34"
+#+include: "code/blog/ringbuf.rs" src rust :lines "3-36"
 
 And then a sliding window implementation also becomes trivial:
 
@@ -247,7 +247,7 @@ their position in the original text, so that we can pop them when needed.
 
 In code, it looks like this:
 #+caption: An implementaion of the =MonotoneQueue= and the corresponding =QueueMinimizer=.
-#+include: "code/blog/queue.rs" src rust :lines "2-"
+#+include: "code/blog/queue.rs" src rust :lines "2-28"
 
 *** Performance characteristics
 :PROPERTIES:
@@ -296,8 +296,8 @@ window to scan. Thus, even though it is branchless, consecutive iterations
 depend on each other and ILP (instruction level parallelism, aka pipelining) may only have a limited effect.
 
 ** Re-scan
-I learned of an improved method via [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for robust winnowing,
-but I believe it is folklore[fn::Citation needed, both for it being folklore and
+I learned of an improved method via [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] for winnowing,
+but I believe the method is folklore[fn::Citation needed, both for it being folklore and
 for the original idea.].
 This is a slightly improved variant of the method above. Above, we do a new scan
 for each new minimizer, but it turns out this can sometimes be avoided.
@@ -440,7 +440,7 @@ Observations:
   precise), because for each window, a minimum must be taken between the suffix
   and prefix.
 
-*** TODO Theoretical lower bounds
+*** Open problem: Theoretical lower bounds
 
 It would be cool to have a formal analysis showing that we cannot do
 better than $2-2/(w+1)$ expected comparisons per element to compute the random
@@ -468,10 +468,11 @@ harness = false
 #+end_src
 
 We add =benches/bench.rs= which looks like this:
-@@html:<details><summary>Click to show code</summary>@@
+#+attr_shortcode: "Click to show code."
+#+begin_details
 #+caption: A basic criterion benchmark for the comparison so far.
 #+include: "code/bench.rs" src rust :lines "19-53"
-@@html:</details>@@
+#+end_details
 
 *** Making criterion fast
 By default, the benchmarks are quite slow. That's for a couple of reasons:
@@ -527,14 +528,14 @@ Similarly, I have hyper threading disabled, so that each program has a full core
 to itself, without interference with other programs.
 
 
-** TODO Runtime comparison with other implementations
+** Runtime comparison with other implementations
 Let's compare the runtime of our method so far with
 two other Rust implementations:
 - [[https://crates.io/crates/minimizer-iter][minimizer-iter]] is an implementation written by [[https://twitter.com/IgorMartayan][Igor Martayan]]. It returns an iterator over all
   /distinct/ minimizers and uses the queue algorithm.
 - Daniel Liu's [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][implementation]] of the rescan algorithm.
 
-#+caption: Runtime comparison between our and other's implementations. TODO: more params, 10^6 text length.
+#+caption: Runtime comparison between our and other's implementations.
 #+begin_src txt
 g/naive                 time:   [64.399 ms 64.401 ms 64.404 ms]
 g/buffered              time:   [55.154 ms 55.160 ms 55.173 ms]
@@ -577,7 +578,7 @@ stat test='':
 The metrics that are relevant to us now are summarized in the following table.
 
 #+begin_src sh :exports none
-for alg in naive buffered queue\$ queue_igor jumping rescan\$ rescan_daniel split ; just stat-selection $alg ; end
+for alg in naive buffered\$ queue\$ queue_igor jumping rescan\$ rescan_daniel split\$ ; just stat-selection $alg ; end
 #+end_src
 
 #+caption: =perf stat= results for all methods so far.
@@ -586,11 +587,11 @@ for alg in naive buffered queue\$ queue_igor jumping rescan\$ rescan_daniel spli
 | =Naive=        |                64 |                     4.13 |                 1743 |           0.11% |
 | =Buffered=     |                55 |                     2.17 |                  987 |           4.66% |
 | =Queue=        |                22 |                     2.29 |                  810 |           4.29% |
-| =QueueIgor=    |               7.1 |                     2.33 |                  662 |           4.29% |
-| =Jumping=      |                14 |                     3.89 |                 1459 |           0.13% |
+| =QueueIgor=    |                27 |                     2.33 |                  662 |           4.29% |
+| =Jumping=      |               7.1 |                     3.89 |                 1459 |           0.13% |
 | =Rescan=       |                14 |                     3.02 |                 1116 |           2.26% |
-| =RescanDaniel= |                27 |                     3.21 |                 1410 |           0.85% |
-| =Split=        |               9.0 |                     3.37 |                 1116 |           1.55% |
+| =RescanDaniel= |               9.0 |                     3.21 |                 1410 |           0.85% |
+| =Split=        |                14 |                     3.37 |                 1116 |           1.55% |
 
 Observe:
 - =Naive= has an instructions per cycle (IPC) of over 4! I have never actually seen IPC that high.
@@ -642,8 +643,8 @@ The only reason we are storing an =Elem= that includes the position is that we
 must return the leftmost minimum. But since e.g. =position_min()= returns the
 leftmost minimum anyway, we can try to avoid storing the position and always
 iterate over values from left to right. We'll add a method to our =RingBuf= for this:
-#+caption: Split the =RingBuf= into two slices, such that the element of the first returned slice come before the second part.
-#+include: "code/blog/ringbuf.rs" src rust :lines "42-48"
+#+caption: Split the =RingBuf= into two slices, such that the element of the first returned slice come before the second part, and compute their minimum.
+#+include: "code/blog/ringbuf.rs" src rust :lines "44-"
 
 #+caption: =BufferedOpt= that only stores values and finds the minimum from left to right. Runs in =26ms=, down from =55ms=.
 #+include: "code/blog/naive.rs" src rust :lines "49-"
@@ -651,7 +652,8 @@ iterate over values from left to right. We'll add a method to our =RingBuf= for 
 The hot loop of the code looks much, much better now, using =cmov= instead of
 branches to overwrite the minimum.
 
-@@html:<details><summary>New assembly</summary>@@
+#+attr_shortcode: "New assembly"
+#+begin_details
 #+caption: New hot-loop, using =cmov=, and very few branches.
 #+begin_src asm
   1.59 │898:┌─→lea        0x8(%r14),%r13
@@ -671,7 +673,7 @@ branches to overwrite the minimum.
   0.44 │    ├──cmp        %r9,%r14
   3.90 │    └──jne        898          
 #+end_src
-@@html:</details>@@
+#+end_details
 
 Also the =perf stat= is great now: =4.23 IPC= and =0.13%= branch misses, so
 we'll leave it at this.
@@ -682,10 +684,155 @@ we'll leave it at this.
 - Prefer =cmov= over branches to compute minima.
 #+end_notice
 
-*** Optimizing =Queue=
-*** Optimizing =Jumping=
+*** =Queue= is hopelessly branchy
+We can confirm that indeed a lot of time is spend on branch-misses around
+the popping of the queue.
+#+attr_shortcode: "Assembly code showing a badly predicted branch."
+#+begin_details
+#+caption: Each of the two directions after the branch takes =10%= of time.
+#+begin_src asm
+ 1.20 │3a0:   lea        (%rdx,%rax,1),%rdi
+ 0.63 │ ↑     cmp        %rcx,%rdi
+ 1.34 │ │     mov        $0x0,%edi
+ 0.97 │ │     cmovae     %rcx,%rdi
+ 0.46 │ │     shl        $0x4,%rdi
+ 0.49 │ │     mov        %rsi,%r8
+ 1.58 │ │     sub        %rdi,%r8
+ 1.52 │ │  ┌──cmp        %rbp,(%r8)    ; compare the new element with the back
+ 1.97 │ │  ├──jb         3d2           ; if back is smaller, break loop
+*9.85*│ │  │  dec        %rax          ; pop: decrease capacity
+ 3.70 │ │  │  mov        %rax,0x28(%rsp)
+ 0.41 │ │  │  add        $0xfffffffffffffff0,%rsi
+ 0.08 │ │  │  test       %rax,%rax     ; queue not yet empty
+ 0.37 │ └──│─ jne        3a0           ; try popping another element
+ 0.38 │    │  xor        %eax,%eax
+*9.64*│3d2:└─→cmp        %rcx,%rax
+#+end_src
+#+end_details
+
+Sadly, I don't really see much room for improvement here.
+
+*** =Jumping= is already very efficient
+If we do a =perf report= here, we see that only =25%= of the time is spent in
+the =minimizer_positions= function:
+#+caption: =just perf jumping= shows that most time is spent computing hashes.
+#+begin_src txt
+  63.69%  <map::Map<I,F> as Iterator>::fold
+  24.25%  <JumpingMinimizer<H> as Minimizer>::minimizer_positions
+#+end_src
+
+The hot loop for finding the minimum of a window is very compact again.
+#+attr_shortcode: "Assembly code"
+#+begin_details
+#+caption: Hot loop of =Jumping= that finds the minimum of a window, with plenty =cmov= instructions and no branches.
+#+begin_src asm
+  2.84 │170:┌─→lea     0x1(%rcx),%rsi
+  1.58 │    │  mov     -0x18(%rdx,%rcx,8),%rdi
+  4.17 │    │  mov     -0x10(%rdx,%rcx,8),%r8
+  0.09 │    │  cmp     %rdi,%rax
+  3.60 │    │  cmovb   %rax,%rdi
+  9.34 │    │  cmovbe  %rbp,%rsi
+       │    │  lea     0x2(%rcx),%rax
+  0.94 │    │  cmp     %r8,%rdi
+  2.59 │    │  cmovae  %r8,%rdi
+  9.36 │    │  cmovbe  %rsi,%rax
+  1.35 │    │  mov     -0x8(%rdx,%rcx,8),%rsi
+  0.27 │    │  lea     0x3(%rcx),%rbp
+  0.86 │    │  cmp     %rsi,%rdi
+  5.69 │    │  cmovae  %rsi,%rdi
+  5.94 │    │  cmovbe  %rax,%rbp
+  1.48 │    │  mov     (%rdx,%rcx,8),%rsi
+  0.72 │    │  add     $0x4,%rcx
+  0.32 │    │  cmp     %rsi,%rdi
+  4.98 │    │  mov     %rdi,%rax
+  1.31 │    │  cmovae  %rsi,%rax
+  5.76 │    │  cmova   %rcx,%rbp
+       │    ├──cmp     %rbx,%rcx
+  0.13 │    └──jne     170                                                 
+#+end_src
+#+end_details
+
+More problematic is the =63%= of time spent on hashing kmers, but we will
+postpone introducing a faster hash function a bit longer.
+
 *** Optimizing =Rescan=
+The original =Rescan= implementation suffers from the same issue as the
+=Buffered= and compares positions, so let's reuse the =RingBuf::forward_min()=
+function, and compare elements only by value.
+#+attr_shortcode: "Code for RescanOpt."
+#+begin_details
+#+caption: Optimized =RescanOpt= that runs in =10.2ms= instead of =14.1ns=.
+#+include: "code/blog/rescan.rs" src rust :lines "25-"
+#+end_details
+
+This has =3.55 IPC= up from =3.02=, and =0.91%= branch misses, down from
+=2.26%=, which results in the runtime going down from =14.1ms= to =10.2ms=.
+
+The hottest part of the remaining code is now the branch-miss when ~if pos -
+min.pos == w~ is true, taking ~6%~ of time, since this is an unpredictable
+branch. This seems rather unavoidable. Otherwise most time is spent hashing kmers.
+
 *** Optimizing =Split=
+Also here we start by avoiding position comparisons.
+This time it is slightly more tricky though: the =RingBuf= /does/ have to store
+positions, since after taking suffix-minima, the value at each position does not
+have to correspond anymore to its original position.
+
+The tricky part here is to ensure that the compiler generates a branchless
+minimum, since usually it creates a branch to avoid overwriting two values with
+their own value:
+
+#+caption: Making sure the suffix minima use =cmov= instructions.
+#+begin_src diff
+-if ring_buf[i + 1].val <= ring_buf[i].val {
+-    ring_buf[i] = ring_buf[i + 1];
+-};
++ring_buf[i] = if ring_buf[i + 1].val <= ring_buf[i].val {
++    ring_buf[i + 1]
++} else {
++    ring_buf[i]
++};
+#+end_src
+
+#+attr_shortcode: "Code for SplitOpt."
+#+begin_details
+#+caption: Optimized =SplitOpt= that runs in =11.2ms= instead of =14.0ns=.
+#+include: "code/blog/split.rs" src rust :lines "30-"
+#+end_details
+
+Now, it runs in =11.2ms= instead of =14.0ms=, and has =3.46 IPC= (up from =3.37
+IPC=) and =0.63%= branch misses, down from =1.55%=.
+The remaining branch misses seem to be related to the kmer hashing, although
+this is somewhat surprising as =Jumping= doesn't have them.
+
+** A new performance comparison
+Now that we have our optimized versions, let's summarize the new results.
+
+#+begin_src sh :exports none
+for alg in naive buffered\$ buffered_opt queue\$ queue_igor jumping rescan\$ rescan_opt rescan_daniel split\$ split_opt; just stat-selection $alg ; end
+#+end_src
+
+#+caption: =perf stat= results for all methods so far, for /w=11/.
+#+attr_html: :class small
+| metric         | Runtime (ns/char) | instructions/cycle (GHz) | branches/sec (M/sec) | branch misses % |
+| =Naive=        |                64 |                     4.13 |                 1743 |           0.11% |
+| =Buffered=     |                55 |                     2.17 |                  987 |           4.66% |
+| =BufferedOpt=  |              *26* |                   *4.19* |               *1499* |         *0.13%* |
+| =Queue=        |                22 |                     2.29 |                  810 |           4.29% |
+| =QueueIgor=    |                27 |                     2.33 |                  662 |           4.29% |
+| =Jumping=      |               7.1 |                     3.89 |                 1459 |           0.13% |
+| =Rescan=       |                14 |                     3.02 |                 1116 |           2.26% |
+| *=RescanOpt=*  |              *10* |                   *3.58* |               *1397* |         *0.90%* |
+| =RescanDaniel= |               9.0 |                     3.21 |                 1410 |           0.85% |
+| =Split=        |                14 |                     3.37 |                 1116 |           1.55% |
+| =SplitOpt=     |              *11* |                   *3.47* |               *1410* |         *0.63%* |
+
+Note how =BufferedOpt= is now almost as fast as =Queue=, even though it's
+$O(nw)$ instead of $O(n)$. Also, =RescanOpt= is now nearly as fast as
+=RescanDaniel=, although =Jumping= is still quite a bit faster.
+For reasons I do not understand =SplitOpt= is still not faster than =RescanOpt=,
+but we'll have to leave it at this.
+
 * TODO Let the optimization begin
 :PROPERTIES:
 :CUSTOM_ID: Optimizing
@@ -739,140 +886,6 @@ g/4_rescan              time:   [10.557 ms 10.562 ms 10.574 ms]
 g/5_rescan_nthash       time:   [12.964 ms 12.980 ms 12.992 ms]
 #+end_src
 
-** Optimizing the queue
-We're already close to the reference implementation, but not quite there yet.
-Let's do some profiling. For this, we can pass ~--profile-time 5~ to
-~criterion~, so that instead of the usual benchmarking, it just runs the
-selected benchmarks for 5 seconds. We start with a flamegraph of the v3 method above.
-#+begin_src just
-flame test='':
-    cargo flamegraph --bench bench --open -- --bench --profile-time 2 {{test}}
-#+end_src
-
-#+caption: A flamegraph made using =just flame 3_queue= showing that some time is spent in the warm-up, some in main loop, and that most time is spent in the =push= function.
-#+attr_html: :class inset
-[[./3_flame.svg][file:3_flame.svg]]
-
-This is not yet super insightful though. It's pretty much expected that most
-time is in the =push= function anyway. Let's get some more statistics using
-=perf stat=:
-#+begin_src just
-stat test='':
-    cargo build --profile bench --benches
-    perf stat -d cargo criterion -- --profile-time 2 {{test}}
-#+end_src
-#+begin_src txt
-          2,380.66 msec task-clock:u                     #    1.005 CPUs utilized
-                 0      context-switches:u               #    0.000 /sec
-                 0      cpu-migrations:u                 #    0.000 /sec
-            22,675      page-faults:u                    #    9.525 K/sec
-     5,873,141,947      cycles:u                         #    2.467 GHz
-    13,624,513,378      instructions:u                   #    2.32  insn per cycle
-     1,893,102,104      branches:u                       #  795.201 M/sec
-        77,266,703      branch-misses:u                  #    4.08% of all branches
-     2,960,654,139      L1-dcache-loads:u                #    1.244 G/sec
-        19,781,179      L1-dcache-load-misses:u          #    0.67% of all L1-dcache accesses
-         1,659,216      LLC-loads:u                      #  696.957 K/sec
-           269,546      LLC-load-misses:u                #   16.25% of all LL-cache accesses
-#+end_src
-
-There is still nothing that stands out as very bad. 2.3 instructions per cycle
-is not great, but still reasonable. (It can go up to 4 for my processor, and
-above 3 is good usually.) Maybe $4\%$ of branch misses is a problem though.
-Let's dive deeper and look at =perf record=:
-#+begin_src just
-perf test='':
-    cargo build --profile bench --benches
-    perf record cargo criterion -- --profile-time 2 {{test}}
-    perf report
-#+end_src
-#+caption: =just perf 3_queue=
-#+begin_src txt
-  65.79%  <bench::randmini::sliding_min::MonotoneQueue<Val> as bench::randmini::sliding_min::SlidingMin<Val>>::push
-  22.15%  <core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::fold
-  ...
-#+end_src
-
-Now the problem is clear! The =push= function is not inlined. Let's fix that.
-(TODO commit)
-#+begin_src diff
-+#[inline(always)]
- fn new(w: usize) -> Self {
-
-+#[inline(always)]
- fn push(&mut self, val: Val) -> Elem<Val> {
-#+end_src
-#+begin_src txt
-rnd/ext_minimizer_iter  time:   [20.023 ms 20.092 ms 20.206 ms]
-rnd/ext_daniel          time:   [9.2619 ms 9.4479 ms 9.6512 ms]
-rnd/3a_queue            time:   [23.936 ms 23.948 ms 23.964 ms]
-rnd/3b_inlined_queue    time:   [22.786 ms 22.874 ms 22.988 ms]
-#+end_src
-
-A well, forgive me my optimism. Either way, this is decently close to the baseline
-version. Let's look in slightly more detail at the =perf report=:
-
-#+begin_src asm
-  1.02 │2f0:   lea    (%rdx,%rax,1),%rdi  ; start of the while pop-back loop.
-  0.58 │       cmp    %rcx,%rdi
-  1.41 │       mov    $0x0,%edi
-  0.67 │       cmovae %rcx,%rdi
-  0.35 │       shl    $0x4,%rdi
-  0.59 │       mov    %rsi,%r8
-  1.28 │       sub    %rdi,%r8
-  1.74 │    ┌──cmp    %r12,(%r8)              ; Is back > val?
-  1.91 │    ├──jbe    321                     ; -> NO, pop it.
- *9.08*│    │  dec    %rax
-  3.41 │    │  mov    %rax,0x18(%rbx)
-  0.35 │    │  add    $0xfffffffffffffff0,%rsi
-  0.10 │    │  test   %rax,%rax
-  0.33 │    │↑ jne    2f0                 ; jumps back to the top
-  0.28 │    │  xor    %eax,%eax
-       │    │self.q.push_back(Elem { pos: self.pos, val });
-*12.02*│321:└─→mov    0x28(%rbx),%r13         ; -> YES, stop.
-#+end_src
-We can see that a lot of time, 21% of the total, is spent on the two
-instructions right after the branch. Indeed, this branch checks whether the
-previous element is larger than the current one, and that is basically 50-50
-random, as bad as it can be.
-
-Thus, we would like a less branchy and more predictable method for sliding windows.
-
-** Optimizing the rescan
-
-If we look at the generated assembly, we can see it is quite branchy. In an
-attempt to fix this, we can replace all array indexing by =unsafe {v.get_unchecked(idx) }=.
-But it turns out doing so gives only negligible performance gains.
-
-One other thing that stands out in the =perf= is this:
-#+begin_src asm
-       │    ┌──cmp    0x38(%r15),%rdx
-       │    │if val < self.min_val {
-       │    ├──jae    300
-       │    │self.min_val = val;
-  5.61 │    │  mov    %rdx,0x38(%r15)
-       │    │self.min_pos = self.pos;
-       │    │  mov    0x20(%r15),%rdx
-  0.38 │    │  mov    %rdx,0x30(%r15)
-#+end_src
-5% of the time is spend on the case where the =self.min_val= is updated,
-because of branch mispredictions. It would be better to avoid the branch by
-using =cmov= instead:
-#+begin_src diff
--            if val < self.min_val {
--                self.min_val = val;
--                self.min_pos = self.pos;
--            }
-+            (self.min_val, self.min_pos) = if val < self.min_val {
-+                (val, self.pos)
-+            } else {
-+                (self.min_val, self.min_pos)
-+            };
-#+end_src
-This indeed lowers the runtime by 3% to =10.5s=.
-
-Now, 5% of time is spent on the branch miss when the minimum falls out of the
-window, since this happens at random times. But first, we improve the hash function.
 
 ** Making ntHash fast
 One reason is that the =next= function on the iterator is [[https://github.com/luizirber/nthash/pull/13][not inlined]].
