@@ -18,8 +18,7 @@ Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
 - [[*Random minimizers][Background]]
 - [[*Algorithms][Overview of algorithms]]
-- TODO: [[#Optimizing][Optimizing the implementation]]
-  - TODO: [[*Setting up benchmarking][Benchmarking]]
+- TODO
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
@@ -209,7 +208,8 @@ And then a sliding window implementation also becomes trivial:
 #+caption: The =Buffered= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
 #+include: "code/blog/naive.rs" src rust :lines "30-"
 
-Using this trait, we can clean up the implementation of the =Naive= minimizer from
+Using this trait, we can clean up[fn::The =hash_kmers= function here is part of
+the =Hasher= trait that can be found in [[hasher]].] the implementation of the =Naive= minimizer from
 before[fn::In fact, the =Buffered= implementation is slightly more efficient
 since it stores hashes instead of recomputing them $w$ times.]. In fact, we can now generically implement a minimizer scheme using any
 implementation of the sliding window algorithm.
@@ -279,13 +279,14 @@ each window individually. Thus, it solves [[*Problem A: Only the set of
 minimizers][Problem A]] instead of [[*Problem B: The minimizer of each
 window][Problem B]].[fn:legend]
 
-#+caption: Each time a minimizer (green) is found, jump to the window starting right after to find the next minimizer. The last iteration is special and checks if possibly one more minimizer has to be added, which is not the case here.
+#+caption: Each time a minimizer (bold) is found, jump to the window starting right after to find the next minimizer. The last iteration is special and checks if possibly one more minimizer has to be added, which is not the case here.
 #+attr_html: :class inset
 [[file:./jump.svg]]
 
 Since the expected distance between random minimizers is $(w+1)/2$, we expect to
 scan each position just under two times.
 
+#+name: jumping-code
 #+caption: Solving Problem A by jumping to the window after the previous minimizer. Note that this first computes all hashes in a separate pass.
 #+include: "code/blog/jumping.rs" src rust :lines "2-"
 
@@ -589,15 +590,16 @@ for alg in naive buffered\$ queue\$ queue_igor jumping rescan\$ rescan_daniel sp
 
 #+caption: =perf stat= results for all methods so far.
 #+attr_html: :class small
-| metric         | Runtime (ns/char) | instructions/cycle (GHz) | branches/sec (M/sec) | branch misses % |
-| =Naive=        |                64 |                     4.13 |                 1743 |           0.11% |
-| =Buffered=     |                55 |                     2.17 |                  987 |           4.66% |
-| =Queue=        |                22 |                     2.29 |                  810 |           4.29% |
-| =QueueIgor=    |                27 |                     2.33 |                  662 |           4.29% |
-| =Jumping=      |               7.1 |                     3.89 |                 1459 |           0.13% |
-| =Rescan=       |                14 |                     3.02 |                 1116 |           2.26% |
-| =RescanDaniel= |               9.0 |                     3.21 |                 1410 |           0.85% |
-| =Split=        |                14 |                     3.37 |                 1116 |           1.55% |
+| metric         | Runtime | instructions/cycle | branches/sec | branch misses |
+|                | ns/char |                GHz |        M/sec |             % |
+| =Naive=        |      64 |               4.13 |         1743 |         0.11% |
+| =Buffered=     |      55 |               2.17 |          987 |         4.66% |
+| =Queue=        |      22 |               2.29 |          810 |         4.29% |
+| =QueueIgor=    |      27 |               2.33 |          662 |         4.29% |
+| =Jumping=      |     7.1 |               3.89 |         1459 |         0.13% |
+| =Rescan=       |      14 |               3.02 |         1116 |         2.26% |
+| =RescanDaniel= |     9.0 |               3.21 |         1410 |         0.85% |
+| =Split=        |      14 |               3.37 |         1116 |         1.55% |
 
 Observe:
 - =Naive= has an instructions per cycle (IPC) of over 4! I have never actually seen IPC that high.
@@ -630,7 +632,7 @@ This step is 'just' so we can make a fair benchmark between them, and in the end
 we will only optimize one of them further, so I will try to keep it short.
 The final optimized version of each algorithm can be found in the repository,
 but intermediate diffs are only shown here.
-*** Optimizing =Buffered=: reducing branch misses using forward minima
+*** Optimizing =Buffered=: reducing branch misses
 Let's have a look at =perf record=:
 #+caption: =just perf buffered= shows very inefficient and branchy code. Lines marked with a =*= have over /5%/ of time spent in them. This pattern occurs multiple times due to loop unrolling.
 #+begin_src asm
@@ -818,20 +820,22 @@ Now that we have our optimized versions, let's summarize the new results.
 for alg in naive buffered\$ buffered_opt queue\$ queue_igor jumping rescan\$ rescan_opt rescan_daniel split\$ split_opt; just stat-selection $alg ; end
 #+end_src
 
+
 #+caption: =perf stat= results for all methods so far, for /w=11/.
 #+attr_html: :class small
-| metric         | Runtime (ns/char) | instructions/cycle (GHz) | branches/sec (M/sec) | branch misses % |
-| =Naive=        |                64 |                     4.13 |                 1743 |           0.11% |
-| =Buffered=     |                55 |                     2.17 |                  987 |           4.66% |
-| =BufferedOpt=  |              *26* |                   *4.19* |               *1499* |         *0.13%* |
-| =Queue=        |                22 |                     2.29 |                  810 |           4.29% |
-| =QueueIgor=    |                27 |                     2.33 |                  662 |           4.29% |
-| =Jumping=      |               7.1 |                     3.89 |                 1459 |           0.13% |
-| =Rescan=       |                14 |                     3.02 |                 1116 |           2.26% |
-| *=RescanOpt=*  |              *10* |                   *3.58* |               *1397* |         *0.90%* |
-| =RescanDaniel= |               9.0 |                     3.21 |                 1410 |           0.85% |
-| =Split=        |                14 |                     3.37 |                 1116 |           1.55% |
-| =SplitOpt=     |              *11* |                   *3.47* |               *1410* |         *0.63%* |
+| metric         | Runtime | instructions/cycle | branches/sec | branch misses |
+|                | ns/char |                GHz |        M/sec |             % |
+| =Naive=        |      64 |               4.13 |         1743 |         0.11% |
+| =Buffered=     |      55 |               2.17 |          987 |         4.66% |
+| =BufferedOpt=  |    *26* |             *4.19* |       *1499* |       *0.13%* |
+| =Queue=        |      22 |               2.29 |          810 |         4.29% |
+| =QueueIgor=    |      27 |               2.33 |          662 |         4.29% |
+| =Jumping=      |     7.1 |               3.89 |         1459 |         0.13% |
+| =Rescan=       |      14 |               3.02 |         1116 |         2.26% |
+| *=RescanOpt=*  |    *10* |             *3.58* |       *1397* |       *0.90%* |
+| =RescanDaniel= |     9.0 |               3.21 |         1410 |         0.85% |
+| =Split=        |      14 |               3.37 |         1116 |         1.55% |
+| =SplitOpt=     |    *11* |             *3.47* |       *1410* |       *0.63%* |
 
 Note how =BufferedOpt= is now almost as fast as =Queue=, even though it's
 $O(nw)$ instead of $O(n)$. Unpredictable branches really are terrible. Also,
@@ -840,59 +844,96 @@ $O(nw)$ instead of $O(n)$. Unpredictable branches really are terrible. Also,
 For reasons I do not understand =SplitOpt= is still not faster than =RescanOpt=,
 but we'll have to leave it at this.
 
-* TODO Let the optimization begin
-:PROPERTIES:
-:CUSTOM_ID: Optimizing
-:END:
+* TODO Rolling our own hash
 Topics to cover, in some order:
-- Branch misses around =min= of =(val, pos)= pairs
-- unchecked indexing
 - wyhash
 - NtHash, and how to make an efficient implementation.
-- SIMD: processing 4/8/16(?) sequences in parallel.
 - Procomputing hashes, separate from ISMD
 
-** TODO NtHash: a rolling kmer hash
-One problem with =fxhash= and =wyhash= is that they hash strings of arbitrary
-length, and hence generate a lot of code to handle all length modulo $8$ efficiently.
-In practice, we've only been using $k=21$ so far, but this still requires
-iterating over three $8$ byte words. Instead, a rolling hash only has to handle
-the first and last character of each string, regardless of the length of the
-string. We will use ntHash [cite:@nthash] (see also [[../nthash.org][this post]]). This assigns a random value $h(c)$ to
-each DNA character $c$, and computes the hash of a string as $x$ as
-\begin{equation}
-h(x) = \bigoplus_{i=0}^{k-1} rot^i(h(x_i)),
-\end{equation}
-where $rot^i$ does a $64$-bit rotate, and $\oplus$ is the xor operation.
-This can be efficiently computed incrementally by rotating the hash $1$, then
-xor'ing in $h(x_k)$, and then xor'ing out $rot^{k}(h(x_0))$.
+As we saw, =Jumping= spends two thirds of its time on hashing the kmers, and in
+fact, =SplitOpt= and =RescanOpt= spend around half of their time on hashing.
+Thus, it is finally time to investigate some different hash functions.
 
-Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementation is simple:
-#+begin_src rust
-pub struct V5RescanNtHash {
-    pub w: usize,
-    pub k: usize,
-}
+** FxHash
+So far, we have been using [[https://crates.io/crates/fxhash][=FxHash=]], a [[https://docs.rs/fxhash/0.2.1/src/fxhash/lib.rs.html#64][very simple]] hash function originally used by FireFox and also used
+in the Rust compiler. For each =u64= chunk of 8 bytes, it bit-rotates the hash
+so far, =xor=s with the new words, and multiplies by a fixed constant. For
+inputs less than 8 characters, it's only a single multiplication.
+Even though this method iterates over the input length, all k-mers have the same
+length, so that the branches involved are usually very predictable.
+Nevertheless, hashing each k-mer involves quite some instructions, and
+especially a lot of code is generated to to handle all lengths modulo $8$ efficiently.
 
-impl Minimizer for V5RescanNtHash {
-    fn minimizers(&self, text: &[u8]) -> Vec<usize> {
-        let mut q = Rescan::new(self.w);
-        let mut kmer_hashes = nthash::NtHashForwardIterator::new(text, self.k).unwrap();
-        for h in kmer_hashes.by_ref().take(self.w - 1) {
-            q.push(h);
-        }
-        kmer_hashes.map(|h| q.push(h).pos).collect()
-    }
-}
-#+end_src
+*** WyHash
+[[https://crates.io/crates/wyhash][WyHash]] is currently the fastest cryptographically secure hash function in the
+SMHasher benchmark, but using it instead of FxHash slows down
+the benchmarks by roughly =2ns= per character.
+The reason is that FxHash itself is not secure, and hence can be simpler.
 
-Unfortunately, it's slower than before:
-#+begin_src txt
-g/ext_daniel            time:   [8.9199 ms 8.9300 ms 8.9405 ms]
-g/4_rescan              time:   [10.557 ms 10.562 ms 10.574 ms]
-g/5_rescan_nthash       time:   [12.964 ms 12.980 ms 12.992 ms]
-#+end_src
 
+** NtHash: a rolling hash
+We could avoid this for loop for the hashing of each k-mer by using a /rolling/
+hash that only needs to update the hash based on the character being added and
+removed. The classsic rolling hash is the Karp-Rabin hash, where the hash of a kmer $x$
+is
+$$
+h(x) = \sum_{i=0}^{k-1} x_i \cdot p^i \pmod m,
+$$
+for some modulus $m$ (e.g. $2^{64}$) and coprime integer $p$. This can be computed in an incremental
+way by multiplying the previous hash by $p$ and adding/subtracting terms for the
+character being added and removed.
+
+=NtHash= [cite:@nthash] is a more efficient variant[fn::The ntHash paper doesn't
+actually provide a benchmark for this though. But the consensus seems to be that
+buzhash is faster than classic multiplication based methods.] of this based on 'buzhash',
+using multiplication and addition $(\times, +)$ uses bitwise rotation and xor $(\text{rot}, \oplus)$:
+$$
+h(x) = \bigoplus_{i=0}^{k-1} \text{rot}^i(f(x_i)),
+$$
+where $f$ is a static table lookup that maps each character to some fixed random
+value. (See also [[file:../nthash.org][this post on ntHash]]).
+
+Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementation of the =Hasher= trait that we've
+implicitly been using so far is simple:
+#+name: hasher
+#+caption: Wrapping the =nthash= crate with the =Hasher= trait.
+#+include: "code/blog/hash.rs" src rust :lines "-29"
+
+Unfortunately, the results are mixed:
+#+caption: Runtime in ns/kmer of methods with FxHash and ntHash.
+#+attr_html: :class small
+| alg \ hash:   | FxHash | ntHash |
+| =BufferedOpt= |     26 |     30 |
+| =Queue=       |     22 |     24 |
+| =Jumping=     |    7.1 |    5.0 |
+| =RescanOpt=   |     10 |     14 |
+| =SplitOpt=    |     11 |     16 |
+All methods become =2-4ns/ker= slower, apart from =Jumping=, which is actually
+significantly faster. Remember that for =Jumping= ([[jumping-code]]) we first compute all hashes
+and collect them into a vector, while all other methods compute hashes on the
+fly. Thus, for some reason =ExtNtHasher= must be faster than FxHash when
+simply streaming through all kmers, while it's slower when rolling the hash at
+more irregular intervals.
+
+*** Buffered hash values
+Based on the difference above, let's investigate whether first collecting all
+hashes to a vector speeds up the other methods as well. We provide a simple
+wrapper type for this:
+#+caption: =Buffer<H>= is a =Hasher= that first collects all hashes to a vector and then iterates over them.
+#+include: "code/blog/hash.rs" src rust :lines "39-"
+
+#+caption: Runtime in ns/kmer of methods with FxHash, ntHash, and buffered versions.
+#+attr_html: :class small
+| alg \ hash:   | FxHash | FxHash | ntHash | ntHash |
+| buffered:     |     no |  *yes* |     no |  *yes* |
+| =BufferedOpt= |     26 |     31 |     30 |     28 |
+| =Queue=       |     22 |     24 |     24 |     22 |
+| =Jumping=     |    7.1 |    7.1 |    5.0 |    5.0 |
+| =RescanOpt=   |     10 |     13 |     14 |     11 |
+| =SplitOpt=    |     11 |     14 |     16 |     12 |
+We see that for FxHash, buffering does not give a speedup, while for ntHash,
+buffering typically makes things faster (buf not =Jumping=, which is already
+buffered anyway).
 
 ** Making ntHash fast
 One reason is that the =next= function on the iterator is [[https://github.com/luizirber/nthash/pull/13][not inlined]].
@@ -948,6 +989,9 @@ It's not exactly clear to me why this is not as fast as Daniel's original
 version. Probably it's still because things aren't inlined, and I don't understand why
 that's not happening.
 
+* TODO SIMD all the way
+- unchecked indexing
+- SIMD: processing 4/8/16(?) sequences in parallel.
 
 * TODO Super-k-mers and canonical kmers
 
