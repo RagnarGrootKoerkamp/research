@@ -1,5 +1,5 @@
 #+title: [WIP] Computing random minimizers, fast
-#+filetags: @results @lablog hpc minimizers nthash wip
+#+filetags: @results @walkthrough hpc minimizers nthash wip
 #+HUGO_LEVEL_OFFSET: 0
 #+OPTIONS: ^:{} num:2 H:4
 #+hugo_front_matter_key_replace: author>authors
@@ -10,9 +10,17 @@
 
 In this post, we will develop a fast implementation of random minimizers.
 
+The goals here are:
+- a library for fast random minimizers,
+- explaining the final code, and the design decisions leading to it,
+- walking you through the development process, hopefully teaching how to do this yourself.
+
 Code for this post is in the =benches/= directory of
 [[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]]. The unpolished experiments are in the
 =playground= branch.
+Most code snippets are directly included from the repository. I have tried to
+write clean and readable code that follows the order of this post. Still,
+there will be small parts that only become useful later on.
 
 Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
@@ -693,7 +701,7 @@ we'll leave it at this.
 #+end_notice
 
 *** =Queue= is hopelessly branchy
-We can confirm that indeed a lot of time is spend on branch-misses around
+We can confirm that indeed a lot of time is spent on branch-misses around
 the popping of the queue.
 #+attr_shortcode: "Assembly code showing a badly predicted branch."
 #+begin_details
@@ -931,38 +939,84 @@ wrapper type for this:
 | =Jumping=     |    7.1 |    7.1 |    5.0 |    5.0 |
 | =RescanOpt=   |     10 |     13 |     14 |     11 |
 | =SplitOpt=    |     11 |     14 |     16 |     12 |
-We see that for FxHash, buffering does not give a speedup, while for ntHash,
-buffering typically makes things faster (buf not =Jumping=, which is already
-buffered anyway).
 
-** Making ntHash fast
-One reason is that the =next= function on the iterator is [[https://github.com/luizirber/nthash/pull/13][not inlined]].
-Updating to the git version brings it down from 12.9ms to 12.7ms, a whole 2%
-faster:
-#+begin_src diff
--nthash = "0.5.1"
-+nthash = { git = "https://github.com/luizirber/nthash" }
-#+end_src
-But actually the function still isn't inlined anyway. Enabling link-time optimization:
-#+begin_src diff
- [profile.release]
- debug = true
-+lto = true
-#+end_src
-brings the runtime down to 11.3ms, but now the build is very slow, and actually
-still not all functions are inlined. I'm not quite sure why this is. I tried
-inlining the closure:
-#+begin_src diff
- kmer_hashes.map(
-+    #[inline(always)]
-     |h| q.push(h).pos).collect()
- )
-#+end_src
-but that also didn't help.
+#+attr_shortcode: takeaway
+#+begin_notice
+Buffering hashes in an intermediate vector helps for ntHash, but not for FxHash.
+#+end_notice
 
-Instead, we'll just optimize the nthash library itself. For convenience we first
-copy the source to our repo.
-First, let's remove the check that all characters are =ACGT=:
+** Making ntHash fast: going branchless
+Still now, ntHash take over half the time of the =Jumping= algorithm, so we'll
+try to make it a bit faster.
+#+caption: =just perf jumping_nt= shows that most time is spent creating the =Vec= of hashes from the ntHash iterator.
+#+begin_src txt
+50.65%  <Vec<T> as SpecFromIter<T,I>>::from_iter
+36.68%  <JumpingMinimizer<H> as Minimizer>::minimizer_positions
+#+end_src
+
+#+attr_shortcode: "Assembly for collecting ntHashes into a vector."
+#+begin_details
+#+caption: Assembly code for collecting all ntHashes into a vector. We see plenty of branches.
+#+begin_src gas
+1c5:   mov    %r14,(%rax,%r13,8)
+       inc    %r13
+       mov    %r13,0x40(%rsp)
+     if self.current_idx == self.max_idx {
+       mov    %rbx,%rcx
+       add    %r13,%rcx
+     ↑ je     153
+     if self.current_idx != 0 {
+1dd:   mov    %rbp,%rcx
+       add    %r13,%rcx
+     ↓ je     24d
+     let seqi = self.seq[i];
+       lea    -0x1(,%r13,1),%rdi
+       add    %rbp,%rdi
+       cmp    %r15,%rdi
+     ↓ jae    2e2
+       mov    0x20(%rsp),%rcx
+     let seqk = self.seq[i + self.k];
+       add    %r13,%rcx
+       dec    %rcx
+       cmp    %r15,%rcx
+     ↓ jae    2cd
+     let seqi = self.seq[i];
+       movzbl -0x1(%r12,%r13,1),%ecx
+       lea    anon.c37bfa7dce888be50e4a96f2eaf16e27.6.llvm.2840843246760040980+0x6f,%rsi
+     let val = H_LOOKUP[c as usize];
+       mov    (%rsi,%rcx,8),%rdx
+     if val == 1 {
+       cmp    $0x1,%rdx
+     ↓ je     272
+       mov    0x28(%rsp),%rcx
+     let seqk = self.seq[i + self.k];
+       movzbl -0x1(%rcx,%r13,1),%ecx
+     let val = H_LOOKUP[c as usize];
+       mov    (%rsi,%rcx,8),%rsi
+     if val == 1 {
+       cmp    $0x1,%rsi
+     ↓ je     272
+       rorx   $0x3f,%r14,%r14
+       mov    0x18(%rsp),%rcx
+       rol    %cl,%rdx
+     self.fh = self.fh.rotate_left(1) ^ h(seqi).rotate_left(self.k as u32) ^ h(seqk);
+       xor    %rsi,%r14
+       xor    %rdx,%r14
+24d:   cmp    0x30(%rsp),%r13
+     ↑ jne    1c5
+#+end_src
+#+end_details
+
+Even though we know from =perf stat= that there are basically no branch misses,
+the assembly does contain a lot of branches, most of which correspond to
+assertions/bound checks in the original code. To fix these, will copy [[https://docs.rs/nthash/0.5.1/src/nthash/lib.rs.html#281-306][the source]]
+of the =nthash= crate and modify it locally.
+
+To start, =ExtNtHash= takes in =2.9ns/kmer= to collect kmer hashes to a vector.
+
+First, we see that for each character it is checked whether it is =ACTG=. It
+would be faster to do that up-front if needed, so let's remove the check.
+#+caption: Skip checking that characters are =ACTG=. Runtime: =2.9ns/kmer= ↦ =2.6ns/kmer=.
 #+begin_src diff
  fn h(c: u8) -> u64 {
      let val = H_LOOKUP[c as usize];
@@ -972,22 +1026,179 @@ First, let's remove the check that all characters are =ACGT=:
      val
  }
 #+end_src
-Runtime goes to 11.1s.
 
-Next, we sprinkle in some =get_unchecked=:
+Next, we sprinkle in some =get_unchecked=, to avoid unnecessary bound checks.
+Both checks are provably impossible to fail, yet the compiler isn't able to
+elide them. I suspect it has something to do with the
+=NtHashForwardIterator::new()= function not being inlined, and hence the
+=next()= function not being aware of invariants checked during initialization. I
+also tried adding some additional assertions and using =unchecked_add= to
+indicate that overflow is undefined behaviour, but even then one of the branches remained.
+Even with full link time optimization enabled (~lto = true~ in =Cargo.toml=),
+the branches are still there[fn::The runtime does go down a bit to =2.3ns/kmer=,
+but we'll postpone looking into this more, since full lto is absolutely terrible
+for compile times, and thin lto is not sufficient.].
+
+#+caption: Avoiding bound checks: =2.6ns/kmer= ↦ =1.9ns/kmer=.
 #+begin_src diff
--let val = H_LOOKUP[c as usize];
- ...
--let seqi = self.seq[i];
-+let seqi = unsafe { *self.seq.get_unchecked(i) };
--let seqk = self.seq[i + self.k];
-+let seqk = unsafe { *self.seq.get_unchecked(i + self.k) };
-#+end_src
-and runtime goes down to 10.7s.
+ if self.current_idx != 0 {
+     let i = self.current_idx - 1;
+-    let seqi = self.seq[i];
+-    let seqk = self.seq[i + self.k];
++    let seqi = unsafe { *self.seq.get_unchecked(i) };
++    let seqk = unsafe { *self.seq.get_unchecked(i + self.k) };
 
-It's not exactly clear to me why this is not as fast as Daniel's original
-version. Probably it's still because things aren't inlined, and I don't understand why
-that's not happening.
+     ...
+ }
+#+end_src
+
+At this point there are three branches left:
+1. Checking whether the end of the sequence was reached.
+2. The ~self.current_idx != 0~ check that makes sure we don't remove a character
+   in the first iteration.
+3. A check that the vector we are accumulating into still has space.
+
+Both the second and third should be redundant: we can handle the first
+iteration separately, and pre-allocate a vector that is sufficiently large.
+Let's fix the latter one first. Ideally, the compiler would check that the
+=size_hint= provided by the =NtHashForwardIterator= is large enough and that the
+initial =Vec::reserve()= has sufficient capacity that an overflow can not
+happen, but alas, that's not the case (also not with full lto).
+
+Generally, it seems that we can not get rid of the possible resize check while
+using =.collect::<Vec<_>>()=. Thus, let's roll our own.
+
+First, we can manually reserve the vector capacity and then fill it:
+#+caption: Even with a manually reserved vector, there is an impossible-to-reach call to =grow_one=.
+#+begin_src rust
+fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
+    let len = t.len() - k + 1;
+    let mut v = Vec::with_capacity(len);
+    let mut it = self.hasher.hash_kmers(k, t);
+    for _ in 0..len {
+        v.push(it.next().unwrap());
+    }
+    v.into_iter()
+}
+#+end_src
+
+#+attr_shortcode: "Generated assembly"
+#+begin_details
+#+caption: The assembly still shows a call to =grow_one=, which should be impossible to reach.
+#+begin_src gas
+  0.04 │330:┌─→mov          0x10(%rsp),%rax
+ 19.91 │    │  mov          %r13,0x8(%rax,%rbx,8)
+  0.01 │    │  add          $0x2,%rbx
+  0.11 │    │  mov          %rbx,0x18(%rsp)
+       │    │  mov          %r12,%rax
+ 19.65 │    │  mov          %rbp,%rbx
+       │    │  add          %rbp,%rax
+       │    │↓ je           38f                                    ; unwrap failed?
+  0.06 │34e:│  lea          0x1(%rbx),%rbp
+  0.01 │    │  movzbl       (%r15,%rbx,1),%eax
+ 18.40 │    │  rorx         $0x3f,%r13,%rdx
+  0.06 │    │  mov          (%r14,%rax,8),%r13
+  0.16 │    │  mov          0x20(%rsp),%rcx
+ 20.75 │    │  rol          %cl,%r13
+  0.13 │    │  mov          0x60(%rsp),%rax
+  0.36 │    │  movzbl       (%rax,%rbx,1),%eax
+ 19.85 │    │  xor          %rdx,%r13
+  0.41 │    │  xor          (%r14,%rax,8),%r13
+       │    ├──cmp          0x8(%rsp),%rbp
+  0.06 │    └──jne          330                                    ; vector capacity was reached?
+       │       lea          0x8(%rsp),%rdi
+       │       vzeroupper
+       │     → call         alloc::raw_vec::RawVec<T,A>::grow_one  ; grow the vec
+       │     ↑ jmp          330
+       │38f:   mov          0x8(%rsp),%r12
+#+end_src
+#+end_details
+
+Well this doesn't work. I really trusted the compiler to optimize this away, but
+it doesn't[fn::Maybe there is a reason for keeping it that I don't see? Let me know!]. Guess I'll have to adjust my trust level accordingly.
+
+Anyway, I suppose we'll just make a default vector with the right
+/size/ and then fill it, so we can completely drop the =push= call.
+#+caption: Using a fixed-size vector drops the =grow= check! Runtime: =1.94ns/kmer= ↦ =1.77ns/kmer=.
+#+begin_src rust
+fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
+    let len = t.len() - k + 1;
+    let mut v = vec![H::Out::default(); len];
+    let mut it = self.hasher.hash_kmers(k, t);
+    for x in v.iter_mut() {
+        *x = it.next().unwrap();
+    }
+    v.into_iter()
+}
+#+end_src
+
+The current assembly looks like this.
+#+caption: Current assembly code for collecting ntHashes into a vector.
+#+begin_src gas
+300:┌─→mov          %r11,%rcx                ; read max_iterations
+    │  add          %r8,%rcx                 ; check if last iteration
+    │↓ je           362                      ; unwrap fails?
+    │  movzbl       (%r12,%r8,1),%ecx        ; get seq[i]
+    │  mov          (%r9,%rcx,8),%r10        ; lookup hash of seq[i]
+    │  mov          %r13d,%ecx               ; read 32-bit k into %ecx
+    │  rol          %cl,%r10                 ; rotate hash(seq[i]) by %cl = low 8 bits of %ecx
+    │  rorx         $0x3f,%rsi,%rsi          ; rotate rolling hash %rsi
+    │  xor          %r10,%rsi                ; xor with hash of seq[i]
+    │  movzbl       (%rax,%r8,1),%ecx        ; get seq[i+k]
+    │  xor          (%r9,%rcx,8),%rsi        ; xor with hash of seq[i+k]
+    │  mov          %rsi,0x8(%r14,%r8,8)     ; write result to vec
+    │  inc          %r8                      ; increase i
+    ├──add          $0xfffffffffffffff8,%rdx ; decrease loop counter
+    └──jne          300
+#+end_src
+
+This looks pretty great! The first three lines are somewhat redundant though,
+since we know the unwrap can never fail[fn::Again, the compiler disappoints a
+bit.].  And also on line 6, there is a 32-bit =mov= from =%r13d= to =%ecx= of
+which the low 8 bits are used on line 7 as =%cl=[fn::[[https://wiki.osdev.org/CPU_Registers_x86-64][This article]] has a nice
+summary table of the register naming.]. But then why not directly use the low 8
+bits of =%r13=, =%r13b=? Maybe the compiler insists on using the /counter/
+register =c= for this?
+
+Either way, let's get rid of the last remaining branch:
+#+caption: Using =unwrap_unchecked= to avoid a branch. Runtime: =1.77ns/kmer= ↦ =2.20ns/kmer=.
+#+begin_src diff
+ for x in v.iter_mut() {
+-    *x = it.next().unwrap();
++    unsafe { *x = it.next().unwrap_unchecked() };
+ }
+#+end_src
+
+Somehow this is worse. It seems two new branches came back when removing this
+one![fn::Cf. [[https://en.wikipedia.org/wiki/Lernaean_Hydra][Hydra]] (Greek mythology).]
+
+#+attr_shortcode: "Assembly, but worse."
+#+begin_details
+#+caption: There is now a branch again to check if the index is 0.
+#+begin_src gas
+       │2f0:┌─→cmp          %rbx,%r8
+       │    │↑ je           2e0
+ 10.88 │    │  test         %r8,%r8
+  0.01 │    │↓ je           323
+  0.03 │    │  movzbl       -0x1(%r13,%r8,1),%ecx
+  8.79 │    │  lea          (%r8,%rbp,1),%r9
+       │    │  dec          %r9
+ 12.47 │    │  movzbl       0x0(%r13,%r9,1),%r9d
+  0.06 │    │  rorx         $0x3f,%rdx,%r10
+  9.37 │    │  mov          (%r11,%rcx,8),%rdx
+       │    │  mov          %ebp,%ecx
+ 19.99 │    │  rol          %cl,%rdx
+  0.09 │    │  xor          %r10,%rdx
+ 13.48 │    │  xor          (%r11,%r9,8),%rdx
+       │323:│  inc          %r8
+ 16.40 │    │  mov          %rdx,(%r14,%rsi,1)
+       │    │  add          $0x8,%rsi
+       │    ├──cmp          %rsi,%r12
+  8.44 │    └──jne          2f0
+#+end_src
+#+end_details
+
+We've kinda spent enough time on this for now. But I'm still unhappy
 
 * TODO SIMD all the way
 - unchecked indexing
