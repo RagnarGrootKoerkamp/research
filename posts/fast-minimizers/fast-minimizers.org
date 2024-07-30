@@ -852,12 +852,7 @@ $O(nw)$ instead of $O(n)$. Unpredictable branches really are terrible. Also,
 For reasons I do not understand =SplitOpt= is still not faster than =RescanOpt=,
 but we'll have to leave it at this.
 
-* TODO Rolling our own hash
-Topics to cover, in some order:
-- wyhash
-- NtHash, and how to make an efficient implementation.
-- Procomputing hashes, separate from ISMD
-
+* TODO Rolling[fn::Hah, get it?@@html:<br/>@@ There's at least *two* alternative interpretations ;)] our own hash
 As we saw, =Jumping= spends two thirds of its time on hashing the kmers, and in
 fact, =SplitOpt= and =RescanOpt= spend around half of their time on hashing.
 Thus, it is finally time to investigate some different hash functions.
@@ -1014,6 +1009,8 @@ of the =nthash= crate and modify it locally.
 
 To start, =ExtNtHash= takes in =2.9ns/kmer= to collect kmer hashes to a vector.
 
+*** Drop sanity checks
+
 First, we see that for each character it is checked whether it is =ACTG=. It
 would be faster to do that up-front if needed, so let's remove the check.
 #+caption: Skip checking that characters are =ACTG=. Runtime: =2.9ns/kmer= ↦ =2.6ns/kmer=.
@@ -1027,6 +1024,7 @@ would be faster to do that up-front if needed, so let's remove the check.
  }
 #+end_src
 
+*** Drop bound checks
 Next, we sprinkle in some =get_unchecked=, to avoid unnecessary bound checks.
 Both checks are provably impossible to fail, yet the compiler isn't able to
 elide them. I suspect it has something to do with the
@@ -1051,6 +1049,13 @@ for compile times, and thin lto is not sufficient.].
      ...
  }
 #+end_src
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Not all provably redundant bound checks are always elided.
+#+end_notice
+
+*** Efficiently collecting to a vector
 
 At this point there are three branches left:
 1. Checking whether the end of the sequence was reached.
@@ -1119,7 +1124,7 @@ it doesn't[fn::Maybe there is a reason for keeping it that I don't see? Let me k
 
 Anyway, I suppose we'll just make a default vector with the right
 /size/ and then fill it, so we can completely drop the =push= call.
-#+caption: Using a fixed-size vector drops the =grow= check! Runtime: =1.94ns/kmer= ↦ =1.77ns/kmer=.
+#+caption: Using a fixed-size vector drops the =grow= check! Runtime: =1.94ns/kmer= ↦ =1.71ns/kmer=.
 #+begin_src rust
 fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
     let len = t.len() - k + 1;
@@ -1133,7 +1138,7 @@ fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
 #+end_src
 
 The current assembly looks like this.
-#+caption: Current assembly code for collecting ntHashes into a vector.
+#+caption: Current assembly code for collecting ntHashes into a vector. *Spend some time* to understand the comments here.
 #+begin_src gas
 300:┌─→mov          %r11,%rcx                ; read max_iterations
     │  add          %r8,%rcx                 ; check if last iteration
@@ -1149,19 +1154,40 @@ The current assembly looks like this.
     │  mov          %rsi,0x8(%r14,%r8,8)     ; write result to vec
     │  inc          %r8                      ; increase i
     ├──add          $0xfffffffffffffff8,%rdx ; decrease loop counter
-    └──jne          300
+    └──jne          300                      ; loop
 #+end_src
 
-This looks pretty great! The first three lines are somewhat redundant though,
+#+attr_shortcode: takeaway
+#+begin_notice
+Avoid =push= to fill know-size arrays. (But maybe this doesn't apply in general.)
+#+end_notice
+
+*Aside: x64 intricacies.* This looks pretty great! The first three lines are somewhat redundant though,
 since we know the unwrap can never fail[fn::Again, the compiler disappoints a
-bit.].  And also on line 6, there is a 32-bit =mov= from =%r13d= to =%ecx= of
+bit. Maybe there is some tricky reason why it's not actually redundant?].  And also on line 6, there is a 32-bit =mov= from =%r13d= to =%ecx= of
 which the low 8 bits are used on line 7 as =%cl=[fn::[[https://wiki.osdev.org/CPU_Registers_x86-64][This article]] has a nice
 summary table of the register naming.]. But then why not directly use the low 8
 bits of =%r13=, =%r13b=? Maybe the compiler insists on using the /counter/
-register =c= for this?
+register =c= for this? After some more reading and discussing with [[https://twitter.com/zommiommy][Tommasso Fontana]], that does indeed seem to be the
+case: [[https://c9x.me/x86/html/file_module_x86_id_273.html][this page]] lists the opcodes for =rol= instructions, and the only supported
+variants are rotating by =1=, by =cl=, and by an immediate value.[fn::See also
+[[https://en.wikibooks.org/wiki/X86_Assembly/X86_Architecture#General-Purpose_Registers_(GPR)_-_16-bit_naming_conventions][this wiki page]] and [[https://www.swansontec.com/sregisters.html][this nice article]] for some more information about special
+purpose registers].
 
-Either way, let's get rid of the last remaining branch:
-#+caption: Using =unwrap_unchecked= to avoid a branch. Runtime: =1.77ns/kmer= ↦ =2.20ns/kmer=.
+*Aside: native compilation.* I'm using =-march=native=. Without that, it generates a =rol $1,%rsi=
+instead of a =rorx $0x3f,%rsi,%rsi=, and the runtime is =1.83ns/kmer= instead of
+=1.71ns/kmer=. =rorx= is probably faster because the =x= suffix means it doesn't
+set overflow/carry flags, and hence has fewer dependencies with other
+instructions. But =rorx= is only available with [[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#BMI2_(Bit_Manipulation_Instruction_Set_2)][BMI2]], so this requires the
+native compilation.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Use =-march=native=.
+#+end_notice
+
+*Back to branches.* Either way, let's get rid of the last remaining branch:
+#+caption: Using =unwrap_unchecked= to avoid a branch. Runtime: =1.71ns/kmer= ↦ =2.20ns/kmer=.
 #+begin_src diff
  for x in v.iter_mut() {
 -    *x = it.next().unwrap();
@@ -1198,7 +1224,146 @@ one![fn::Cf. [[https://en.wikipedia.org/wiki/Lernaean_Hydra][Hydra]] (Greek myth
 #+end_src
 #+end_details
 
-We've kinda spent enough time on this for now. But I'm still unhappy
+I've also tried adding an =assert_eq!(v.len(), len)=, but that doesn't help
+either.[fn::Cf. [[https://en.wikipedia.org/wiki/Chekhov%27s_gun][Chekhov's gun]].]
+#+caption: Asserting on the length of the vector doesn't change the runtime.
+#+begin_src diff
++let mut v = vec![H::Out::default(); len];
++assert_eq!(v.len(), len);
+#+end_src
+
+*Addressing mode.*
+Another thing we can do is improve the vector addressing mode. Instead of
+writing to =vector_offset + index * 8=, it's sometimes faster to directly write
+to a =*ptr= address. Let's try something:
+#+name: ptr-offset
+#+caption: Using a pointer offset instead of iterating the vector again makes things worse: =1.71ns/kmer= ↦ =1.82ns/kmer=.
+#+begin_src diff
+ let mut v = vec![H::Out::default(); len];
+ assert_eq!(v.len(), len);
+ let mut it = self.hasher.hash_kmers(k, t);
+-for x in v.iter_mut() {
+-    *x = it.next().unwrap();
+-}
++for i in 0..len {
++    unsafe { v.as_mut_ptr().add(i).write(it.next().unwrap()) };
++}
+#+end_src
+I'm not quite sure why, but this causes the assembly to be one instruction
+longer and hence slightly slower.
+
+*Confusion, again!* Ok let's remove the assertion again.
+#+caption: Removing the assertion gets us where we wanted to be all this time: =1.71ns/kmer= ↦ =1.59ns/kmer=.
+#+begin_src diff
+ let mut v = vec![H::Out::default(); len];
+-assert_eq!(v.len(), len);
+ let mut it = self.hasher.hash_kmers(k, t);
+ for i in 0..len {
+     unsafe { v.as_mut_ptr().add(i).write(it.next().unwrap()) };
+ }
+#+end_src
+
+/Finally/ the assembly is how I like it:
+
+#+caption: Look at it! Isn't it wonderful? No more redundant branches and some loop-unrolling.
+#+begin_src gas
+  0.02 │7b0:   movzbl       0x0(%rbp,%rsi,1),%ecx
+ 10.28 │       mov          (%r14,%rcx,8),%rdi
+  3.67 │       mov          %r12d,%ecx
+ 11.31 │       rol          %cl,%rdi
+  3.13 │       rorx         $0x3f,%rdx,%rdx
+       │       xor          %rdi,%rdx
+  0.02 │       movzbl       -0x1(%rbx,%rsi,1),%ecx
+ 10.94 │       xor          (%r14,%rcx,8),%rdx
+  5.91 │       mov          %rdx,0x8(%rax,%rsi,8)
+  0.02 │       movzbl       0x1(%rbp,%rsi,1),%ecx
+  0.02 │       mov          (%r14,%rcx,8),%rdi
+ 10.70 │       mov          %r12d,%ecx
+  4.53 │       rol          %cl,%rdi
+ 11.34 │       rorx         $0x3f,%rdx,%rdx
+  5.42 │       xor          %rdi,%rdx
+  0.58 │       movzbl       (%rbx,%rsi,1),%ecx
+  0.17 │       xor          (%r14,%rcx,8),%rdx
+ 18.47 │       mov          %rdx,0x10(%rax,%rsi,8)
+  3.48 │       add          $0x2,%rsi
+       │       cmp          %rsi,%r8
+       │     ↑ jne          7b0
+#+end_src
+
+At this point I am rather confused, but at least the code looks good:
+1. Why does removing the assertion make things faster?
+2. Why is the loop using a pointer offset ([[ptr-offset]]) faster/different at
+   all? Shouldn't the compiler have the same information on both cases?
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Adding assertions to 'help' the compiler can be counterproductive.
+#+end_notice
+
+** Rolling a bit[fn::$k$ bits, actually] less
+As we saw before, the rotation by $k$ positions takes two instructions: one to
+move $k$ into =%cl=, and one for the rotation itself. But all rotations are over
+exactly $k$, so in fact, we can precompute these:
+#+caption: Precomputing the rotations by $k$ positions. Runtime: =1.59ns/kmer= ↦ =1.41ns/kmer=.
+#+begin_src diff
+ Some(NtHashForwardIterator {
+     seq,
+     k,
+     fh,
+     current_idx: 0,
+     max_idx: seq.len() - k + 1,
++    rot_k: H_LOOKUP.map(|x| x.rotate_left(k as u32)),
+ })
+
+ ...
+
+-self.fh = self.fh.rotate_left(1) ^ h(seqi).rotate_left(self.k as u32) ^ h(seqk);
++self.fh = self.fh.rotate_left(1) ^ self.rot_k[seqi as usize] ^ h(seqk);
+#+end_src
+
+#+caption: The corresponding assembly goes from 21 to just 15 instructions for 2 loops.
+#+begin_src gas
+       │570:   movzbl       0x0(%rbp,%rax,1),%ecx
+ 16.03 │       movzbl       -0x1(%r8,%rax,1),%edx
+  0.05 │       rorx         $0x3f,%r12,%rsi            *
+  0.34 │       xor          0xa58(%rsp,%rcx,8),%rsi    *
+  0.05 │       xor          (%rbx,%rdx,8),%rsi         *
+ 32.71 │       mov          %rsi,0x8(%r15,%rax,8)
+  0.02 │       movzbl       0x1(%rbp,%rax,1),%ecx
+  0.02 │       rorx         $0x3f,%rsi,%r12            *
+  0.34 │       xor          0xa58(%rsp,%rcx,8),%r12    *
+ 17.62 │       movzbl       (%r8,%rax,1),%ecx
+  0.49 │       xor          (%rbx,%rcx,8),%r12         *
+ 32.02 │       mov          %r12,0x10(%r15,%rax,8)
+  0.08 │       add          $0x2,%rax
+       │       cmp          %rax,%rdi
+  0.14 │     ↑ jne          570                         
+#+end_src
+
+** Analysing the assembly code
+
+At this point, we cannot hope for much more. The 15 instructions fall apart as:
+- 1: increase iteration count by 2,
+- 2: compare and jump,
+- Then for each of the two unrolled iterations:
+  - 2: load two characters,
+  - 1: rotate the rolling hash,
+  - 2: xor in the two characters,
+  - 1: write back the result.
+
+At =1.41ns/kmer=, this loop should take =2.82ns= for the two iterations, or
+=2.82ns/loop * 2.6GHz = 7.3 cycles/loop=, that corresponds to just over 2
+instructions per cycle, and indeed =perf stat= shows =2.04 IPC=. Indeed, I have
+marked the critical path of xor'ing the hashes with =*= s in the assembly code,
+and we see 6 instructions that all depend on each others result, so an overhead
+of =1.3= cycle on top of that is not terrible.
+
+Still, instead of doing =x = (x^a)^b=, it would be more efficient to do =x =
+x^(a^b)=. But just parenthesizing the code like that doesn't improve the
+assembly. Probably because that would require an separate load instruction,
+since xor'ing two addresses from memory is not a thing.
+
+
 
 * TODO SIMD all the way
 - unchecked indexing
