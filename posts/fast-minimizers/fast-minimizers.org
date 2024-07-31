@@ -5,7 +5,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
-#+hugo_paired_shortcodes: notice details
+#+hugo_paired_shortcodes: %notice details
 #+date: <2024-07-12 Fri>
 
 In this post, we will develop a fast implementation of random minimizers.
@@ -214,7 +214,7 @@ and in each step recompute the minimum. The boiler plate for the ring buffer is 
 And then a sliding window implementation also becomes trivial:
 
 #+caption: The =Buffered= implementation of =SlidingMin= that buffers the last $w$ values and recomputes the minimum on each =push=.
-#+include: "code/blog/naive.rs" src rust :lines "30-"
+#+include: "code/blog/naive.rs" src rust :lines "30-48"
 
 Using this trait, we can clean up[fn::The =hash_kmers= function here is part of
 the =Hasher= trait that can be found in [[hasher]].] the implementation of the =Naive= minimizer from
@@ -331,7 +331,7 @@ original text. Thus, we don't only store elements but also their positions,
 and break ties by position.
 
 #+caption: =Rescan= implementation of =SlidingMin=.
-#+include: "code/blog/rescan.rs" src rust :lines "2-"
+#+include: "code/blog/rescan.rs" src rust :lines "2-24"
 
 *** Performance characteristics
 :PROPERTIES:
@@ -404,7 +404,7 @@ pre-processing step, but it can also be done on the fly:
 [[file:./split.svg]]
 
 #+caption: Code for the =Split= algorithm, that computes the suffix minima for each chunk exactly every $w$ iterations.
-#+include: "code/blog/split.rs" src rust :lines "2-"
+#+include: "code/blog/split.rs" src rust :lines "2-29"
 
 *** Performance characteristics
 :PROPERTIES:
@@ -900,7 +900,7 @@ Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementatio
 implicitly been using so far is simple:
 #+name: hasher
 #+caption: Wrapping the =nthash= crate with the =Hasher= trait.
-#+include: "code/blog/hash.rs" src rust :lines "-29"
+#+include: "code/blog/hash.rs" src rust :lines "-33"
 
 Unfortunately, the results are mixed:
 #+caption: Runtime in ns/kmer of methods with FxHash and ntHash.
@@ -923,7 +923,7 @@ Based on the difference above, let's investigate whether first collecting all
 hashes to a vector speeds up the other methods as well. We provide a simple
 wrapper type for this:
 #+caption: =Buffer<H>= is a =Hasher= that first collects all hashes to a vector and then iterates over them.
-#+include: "code/blog/hash.rs" src rust :lines "39-"
+#+include: "code/blog/hash.rs" src rust :lines "41-55"
 
 #+caption: Runtime in ns/kmer of methods with FxHash, ntHash, and buffered versions.
 #+attr_html: :class small
@@ -1028,7 +1028,7 @@ would be faster to do that up-front if needed, so let's remove the check.
 Next, we sprinkle in some =get_unchecked=, to avoid unnecessary bound checks.
 Both checks are provably impossible to fail, yet the compiler isn't able to
 elide them. I suspect it has something to do with the
-=NtHashForwardIterator::new()= function not being inlined, and hence the
+=NtHashIt::new()= function not being inlined, and hence the
 =next()= function not being aware of invariants checked during initialization. I
 also tried adding some additional assertions and using =unchecked_add= to
 indicate that overflow is undefined behaviour, but even then one of the branches remained.
@@ -1066,7 +1066,7 @@ At this point there are three branches left:
 Both the second and third should be redundant: we can handle the first
 iteration separately, and pre-allocate a vector that is sufficiently large.
 Let's fix the latter one first. Ideally, the compiler would check that the
-=size_hint= provided by the =NtHashForwardIterator= is large enough and that the
+=size_hint= provided by the =NtHashIt is large enough and that the
 initial =Vec::reserve()= has sufficient capacity that an overflow can not
 happen, but alas, that's not the case (also not with full lto).
 
@@ -1295,9 +1295,15 @@ At this point I am rather confused, but at least the code looks good:
 2. Why is the loop using a pointer offset ([[ptr-offset]]) faster/different at
    all? Shouldn't the compiler have the same information on both cases?
 
+
 #+attr_shortcode: takeaway
 #+begin_notice
 Adding assertions to 'help' the compiler can be counterproductive.
+#+end_notice
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Instead of using =v[i]= or iterating over a vector, use =v.as_ptr().add(i)=.[fn::In fact, Daniel Liu recommended me multiple times that pointer offsets are faster, so I'll let this be my lesson.]
 #+end_notice
 
 ** Rolling a bit[fn::$k$ bits, actually] less
@@ -1306,7 +1312,7 @@ move $k$ into =%cl=, and one for the rotation itself. But all rotations are over
 exactly $k$, so in fact, we can precompute these:
 #+caption: Precomputing the rotations by $k$ positions. Runtime: =1.59ns/kmer= ↦ =1.41ns/kmer=.
 #+begin_src diff
- Some(NtHashForwardIterator {
+ Some(NtHashIt {
      seq,
      k,
      fh,
@@ -1340,9 +1346,9 @@ exactly $k$, so in fact, we can precompute these:
   0.14 │     ↑ jne          570                         
 #+end_src
 
-** Analysing the assembly code
+*** Analysing the assembly code
 
-At this point, we cannot hope for much more. The 15 instructions fall apart as:
+At this point, we cannot hope for much fewer instructions. The 15 instructions are:
 - 1: increase iteration count by 2,
 - 2: compare and jump,
 - Then for each of the two unrolled iterations:
@@ -1351,24 +1357,211 @@ At this point, we cannot hope for much more. The 15 instructions fall apart as:
   - 2: xor in the two characters,
   - 1: write back the result.
 
-At =1.41ns/kmer=, this loop should take =2.82ns= for the two iterations, or
-=2.82ns/loop * 2.6GHz = 7.3 cycles/loop=, that corresponds to just over 2
-instructions per cycle, and indeed =perf stat= shows =2.04 IPC=. Indeed, I have
-marked the critical path of xor'ing the hashes with =*= s in the assembly code,
-and we see 6 instructions that all depend on each others result, so an overhead
-of =1.3= cycle on top of that is not terrible.
+At =1.41ns/kmer=, this loop should take =1.41ns/kmer * 2.6GHz = 3.7 cycles/kmer=
+or =7.3 cycles/loop=, which corresponds to just over 2
+instructions per cycle. Indeed, =perf stat= shows =2.04 IPC=. I have
+marked the critical path of xor'ing the hashes with =*= s in the assembly code
+above.
+The three =rorx, xor, xor= instructions have a total latency of =1+2+2=5=
+cycles, which is actually /higher/ than the =3.7 cyckes/kmer= we measure. Maybe
+the 'load' micro-up in the xor can actually be done in parallel before the
+result of the previous xor is done? Regardless, this is pretty impressive performance!
 
 Still, instead of doing =x = (x^a)^b=, it would be more efficient to do =x =
 x^(a^b)=. But just parenthesizing the code like that doesn't improve the
-assembly. Probably because that would require an separate load instruction,
-since xor'ing two addresses from memory is not a thing.
+assembly. Probably because that would require a separate load instruction,
+since xor'ing with two addresses from memory (as opposed to a memory address and
+a register) is not a thing.
+
+** Parallel it is
+As we saw above, the current ntHash implementation only uses around =2 IPC=,
+while each core should be able to execute up to 4 instructions every cycle.
+Thus, let's simply try to run two copies of our main loop in parallel:
+#+caption: Running two copies of the main loop in parallel. Runtime: =1.41ns/kmer= ↦ =1.36ns/kmer=.
+#+include: "code/blog/hash.rs" src rust :lines "89-109"
+
+Sadly, this is not nearly the two times speedup I was hoping for, but at least
+we're at =2.5 IPC= and  now, and =3.5 cycles/kmer=, even closer to the =3
+cycles/kmer= lower bound from the =xor= dependency chain. (Even though now that
+we process two independent chains, that lower bound really is only =1.5
+cycles/kmer=. Probably the code is just fully occupying some ports.) The assembly code is:
+
+#+caption: The assembly code for the parallelized version. But for /some/ reason, there are two compares again!
+#+begin_src gas
+       │8a0:┌─→cmp          %rcx,%r9
+       │    │↓ je           9ae
+ 11.67 │    │  movzbl       (%r15,%rcx,1),%edx
+  0.42 │    │  movzbl       (%r8,%rcx,1),%esi
+  5.91 │    │  rorx         $0x3f,%r14,%r14           *1
+  1.89 │    │  xor          0x1298(%rsp,%rdx,8),%r14  *1
+ 14.32 │    │  xor          (%r12,%rsi,8),%r14        *1
+  0.25 │    │  mov          (%rsp),%rdx
+ 19.19 │    │  mov          %r14,0x8(%rdx,%rcx,8)
+  0.15 │    │  movzbl       (%rdi,%rcx,1),%edx
+  5.85 │    │  rorx         $0x3f,%rbx,%rbx           *2
+  2.24 │    │  xor          0x268(%rsp,%rdx,8),%rbx   *2
+ 12.19 │    │  movzbl       0x0(%r13,%rcx,1),%edx
+  4.63 │    │  xor          (%r12,%rdx,8),%rbx        *2
+ 15.21 │    │  mov          %rbx,(%rax,%rcx,8)
+  0.03 │    │  inc          %rcx
+       │    ├──cmp          %rcx,%r9
+  6.03 │    └──jne          8a0
+#+end_src
+
+But this is just silly: At the end we compare =%rcx= with =%r9=, and if they
+are not equal, we continue with the next iteration. Then the first thing we do:
+again compare =%rcx= with =%r9=, and panic on the =unwrap= if they are equal.
+But we /just/ checked they are not equal... Again, I'm at a loss why this it the
+case. Clearly there are two =unwrap= calls in our inner loop, but since they
+check exactly the same, there really is no need for this.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Compilers are weird and not to be trusted?[fn::I wouldn't be surprised if I end
+up looking more into compilers eventually.]
+#+end_notice
+
+*** More parallel
+I tried to parallellize more by doing 3 or 4 chunks at a time, both manually as
+above and by using const generics and iterating over =[_; B]= types, but they all
+perform worse at the moment, and generate very branchy code again.
+Probably the better way to avoid all these issues is by inlining and
+interleaving the ntHash code.
+
+Instead of doing a 'high level' parallellization where we make $B$
+calls to =it.next()= in parallel, it's more efficient to 'internalize' the
+parallellization, so that all the accounting overhead is done only once.
+
+Thus, we first try this:
+#+caption: Splitting the text in $L$ parts that are processed in parallel, but without SIMD. Takes =1.15ns/kmer= for =L=2= and =1.19ns/kmer= for =L=3=, down from =1.36ns/kmer=.
+#+begin_src rust
+impl<'a, const L: usize> Iterator for NtHashParIt<'a, L> {
+    // Each iteration now returns an array of L hashes.
+    type Item = [u64; L];
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<[u64; L]> {
+        if self.current_idx == self.n {
+            return None;
+        };
+
+        if self.current_idx != 0 {
+            let i = self.current_idx - 1;
+            // Do L steps consecutively.
+            self.fh = from_fn(|l| {
+                let seqi = unsafe { *self.seq.get_unchecked(l * self.n + i) };
+                let seqk = unsafe { *self.seq.get_unchecked(l * self.n + i + self.k) };
+                self.fh[l].rotate_left(1) ^ self.rot_k[seqi as usize] ^ h(seqk)
+            });
+        }
+
+        self.current_idx += 1;
+        Some(self.fh)
+    }
+}
+#+end_src
+This is already slightly faster than the version we had. Let's try more granular parallellization:
+#+caption: With even more granular parallelization, we get =1.14ns/kmer= for =L=2= and =1.10ns/kmer= for =L=3=, down from =1.15ns/kmer=.
+#+begin_src diff
+-self.fh = from_fn(|l| {
+-    let seqi = unsafe { *self.seq.get_unchecked(l * self.n + i) };
+-    let seqk = unsafe { *self.seq.get_unchecked(l * self.n + i + self.k) };
+-    self.fh[l].rotate_left(1) ^ self.rot_k[seqi as usize] ^ h(seqk)
+-});
++let seqi: [u8; L] = from_fn(|l| unsafe { *self.seq.get_unchecked(l * self.n + i) });
++let seqk: [u8; L] = from_fn(|l| unsafe { *self.seq.get_unchecked(l * self.n + i + self.k) });
++self.fh = from_fn(|l| self.fh[l].rotate_left(1) ^ self.rot_k[seqi[l] as usize] ^ h(seqk[l]));
+#+end_src
+This latest parallel version with $L=3$ runs at =1.10ns/kmer= and =2.7 IPC=, or
+exactly =3 cycles/kmer=. I'm still not quite sure what the main bottleneck is
+though. Anyway, from Agner Fog's instruction tables and [[https://uops.info][uops.info]], I gather that
+all of =movzbl=, =rorx=, =xor=, and =mov= can do 2 per cycle, but that all
+instructions that read from memory have latency up to ~5 cycles, which sounds
+like it may be a bottleneck. But it's hard to say.
+
+** Actual SIMD, at last
+The first SIMD version is basically the same as before when using =[u64, L]=,
+but using =Simd<u64, L>= instead, with =#![feature(portable_simd)]= enabled.
+#+attr_shortcode: "SIMD version of ntHash"
+#+begin_details
+#+caption: The SIMD version is quite similar to before. It's slightly slower at =1.14ns/kmer= for =L=4=.
+#+begin_src rust
+let i = self.current_idx - 1;
+let seqi: Simd<u64, L> =
+    from_fn(|l| unsafe { *self.seq.get_unchecked(l * self.n + i) as u64 }).into();
+let seqk: Simd<u64, L> =
+    from_fn(|l| unsafe { *self.seq.get_unchecked(l * self.n + i + self.k) as u64 }) .into();
+let hi: Simd<u64, L> = from_fn(|l| self.rot_k[seqi[l] as usize]).into();
+let hk: Simd<u64, L> = from_fn(|l| h(seqk[l] as u8)).into();
+self.fh = ((self.fh << 1) | (self.fh >> 63)) ^ hi ^ hk;
+#+end_src
+#+end_details
+The main difference is that in SIMD, there is no bit-rotate instruction[fn::At
+least not with AVX256. AVX512 [[https://doc.rust-lang.org/core/arch/x86/fn._mm256_rol_epi32.html][does have it]] though.], so
+that instead we have to implement this using two shifts. Let's have a quick look
+at the generated code.
+#+caption: Assembly for the SIMD ntHash. Still lots of memory accesses and many instructions spent on packing the SIMD registers.
+#+begin_src gas
+  0.68 │c50:┌─→cmp          %r9,%rax
+  0.04 │    │↓ je           d46
+       │    │  movzbl       (%rsi,%r9,1),%r10d        ; read char from seq
+  0.04 │    │  vmovq        0x940(%rsp,%r10,8),%xmm1  ; get hash of char into xmm1 128-bit register
+ 10.70 │    │  movzbl       (%rdx,%r9,1),%r10d
+  0.51 │    │  vmovq        0x940(%rsp,%r10,8),%xmm2
+       │    │  movzbl       (%rcx,%r9,1),%r10d
+  0.16 │    │  vmovq        0x940(%rsp,%r10,8),%xmm3
+  9.83 │    │  movzbl       (%r12,%r9,1),%r10d
+  0.58 │    │  vmovq        0x940(%rsp,%r10,8),%xmm4
+  0.45 │    │  movzbl       (%r14,%r9,1),%r10d
+  0.16 │    │  vmovq        0x0(%r13,%r10,8),%xmm5
+ 10.32 │    │  movzbl       (%r15,%r9,1),%r10d
+  0.70 │    │  vmovq        0x0(%r13,%r10,8),%xmm6
+  0.30 │    │  movzbl       (%r11,%r9,1),%r10d
+  0.14 │    │  vmovq        0x0(%r13,%r10,8),%xmm7
+ 11.43 │    │  movzbl       (%rbx,%r9,1),%r10d
+  0.86 │    │  vmovq        0x0(%r13,%r10,8),%xmm8
+  0.02 │    │  vpunpcklqdq  %xmm1,%xmm2,%xmm1       ; merge xmm1 and xmm2
+  0.12 │    │  vpunpcklqdq  %xmm3,%xmm4,%xmm2       ; merge xmm3 and xmm4
+ 10.25 │    │  vinserti128  $0x1,%xmm1,%ymm2,%ymm1  ; merge xmm1 and xmm2 into ymm1 256-bit register
+  0.72 │    │  vpunpcklqdq  %xmm5,%xmm6,%xmm2       ;\
+  0.21 │    │  vpunpcklqdq  %xmm7,%xmm8,%xmm3       ; merge xmm5-8 into ymm2
+  1.45 │    │  vinserti128  $0x1,%xmm2,%ymm3,%ymm2  ;/
+ 16.62 │    │  vpxor        %ymm1,%ymm2,%ymm1       ; compute the 'delta': ymm1 ^ ymm2
+  0.51 │    │  vpsrlq       $0x3f,%ymm0,%ymm2       ; shift right
+       │    │  vpaddq       %ymm0,%ymm0,%ymm0       ; shift left = *2 = ymm0 + ymm0
+       │    │  vpor         %ymm2,%ymm0,%ymm0       ; or the two results
+ 10.66 │    │  vpxor        %ymm0,%ymm1,%ymm0       ; xor in the 'delta' term
+  2.55 │    │  vmovdqu      %ymm0,(%rdi)            ; write to memory
+       │    │  inc          %r9
+       │    │  add          $0x20,%rdi
+  0.02 │    ├──cmp          %r9,%r8
+  9.94 │    └──jne          c50
+#+end_src
+This looks rather terrible! There are many instructions to read the sequence
+characters and get their hashes, and then a number of instructions to merge
+everything into SIMD registers. The final rotate and xor operations are
+optimized, but they make up only a small part of the total runtime like this.
+
+*** SIMD table lookups
+
+So far, we have been assuming that the text can be anything. But actually,
+ntHash already is only 'seeded' for DNA characters =ACTG=, and so the =[u64;
+256]= table really only contains 4 interesting entries. So we could just use a
+=[u64; 4]=. But wait! That's exactly the size of a single SIMD register.
+Indeed, we can store them in a single SIMD register, and use a /shuffle/ instruction to
+extract them.
+
+#+attr_shortcode: assumption
+#+begin_notice
+From now on, we assume that the text is a ~&[u8]~ containing only values in ~[0, 3]~.
+#+end_notice
 
 
 
 * TODO SIMD all the way
-- unchecked indexing
-- SIMD: processing 4/8/16(?) sequences in parallel.
+- Investigate shuffles within 128bit lanes since they are much faster.
 
 * TODO Super-k-mers and canonical kmers
+
 
 #+print_bibliography:
