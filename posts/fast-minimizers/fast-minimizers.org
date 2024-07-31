@@ -350,7 +350,7 @@ $O(1)$ per iteration.]
 
 With some [[https://www.google.com/search?q=sliding%20window%20minimum][Googling]][fn::It's the third result.] I found [[https://codeforces.com/blog/entry/71687][this codeforces blog]] on
 computing sliding window minima. In the post, the idea is presented using two
-queues. My explanation below goes in a slightly different direction, but in the
+stacks. My explanation below goes in a slightly different direction, but in the
 end it comes down to the same.
 
 *Aside: Accumulating non-invertible functions.*
@@ -1479,6 +1479,17 @@ all of =movzbl=, =rorx=, =xor=, and =mov= can do 2 per cycle, but that all
 instructions that read from memory have latency up to ~5 cycles, which sounds
 like it may be a bottleneck. But it's hard to say.
 
+Note that all the methods above return a =[u64; L]= at a time. For now I'm just
+collecting those into a =Vec<[u64; L]>=. We could then either return an iterator
+over those blocks, or return a sequential iterator that traverses the entire
+vector =L= times. Or we could even transpose the data back to a =Vec<u64>=, but
+that would be somewhat slower.
+
+#+attr_shortcode: assumption
+#+begin_notice
+It's fine to return out-of-order data.
+#+end_notice
+
 ** Actual SIMD, at last
 The first SIMD version is basically the same as before when using =[u64, L]=,
 but using =Simd<u64, L>= instead, with =#![feature(portable_simd)]= enabled.
@@ -1547,20 +1558,341 @@ optimized, but they make up only a small part of the total runtime like this.
 So far, we have been assuming that the text can be anything. But actually,
 ntHash already is only 'seeded' for DNA characters =ACTG=, and so the =[u64;
 256]= table really only contains 4 interesting entries. So we could just use a
-=[u64; 4]=. But wait! That's exactly the size of a single SIMD register.
-Indeed, we can store them in a single SIMD register, and use a /shuffle/ instruction to
-extract them.
+=[u64; 4]=.
 
 #+attr_shortcode: assumption
 #+begin_notice
-From now on, we assume that the text is a ~&[u8]~ containing only values in ~[0, 3]~.
+From now on, we assume that the text is a ~&[u8]~ containing only values in ~0..=3~.
 #+end_notice
 
+That's exactly the size of a single SIMD register.
+Indeed, we can store them in a single SIMD register, and use a /shuffle/ instruction to
+extract them.
 
+Or at least that's what we would /like/ to do.
 
-* TODO SIMD all the way
-- Investigate shuffles within 128bit lanes since they are much faster.
+Sadly, there is no AVX2[fn::In *AVX512* there is [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#techs=AVX_512,Other&expand=138,140,3965&text=_mm256_permutexvar_epi64&ig_expand=5059][=_mm256_permutexvar_epi64=]] (latency 3).]
+dynamic[fn::There are *static* cross-128-bit lane shuffles that require a
+=const= shuffle argument, such as [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#text=_mm256_permute4x64_epi64&ig_expand=4931][=_mm256_permute4x64_epi64=]] (latency 3).] cross-128bit lane[fn::There is a *within-128-bit* lane dynamic
+shuffle, [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=4931,4954,4953,4949,4940,4940&text=_mm256_permutevar_pd][=_mm256_permutevar_pd=]] (latency 1)] 64-bit[fn::There is a
+*32-bit* variant, [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=4931,4954,4953,4949,4940,4940,4953,4954&text=_mm256_permutevar8x32_ps][=_mm256_permutevar8x32_ps=]] (latency 3)] shuffle available, but
+if we give up any one of these constraints we're good. Thus, we can implement the
+64-bit shuffle using the 32-bit shuffle. When we want to look up the 64-bit hash
+of a character with value/index =c=, now instead we look up the two
+32-bit parts independently, which will be at indices =2c= and =2c+1=.
 
+But instead of implementing this, let's do something simpler[fn::And not waste
+more of the author's time.].
+
+*** 32-bit hashes
+
+Everything becomes much simpler if we
+use 32-bit hashes directly! There really is no reason we need the full
+64-bit hashes to select the minimum hash of a window of size $w$ that is
+rarely more than $100$.
+And since also the 4 values in the
+dictionary now fit in 128 bits, so that we do not need cross 128-bit lane
+shuffles anymore at all! So we can now exactly use the [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=4931,4954,4953,4940,4953,4954,4954,4953,4940,4949,4949&text=_mm256_permutevar_ps][=_mm256_permutevar_ps=]]
+instruction, which even has 1 cycle latency. And also, we can now compute 8 hashes at a time instead
+of 4![fn::You'd almost ask yourself why we didn't do this from the start.]
+Somewhat annoyingly there is no =_epi32= integer version of this, so we'll have
+to cast our data to 32-bit floats and back to make the type checker happy.
+
+The new code looks like this:
+#+name: simd-32bit
+#+caption: Highlights of using SIMD permute to look up the hash values of characters. Runs in =1.66 ns/kmer=, not yet close to our best of =1.10 ns/kmer=.
+#+begin_src rust
+// Types
+const L: usize = 8;
+type T = u32;
+type S = Simd<T, L>;
+...
+// Initialization of 8x32 'tables',
+// containing a copy of the 4 32-bit values in both the high and low 128 bits.
+let table: S = b"ACTGACTG".map(|c| h(c) as T).into();
+let table_rot_k: S = b"ACTGACTG".map(|c| h(c).rotate_left(k as u32) as T).into();
+...
+// Wrap _mm256_permutevar_ps, which is typed for floats, with integer types.
+use std::mem::transmute as t;
+let permutevar_epi32 = |table: S, idx: S| t(_mm256_permutevar_ps(t(table), t(idx)));
+
+// Look up the character values.
+let hi: S = permutevar_epi32(self.table_rot_k, seqi);
+let hk: S = permutevar_epi32(self.table, seqk);
+
+// Update the rolling hash.
+// There is no SIMD rotate in AVX2 so we do it manually.
+self.fh = ((self.fh << 1) | (self.fh >> 31)) ^ hi ^ hk;
+#+end_src
+
+In the assembly, we see 16 copies of the code below, an shift-in and shift-out
+character for each of the 8 lanes.
+#+caption: Reading a single character from the sequence into a SIMD register.
+#+begin_src gas
+mov            0x20(%rsp),%rbp           ; read the offset in the sequence of current lane
+movzbl         0x0(%rbp,%rdi,1),%ebp     ; read the character
+vpinsrd        $0x2,%ebp,%xmm4,%xmm4     ; insert the read character into a SIMD register
+#+end_src
+
+*** Shared offsets
+Instead of storing all offsets on the stack, we can also put them all in a
+single SIMD register.
+
+#+caption: Using a single SIMD register with offsets. It's much slower.
+#+begin_src diff
+ // initialization
+ Some(Self {
++    offsets: from_fn(|l| (l * n) as T).into(),
+ })
+
+ // loop
+ let s_ptr = self.seq.as_ptr();
+-let seqi: S = from_fn(|l| *s_ptr.add(l * self.n + i) as T).into();
+-let seqk: S = from_fn(|l| *s_ptr.add(l * self.n + i + self.k) as T).into();
++let oi = self.offsets + S::splat(i as T);
++let ok = oi + S::splat(self.k as T);
++let seqi = oi.as_array().map(|o| *s_ptr.add(o as usize) as T).into();
++let seqk = ok.as_array().map(|o| *s_ptr.add(o as usize) as T).into();
+#+end_src
+
+In fact, this turns out worse. Now the indices are computed in SIMD, but then
+have to be extracted anyway before any lookups are done.
+I was expecting a =gather= instruction to be generated here, but maybe the 'zero
+extend' of reading a =u8= into a =u32= is preventing that.
+
+** SIMD: The Gathering
+
+*** Gathering 4 characters at a time
+But that gives a new idea! If we're anyway reading from a memory location, we
+may as well directly read of full =u32= worth of memory instead of just a =u8=.
+That could reduce the time spent on reading 4-fold.
+Thus, we make a read every fourth iteration, and then buffer the values.
+
+#+name: simd-gather-4
+#+caption: Reading a =u32= every fourth iteration. Still runs in =1.65 ns/kmer=, like Code Snippet [[simd-32bit]].
+#+begin_src rust
+pub struct NtHashSimdIt<'a> {
+    ...
+    // New buffer fields in the struct.
+    chars_i: S,
+    chars_k: S,
+}
+
+// New main loop.
+if i % 4 == 0 {
+    let p = self.seq.as_ptr() as *const u32;
+    let oi = self.offsets + S::splat(i as u32);
+    let ok = oi + S::splat(self.k as u32);
+    // Read a u32 at given byte offsets.
+    // Assumes little-endian.
+    self.chars_i = oi.as_array().map(|o| *p.byte_offset(o as isize)).into();
+    self.chars_k = ok.as_array().map(|o| *p.byte_offset(o as isize)).into();
+}
+// Extract the last 2 bits of each character.
+let seqi = self.chars_i & S::splat(0x03);
+let seqk = self.chars_k & S::splat(0x03);
+// Shift remaining characters in the buffer to the right.
+self.chars_i >>= S::splat(8);
+self.chars_k >>= S::splat(8);
+#+end_src
+
+The assembly looks very interesting now:
+#+caption: Assembly code for gathering a =u32= every fourth iteration. The 4 =gather= (=vpgatherqd=) instructions together take 80% of the time!
+#+begin_src gas
+  0.04 │1450:┌─→vpsrld         $0x1f,%ymm3,%ymm7
+  0.73 │  │  │  vpaddd         %ymm3,%ymm3,%ymm3
+  0.89 │  │  │  vpor           %ymm7,%ymm3,%ymm3
+  1.39 │  │  │  vpbroadcastd   -0x544de(%rip),%ymm7           ; Splat [3,3,3,3] for the mask
+  0.05 │  │  │  vpand          %ymm7,%ymm6,%ymm8              ; mask low 2 bits
+  0.90 │  │  │  vpermilps      %ymm8,%ymm2,%ymm8              ; table lookup 1
+  0.78 │  │  │  vpxor          %ymm3,%ymm8,%ymm3              ; xor in the results
+  1.71 │  │  │  vpand          %ymm7,%ymm5,%ymm7              ; mask low 2 bits
+  0.03 │  │  │  vpermilps      %ymm7,%ymm4,%ymm7              ; table lookup 2
+  2.23 │  │  │  vpxor          %ymm7,%ymm3,%ymm3              ; xor in the result
+  0.01 │  │  │  vpsrld         $0x8,%ymm5,%ymm5               ; shift remaining characters
+  1.34 │  │  │  vpsrld         $0x8,%ymm6,%ymm6               ; shift remaining characters
+  0.01 │  │  │  vmovdqu        %ymm3,(%rax)
+  1.42 │  │  │  add            $0x20,%rax
+  0.01 │  │  │  inc            %rdx
+  1.21 │  │  │  cmp            %rdx,%rcx
+       │  │  │↑ je             12de
+  0.01 │149e:│  cmp            %rdx,%rdi
+       │  │  │↓ je             152b
+  0.03 │  │  │  test           $0x3,%dl
+  1.26 │  └──│─ jne            1450                           ; loop when i%4 != 0
+  0.01 │     │  vmovd          %edx,%xmm5                     ; from here on: read sequence
+  0.73 │     │  vpbroadcastd   %xmm5,%ymm5
+       │     │  vpaddd         %ymm0,%ymm5,%ymm5
+  0.09 │     │  vpmovzxdq      %xmm5,%ymm6
+  0.01 │     │  vextracti128   $0x1,%ymm5,%xmm7
+  0.89 │     │  vpmovzxdq      %xmm7,%ymm7
+       │     │  vpcmpeqd       %xmm8,%xmm8,%xmm8
+  0.09 │     │  vpxor          %xmm9,%xmm9,%xmm9
+*21.19*│     │  vpgatherqd     %xmm8,(%r12,%ymm7,1),%xmm9     ; slow gather instruction
+  0.64 │     │  vpcmpeqd       %xmm7,%xmm7,%xmm7                                            
+       │     │  vpxor          %xmm8,%xmm8,%xmm8                                            
+*19.20*│     │  vpgatherqd     %xmm7,(%r12,%ymm6,1),%xmm8     ; slow gather instruction
+  0.65 │     │  vpaddd         %ymm1,%ymm5,%ymm5
+       │     │  vextracti128   $0x1,%ymm5,%xmm6
+       │     │  vpmovzxdq      %xmm6,%ymm6
+       │     │  vpcmpeqd       %xmm7,%xmm7,%xmm7
+  0.83 │     │  vpxor          %xmm10,%xmm10,%xmm10
+*20.09*│     │  vpgatherqd     %xmm7,(%r12,%ymm6,1),%xmm10    ; slow gather instruction
+  0.61 │     │  vinserti128    $0x1,%xmm9,%ymm8,%ymm6                                       
+       │     │  vpmovzxdq      %xmm5,%ymm5
+       │     │  vpcmpeqd       %xmm7,%xmm7,%xmm7
+       │     │  vpxor          %xmm8,%xmm8,%xmm8
+*20.23*│     │  vpgatherqd     %xmm7,(%r12,%ymm5,1),%xmm8     ; slow gather instruction
+  0.65 │     │  vinserti128    $0x1,%xmm10,%ymm8,%ymm5
+       │     └──jmp            1450
+#+end_src
+
+The first very clear observation is that even though we only gather every fourth
+iteration, those 4 instructions take up 80% of the time! Clearly, getting the
+data from memory into the SIMD registers is the bottleneck here. What is
+somewhat surprising is that line 15 and 16 of [[simd-gather-4]] are each turned into
+two =gather= instructions. As it turns out, there are [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=554,3771,3707,3771,3768,3707,3771,3707&techs=AVX_ALL&text=_mm256_i*gather_epi32][two very similar gather
+instructions]]:
+- =_mm256_i64father_epi32=, which takes a 256-bit SIMD register with four 64-bit
+  indices and returns a 128-bit SIMD register with four 32-bit values.
+- =_mm256_i32father_epi32=, which takes a 256-bit SIMD register with eight 32-bit
+  indices and returns a 256-bit SIMD register with eight 32-bit values.
+It would be slightly nicer to use the second version, but in the end I suspect
+it wouldn't matter much for performance, since the same number of entries is
+read anyway.
+
+*** Gathering 8 characters at a time
+
+At this point, it is very clear that the gathering is the bottleneck. Since
+it is already split into two instructions anyway, we may as well fetch a =u64=
+at a time. We then have to do some shuffling to those into two SIMD registers of
+=u32= values, one with the first 32 bits of each =u64=, and one with the second 32 bits.
+Then after 4 iterations, we can cheaply swap in the remaining 32 bits.
+
+#+caption: Gathering a full =u64= at a time requires slightly more messy code, but now runs in =1.05 ns/kmer=! /Finally/ improving the =1.10 ns/kmer= non-SIMD best so far.
+#+begin_src rust
+pub struct NtHashSimdIt<'a> {
+    offsets: Simd<*const u8, 4>,
+    offsets_next: Simd<*const u8, 4>,
+    chars_i: Simd<u32, 4>,
+    chars_k: Simd<u32, 4>,
+    chars_i_next: Simd<u32, 4>,
+    chars_k_next: Simd<u32, 4>,
+}
+
+// Every 8th iteration, read a u64 of incoming and outgoing data for each of the 8 chunks.
+if i % 8 == 0 {
+    let oi1 = self.offsets.wrapping_add(Simd::splat(i));
+    let oi2 = self.offsets_next.wrapping_add(Simd::splat(i));
+    let ok1 = oi1.wrapping_add(Simd::splat(self.k));
+    let ok2 = oi2.wrapping_add(Simd::splat(self.k));
+
+    // i1, k1: The next 64bits for the first 4 chunks.
+    // i2, k2: The next 64bits for the second 4 chunks.
+    // The inner transmute makes the *u8 into a *u32, which assumes little-endian.
+    // The outer transmute makes the [u64, 4] into a [u32, 8].
+    let chars_i1: Simd<u32, 8> =
+        transmute(Simd::<u64, 4>::gather_ptr(transmute(oi1)));
+    let chars_i2: Simd<u32, 8> =
+        transmute(Simd::<u64, 4>::gather_ptr(transmute(oi2)));
+    let chars_k1: Simd<u32, 8> =
+        transmute(Simd::<u64, 4>::gather_ptr(transmute(ok1)));
+    let chars_k2: Simd<u32, 8> =
+        transmute(Simd::<u64, 4>::gather_ptr(transmute(ok2)));
+
+    // The upcoming 32 bits for each chunk.
+    // The 32 bits after that for each chunk.
+    (self.chars_i, self.chars_i_next) = chars_i1.deinterleave(chars_i2);
+    (self.chars_k, self.chars_k_next) = chars_k1.deinterleave(chars_k2);
+}
+// After 4 iterations, swap in the next 32 bits.
+if i % 8 == 4 {
+    self.chars_i = self.chars_i_next;
+    self.chars_k = self.chars_k_next;
+}
+#+end_src
+
+=perf stat= now shows that the total time on =gather= instructions has gone down
+from =80%= to =67%=. Still quite some room for improvement if we could make the
+input faster. The =deinterleave= is translated to some [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=554,6050,6050,6050&text=_mm256_shuffle_ps][=vshufps=]] (latency 1) and
+[[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=554,6050,6050,6050,4932&text=vpermpd&techs=AVX_ALL][=vpermpd=]] (latency 3) instructions as follows:
+#+caption: Snippet of the generated assembly for the =deinterleave= after two =gather= instructions.
+#+begin_src gas
+*15.25*│        vpgatherqq     %ymm12,0x0(,%ymm10,1),%ymm11  ; gather to yxx11
+                ...
+*17.27*│        vpgatherqq     %ymm12,0x0(,%ymm7,1),%ymm10   ; gather to yxx10
+                ...
+  0.70 │        vshufps        $0x88,%ymm10,%ymm11,%ymm9     ; extract low 32 bits
+  0.18 │        vpermpd        $0xd8,%ymm9,%ymm9             ; shuffle
+       │        vshufps        $0xdd,%ymm10,%ymm11,%ymm10    ; extract high 32 bits
+  0.07 │        vpermpd        $0xd8,%ymm10,%ymm10           ; shuffle
+#+end_src
+
+*** Gathering 32 characters at a time
+
+Clearly, streaming the input is still a limitation. But we have one last trick
+available. We already assume that the input takes 2-bit values in =0..=3=, so that of
+each byte we read, 6 bits are wasted. Instead, let's assume that the input is
+already bit-packed!
+
+#+attr_shortcode: assumption
+#+begin_notice
+The text is 2-bit encoded and bit-packed.
+#+end_notice
+
+For now I'll just keep using the same =&[u8]= type for the text, but in the
+final API it would be cleaner to create a wrapper type.
+
+The code is mostly similar to before, with the change that we now shift out only
+2 bits instead of 8 at the end of every iteration.
+One more change is that we can't simply read data at every 2-bit offset.
+Specifically, we can't necessarily read a =u64= at position =i= and a =u64= at
+position =i+k= at the same time. Thus, we separate the updates for the start and
+end positions of the window. We should then also initialize =self.chars_k= with the
+leading bits.
+
+#+caption: When using bit-packed data, we must read the position-=i= and position-=i+k= data separately. Runtime goes from =1.05 ns/kmer= to =0.17 ns/kmer=.
+#+begin_src rust
+let read = |i| {
+    let oi1 = self.offsets.wrapping_add(Simd::splat(i));
+    let oi2 = self.offsets_next.wrapping_add(Simd::splat(i));
+    let chars_i1: Simd<u32, 8> = transmute(Simd::<u64, 4>::gather_ptr(transmute(oi1)));
+    let chars_i2: Simd<u32, 8> = transmute(Simd::<u64, 4>::gather_ptr(transmute(oi2)));
+    chars_i1.deinterleave(chars_i2)
+};
+if i % 32 == 0 {
+    (self.chars_i, self.chars_i_next) = read(i);
+}
+if i % 32 == 16 {
+    self.chars_i = self.chars_i_next;
+}
+if (i + self.k) % 32 == 0 {
+    (self.chars_k, self.chars_k_next) = read(i + self.k);
+}
+if (i + self.k) % 32 == 16 {
+    self.chars_k = self.chars_k_next;
+}
+#+end_src
+
+Yes, you read that right, =0.17 ns/kmer= :) That's =0.44 cycles/kmer=, and /way/
+faster than anything we had before.
+
+#+attr_shortcode: "The full code for SIMD-based hashing of bitpacked data is here."
+#+begin_details
+#+caption: Full source of the SIMD ntHash with bit-packed data.
+#+include: "code/blog/nthash.rs" src rust :lines "185-"
+#+end_details
+
+The four =gather= instructions only take around 30% of the total time now, and
+thus aren't nearly as much of a bottleneck anymore. =perf stat= shows that there
+are nearly no branch misses, and =2.43 IPC=, which is good but actually not
+quite perfect yet.
+
+** Deeper down the rabbit hole
+*** TODO 16-bit hashes?
+*** TODO Reusing the gathers?
+
+* TODO SIMD sliding window
 * TODO Super-k-mers and canonical kmers
 
 
