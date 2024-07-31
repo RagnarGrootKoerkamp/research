@@ -1888,9 +1888,60 @@ thus aren't nearly as much of a bottleneck anymore. =perf stat= shows that there
 are nearly no branch misses, and =2.43 IPC=, which is good but actually not
 quite perfect yet.
 
+*** Reusing the gathers
+Each character is currently read twice: once when it enters the sliding window,
+and once when it exits. It would be more efficient to reuse the first read
+instead of re-reading from memory.
+When $k\geq 32$, this is actually quite straightforward: At some point $(i+k)
+\bmod 32 = 0$,
+and the next 32 characters/64 bits of data are read at position $i+k$.
+Then $k$ iterations later, $i$ itself is equal to that same value, and exactly
+the same data is read. Thus, we can buffer the data read for position $i+k$ and
+use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
+32$. For larger $k$. For larger $k$, it could still be done but needs a larger buffer.
+#+caption: Reusing the =gather= at position $i+k$ for position $i$ when $k\leq 32$. Runtime goes from =0.17 ns/kmer= to =0.15 ns/kmer=.
+#+begin_src diff
+ pub struct NtHashPackedSimdIt<'a> {
+     ...
++    chars_k_copy: S,
++    chars_k_next_copy: S,
+ }
+
+
+ if i % 32 == 0 {
++    if self.k <= 32 {
++        self.chars_i = self.chars_k_copy;
++        self.chars_i_next = self.chars_k_next_copy;
++    } else {
+        (self.chars_i, self.chars_i_next) = read(i);
++    }
+ }
+ if i % 32 == 16 {
+     self.chars_i = self.chars_i_next;
+ }
+ if (i + self.k) % 32 == 0 {
+     (self.chars_k, self.chars_k_next) = read(i + self.k);
++    self.chars_k_copy = self.chars_k;
++    self.chars_k_next_copy = self.chars_k_next;
+ }
+ if (i + self.k) % 32 == 16 {
+     self.chars_k = self.chars_k_next;
+ }
+#+end_src
+
 ** Deeper down the rabbit hole
 *** TODO 16-bit hashes?
-*** TODO Reusing the gathers?
+
+#+attr_shortcode: takeaway
+#+begin_notice
+We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.17 ns/kmer= by using
+32-bit hashes, a bit-packed input, and by using SIMD to parallellize over chunks
+of the input. 17x speedup!
+#+end_notice
+
+** TODO Some more notes about ntHash
+
+** TODO But what about a simple multiply hash
 
 * TODO SIMD sliding window
 * TODO Super-k-mers and canonical kmers
