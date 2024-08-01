@@ -67,11 +67,11 @@ minimizer kmers and their positions. This information is sufficient to /sketch/
 the text.
 
 #+name: problem-a
-#+caption: A trait that defines Problem A and returns the set of kmers of the input.
+#+caption: A trait that defines Problem A and returns the set of kmers of the input. As to why this takes a =&mut self= instead of a =&self=, see [[#cached-vec]].
 #+begin_src rust
 pub trait Minimizer {
     /// Problem A: The absolute positions of all minimizers in the text.
-    fn minimizer_positions(&self, text: &[u8]) -> Vec<usize>;
+    fn minimizer_positions(&mut self, text: &[u8]) -> Vec<usize>;
 }
 #+end_src
 
@@ -94,7 +94,7 @@ pub trait Minimizer {
     ...
 
     /// Problem B: For each window, the absolute position in the text of its minimizer.
-    fn window_minimizers(&self, text: &[u8]) -> Vec<usize>;
+    fn window_minimizers(&mut self, text: &[u8]) -> Vec<usize>;
 }
 #+end_src
 
@@ -122,7 +122,7 @@ pub trait Minimizer {
     ...
 
     /// Problem C: The super-k-mers of the text.
-    fn super_kmers(&self, text: &[u8]) -> Vec<SuperKmer>;
+    fn super_kmers(&mut self, text: &[u8]) -> Vec<SuperKmer>;
 }
 #+end_src
 
@@ -300,7 +300,7 @@ scan each position just under two times.
 
 *** Performance characteristics
 :PROPERTIES:
-:CUSTOM_ID: queue-performance
+:CUSTOM_ID: jumping-performance
 :END:
 
 One benefit of this method is that it is completely branchless. Each iteration of
@@ -896,6 +896,20 @@ $$
 where $f$ is a static table lookup that maps each character to some fixed random
 value. (See also [[file:../nthash.org][this post on ntHash]]).
 
+The main benefit of this method over Karp-Rabin hashing is that typically table
+lookups and bit rotate instructions are much faster than multiplications.
+
+One limitation of NtHash is that it is /periodic/: when $k> 64$, characters
+that are exactly 64 positions apart will have the same rotation applies to their
+$f(x_i)$. This means that the hashes of =A....A= and =B....B= are be the same,
+and similarly the hashes of =A....B= and =B....A= are the same. NtHash2
+[cite:@nthash2] fixes this by using multiple rotation periods, but we will stick
+with the original NtHash. In practice, minimizers with $k> 64$ are rarely
+used anyway, and even if so, then the probability of hash collisions between the
+$w$ k-mers in a window should be small enough.
+
+*** The =nthash= crate
+
 Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementation of the =Hasher= trait that we've
 implicitly been using so far is simple:
 #+name: hasher
@@ -1076,7 +1090,7 @@ using =.collect::<Vec<_>>()=. Thus, let's roll our own.
 First, we can manually reserve the vector capacity and then fill it:
 #+caption: Even with a manually reserved vector, there is an impossible-to-reach call to =grow_one=.
 #+begin_src rust
-fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
+fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
     let len = t.len() - k + 1;
     let mut v = Vec::with_capacity(len);
     let mut it = self.hasher.hash_kmers(k, t);
@@ -1126,7 +1140,7 @@ Anyway, I suppose we'll just make a default vector with the right
 /size/ and then fill it, so we can completely drop the =push= call.
 #+caption: Using a fixed-size vector drops the =grow= check! Runtime: =1.94ns/kmer= ↦ =1.71ns/kmer=.
 #+begin_src rust
-fn hash_kmers(&self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
+fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
     let len = t.len() - k + 1;
     let mut v = vec![H::Out::default(); len];
     let mut it = self.hasher.hash_kmers(k, t);
@@ -1598,6 +1612,15 @@ of 4![fn::You'd almost ask yourself why we didn't do this from the start.]
 Somewhat annoyingly there is no =_epi32= integer version of this, so we'll have
 to cast our data to 32-bit floats and back to make the type checker happy.
 
+#+attr_shortcode: assumption
+#+begin_notice
+We assume that 32-bit ntHashes are sufficient.
+
+The lower periodicity causes some
+collisions for $k> 32$, but they will still be rare and the number of k-mers in
+a window $w$ that we're minimizing over is small anyway.
+#+end_notice
+
 The new code looks like this:
 #+name: simd-32bit
 #+caption: Highlights of using SIMD permute to look up the hash values of characters. Runs in =1.66 ns/kmer=, not yet close to our best of =1.10 ns/kmer=.
@@ -1884,9 +1907,10 @@ faster than anything we had before.
 #+end_details
 
 The four =gather= instructions only take around 30% of the total time now, and
-thus aren't nearly as much of a bottleneck anymore. =perf stat= shows that there
-are nearly no branch misses, and =2.43 IPC=, which is good but actually not
-quite perfect yet.
+thus aren't nearly as much of a bottleneck anymore.
+
+At this point, I thought we were done and not much further improvement would be
+possible. But I was wrong.
 
 *** Reusing the gathers
 Each character is currently read twice: once when it enters the sliding window,
@@ -1899,7 +1923,7 @@ Then $k$ iterations later, $i$ itself is equal to that same value, and exactly
 the same data is read. Thus, we can buffer the data read for position $i+k$ and
 use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
 32$. For larger $k$. For larger $k$, it could still be done but needs a larger buffer.
-#+caption: Reusing the =gather= at position $i+k$ for position $i$ when $k\leq 32$. Runtime goes from =0.17 ns/kmer= to =0.15 ns/kmer=.
+#+caption: Reusing the =gather= at position $i+k$ for position $i$ when $k\leq 32$. Runtime goes from =0.17 ns/kmer= to =0.155 ns/kmer=.
 #+begin_src diff
  pub struct NtHashPackedSimdIt<'a> {
      ...
@@ -1929,19 +1953,466 @@ use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
  }
 #+end_src
 
-** Deeper down the rabbit hole
-*** TODO 16-bit hashes?
+In each iteration we now check whether $i\bmod 32 \equiv 0$ and $i\bmod 32\equiv
+16$. It's more efficient to first do a single check whether $i\bmod 16\equiv 0$,
+and only then check which of the two cases it is, since that saves a compare and
+jump in the main loop. That brings the runtime down to =0.145 ns/kmer=, or
+precisely 3 clock cycles per 8 hashes.
+
+One drawback of the above is that when $k$ is indeed small, we now have a
+useless if statement and a bunch of unnecessary code for =read(i)= is generated.
+So let's put this condition behind a generic:
+#+caption: Checking whether $k\leq 32$ ahead of time saves a branch.chars_i= and =self.chars_k= variables in registers again. Runtime goes from =0.145 ns/kmer= to =0.135 ns/kmer=.
+#+begin_src diff
+-pub struct NtHashSimd;
++pub struct NtHashSimd<const SMALL_K: bool>;
+
+-pub struct NtHashPackedSimdIt<'a> { .. }
++pub struct NtHashPackedSimdIt<'a, const SMALL_K: bool> { .. }
+
+ fn next(&mut self) -> Option<S> {
+     ...
+     if i % 16 == 0 {
+         if i % 32 == 0 {
+-            if self.k <= 32 {
++            if SMALL_K {
+                 self.chars_i = self.chars_k_copy;
+                 self.chars_i_next = self.chars_k_next_copy;
+             } else {
+                 (self.chars_i, self.chars_i_next) = read(i);
+             }
+         }
+     }
+     ...
+ }
+#+end_src
+
+At this point, =perf stat= shows that there are nearly no branch misses, and
+=2.43 IPC=, which is good but actually not that close to =4=. Again this makes
+me wonder what the actual bottleneck is.  Remember [[*Parallel it is]]? Where we
+processed two chunks in parallel? Maybe we should eventually try that again.
+
+** Fixing the benchmark
+:PROPERTIES:
+:CUSTOM_ID: cached-vec
+:END:
+At this point, =perf record= shows:
+#+caption: =perf record= shows that only just over half the time is actually spent in =hash_kmers=.
+#+begin_src txt
+  43.89%  bench-3dc28953a  bench-3dc28953a01a51f9  <BufferPar<_,H> as ParHasher<_>>::hash_kmers
+  41.57%  bench-3dc28953a  libc.so.6               0x0000000000167f4a
+#+end_src
+Surely, this other part has something to do with either allocating or dropping
+the vector to which we collect. Let's fix that by reusing the vector between iterations.
+
+Thus, we now make all our =Hasher= instances /statefull/ to give them the
+opportunity to reuse their allocated memory between iterations. This is what
+requires e.g. =Hasher::hash_kmers= to take a =&mut self=: so that it can use and
+modify this state.
+
+The new caching hasher looks like this:
+#+caption: The new =Cached= hasher reuses the allocated buffer between usages. Runtime goes from =0.135 ns/kmer= to =0.102 ns/kmer=.
+#+include: "code/blog/hash.rs" src rust :lines "151-"
+
+Now, =perf= again shows that over 90% of time is spent in the =hash_kmers=
+function, and indeed the runtime improves significantly: =0.102 ns/kmer=![fn::Maybe it's time to switch to picoseconds/ps?]
+And also, we're at exactly =3 IPC= now, which at last seems quite reasonable.
 
 #+attr_shortcode: takeaway
 #+begin_notice
-We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.17 ns/kmer= by using
+We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.102 ns/kmer= by using
 32-bit hashes, a bit-packed input, and by using SIMD to parallellize over chunks
-of the input. 17x speedup!
+of the input. 28x speedup!
 #+end_notice
 
-** TODO Some more notes about ntHash
+*** One last branch
+At this point, there is also still one redundant branch due to the =unwrap= when
+iterating over the vector.
+#+caption: The =it.next().unwrap()= causes a redundant branch that's never taken.
+#+begin_src rust
+for i in 0..n {
+    let hs = it.next().unwrap();
+    for j in 0..L {
+        unsafe { self.v.get_unchecked_mut(i)[j] = hs[j] };
+    }
+}
+#+end_src
+I tried replacing it by =unwrap_unchecked=, but that creates slower code. I
+also tried removing the case that returns =None= completely, which does remove
+branch, but anyway the runtime of the code is the same, most likely since
+parsing the instructions isn't the bottleneck anyway.
 
-** TODO But what about a simple multiply hash
+
+
+** Analysis: Machine code analysis
+It would be great to know what the actual bottleneck of the code is now. One way
+to (try to) find out is by using LLVM's Machine Code Analyzer (LLVM-mca). First,
+we must determine the loop to analyse. For simplicity, let's exclude the input
+gathering, and only focus on the nthash computation, that covers around 70% of
+the time:
+#+attr_shortcode: "Assembly code of the hot loop."
+#+begin_details
+#+caption: The current hot loop.
+#+begin_src gas
+  5.89 │1530:┌─→vmovdqa        0x1a0(%rsp),%ymm6
+  0.10 │1539:│  vmovdqa        0x160(%rsp),%ymm7
+  4.07 │     │  vpsrld         $0x2,%ymm7,%ymm8
+  1.60 │     │  vmovdqa        %ymm8,0x160(%rsp)
+ 13.26 │     │  vpsrld         $0x2,%ymm6,%ymm8
+  0.03 │     │  vmovdqa        %ymm8,0x1a0(%rsp)
+  2.31 │     │  vpsrld         $0x1f,%ymm2,%ymm8
+  0.53 │     │  vpaddd         %ymm2,%ymm2,%ymm2
+  7.44 │     │  vpor           %ymm2,%ymm8,%ymm2
+  0.06 │     │  vpbroadcastd   -0x5b12c(%rip),%ymm8        # a8938 <.LCPI27_11>
+  2.14 │     │  vpand          %ymm7,%ymm8,%ymm7
+  0.41 │     │  vpermilps      %ymm7,%ymm0,%ymm7
+  8.60 │     │  vpxor          %ymm7,%ymm2,%ymm2
+  0.07 │     │  vpand          %ymm6,%ymm8,%ymm6
+  2.21 │     │  vpermilps      %ymm6,%ymm3,%ymm6
+  2.13 │     │  vpxor          %ymm6,%ymm2,%ymm2
+       │     │unsafe { v.get_unchecked_mut(i)[j] = hs[j] };
+  9.16 │     │  vmovdqu        %ymm2,(%rax)
+  0.01 │     │  inc            %rdx
+  1.89 │     │  add            $0x20,%rax
+  1.82 │     │  cmp            %rdx,%rcx
+       │     │↑ je             13e9
+       │     │if self.current_idx == self.n {
+  6.34 │15a2:│  cmp            %rdx,%r12
+       │     │↓ je             16f2
+       │     │if i % 16 == 0 {
+  0.06 │     │  test           $0xf,%dl
+       │     │↓ je             15d0
+       │     │if (i + self.k) % 16 == 0 {
+  1.76 │     │  lea            (%r8,%rdx,1),%rsi
+  0.10 │     ├──test           $0xf,%sil
+  1.95 │     └──jne            1530                                                
+#+end_src
+#+end_details
+
+We can use [[https://github.com/pacak/cargo-show-asm][=carg-show-asm=]] to conveniently extract the assembly code.
+First, we mark the =hash_kmers= function as =#[inline(never)]= so that we can
+find its function. Then we can get the assembly code of it using:
+#+caption: =cargo asm= invocation to get the AT&T style assembly for the =hash_kmers= function.
+#+begin_src sh
+cargo asm --bench bench hash_kmers --att
+#+end_src
+This outputs the full function, including setup and cleanup. We manually copy
+the assembly corresponding to the inner loop to a separate file.
+
+#+attr_shortcode: "Extracted assembly code"
+#+begin_details
+#+caption: The extracted assembly code has some minor differences in ordering from the one before, but it mostly the same.
+#+begin_src gas
+	vmovdqa 608(%rsp), %ymm7
+	vmovdqa 544(%rsp), %ymm8
+	vpsrld $2, %ymm8, %ymm9
+	vmovdqa %ymm9, 544(%rsp)
+	vpsrld $2, %ymm7, %ymm9
+	vmovdqa %ymm9, 608(%rsp)
+	vpand %ymm2, %ymm8, %ymm8
+	vpermilps %ymm8, %ymm3, %ymm8
+	vpand %ymm2, %ymm7, %ymm7
+	vpermilps %ymm7, %ymm4, %ymm7
+	vxorps %ymm7, %ymm8, %ymm7
+	vpsrld $31, %ymm0, %ymm8
+	vpaddd %ymm0, %ymm0, %ymm0
+	vpor %ymm0, %ymm8, %ymm0
+	vxorps %ymm0, %ymm7, %ymm0
+	vmovups %ymm0, (%rdx)
+	incq %rsi
+	addq $32, %rdx
+	cmpq %rsi, %rcx
+	je .LBB116_34
+	cmpq %rsi, %rax
+	je .LBB116_35
+	testb $15, %sil
+	je .LBB116_23
+	leaq 21(%rsi), %rdi
+	testb $15, %dil
+	jne .LBB116_30
+#+end_src
+#+end_details
+
+Then, we can run LLVM-mca on this code: =llvm-mca < assembly=, optionally with
+some flags such as =--all-stats=, =--all-view=, =--bottleneck-analysis=, and =--timeline=. I
+highly encourage you to run it yourself and have a closer look at the output.
+
+First, the output contains some high level statistics:
+#+caption: According to LLVM-mca, the max inverse throughput is 5 cycles per loop.
+#+begin_src txt
+Iterations:        100
+Instructions:      2700
+Total Cycles:      558
+Total uOps:        3000
+
+Dispatch Width:    6
+uOps Per Cycle:    5.38
+IPC:               4.84
+Block RThroughput: 5.0
+#+end_src
+We wee that the it reports the maximum throughput of this block at one iteration
+every 5 cycles. But our benchmark already showed that we can do 1 iteration
+every 3 cycles, so I'm confused here. Also the dispatch width of 6 and =4.84
+IPC= seem unreasonably high, but maybe I was using the wrong numbers for my CPU
+(a =i7 10750H=).
+
+Then, we get a table of latency and throughput values.
+#+attr_shortcode: "Latency and throughput table"
+#+begin_details
+#+caption: MicroOps, latency, and throughput numbers.
+#+begin_src txt
+[1]: #uOps
+[2]: Latency
+[3]: RThroughput
+[4]: MayLoad
+[5]: MayStore
+[6]: HasSideEffects (U)
+
+[1]    [2]    [3]    [4]    [5]    [6]    Instructions:
+ 1      7     0.50    *                   vmovdqa	608(%rsp), %ymm7
+ 1      7     0.50    *                   vmovdqa	544(%rsp), %ymm8
+ 1      1     0.50                        vpsrld	$2, %ymm8, %ymm9
+ 2      1     1.00           *            vmovdqa	%ymm9, 544(%rsp)
+ 1      1     0.50                        vpsrld	$2, %ymm7, %ymm9
+ 2      1     1.00           *            vmovdqa	%ymm9, 608(%rsp)
+ 1      1     0.33                        vpand	%ymm2, %ymm8, %ymm8
+ 1      1     1.00                        vpermilps	%ymm8, %ymm3, %ymm8
+ 1      1     0.33                        vpand	%ymm2, %ymm7, %ymm7
+ 1      1     1.00                        vpermilps	%ymm7, %ymm4, %ymm7
+ 1      1     0.33                        vxorps	%ymm7, %ymm8, %ymm7
+ 1      1     0.50                        vpsrld	$31, %ymm0, %ymm8
+ 1      1     0.33                        vpaddd	%ymm0, %ymm0, %ymm0
+ 1      1     0.33                        vpor	%ymm0, %ymm8, %ymm0
+ 1      1     0.33                        vxorps	%ymm0, %ymm7, %ymm0
+ 2      1     1.00           *            vmovups	%ymm0, (%rdx)
+ 1      1     0.25                        incq	%rsi
+ 1      1     0.25                        addq	$32, %rdx
+ 1      1     0.25                        cmpq	%rsi, %rcx
+ 1      1     0.50                        je	.LBB116_34
+ 1      1     0.25                        cmpq	%rsi, %rax
+ 1      1     0.50                        je	.LBB116_35
+ 1      1     0.25                        testb	$15, %sil
+ 1      1     0.50                        je	.LBB116_23
+ 1      1     0.50                        leaq	21(%rsi), %rdi
+ 1      1     0.25                        testb	$15, %dil
+ 1      1     0.50                        jne	.LBB116_30
+#+end_src
+#+end_details
+
+And lastly, we see which ports every instruction can execute on. The top line is
+a summary of total usage of each port.
+
+#+attr_shortcode: "Port usage table"
+#+begin_details
+#+caption: Port usage for each instruction. Ports 1, 2, 5, and 6 are used 5.5 times every iteration.
+#+begin_src txt
+Resources:
+[0]   - SKLDivider
+[1]   - SKLFPDivider
+[2]   - SKLPort0
+[3]   - SKLPort1
+[4]   - SKLPort2
+[5]   - SKLPort3
+[6]   - SKLPort4
+[7]   - SKLPort5
+[8]   - SKLPort6
+[9]   - SKLPort7
+
+
+Resource pressure per iteration:
+[0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]
+ -      -     5.51   5.49   1.67   1.67   3.00   5.50   5.50   1.66
+
+Resource pressure by instruction:
+[0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]    Instructions:
+ -      -      -      -     0.33   0.67    -      -      -      -     vmovdqa	608(%rsp), %ymm7
+ -      -      -      -     0.67   0.33    -      -      -      -     vmovdqa	544(%rsp), %ymm8
+ -      -     0.05   0.95    -      -      -      -      -      -     vpsrld	$2, %ymm8, %ymm9
+ -      -      -      -     0.31   0.32   1.00    -      -     0.37   vmovdqa	%ymm9, 544(%rsp)
+ -      -     0.02   0.98    -      -      -      -      -      -     vpsrld	$2, %ymm7, %ymm9
+ -      -      -      -     0.32   0.34   1.00    -      -     0.34   vmovdqa	%ymm9, 608(%rsp)
+ -      -      -      -      -      -      -     1.00    -      -     vpand	%ymm2, %ymm8, %ymm8
+ -      -      -      -      -      -      -     1.00    -      -     vpermilps	%ymm8, %ymm3, %ymm8
+ -      -     0.51   0.49    -      -      -      -      -      -     vpand	%ymm2, %ymm7, %ymm7
+ -      -      -      -      -      -      -     1.00    -      -     vpermilps	%ymm7, %ymm4, %ymm7
+ -      -     0.99    -      -      -      -     0.01    -      -     vxorps	%ymm7, %ymm8, %ymm7
+ -      -     0.48   0.52    -      -      -      -      -      -     vpsrld	$31, %ymm0, %ymm8
+ -      -     0.51   0.48    -      -      -     0.01    -      -     vpaddd	%ymm0, %ymm0, %ymm0
+ -      -     0.48    -      -      -      -     0.52    -      -     vpor	%ymm0, %ymm8, %ymm0
+ -      -     0.99    -      -      -      -     0.01    -      -     vxorps	%ymm0, %ymm7, %ymm0
+ -      -      -      -     0.04   0.01   1.00    -      -     0.95   vmovups	%ymm0, (%rdx)
+ -      -     0.01   0.02    -      -      -      -     0.97    -     incq	%rsi
+ -      -      -     0.04    -      -      -     0.01   0.95    -     addq	$32, %rdx
+ -      -      -     0.48    -      -      -     0.01   0.51    -     cmpq	%rsi, %rcx
+ -      -      -      -      -      -      -      -     1.00    -     je	.LBB116_34
+ -      -     0.02   0.49    -      -      -     0.01   0.48    -     cmpq	%rsi, %rax
+ -      -     0.02    -      -      -      -      -     0.98    -     je	.LBB116_35
+ -      -      -     0.50    -      -      -     0.47   0.03    -     testb	$15, %sil
+ -      -     0.46    -      -      -      -      -     0.54    -     je	.LBB116_23
+ -      -      -     0.51    -      -      -     0.49    -      -     leaq	21(%rsi), %rdi
+ -      -      -     0.03    -      -      -     0.96   0.01    -     testb	$15, %dil
+ -      -     0.97    -      -      -      -      -     0.03    -     jne	.LBB116_30
+#+end_src
+#+end_details
+
+The timeline also looks cool.
+#+attr_shortcode: "Timeline"
+#+begin_details
+#+caption: Two iterations of the timeline, that show that the =vmovdqa= instructions that load the characters take a lot of time to execute.
+#+begin_src txt
+[5,0]     .    .    .    .    .    DeeeeeeeE-R    .    .    .    .    . .   vmovdqa	608(%rsp), %ymm7
+[5,1]     .    .    .    .    .    DeeeeeeeE-R    .    .    .    .    . .   vmovdqa	544(%rsp), %ymm8
+[5,2]     .    .    .    .    .    D=======eER    .    .    .    .    . .   vpsrld	$2, %ymm8, %ymm9
+[5,3]     .    .    .    .    .    D========eER   .    .    .    .    . .   vmovdqa	%ymm9, 544(%rsp)
+[5,4]     .    .    .    .    .    .D=======eER   .    .    .    .    . .   vpsrld	$2, %ymm7, %ymm9
+[5,5]     .    .    .    .    .    .D========eER  .    .    .    .    . .   vmovdqa	%ymm9, 608(%rsp)
+[5,6]     .    .    .    .    .    .D======eE--R  .    .    .    .    . .   vpand	%ymm2, %ymm8, %ymm8
+[5,7]     .    .    .    .    .    .D=======eE-R  .    .    .    .    . .   vpermilps	%ymm8, %ymm3, %ymm8
+[5,8]     .    .    .    .    .    .D=======eE-R  .    .    .    .    . .   vpand	%ymm2, %ymm7, %ymm7
+[5,9]     .    .    .    .    .    . D=======eER  .    .    .    .    . .   vpermilps	%ymm7, %ymm4, %ymm7
+[5,10]    .    .    .    .    .    . D========eER .    .    .    .    . .   vxorps	%ymm7, %ymm8, %ymm7
+[5,11]    .    .    .    .    .    . D=======eE-R .    .    .    .    . .   vpsrld	$31, %ymm0, %ymm8
+[5,12]    .    .    .    .    .    . D=======eE-R .    .    .    .    . .   vpaddd	%ymm0, %ymm0, %ymm0
+[5,13]    .    .    .    .    .    . D========eER .    .    .    .    . .   vpor	%ymm0, %ymm8, %ymm0
+[5,14]    .    .    .    .    .    . D=========eER.    .    .    .    . .   vxorps	%ymm0, %ymm7, %ymm0
+[5,15]    .    .    .    .    .    .  D=========eER    .    .    .    . .   vmovups	%ymm0, (%rdx)
+[5,16]    .    .    .    .    .    .  D=eE--------R    .    .    .    . .   incq	%rsi
+[5,17]    .    .    .    .    .    .  D===eE------R    .    .    .    . .   addq	$32, %rdx
+[5,18]    .    .    .    .    .    .  D===eE------R    .    .    .    . .   cmpq	%rsi, %rcx
+[5,19]    .    .    .    .    .    .  D====eE-----R    .    .    .    . .   je	.LBB116_34
+[5,20]    .    .    .    .    .    .   D====eE----R    .    .    .    . .   cmpq	%rsi, %rax
+[5,21]    .    .    .    .    .    .   D=====eE---R    .    .    .    . .   je	.LBB116_35
+[5,22]    .    .    .    .    .    .   D======eE--R    .    .    .    . .   testb	$15, %sil
+[5,23]    .    .    .    .    .    .   D=======eE-R    .    .    .    . .   je	.LBB116_23
+[5,24]    .    .    .    .    .    .   D=======eE-R    .    .    .    . .   leaq	21(%rsi), %rdi
+[5,25]    .    .    .    .    .    .   D========eER    .    .    .    . .   testb	$15, %dil
+[5,26]    .    .    .    .    .    .    D========eER   .    .    .    . .   jne	.LBB116_30
+[6,0]     .    .    .    .    .    .    DeeeeeeeE--R   .    .    .    . .   vmovdqa	608(%rsp), %ymm7
+[6,1]     .    .    .    .    .    .    DeeeeeeeE--R   .    .    .    . .   vmovdqa	544(%rsp), %ymm8
+[6,2]     .    .    .    .    .    .    D=======eE-R   .    .    .    . .   vpsrld	$2, %ymm8, %ymm9
+[6,3]     .    .    .    .    .    .    D========eER   .    .    .    . .   vmovdqa	%ymm9, 544(%rsp)
+[6,4]     .    .    .    .    .    .    .D======eE-R   .    .    .    . .   vpsrld	$2, %ymm7, %ymm9
+[6,5]     .    .    .    .    .    .    .D========eER  .    .    .    . .   vmovdqa	%ymm9, 608(%rsp)
+[6,6]     .    .    .    .    .    .    .D=======eE-R  .    .    .    . .   vpand	%ymm2, %ymm8, %ymm8
+[6,7]     .    .    .    .    .    .    .D========eER  .    .    .    . .   vpermilps	%ymm8, %ymm3, %ymm8
+[6,8]     .    .    .    .    .    .    .D=======eE-R  .    .    .    . .   vpand	%ymm2, %ymm7, %ymm7
+[6,9]     .    .    .    .    .    .    . D========eER .    .    .    . .   vpermilps	%ymm7, %ymm4, %ymm7
+[6,10]    .    .    .    .    .    .    . D=========eER.    .    .    . .   vxorps	%ymm7, %ymm8, %ymm7
+[6,11]    .    .    .    .    .    .    . D=======eE--R.    .    .    . .   vpsrld	$31, %ymm0, %ymm8
+[6,12]    .    .    .    .    .    .    . D=======eE--R.    .    .    . .   vpaddd	%ymm0, %ymm0, %ymm0
+[6,13]    .    .    .    .    .    .    . D========eE-R.    .    .    . .   vpor	%ymm0, %ymm8, %ymm0
+[6,14]    .    .    .    .    .    .    . D==========eER    .    .    . .   vxorps	%ymm0, %ymm7, %ymm0
+[6,15]    .    .    .    .    .    .    .  D==========eER   .    .    . .   vmovups	%ymm0, (%rdx)
+[6,16]    .    .    .    .    .    .    .  D==eE--------R   .    .    . .   incq	%rsi
+[6,17]    .    .    .    .    .    .    .  D===eE-------R   .    .    . .   addq	$32, %rdx
+[6,18]    .    .    .    .    .    .    .  D====eE------R   .    .    . .   cmpq	%rsi, %rcx
+[6,19]    .    .    .    .    .    .    .  D=====eE-----R   .    .    . .   je	.LBB116_34
+[6,20]    .    .    .    .    .    .    .   D=====eE----R   .    .    . .   cmpq	%rsi, %rax
+[6,21]    .    .    .    .    .    .    .   D======eE---R   .    .    . .   je	.LBB116_35
+[6,22]    .    .    .    .    .    .    .   D======eE---R   .    .    . .   testb	$15, %sil
+[6,23]    .    .    .    .    .    .    .   D=======eE--R   .    .    . .   je	.LBB116_23
+[6,24]    .    .    .    .    .    .    .   D=======eE--R   .    .    . .   leaq	21(%rsi), %rdi
+[6,25]    .    .    .    .    .    .    .   D========eE-R   .    .    . .   testb	$15, %dil
+[6,26]    .    .    .    .    .    .    .    D========eER   .    .    . .   jne	.LBB116_30
+#+end_src
+#+end_details
+
+The thing that struck me most in all this is that the =vmovdqa= instructions
+have a quite high latency of 7 cycles. Even though it is probably hidden, it
+would be nice to remove this. In fact, we can see that the buffers containing
+the characters are read from memory/the stack (=608(%rsp)= is an address
+relative to the stack pointer), then shifted by 2 bits, and then written back to
+the same place. I wonder why this value can't just be kept in a register
+instead. In fact, I have seen a few cases where a register /is/ used directly,
+but I can't make it work reliably.
+
+** Finals thoughts
+Now that we've reached =0.1 ns/kmer=, and nearly 30x speedup over a previous
+implementation, I think it's finally time to call it a day[fn::Week, rather, for
+this section.].
+
+To recap, our speed is:
+- =0.1 ns/kmer=
+- =0.26 cycles/kmer=
+- =2.08 cycles/8kmers=, i.e., 2 cycles per iteration of the main loop that produces 8
+  hashes in a SIMD.
+
+And for completeness, here's the full source code.
+
+#+attr_shortcode: "Full code for the SIMD NtHash implementation."
+#+begin_details
+#+caption: Full code for the SIMD FxHash implementation.
+#+include: "code/blog/nthash.rs" src rust :lines "185-"
+#+end_details
+
+*** Doubling down again
+Currently, the number of instructions per cycle is 3, while it could be over 4.
+One thing that we could try is to split the input in to 16 chunks and process
+them in parallel using two SIMD units of 8 lanes. That way, we could fully
+exploit the parallellism of SIMD in combination with the instruction level
+parallellism of the CPU. However, my feeling is that the throughput is already
+bounded by the number of available registers and ports, so that doing everything
+in parallel wouldn't help much.
+
+I did a very quick and ugly test for this, and it came out twice as slow. The
+main reasons seems to be that indeed many variables spill onto the stack, making
+things much slower.
+
+*** 16-bit hashes?
+By going from 64bit to 32bit hashes, the SIMD code became much simpler and
+faster. One could imagine that going to 16bit hashes gives a similar speedup.
+Especially since now 80% of time is spent in the inner loop doing 'plain' SIMD
+instructions, having double the parallellism may be good.
+One drawback though is that there are no 16-bit shuffle/permute instructions to
+do the corresponding table lookup, so we'd have to:
+1. Deinterleave the 16-bit characters into two vectors of 32-bit characters.
+2. Do two 32-bit =permutevar= instructions.
+3. Interleave the results back together.
+Or alternatively, we could use 128-bit byte shuffles, but then still we have to
+do some extra accounting to turn the character values into appropriate
+byte-indices.
+Lastly, we'd also have to split the =u64= of characters read in each place into
+4 chunks of 16 instead of 2 chunks of 32, and then rotate the chunks every 8
+instead of 16 characters. But this probably doesn't cause much of a slowdown.
+
+To summarize, I think some speedup may be possible here, but definitely not the
+2x one may naively expect.
+
+*** What about a simple multiply hash
+For small $k\leq 16$, a different approach is to simply multiply their 32-bit value by
+a constant and use that as a hash, as FxHash does. Surely, this can also be
+optimized to be very efficient.
+
+By re-using all the work we already did to efficiently gather the data from the
+sequence, this is now fairly straightforward:
+#+caption: Using FxHash instead of ntHash takes =75 ps/kmer=, down from =102 ps/kmer=!
+#+begin_src rust
+// upcoming_chars contains the next 32bits for each lane, and is gathered as before.
+// Extract the last 2 bits of each character.
+let new_chars = self.upcoming_chars & S::splat(0x03);
+// Shift remaining characters to the right.
+self.upcoming_chars >>= S::splat(2);
+// Rotate the bit-representation.
+self.chars <<= S::splat(2);
+// Mask out the old bits.
+self.chars &= self.mask;
+// Or in the new bits.
+self.chars |= new_chars;
+// Multiply by a constant.
+return self.chars * self.constant;
+#+end_src
+
+#+attr_shortcode: "Full code for the SIMD FxHash implementation."
+#+begin_details
+#+caption: Full code for the SIMD FxHash implementation.
+#+include: "code/blog/fxhash.rs" src rust
+#+end_details
+
+Again faster, with =75 ps/kmer= now, or 1.56 cycles per iteration!
+
+One drawback of course is that this really only works for small $k$. For
+$16<k\leq 32$ the same could be done by doing two 32-bit multiplications, but
+that would probably hurt performance and make it slower than our ntHash implementation.
 
 * TODO SIMD sliding window
 * TODO Super-k-mers and canonical kmers
