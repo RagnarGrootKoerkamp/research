@@ -26,7 +26,9 @@ Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
 - [[*Random minimizers][Background]]
 - [[*Algorithms][Overview of algorithms]]
-- TODO
+- [[*Analysing what we have so far][Analysing and optimizing the algorithms]]
+- [[#rolling-our-own-hash][Rolling our own hash function]]
+- [[*SIMD sliding window][SIMD sliding window]]
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
@@ -403,8 +405,9 @@ pre-processing step, but it can also be done on the fly:
 #+attr_html: :class inset
 [[file:./split.svg]]
 
+#+name: code-split
 #+caption: Code for the =Split= algorithm, that computes the suffix minima for each chunk exactly every $w$ iterations.
-#+include: "code/blog/split.rs" src rust :lines "2-29"
+#+include: "code/blog/split.rs" src rust :lines "4-30"
 
 *** Performance characteristics
 :PROPERTIES:
@@ -728,6 +731,12 @@ the popping of the queue.
 
 Sadly, I don't really see much room for improvement here.
 
+#+attr_shortcode: takeaway
+#+begin_notice
+Data-dependent branches are terrible.
+#+end_notice
+
+
 *** =Jumping= is already very efficient
 If we do a =perf report= here, we see that only =25%= of the time is spent in
 the =minimizer_positions= function:
@@ -812,14 +821,20 @@ their own value:
 
 #+attr_shortcode: "Code for SplitOpt."
 #+begin_details
+#+name: code-split-opt
 #+caption: Optimized =SplitOpt= that runs in =11.2ms= instead of =14.0ns=.
-#+include: "code/blog/split.rs" src rust :lines "30-"
+#+include: "code/blog/split.rs" src rust :lines "31-66"
 #+end_details
 
 Now, it runs in =11.2ms= instead of =14.0ms=, and has =3.46 IPC= (up from =3.37
 IPC=) and =0.63%= branch misses, down from =1.55%=.
 The remaining branch misses seem to be related to the kmer hashing, although
 this is somewhat surprising as =Jumping= doesn't have them.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Data-independent branches are nearly free.
+#+end_notice
 
 ** A new performance comparison
 Now that we have our optimized versions, let's summarize the new results.
@@ -853,6 +868,9 @@ For reasons I do not understand =SplitOpt= is still not faster than =RescanOpt=,
 but we'll have to leave it at this.
 
 * Rolling[fn::Hah, get it?@@html:<br/>@@ There's at least *two* alternative interpretations ;)] our own hash
+:PROPERTIES:
+:CUSTOM_ID: rolling-our-own-hash
+:END:
 As we saw, =Jumping= spends two thirds of its time on hashing the kmers, and in
 fact, =SplitOpt= and =RescanOpt= spend around half of their time on hashing.
 Thus, it is finally time to investigate some different hash functions.
@@ -2015,7 +2033,8 @@ The new caching hasher looks like this:
 #+include: "code/blog/hash.rs" src rust :lines "151-"
 
 Now, =perf= again shows that over 90% of time is spent in the =hash_kmers=
-function, and indeed the runtime improves significantly: =0.102 ns/kmer=![fn::Maybe it's time to switch to picoseconds/ps?]
+function, and indeed the runtime improves significantly: =0.102
+ns/kmer=![fn::Maybe it's time to switch to picoseconds (ps)?]
 And also, we're at exactly =3 IPC= now, which at last seems quite reasonable.
 
 #+attr_shortcode: takeaway
@@ -2024,6 +2043,11 @@ We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.102 ns/kmer= by using
 32-bit hashes, a bit-packed input, and by using SIMD to parallellize over chunks
 of the input. 28x speedup!
 #+end_notice
+
+Note that instead of returning a vector, we could also benchmark just the time
+to compute all the results, e.g. by summing all the output hashes. That only takes
+=0.90 ns/kmer=. But for consistency, it is simpler to always require an actual
+vector as output.
 
 *** One last branch
 At this point, there is also still one redundant branch due to the =unwrap= when
@@ -2414,7 +2438,64 @@ One drawback of course is that this really only works for small $k$. For
 $16<k\leq 32$ the same could be done by doing two 32-bit multiplications, but
 that would probably hurt performance and make it slower than our ntHash implementation.
 
-* TODO SIMD sliding window
+* SIMD sliding window
+
+At this point, we can go back to the sliding window minimum problem and use our
+new rolling hash for it.  Naturally, we would like to also use SIMD here. The
+easiest is to adapt the =Split= method, since it is completely deterministic.
+That ensures that when processing multiple chunks of a sequence, the steps in
+each chunk (SIMD lane) are exactly the same.
+
+Below is a relatively straightforward SIMD version of our initial code
+[[code-split]] (and [[code-split-opt]] for the optimized version). It takes as input an
+iterator over =[u32; 8]= of 8 hashes (of independent chunks), and outputs a
+=[u32; 8]= for each window of width $w$ with the absolute position of the
+leftmost minimizer. Some details:
+- Instead of comparing full 32-bit values, only the high 16-bits of each hash are compared.
+- The low 16 bits of each 32-bit word are used to store the position, so that
+  ties are automatically broken towards the minimal position. This means that
+  the position can only go up to $2^{16}$, so the sequences needs to be chunked
+  into pieces shorter than that, say of length $2^{15}$.
+- I already used =.get_unchecked= where needed.
+- Made sure that the =.skip(w-1)= at the end doesn't become an =if= statement in
+  the inner loop (or even puts the inner closure behind a function call some cases).
+
+#+caption: SIMD version of the =Split= algorithm.
+#+include: "code/blog/split.rs" src rust :lines "68-"
+
+We can benchmark this code in a few ways:
+1. Take a test, compute hashes, and then directly stream them into the sliding window minima.
+2. Take a text, compute hashes to a vector, then read the vector to compute
+   sliding window minima.
+3. Like 2, but only measure the time for the sliding window minima.
+
+As expected, method 2 reports close to =0.1ns= more than method 3, exactly the
+time taken to compute hashes.
+As output, we test both taking just the sum of all positions, and writing all
+positions to a vector.
+
+#+caption: Runtime of computing hashes and taking sliding window minima. The first column indicates whether hashes are streamed directly to the window minima or first written to a vector.
+#+attr_html: :class small
+| =ps/window= | sum positions | collect positions |
+| streaming hashes | 158 |     226 |
+| buffered hashes | 192 |     210 |
+
+We see that the fully streaming option that doesn't use any memory is clearly
+the fastest. Collecting the final result is faster when the intermediate results
+are already in a vector. I'm not quite sure why. Possibly the allocation is
+reused, but I don't think that is actually the case.
+
+Either way, this seems to be plenty fast, and I don't see any more easy wins
+here. Comparing =(hash, pos)= tuples as a single integer seems inevitable for
+good performance. Maybe we could go down from =(u16, u16)= to =(u8, u8)=, but
+using 8-bit hashes is unlikely to be good enough when $w\sim 20$. In that case,
+each window has a probability somewhere around order $256/w \sim 12\%$ of having
+a duplicate minimizer, which will start to hurt the density.
+
+One more thing to try could be to again process two SIMD units in parallel, but
+also again, a quick and dirty test was quite a bit slower.
+
+
 * TODO Super-k-mers and canonical kmers
 
 
