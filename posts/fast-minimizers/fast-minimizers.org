@@ -8,19 +8,22 @@
 #+hugo_paired_shortcodes: %notice details
 #+date: <2024-07-12 Fri>
 
+* Introduction
+
 In this post, we will develop a fast implementation of random minimizers.
 
 The goals here are:
 - a library for fast random minimizers,
 - explaining the final code, and the design decisions leading to it,
-- walking you through the development process, hopefully teaching how to do this yourself.
+- walking you through the development process, hopefully teaching some tricks
+  and methods for how to do this yourself.
 
 Code for this post is in the =benches/= directory of
-[[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]]. The unpolished experiments are in the
-=playground= branch.
+[[https://github.com/RagnarGrootKoerkamp/minimizers][github:RagnarGrootKoerkamp/minimizers]].
 Most code snippets are directly included from the repository. I have tried to
-write clean and readable code that follows the order of this post. Still,
-there will be small parts that only become useful later on.
+write clean and readable code that follows the order of this post. Occasionally
+some code snippets contain 'future proofing' that will only become relevant
+later on.
 
 Contents[fn::Read this on a wide screen to see the table of contents on the
 left, and footnotes on the right.]:
@@ -29,6 +32,25 @@ left, and footnotes on the right.]:
 - [[*Analysing what we have so far][Analysing and optimizing the algorithms]]
 - [[#rolling-our-own-hash][Rolling our own hash function]]
 - [[*SIMD sliding window][SIMD sliding window]]
+
+** Results
+The end result that we will be working towards here is twofold:
+1. An implementation of *32-bit ntHash* rolling hash that takes
+   =100ps/kmer=[fn::100 picoseconds as in, 0.1 nanoseconds. At =2.6GHz= on
+   an Intel =i7 10750H=. Slightly slower when $k>32$.], or 2 CPU cycles per 8
+   hashes. This is *28x faster* than the [[https://crates.io/crates/nthash][=nthash=]] crate by [[https://twitter.com/luizirber][Luiz Irber]].
+2. An implementation of *random minimizers* that takes =158ps/window=, or 3.3 CPU
+   cycles per 3 windows. This is *60x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *160x
+   faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]].
+
+I plan to upstream these algorithms into the =rust-seq/nthash= and
+=rust-seq/minimizer-iter= crates soon, after polishing of some implementation
+details and designing a nice API[fn::On that matter, specific requests are welcome.].
+
+I welcome any (critical) feedback on this post! I plan to fine-tune it a bit
+more based on this, and will take this into account when writing similar posts
+in the future. If you're feeling adventurous, open a pull request against the
+[[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/fast-minimizers/fast-minimizers.org][source]] of this blog.
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
@@ -2495,6 +2517,11 @@ a duplicate minimizer, which will start to hurt the density.
 One more thing to try could be to again process two SIMD units in parallel, but
 also again, a quick and dirty test was quite a bit slower.
 
+#+attr_shortcode: takeaway
+#+begin_notice
+We can now do sliding window minima in =0.158 ns/kmer=, or =3.3 cycles/8kmers=.
+That's 60x faster than =RescanDaniel=, and 160x faster than =QueueIgor=!
+#+end_notice
 
 * TODO Super-k-mers and canonical kmers
 
