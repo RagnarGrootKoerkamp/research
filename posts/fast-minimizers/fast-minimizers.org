@@ -238,7 +238,7 @@ We can model this problem using the following trait:
 A first implementation that mirrors the =Naive= implementation above could simply store the last $w$ hashes in a =RingBuffer=,
 and in each step recompute the minimum. The boiler plate for the ring buffer is simple:
 #+caption: A simple ring buffer.
-#+include: "code/blog/ringbuf.rs" src rust :lines "3-36"
+#+include: "code/blog/ringbuf.rs" src rust :lines "3-40"
 
 And then a sliding window implementation also becomes trivial:
 
@@ -905,7 +905,7 @@ Thus, it is finally time to investigate some different hash functions.
 ** FxHash
 So far, we have been using [[https://crates.io/crates/fxhash][=FxHash=]], a [[https://docs.rs/fxhash/0.2.1/src/fxhash/lib.rs.html#64][very simple]] hash function originally used by FireFox and also used
 in the Rust compiler. For each =u64= chunk of 8 bytes, it bit-rotates the hash
-so far, =xor=s with the new words, and multiplies by a fixed constant. For
+so far, xor's it with the new words, and multiplies by a fixed constant. For
 inputs less than 8 characters, it's only a single multiplication.
 Even though this method iterates over the input length, all k-mers have the same
 length, so that the branches involved are usually very predictable.
@@ -959,7 +959,7 @@ Using the =nthash= [[https://crates.io/crates/nthash][crate]], the implementatio
 implicitly been using so far is simple:
 #+name: hasher
 #+caption: Wrapping the =nthash= crate with the =Hasher= trait.
-#+include: "code/blog/hash.rs" src rust :lines "-33"
+#+include: "code/blog/hash.rs" src rust :lines "-30"
 
 Unfortunately, the results are mixed:
 #+caption: Runtime in ns/kmer of methods with FxHash and ntHash.
@@ -982,7 +982,7 @@ Based on the difference above, let's investigate whether first collecting all
 hashes to a vector speeds up the other methods as well. We provide a simple
 wrapper type for this:
 #+caption: =Buffer<H>= is a =Hasher= that first collects all hashes to a vector and then iterates over them.
-#+include: "code/blog/hash.rs" src rust :lines "41-55"
+#+include: "code/blog/hash.rs" src rust :lines "41-53"
 
 #+caption: Runtime in ns/kmer of methods with FxHash, ntHash, and buffered versions.
 #+attr_html: :class small
@@ -1125,7 +1125,7 @@ At this point there are three branches left:
 Both the second and third should be redundant: we can handle the first
 iteration separately, and pre-allocate a vector that is sufficiently large.
 Let's fix the latter one first. Ideally, the compiler would check that the
-=size_hint= provided by the =NtHashIt is large enough and that the
+=size_hint= provided by the =NtHashIt= is large enough and that the
 initial =Vec::reserve()= has sufficient capacity that an overflow can not
 happen, but alas, that's not the case (also not with full lto).
 
@@ -1184,15 +1184,19 @@ it doesn't[fn::Maybe there is a reason for keeping it that I don't see? Let me k
 Anyway, I suppose we'll just make a default vector with the right
 /size/ and then fill it, so we can completely drop the =push= call.
 #+caption: Using a fixed-size vector drops the =grow= check! Runtime: =1.94ns/kmer= ↦ =1.71ns/kmer=.
-#+begin_src rust
-fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
-    let len = t.len() - k + 1;
-    let mut v = vec![H::Out::default(); len];
-    let mut it = self.hasher.hash_kmers(k, t);
-    for x in v.iter_mut() {
-        *x = it.next().unwrap();
-    }
-    v.into_iter()
+#+begin_src diff
+ fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> {
+     let len = t.len() - k + 1;
+-    let mut v = vec![H::Out::default(); len];
++    let mut v = Vec::with_capacity(len);
+     let mut it = self.hasher.hash_kmers(k, t);
+-    for x in v.iter_mut() {
+-        *x = it.next().unwrap();
+-    }
++    for _ in 0..len {
++        v.push(it.next().unwrap());
++    }
+     v.into_iter()
 }
 #+end_src
 
@@ -1372,11 +1376,7 @@ exactly $k$, so in fact, we can precompute these:
 #+caption: Precomputing the rotations by $k$ positions. Runtime: =1.59ns/kmer= ↦ =1.41ns/kmer=.
 #+begin_src diff
  Some(NtHashIt {
-     seq,
-     k,
-     fh,
-     current_idx: 0,
-     max_idx: seq.len() - k + 1,
+     ...
 +    rot_k: H_LOOKUP.map(|x| x.rotate_left(k as u32)),
  })
 
@@ -1437,7 +1437,7 @@ As we saw above, the current ntHash implementation only uses around =2 IPC=,
 while each core should be able to execute up to 4 instructions every cycle.
 Thus, let's simply try to run two copies of our main loop in parallel:
 #+caption: Running two copies of the main loop in parallel. Runtime: =1.41ns/kmer= ↦ =1.36ns/kmer=.
-#+include: "code/blog/hash.rs" src rust :lines "89-109"
+#+include: "code/blog/hash.rs" src rust :lines "95-115"
 
 Sadly, this is not nearly the two times speedup I was hoping for, but at least
 we're at =2.5 IPC= and  now, and =3.5 cycles/kmer=, even closer to the =3
@@ -1672,13 +1672,12 @@ The new code looks like this:
 #+begin_src rust
 // Types
 const L: usize = 8;
-type T = u32;
-type S = Simd<T, L>;
+type S = Simd<u32, L>;
 ...
 // Initialization of 8x32 'tables',
 // containing a copy of the 4 32-bit values in both the high and low 128 bits.
-let table: S = b"ACTGACTG".map(|c| h(c) as T).into();
-let table_rot_k: S = b"ACTGACTG".map(|c| h(c).rotate_left(k as u32) as T).into();
+let table: S = b"ACTGACTG".map(|c| h(c) as u32).into();
+let table_rot_k: S = b"ACTGACTG".map(|c| h(c).rotate_left(k as u32) as u32).into();
 ...
 // Wrap _mm256_permutevar_ps, which is typed for floats, with integer types.
 use std::mem::transmute as t;
@@ -1710,9 +1709,10 @@ single SIMD register.
 #+begin_src diff
  // initialization
  Some(Self {
+     ...
 +    offsets: from_fn(|l| (l * n) as T).into(),
  })
-
+...
  // loop
  let s_ptr = self.seq.as_ptr();
 -let seqi: S = from_fn(|l| *s_ptr.add(l * self.n + i) as T).into();
@@ -1745,7 +1745,7 @@ pub struct NtHashSimdIt<'a> {
     chars_i: S,
     chars_k: S,
 }
-
+...
 // New main loop.
 if i % 4 == 0 {
     let p = self.seq.as_ptr() as *const u32;
@@ -1847,7 +1847,8 @@ pub struct NtHashSimdIt<'a> {
     chars_i_next: Simd<u32, 4>,
     chars_k_next: Simd<u32, 4>,
 }
-
+...
+// In main loop:
 // Every 8th iteration, read a u64 of incoming and outgoing data for each of the 8 chunks.
 if i % 8 == 0 {
     let oi1 = self.offsets.wrapping_add(Simd::splat(i));
@@ -1976,6 +1977,7 @@ use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
 +    chars_k_next_copy: S,
  }
 
+ ...
 
  if i % 32 == 0 {
 +    if self.k <= 32 {
