@@ -72,6 +72,8 @@
 (setq org-cite-global-bibliography (list (expand-file-name "references.bib")))
 (setq org-hugo-base-dir (expand-file-name "."))
 
+(setq user-full-name "Ragnar Groot Koerkamp")
+
 ;;;
 ;;; Public functions
 ;;;
