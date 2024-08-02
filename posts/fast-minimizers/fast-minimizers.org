@@ -46,7 +46,8 @@ The end result that we will be working towards here is twofold:
    cycles per 3 windows. This is *60x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *160x
    faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]].
 
-   It computes all window minimizers of a 2-bit packed human genome in *half a second*.
+   It computes all window minimizers of a 2-bit packed human genome (with
+   non-=ACGT= stripped) in *half a second*.
 
 I plan to upstream these algorithms into the =rust-seq/nthash= and
 =rust-seq/minimizer-iter= crates soon, after polishing the implementation,
@@ -1070,9 +1071,9 @@ To start, =ExtNtHash= takes in =2.9ns/kmer= to collect kmer hashes to a vector.
 
 *** Drop sanity checks
 
-First, we see that for each character it is checked whether it is =ACTG=. It
+First, we see that for each character it is checked whether it is =ACGT=. It
 would be faster to do that up-front if needed, so let's remove the check.
-#+caption: Skip checking that characters are =ACTG=. Runtime: =2.9ns/kmer= ↦ =2.6ns/kmer=.
+#+caption: Skip checking that characters are =ACGT=. Runtime: =2.9ns/kmer= ↦ =2.6ns/kmer=.
 #+begin_src diff
  fn h(c: u8) -> u64 {
      let val = H_LOOKUP[c as usize];
@@ -1615,7 +1616,7 @@ optimized, but they make up only a small part of the total runtime like this.
 *** SIMD table lookups
 
 So far, we have been assuming that the text can be anything. But actually,
-ntHash already is only 'seeded' for DNA characters =ACTG=, and so the =[u64;
+ntHash already is only 'seeded' for DNA characters =ACGT=, and so the =[u64;
 256]= table really only contains 4 interesting entries. So we could just use a
 =[u64; 4]=.
 
@@ -1676,8 +1677,8 @@ type S = Simd<u32, L>;
 ...
 // Initialization of 8x32 'tables',
 // containing a copy of the 4 32-bit values in both the high and low 128 bits.
-let table: S = b"ACTGACTG".map(|c| h(c) as u32).into();
-let table_rot_k: S = b"ACTGACTG".map(|c| h(c).rotate_left(k as u32) as u32).into();
+let table: S = b"ACGTACGT".map(|c| h(c) as u32).into();
+let table_rot_k: S = b"ACGTACGT".map(|c| h(c).rotate_left(k as u32) as u32).into();
 ...
 // Wrap _mm256_permutevar_ps, which is typed for floats, with integer types.
 use std::mem::transmute as t;
