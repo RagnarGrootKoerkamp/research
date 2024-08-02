@@ -34,6 +34,9 @@ left, and footnotes on the right.]:
 - [[*SIMD sliding window][SIMD sliding window]]
 
 ** Results
+:PROPERTIES:
+:CUSTOM_ID: intro-results
+:END:
 The end result that we will be working towards here is twofold:
 1. An implementation of *32-bit ntHash* rolling hash that takes
    =100ps/kmer=[fn::100 picoseconds as in, 0.1 nanoseconds. At =2.6GHz= on
@@ -43,14 +46,16 @@ The end result that we will be working towards here is twofold:
    cycles per 3 windows. This is *60x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *160x
    faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]].
 
-I plan to upstream these algorithms into the =rust-seq/nthash= and
-=rust-seq/minimizer-iter= crates soon, after polishing of some implementation
-details and designing a nice API[fn::On that matter, specific requests are welcome.].
+   It computes all window minimizers of a 2-bit packed human genome in *half a second*.
 
-I welcome any (critical) feedback on this post! I plan to fine-tune it a bit
-more based on this, and will take this into account when writing similar posts
-in the future. If you're feeling adventurous, open a pull request against the
-[[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/fast-minimizers/fast-minimizers.org][source]] of this blog.
+I plan to upstream these algorithms into the =rust-seq/nthash= and
+=rust-seq/minimizer-iter= crates soon, after polishing the implementation,
+adding tests[fn::Headsup: all code I'm about to show is completely untested currently.], and designing a nice API[fn::On that matter, specific requests are welcome.].
+
+I welcome any (critical) feedback on both the content and styling of this post!
+I plan to fine-tune it a bit more based on this, and will take this into account
+when writing similar posts in the future. If you're feeling adventurous, open an
+issue or pull request against the [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/fast-minimizers/fast-minimizers.org][source]] of this blog.
 
 * Random minimizers
 Many tools in bioinformatics rely on /k-mers/.
@@ -2485,6 +2490,11 @@ leftmost minimizer. Some details:
 #+caption: SIMD version of the =Split= algorithm.
 #+include: "code/blog/split.rs" src rust :lines "68-"
 
+** Results
+:PROPERTIES:
+:CUSTOM_ID: sliding-window-results
+:END:
+
 We can benchmark this code in a few ways:
 1. Take a test, compute hashes, and then directly stream them into the sliding window minima.
 2. Take a text, compute hashes to a vector, then read the vector to compute
@@ -2523,7 +2533,29 @@ We can now do sliding window minima in =0.158 ns/kmer=, or =3.3 cycles/8kmers=.
 That's 60x faster than =RescanDaniel=, and 160x faster than =QueueIgor=!
 #+end_notice
 
-* TODO Super-k-mers and canonical kmers
+*** Human genome results
+For a human genome, consisting of roughly 3Gbp, we measure a runtime of =496
+ms=[fn::Compare that to the 40 seconds it takes to convert the byte-encoded
+FASTA sequence to a bit-packed representation using some lazy code. Why aren't
+we using bit-packed on-disk file formats anyway?],
+which corresponds to =0.156 ns/kmer=. Thus, the results we see transfer to
+larger datasets without problems!
+
+* TODO Cleanup, Testing, Super-k-mers, and canonical k-mers
+1. Currently most code is only written to get measure throughput, and not set up to
+   handle edge cases where e.g. the input length is not a multiple of $8$. This
+   needs fixing, and then also some testing for correctness.
+2. Most likely, an API that returns an iterator over super-k-mers (i.e., the
+   range of windows have the same minimizer) that possibly also includes the
+   bit-representation of the minimizer itself would be more convenient than the
+   current API that only returns the minimizer for each window.
+3. In most bioinformatics applications, canonical k-mers are used instead. Most
+   likely this will require doubling large parts of the pipeline to compute
+   reverse-complement hashes and their minimizers, and then take the minimum
+   between the two, with some special tie-breaking in cases where the minimum is
+   shared.
+4. Also the API should probably contain a fast method to convert between byte
+   and packed representations.
 
 
 #+print_bibliography:
