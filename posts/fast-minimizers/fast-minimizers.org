@@ -39,15 +39,14 @@ left, and footnotes on the right.]:
 :END:
 The end result that we will be working towards here is twofold:
 1. An implementation of *32-bit ntHash* rolling hash that takes
-   =100ps/kmer=[fn::100 picoseconds as in, 0.1 nanoseconds. At =2.6GHz= on
-   an Intel =i7 10750H=. Slightly slower when $k>32$.], or 2 CPU cycles per 8
-   hashes. This is *28x faster* than the [[https://crates.io/crates/nthash][=nthash=]] crate by [[https://twitter.com/luizirber][Luiz Irber]].
-2. An implementation of *random minimizers* that takes =158ps/window=, or 3.3 CPU
-   cycles per 3 windows. This is *60x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *160x
-   faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]].
+   around =0.4ns/kmer=, or around 1 CPU cycle per hash. This is *7x faster* than the [[https://crates.io/crates/nthash][=nthash=]] crate by [[https://twitter.com/luizirber][Luiz Irber]].
+2. An implementation of *random minimizers* that takes around =0.6ns/window=, or
+   1.5CPU cycle per window. This is *15x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *40x
+   faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]][fn::I had a
+   bug in earlier benchmarks that caused my timings to be 4x too fast.].
 
    It computes all window minimizers of a 2-bit packed human genome (with
-   non-=ACGT= stripped) in *half a second*.
+   non-=ACGT= stripped) in *two seconds*.
 
 I plan to upstream these algorithms into the =rust-seq/nthash= and
 =rust-seq/minimizer-iter= crates soon, after polishing the implementation,
@@ -323,6 +322,16 @@ window][Problem B]].[fn:legend]
 
 Since the expected distance between random minimizers is $(w+1)/2$, we expect to
 scan each position just under two times.
+
+#+attr_shortcode: bug
+#+begin_notice
+[[https://twitter.com/BKille][Bryce Kille]] noticed that this method has a bug: when the sequence of hashes is e.g.
+=10, 9, 8, 7, 6, 5, 4, 3, 2, 1=, the minimizer of the first window is =7=. Then
+we'd jump to the =6, 5, 4, 3= slice to find =3= as the next minimizer, but that
+is wrong, since =6=, =5=, and =4= are also minimizers. Instead of only taking
+the minimum of the new slice, all prefix minima that are less than the previous
+minimum are minimizers.
+#+end_notice
 
 #+name: jumping-code
 #+caption: Solving Problem A by jumping to the window after the previous minimizer. Note that this first computes all hashes in a separate pass.
@@ -1947,6 +1956,16 @@ if (i + self.k) % 32 == 16 {
 Yes, you read that right, =0.17 ns/kmer= :) That's =0.44 cycles/kmer=, and /way/
 faster than anything we had before.
 
+#+attr_shortcode: bug
+#+begin_notice
+It turns out I made some bugs here. First, the
+array indexing in the code above should use index =i/4= instead of =i=.
+Second, and more importantly, for an input of $n$ bytes, I was only doing $n$
+instead of $4n$ iterations. Thus, all numbers reported from here onwards
+are roughly 4 times slower in practice. I will update them once I have some
+proper tests in place.
+#+end_notice
+
 #+attr_shortcode: "The full code for SIMD-based hashing of bitpacked data is here."
 #+begin_details
 #+caption: Full source of the SIMD ntHash with bit-packed data.
@@ -2204,7 +2223,7 @@ uOps Per Cycle:    5.38
 IPC:               4.84
 Block RThroughput: 5.0
 #+end_src
-We wee that the it reports the maximum throughput of this block at one iteration
+We see that the it reports the maximum throughput of this block at one iteration
 every 5 cycles. But our benchmark already showed that we can do 1 iteration
 every 3 cycles, so I'm confused here. Also the dispatch width of 6 and =4.84
 IPC= seem unreasonably high, but maybe I was using the wrong numbers for my CPU
@@ -2560,5 +2579,7 @@ larger datasets without problems!
 4. Also the API should probably contain a fast method to convert between byte
    and packed representations.
 
+- https://arxiv.org/pdf/2310.13212
+- https://uica.uops.info/
 
 #+print_bibliography:
