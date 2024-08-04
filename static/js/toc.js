@@ -42,7 +42,7 @@ function handler(updates) {
       // ensure that parent menu entries are selected too
       parentElem?.classList.add("selected");
       // Scroll parent element into view.
-      parentElem?.scrollIntoView({
+      parentElem?.querySelectorAll("a").scrollIntoView({
         block: "nearest",
         inline: "nearest",
       });
