@@ -41,8 +41,13 @@ function handler(updates) {
       let parentElem = paragraphMenuMap[s.target.previousHeader]?.closest("li");
       // ensure that parent menu entries are selected too
       parentElem?.classList.add("selected");
+      if (parentElem === undefined) {
+        continue;
+      }
       // Scroll parent element into view.
-      parentElem?.querySelectorAll("a").scrollIntoView({
+      let a = parentElem.firstChild;
+      console.log(parentElem, a);
+      a.scrollIntoView({
         block: "nearest",
         inline: "nearest",
       });
