@@ -1,0 +1,126 @@
+#+title: PACE 24
+#+filetags: @survey wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-09-05 Thu>
+
+
+In this post I will collect some high level ideas and approaches used to solve
+the PACE 2024 challenge.
+Very briefly, the goal is to write fast solvers for NP-hard problems. The
+problem for the [[https://pacechallenge.org/2024/][2024 edition is one-side crossing minimization]]: Given is a
+bipartite graph $(A, B)$ that is drawn in standard way with the nodes of both
+$A$ and $B$ on a line, where the order of the nodes of $A$ is fixed. The goal is
+to find a permutation of $B$ that minimizes the number of edge crossings when
+all edges are drawn as straight lines.
+
+There are 3 /tracks/:
+- *Exact*: Solve instances exactly.
+- *Heuristic*: Solve (much larger) instances approximately.
+- *Parameterized*: Solve instances with a bounded /cutwidth/ exactly.
+
+In the remainder, I will summarize some of the techniques used for different approaches.
+
+Most of this came up in discussions with other participants, in particular with
+Marcel Wienöbst and Kenneth Langedal.
+
+TODO: Cite all the proceedings papers discussing these ideas, from simple to
+hard in my perception.
+
+* General observations
+- $c_{uv}$ is the /crossing number/ between $u$ and $v$ when $u$ comes before
+  $v$ (written $u<v$).
+- $c_{uv}=0$ fixes $u<v$.
+- connected components.
+- feedback arc set reduction
+- FAS components
+- Our observation, /strong fixed pairs/: If the $i$'th neighbours of $u$ is
+  not after the $\lfloor i \cdot |N(v)|/|N(u)|\rfloor$'th neighbour of $v$, then
+  $u < v$.
+  - Also /practically fixed pairs/: When $c(u,v) < c(v,u)$ and there is no subset $X$ of vertices
+    in $B$ such that $vXu$ is better than both $uvX$ and $Xuv$, then we can also
+    commit $u<v$.
+- Vertices in $B$ with identical neighbours can be merged.
+* Heuristic track
+- Iterative local search beats simulated annealing.
+- Greedy steps:
+  try all, in random order. Accept only non-negative (/positive) diffs.
+  - Move single node
+  - Move interval of nodes
+- Randomization steps (when greedy fails)
+
+  If greedy score is lower than global max, restart there.
+  - /Shuffle/ an interval
+  - /reinsert/ up to 10 nodes randomly
+  - /pivot/: take a random node $p$. Partition the rest by $c_{up} < 0$ and $c_{up}\geq
+    0$. Recurse on the parts.
+
+* Parameterized track
+- Winner: after sorting $B$ nodes by their
+  interval start ($O(n\lg n)$), FAS components can be found /fast/, probably (?) around $n\cdot c$
+  time when the cutwidth is at most $c$. I.e., it is important to not do a full
+  $n^2$ matrix fill.
+- (Nearly) all instances have component size $\leq 20$. They are easily solved
+  using a $O(k 2^k)$ travelling-salesman-like DP with $2^k$ states, that can be
+  optimized using SIMD.
+- Our solution: Branch & bound on the optimal order from left to right, after finding strong fixed pairs and practically
+  fixed pairs.
+
+  Optimizations:
+  - /Optimal insert/: don't just /append/ nodes, but insert them optimally into the prefix
+  - /Tail cache/: Cache results for every tail.
+  - /Tail-local practically fixed pairs/: When $u<v$ is forced because the tail
+    contains no set $X$ for which $vXu$ is better than $uvX$ and $Xuv$.
+
+* Exact track
+Now for the most important track.
+- Top 3 all use ILP. MaxSAT turned out slow.
+- ILP formulation: For each pair $(u,v)$, $x_{uv}\in \{0,1\}$ indicates whether
+  $u<v$ or $v<u$. Objective is $\sum_{u,v} (c_{uv} - c_{vu})x_{uv}$.
+
+  There are two options for transitivity constraints:
+  - Forbid all cycles $u<v<w<u$, i.e. forbid $x_{uv} = x_{vw} = x_{wu}$.
+  - Discard $x_{uv}$ that do not correspond to an edge in the feedback arc set,
+    ie where $c_{uv} - c_{vu}= 0$,
+    only keeping $x$ corresponding to edges in the feedback arc set.
+    Now require that for each cycle in this graph, at least one edge is reversed.
+    This is a hitting set formulation.
+- Lazy constraint adding: This is very important, and all top 3 submissions
+  do this. The idea: start without any transitivity constraints and run the ILP.
+  Then, whenever a solution is found, check whether it contains any cycles. If
+  so, add constraints for those cycles.
+  - When all $x_{uv}$ variables are present, only triangles need to be checked.
+  - When $x_{uv}$ variables are only present for a subset of edges, also longer
+    cycles have to be considered.
+  Note: It is important to /randomize/ the cycle constraints that are added,
+  e.g., the DFS must be done on a graph where all neighbour lists are processed
+  in random order.
+
+  Gurobi supports this on-the-fly, but is not allowed in the competition.
+
+  The winning team adapted the /coin/ solver.
+
+  The second team used /highs/ and simply restarted it after every run with the
+  new constraints added.
+
+- TODO Custom rounding of the LP solution?
+- Winning team: Add /Möbius ladder/ as constraints. One property that helps
+  making ILP instances fast/easy to solve is the /integrality gap/: the
+  difference between the value of the best LP and ILP solution. When this is
+  small, it is more likely that a rounded LP solution is also an ILP solution.
+
+  One way to reduce the integrality gap is by finding small 'gadgets'
+  (subgraphs) where the LP solution far from integer, and directly constraining
+  the best possible integer solution on them. In particular, a variant of the [[https://en.wikipedia.org/wiki/M%C3%B6bius_ladder][/Möbius ladder/]]
+  of order $6$ (with the 'inner' ring contracted) is such a gadget.
+
+  Indeed, the bottom of the wikipedia page mentions that they are useful to
+  constrain linear ordering problems.
+
+  TODO: Are there smaller gadgets? Why this one? Why contract the inner ring?
+
+
+
+
+#+print_bibliography:
