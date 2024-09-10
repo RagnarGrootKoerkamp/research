@@ -1,0 +1,157 @@
+#+title: Calling Rust from Python
+#+filetags: @devops
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-09-10 Tue>
+
+Using =PyO3= and =maturin=, it's very easy to call Rust code from Python.
+I'm mostly following the guide at [[https://pyo3.rs][pyo3.rs]], but leaving out some thing related to
+python environments.
+
+* Steps
+
+1. Install =maturin=. I use the Arch package but you can also do a =pip install=
+   in the environment below.
+2. Make sure you have a =lib= target, and add =cdylib= as a crate-type.
+   #+begin_src rust
+[lib]
+crate-type = ["cdylib", "rlib"]
+   #+end_src
+3. Add =pyo3= as a dependency:
+   #+begin_src toml
+[dependencies]
+pyo3 = { version = "0.22.2", features = ["extension-module"] }
+   #+end_src
+4. Create a python environment
+   #+begin_src sh
+python -m venv .env
+   #+end_src
+5. Wrap the functions you want to export. I like to put them in a separate
+   =src/py.rs= module[fn::Note that neither the module nor the functions inside
+   it have to be =pub=.]. A list of how Rust types map to Python types is [[https://pyo3.rs/v0.22.2/conversions/tables][here]].
+   For example, for my =minimizers= repository:
+   #+begin_src rust
+use super::*;
+use pyo3::prelude::*;
+
+#[pyfunction]
+pub fn generate_random_string(n: usize, sigma: usize) -> PyResult<Vec<u8>> {
+    Ok(super::generate_random_string(n, sigma))
+}
+
+/// Take the minimizer configuration (a Rust enum) json encoded, we don't have
+/// to pass around complex types.
+/// The text is automatically converted between Rust slice and python list.
+/// Returns a simple floa.t
+#[pyfunction]
+fn density(scheme: &str, text: Vec<u8>, w: usize, k: usize, sigma: usize) -> PyResult<f64> {
+    let tp: MinimizerType = serde_json::from_str(scheme).unwrap();
+    let density = tp.stats(text, w, k, sigma).0;
+    Ok(density)
+}
+
+/// A Python module. The name of this function must match the `lib.name`
+/// setting in the `Cargo.toml`, else Python will not be able to import the
+/// module.
+#[pymodule]
+fn minimizers(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Add our functions to the module.
+    m.add_function(wrap_pyfunction!(generate_random_string, m)?)?;
+    m.add_function(wrap_pyfunction!(density, m)?)?;
+    Ok(())
+}
+   #+end_src
+6. Build the python code. Make sure to include the =-r= to build in release mode.
+   #+begin_src sh
+source .env/bin/activate && maturin develop -r
+   #+end_src
+   #+begin_src txt
+🐍 Found CPython 3.12 at /home/philae/git/eth/git/minimizers/.env/bin/python
+   Compiling minimizers v0.1.0 (/home/philae/git/eth/git/minimizers)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.81s
+📦 Built wheel to /tmp/.tmpq2msxE/minimizers-0.1.0-cp312-cp312-linux_x86_64.whl
+✏️  Setting installed package as editable
+🛠 Installed minimizers-0.1.0
+   #+end_src
+7. I like to put my python files separate, so create a =py/= directory. From
+   there, symlink the generated library:
+   #+begin_src sh
+mkdir py
+cd py
+ln -s ../.env/lib/python3.12/site-packages/minimizers
+   #+end_src
+8. Now we can run the following python code:
+   #+begin_src py
+import minimizers
+n = 10000000
+sigma=4
+w = 12
+k = 12
+text = minimizers.generate_random_string(n, sigma)
+minimizers.density('{"minimizer_type": "ModSampling", "k0": 4}', text, w, k, sigma)
+   #+end_src
+** Using =kwargs=
+Passing arguments JSON-encoded is somewhat ugly. We can do it nicer by passing
+the scheme being used, and passing any additional parameters as keyword argument (as
+in, ~t=4~ at the end). The new Rust code then looks like this:
+#+begin_src rust
+/// Get an integer parameter from the given optional dictionary.
+fn get(dict: Option<&Bound<'_, PyDict>>, key: &str) -> PyResult<usize> {
+    Ok(dict
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Missing minimizer parameter {key}. Add {key}=<val>."
+            ))
+        })?
+        .get_item(key)?
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Missing minimizer parameter {key}. Add {key}=<val>."
+            ))
+        })?
+        .extract()?)
+}
+
+/// `tp` is the main type of scheme being used.
+/// Additional parameters can be passed using the `params` kwargs.
+#[pyfunction]
+#[pyo3(signature = (tp, text, w, k, sigma, **params))]
+fn density(
+    tp: &str,
+    text: Vec<u8>,
+    w: usize,
+    k: usize,
+    sigma: usize,
+    params: Option<&Bound<'_, PyDict>>,
+) -> PyResult<f64> {
+    let scheme: super::MinimizerType = match tp {
+        "Minimizer" => super::MinimizerType::Minimizer,
+        "Miniception" => super::MinimizerType::Miniception {
+            k0: get(params, "k0")?,
+        },
+        // other variants omitted
+        _ => PyResult::Err(PyValueError::new_err("Invalid minimizer type"))?,
+    };
+    let density = scheme.stats(&text, w, k, sigma).0;
+    Ok(density)
+}
+
+#+end_src
+
+Now, we can call our function in a much cleaner way:
+#+begin_src diff
+-minimizers.density('{"minimizer_type": "ModSampling", "k0": 4}', text, w, k, sigma)
++minimizers.density("ModSampling", text, w, k, sigma, k0 = 4)
+#+end_src
+
+* TODOs
+- Figure out hot-reloading of the library after recompilations. So far, neither
+  =%autoreload= nor =importlib= seem to work.
+- In my understanding, inputs and outputs are converted between Rust and Python representations on
+  every invocation. When passing large texts, such as a human genome, it's
+  probably nicer to store them as /opaque/ types instead. That way Python can't
+  look inside them (and thus not read/write them), but we won't have to pay the
+  price for converting.
+
+  This should be possible using [[https://pyo3.rs/main/doc/pyo3/types/struct.pycapsule][PyCapsule]].
