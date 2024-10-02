@@ -1,0 +1,25 @@
+#+title: FM-index implementations
+#+filetags: @survey
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-10-02 Wed>
+
+Here I'll briefly list some FM-index and related implementations around the web.
+Implementations seem relatively inconsistent, mostly because the FM-index is
+more of a 'wrapper' type around a given Burrows-Wheeler-transform and an
+/occurrences/ list. Both can be implemented in various ways. In particular
+occurrences should be stored using a wavelet tree for optimal compressing.
+
+- The [[https://github.com/wafflespeanut/nucleic-acid/blob/2adbf5181081245423f974a88b5ccf53d7bf26ac/src/bwt.rs#L96][nucleic-acid repo]] contains a completely unoptimised version.
+- The Rust-bio crate contains a [[https://github.com/rust-bio/rust-bio/blob/master/src/data_structures/fmindex.rs#L209][generic FM-index]]. It stores a [[https://github.com/rust-bio/rust-bio/blob/master/src/data_structures/bwt.rs#L75-L94][sampled
+  occurrences array]], so that space is relatively small but lookups take $O(k)$
+  time for sampling factor $k$.
+- SDSL contains a [[https://github.com/simongog/sdsl-lite/blob/c32874cb2d8524119f25f3b501526fe692df29f4/include/sdsl/wavelet_][wavelet tree]] and [[https://github.com/simongog/sdsl-lite/blob/master/include/sdsl/csa_wt.hpp#L48][compressed suffix array]] implementation based
+  on it, that provides the same functionality as an FM-index.
+- There is the [[https://github.com/rossanoventurini/qwt][Quad Wavelet Tree]] (QWT) Rust crate [cite:@qwt]. This uses a 4-ary
+  tree instead of the usual binary wavelet tree, and improves latency by around
+  a factor 2 over SDSL wavelet trees.
+- Dominik Kempa has the [[https://github.com/dominikkempa/faster-minuter?tab=readme-ov-file][Faster-Minuter index]] [cite:@fasterminuter] that contains
+  an improved wavelet tree as well.
+- [[https://github.com/achacond/gem-cutter][GEM-Cutter]] contain a GPU implementation of the FM-index [cite:@gemcutter].
