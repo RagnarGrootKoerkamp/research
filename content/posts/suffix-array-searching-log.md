@@ -11,6 +11,11 @@ Here's a lablog.
 
 # Background
 
+- Compare with `suffix arrays with a twist`: https://www.cai.sk/ojs/index.php/cai/article/view/2019_3_555
+- Compare with https://github.com/mranisz/sa, which is based on `Compact
+  and hash based variants of the suffix array`
+  - https://journals.pan.pl/dlibra/publication/121376/edition/105762/content
+
 Here's a bike
 
 A figure of a bike.
