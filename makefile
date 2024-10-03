@@ -4,11 +4,13 @@ BASE_DIR := $(shell pwd)
 EMACS_BUILD_SRC := $(BASE_DIR)/emacs
 BASE_URL := https://curiouscoding.nl
 
-all: clean build-content open serve
+# all: clean build-content open serve
+all: open serve
 
 .PHONY: clean
 clean:
-	rm -rf content public
+	git clean -X --force content
+	rm -rf public
 	rm -rf static/ox-hugo
 
 .PHONY: serve
@@ -21,7 +23,7 @@ open:
 
 .PHONY: build-content
 build-content:
-	rm -rf content
+	git clean -X --force content
 # Build temporary minimal EMACS installation separate from the one in the machine.
 	XDG_CONFIG_HOME= HOME=$(EMACS_BUILD_SRC) BASE_DIR=$(BASE_DIR) emacs -Q --batch --load $(EMACS_BUILD_SRC)/init.el --execute "(build/export-all)" --kill
 
