@@ -1,12 +1,12 @@
 #+title: Practical selection and sampling schemes
-#+filetags: @ideas minimizers
+#+filetags: @ideas minimizers highlight
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+date: <2024-09-12 Thu>
 
 This post introduces some new practical sampling schemes. It builds on:
-- The [[../mod-minimizers/mod-minimizers.org][post]] and paper [cite:@modmini] introducing the mod-minimizer.
+- The [[../mod-minimizers][post]] and paper [cite:@modmini] introducing the mod-minimizer.
 - The [[../minimizer-lower-bound][post]] and paper [cite:@sampling-lower-bound] introducing a
   lower bound on the density of sampling schemes.
 
@@ -64,25 +64,39 @@ having the smallest t-mer at the start, but also introduces /offset/
 parameter, which we set to $(k-t)/2$.], following [cite/t:@local-kmer-selection]
 who show that this using the middle position is best for /conservation/.
 In particular, open syncmers have the property that they are never close to each other.
-In each window, the /open syncmer minimizer/ simply takes the smallest
+In each window, the /open minimizer/ simply takes the smallest
 k-mer[fn::Smallest with respect to the hash of the central t-mer.] that is an open
 syncmer (or the smallest kmer if there is no open syncmer).
-#+caption: For small alphabet $\sigma=4$, the open syncmer minimizer performs nearly as good as decycling minimizer (not shown), and slightly worse than double decycling minimizers. For large alphabet, the open syncmer minimizer performs very similar to (single) decycling.
+#+caption: For small alphabet $\sigma=4$, the open minimizer performs nearly as good as decycling minimizer (not shown), and slightly worse than double decycling minimizers. For large alphabet, the open syncmer minimizer performs very similar to (single) decycling.
 #+attr_html: :class inset
 [[./figs/4-open-syncmer.svg]]
-** Open-closed syncmer minimizer
-Then Daniel extended this to the /open-closed syncmer minimizer/: If there is an
+
+** Open-closed minimizer
+Then Daniel extended this to the /open-closed minimizer/: If there is an
 open syncmer inside the window, prefer the one with the smallest t-mer. Otherwise, take a closed syncmer,
 i.e., a k-mer whose smallest contained t-mer is at the start or end. Otherwise,
 just take the smallest k-mer.
-#+caption: The /open-closed syncmer minimizer/ improves the open syncmer minimizer, and (for large alphabets) performs very similar to double decycling for $k<w$. For $k>w$, it outperforms double decycling.
+#+caption: The /open-closed minimizer/ improves the open minimizer, and (for large alphabets) performs very similar to double decycling for $k<w$. For $k>w$, it outperforms double decycling.
 #+attr_html: :class inset
 [[./figs/5-open-closed-syncmer.svg]]
-** New: Open-closed mod-minimizer
+
+** New: General mod-minimizer
 Looking at the figure above, one wonders if the smoothness of the methods that
 perform well for $k<w$ can be incorporated into the asymptotically optimal
-step-wise behaviour of the mod-minimizer. Indeed, we can! The OC-mod-minimizer
-works as follows:
+step-wise behaviour of the mod-minimizer. Indeed, this is possible!
+
+The current mod-minimizer basically sets $t=(k\bmod w)$ and then samples the
+smallest t-mer (by a random hash). Instead, we could sample the t-mer according
+to any other scheme, and in particular we can sample the t-mer via the
+open-closed minimizer scheme.
+
+#+caption: The /open-closed mod-minimizer/ performs great both for small $k$ and large $k$.
+#+attr_html: :class inset
+[[./figs/6-oc-mod-mini.svg]]
+
+** Variant: Open-closed minimizer using offsets
+We can also make the following variant on the OC-minimizer that performs
+slightly better when $k$ is just below a multiple of $w$.
 1. Choose the /offset/ $o:=\lfloor((k-t)\bmod w)/2\rfloor$.
 2. A k-mer is a 'open mod-syncmer' if its smallest contained t-mer is at a
    position $x$ with $(x\bmod w)=o$. If there is an open mod-syncmer, take the one with the
@@ -90,20 +104,19 @@ works as follows:
 3. Otherwise, take the smallest k-mer that is a closed syncmer.
 4. Otherwise, return the smallest k-mer.
 
-#+caption: The /open-closed mod-minimizer/ performs great both for small $k$ and large $k$.
+We can improve slightly more by using the t-mer hash instead of taking the smallest k-mer by k-mer
+hash. For open mod-syncmers, we can prefer the one with /minimal/ t-mer, and for
+closed syncmers we can take the one with /maximal/ t-mer.
+
+#+caption: The /open-closed mod-offset-minimizer/ that breaks ties using t-mers is often slightly better. Especially just below $k=2w$.
 #+attr_html: :class inset
-[[./figs/6-oc-mod-mini.svg]]
+[[./figs/7-oc-mod-offset.svg]]
 
-** The $t$-gap
-One issue that remains in the plot above is what I will call the /$t$-gap/:
-especially for small $k$, the graph shifts $t-1$ steps to the right compared to
-the double decycling minimizer. The reason is that by only considering t-mers,
-we effectively reduce the total number of positions that can be sampled by $t-1$.
-
-#+caption: If we increase the alphabet size to $\sigma=256$, $t=1$ is sufficient to get mostly unique t-mers. All our new plots shift left by $t-1$. Now, the OC mod-mini is comparable to double decycling, and also touches the lower bound when $k=(1\bmod w)$.
-#+attr_html: :class inset large
-[[./figs/7-s256.svg][file:./figs/7-s256.svg]]
 * Selection schemes
+
+Before looking at more sampling schemes, we will now first consider some
+/selection/ schemes.
+
 ** Definition
 While a /sampling scheme/ selects a k-mer from a window, a /selection scheme/
 only selects a /position/, and is given by a function $f: \Sigma^w \to [w]$ [cite:@small-uhs].
@@ -111,6 +124,7 @@ only selects a /position/, and is given by a function $f: \Sigma^w \to [w]$ [cit
 All the sampling schemes seen so far can be seen as selection schemes as well,
 but they are inefficient because they never sample the last $k-1$ positions.
 Proper sampling schemes do not have this restriction.
+
 ** Bd-anchors
 One sampling scheme is /bidirectional anchors/ [cite:@bdanchors-esa;@bdanchors].
 Given a window of $w$ characters, this is simply the starting position of its
@@ -121,7 +135,7 @@ density, the rotations starting in the last $r$ positions are excluded.
 
 #+caption: Bd-anchors need a parameter $r$ that grows roughly as $\log_\sigma(w)$, but are never quite optimal.
 #+attr_html: :class inset
-[[./figs/10-bd-anchors.svg]]
+[[./figs/20-bdanchors.svg]]
 
 ** New: Smallest unique substring anchors
 To avoid this instability of bd-anchors, we can simply only look for the
@@ -135,9 +149,9 @@ unique substring/ or /smallest unique suffix/.].
 
 #+caption: Sus-anchors are parameter-free and usually better than bd-anchors.
 #+attr_html: :class inset
-[[./figs/11-sus-anchors.svg]]
+[[./figs/21-sus-anchors.svg]]
 
-** New: Scrambled sort
+** New: Anti lexicographic sorting
 One drawback of taking the lexicographic smallest substring is that suffixes of
 small substrings are also small. In particular, when a window starts with
 ~aaabb...~ as a SUS, after shifting the window by one position, there is a
@@ -154,28 +168,157 @@ occurrence of =z= (or =y= if there is no =z=), instead of starting at the next
 =a=.[fn::This situation reminds of the classic problem to compute the
 probability of seeing e.g. =HH= or =HT= or longer patterns in a series of coin flips.]
 
-#+caption: When doing a 'scrambled lexmin', sus-anchors are surprisingly close to optimal.
+#+caption: When doing a 'anti' lexicographic minimum ('scrambled' in the legend), sus-anchors are surprisingly close to optimal.
 #+attr_html: :class inset
-[[./figs/12-scramble.svg]]
+[[./figs/22-scramble.svg]]
 
-#+caption: In the previous figure I was using the simplified bound of Theorem 1 of [cite:@sampling-lower-bound]. Using the more precise version instead, we see that also for small $w$, this scrambled sort is close to optimal. I enlarged it so you can see how the blue and red overlap.
+#+caption: In the previous figure I was using the simplified bound of Theorem 1 of [cite:@sampling-lower-bound]. Using the more precise version instead, we see that also for small $w$, this anti lexicographic sort is close to optimal. I enlarged it so you can see how the blue and red overlap.
 #+attr_html: :class inset large
-[[./figs/13-scramble.svg][file:./figs/13-scramble.svg]]
+[[./figs/23-scramble.svg][file:./figs/23-scramble.svg]]
 
-#+caption: For alphabet $\sigma=3$, scrambled sus-anchors are also very close to optimal.
+#+caption: For alphabet $\sigma=3$, anti lexicographic sus-anchors are also very close to optimal.
 #+attr_html: :class inset large
-[[./figs/14-s3.svg][file:./figs/14-s3.svg]]
+[[./figs/24-s3.svg][file:./figs/24-s3.svg]]
 
 #+caption: For alphabet $\sigma=2$, there is a bit of a gap towards optimality for $6\leq w\leq 18$. Curiously, the gap appears much smaller both for small $w$ and larger $w$.
 #+attr_html: :class inset large
-[[./figs/15-s2.svg][file:./figs/15-s2.svg]]
+[[./figs/25-s2.svg][file:./figs/25-s2.svg]]
 
-** TODO Scrambled sus-anchor density
-It's not hard to see that sus-anchors are forward. Thus, to compute the density,
-it suffices to compute the probability that two consecutive windows select
-different positions. That in turn is only possible if either the first window
-has its smallest unique substring at the start, or the second window has its
-smallest unique substring at the end.
+One of the reasons that this scheme can perform so well for $k=1$ is that it is
+not, in fact, a /minimizer scheme/, but 'only' a /sampling scheme/. Minimizer
+schemes are those sampling schemes that take the smallest k-mer according to
+some order. All sampling schemes seen so far are indeed minimizer schemes, while
+the sus-anchors are not: even though $k=1$, they use the surrounding context of
+each character to determine it's order.
+
+* More sampling schemes
+** Anti-lex sus-anchors
+The anti-lex sus-anchors are not limited to $k=1$, and also work well for
+slightly larger $k$.
+
+#+caption: The /anti-lex sus-anchors/ are near-optimal for $k$ up to $3$, unlike any other scheme so far. We also use them in combination with the mod-minimizer.
+#+attr_html: :class inset
+[[./figs/8-anti-lex.svg]]
+
+** Threshold anchors
+Let's try to understand why the anti-lex sus-anchors are not as good for larger
+$k$. For a window size $w$, we expect to see each string of length $c=\log_\sigma
+w$ once on average. Thus, we expect the anti-lexicographic smallest string to
+start with a =z= followed by $c-1$ =a='s. This means that only the first
+$\approx c$ characters of each k-mer contribute to its 'value' in determining
+whether it's the smallest one. Clearly, to achieve optimal density, we must use
+/all/ $k$ characters, and not just the first $c$.
+In a way, the first few characters contain too much entropy, while we want to
+use all characters.
+
+Thus, we'd like to come up with a scheme that extracts (around $w$) entropy from all $k$ characters.
+
+One way is to artificially reduce the alphabet to for example only a single bit,
+by splitting it into two halves.
+Still, this gives $2^k$ equally likely values, and hence the first $c_2=\log_2
+w$ characters determine the value of the k-mer, which is still sub-linear in
+$k$.
+
+So, how can we extract /less/ information from each character? As we know, the
+entropy of an event that happens with probability $p$ is $-p \lg p - (1-p) \lg
+(1-p)$, which is maximized for $p=1/2$. Thus, mapping each character to $0$ or
+$1$ with probability not equal to $1/2$ may improve things.
+
+For the $\sigma=4$ case, we can simply map =ACG= to =0= and =T= to =1=, so that
+$p=1/4$, and then look for the smallest anti lexicographic substring, that is, a
+string starting with a =1= followed by as many =0='s as possible.
+
+#+caption: The /anti-lex threshold minimizers/ are near-optimal for $3\leq k \leq 6$, again unlike any other scheme so far.
+#+attr_html: :class inset
+[[./figs/9-threshold.svg]]
+
+Generally, to match the lower bound, we would like to find a sampling scheme
+that never selects two k-mers within distance $k$ of each other (and otherwise
+has roughly uniform distance between $k+1$ and $w$).
+Requiring that each k-mer equals =1000..000= satisfies this requirement.
+
+Thus, we would like to make the probability of a =1000..000= k-mer as large as
+possible, since whenever such a k-mer occurs in the window, we can push the
+sampled k-mers distance $k$ away from each other.
+
+The probability that a k-mer has string =1000..000= is $p\cdot (1-p)^{k-1}$.
+This probability is maximized by choosing $p = 1/k$ (which we can do when the
+alphabet is large), and then equals
+$$
+1/k \cdot (1-1/k)^{k-1} = 1/(k-1)\cdot (1-1/k)^k \approx 1/(k-1) \cdot 1/e \approx \frac{1}{ke}.
+$$
+Thus, the expected number of =1000..000= k-mers in a window is $w/(ke)$. As $k$
+grows above $w/e \approx w/3$, this means that not all windows have such a k-mer
+anymore, and that we potentially loose some performance.
+And indeed, this method appears to only work up to $k=6\leq 24/e$.
+
+The main bottleneck is that for $k\approx w/e$, the probability of having not a
+single =1= is around $(1-1/w)^w \approx 1/e \approx 0.37$. In these cases,
+we can fall back to sampling a random smallest k-mer, but this quickly destroys
+the performance. Thus, in practice I simply use $p=1/4$ so far, which in
+practice leads to there always being a =1=.
+
+*TODO:* Find better tiebreaking rules, and investigate more choices of
+$p$.
+
+Another potential improvement to extract less entropy from each character, while
+still having a sufficiently large probability of a =10000= k-mer occurring,
+could be to require that the first two characters sum to at least some threshold
+$T$, while all
+next chunks of two characters sum to $<T$.
+
+** The $t$-gap disappears for large alphabets
+One issue that remains in the plot above is what I will call the /$t$-gap/:
+especially for small $k$, the graphs of all minimizer/syncmer based methods shift $t-1$ steps to the right compared to
+the double decycling minimizer. The reason is that by only considering t-mers,
+we effectively reduce the total number of positions that can be sampled by $t-1$.
+
+If we increase the alphabet size to $\sigma=256$, $t=1$ is sufficient to get
+mostly unique t-mers. All our new plots shift left by $t-1$. Now, the OC
+mod-mini is comparable to double decycling, and also touches the lower bound
+when $k=(1\bmod w)$.
+
+#+caption: For large alphabets, the syncmer based methods can use $t=1$ and still have unique t-mers, and their plots shift left to touch the lower bound.
+#+attr_html: :class inset large
+[[./figs/10-s256.svg][file:./figs/10-s256.svg]]
+
+* Computing the density of forward schemes
+For forward schemes, the density can be computed in multiple ways:
+1. Compute the fraction of /charged contexts/ of size $w+k$ where the two length-$w$
+   windows select a different position.
+2. Compute the fraction of sampled positions over a cyclic De Bruijn sequence of
+   order $w+k$.
+3. Compute the expected fraction of sampled positions in a random cyclic sequence of
+   length $w+k$.
+
+Each of these also allows for an approximate variant:
+1. Compute the fraction of charged contexts over a sufficiently large sample of $(w+1)$-mers.
+2. Compute the fraction of sampled positions over a sufficiently long sequence.
+3. Compute the fraction over sufficiently many cyclic $(w+1)$-mers.
+
+** WIP: Anti lexicographic sus-anchor density
+It's not hard to see that sus-anchors are forward.
+To compute the density, we'll use the third method above, for $k=1$.
+Suppose the smallest (under anti lex sorting) unique substring of a sequence of lowercase characters is
+simply =z=, i.e., there is only a single =z=. In that case, this will be the
+sus-anchor for /all/ rotations, and only a single position is sampled.
+
+Otherwise, suppose that =za= is the sus-anchor. Then the rotation =a...z= does
+not contain =za= and will sample some other position, and thus, two positions
+are sampled. That is still in line with the $\lceil2/(w+1)\rceil$ lower-bound we
+are approaching.
+
+If the second smallest unique substring (say =Y=) overlaps the smallest unique
+substring in at most one character, then one of these will always be fully
+present and only two positions are sampled.
+
+The bad case where three or more positions are sampled. Let's consider when
+this can happen.
+
+Suppose the SUS is =zX= for some sequence =X= of length at
+least two. Then =zX= will be smallest for all but the rotations of the form
+=X2...zX1= where ~X = X1X2~, with =X2= non-empty.
+
 
 
 
