@@ -1,0 +1,64 @@
+#+title: Comments on 'When Less is More' minimizer review
+#+filetags: @paper-review minimizers
+#+OPTIONS: ^:{} num: num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-10-15 Tue>
+
+These are some (biased) comments on [cite/title/b:@minimizer-review-2] [cite:@minimizer-review-2].
+
+* The importance of ordering
+
+#+begin_quote
+the interest lies in constructing a minimizer with a density within a constant
+factor, i.e., $O(1/w)$ for any $k$.  With lexicographic ordering, minimizers can
+achieve such density, but with large $k$ values ($\geq \log_{|Σ|}(w)-c$ for a
+constant $c$), which might not be desirable [cite:@miniception]. However, random
+ordering can result in a lower density than that of the lexicographic ordering.
+Thus,  random ordering (implemented with pseudo-random hash functions) is
+usually used in practice.
+#+end_quote
+- I typically consider $k = \log_\sigma w$ to be small. Really, only for very
+  small $k$ up to say $4$, random minimizers do /not/ have density $O(1/w)$. So
+  in general, reaching $O(1/w)$ is easy unless $k$ is very small.
+- As shown in Theorem 2 of [cite/t:@miniception], lexicographic minimizers are
+  optimal, in that they have density $O(1/w)$ if and only if this is possible at all.
+  Some motivation why random is in fact better in practice would be good.
+
+#+begin_quote
+Recent investigations indicate that ordering algorithms can achieve a density value of
+$1.8/(w + 1)$ [cite:@docks-wabi], well below the originally proposed lower bound of $2/(w + 1)$ [cite:@sketching-and-sublinear-datastructures;@minimizers].
+#+end_quote
+- I cannot find the $1.8/(w+1)$ in either [cite/t:@docks-wabi] or [cite/t:@docks].
+- For which $k$? For $k=1$, this is impossible. For $k>w$, miniception [cite:@miniception] is
+  better at $1.67/w$, and in fact, mod-minimizer [cite:@modmini] is even better and
+  asymptotically reaches density $1/w$, so this $1.8/(w+1)$ is quite meaningless anyway.
+- A remark that the original lower bound doesn't apply because of overly strong
+  assumptions would be in place here. Otherwise the sentence kinda contradicts itself.
+
+
+* Asymptotically optimal minimizers
+
+#+begin_quote
+This dual-minimizer setup has been shown to achieve
+an upper bound expected density of $1.67/(w + 1)$, which is lower than the $2/(w + 1)$
+density of traditional random minimizers.
+#+end_quote
+- Again, only for $k>w$.
+
+#+begin_quote
+the lower
+bound of the resulting sketch ($1.67/(w + 1)$) is higher than the theoretical lower bound
+($1/w$), which can be achieved using UHS or Polar Sets.
+#+end_quote
+- should say /upper bound/ instead.
+- This paragraph is titled /asymptotically optimal minimizers/, yet it only
+  talks about miniception, which is not in fact asymptotically optimal.
+  UHS and Polar sets are also not really 'plain' minimizers.
+
+  Instead, [cite/t:@asymptotic-optimal-minimizers] present an actual asymptotic
+  optimal minimizer scheme based on universal hitting sets, and
+  [cite/t:@modmini] present an asymptotic optimal scheme with /much lower
+  density in practice/.
+
+#+print_bibliography:
