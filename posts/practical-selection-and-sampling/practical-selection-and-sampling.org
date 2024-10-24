@@ -11,27 +11,60 @@ This post introduces some new practical sampling schemes. It builds on:
   lower bound on the density of sampling schemes.
 
 * Sampling schemes
-** Definitions and background
+** Definitions
 A *sampling scheme* is simply a function $f: \Sigma^{w+k-1} \to [w]$. For a
 *window*
 of length $w+k-1$, containing $w$ k-mers, it samples the starting position
 of one of the k-mers.
 
+#+caption: A k-mer.
+[[./figs/kmer.svg]]
+
+#+caption: A window $W$ of length $\ell=k+w-1$, where the k-mer at position $f(W)=0$ is sampled.
+#+attr_html: :class inset
+[[./figs/window.svg]]
+
 The *density* of a sampling scheme is the expected fraction of distinct positions
 sampled over an infinitely long random string.
+
+#+caption: The /density/ of a scheme is the fraction of sampled k-mers.
+#+attr_html: :class inset
+[[./figs/density.svg]]
 
 A sampling scheme is *forward* when the absolute sampled position never
 decreases as we slide the window over a sequence.
 
-The *random minimizer* has a density of $2/(w+1)$.
-
 A *trivial lower bound* on the density is $1/w$.
 
-Previous sampling schemes are *miniception* and the *double-decycling based minimizer*.
+The *random minimizer* has a density of $2/(w+1)$, and chooses the k-mer $X$ with
+the smallest (pseudo-random) hash $h(X)$.
 
-#+caption: Some previous sampling schemes, and the $1/w$ lower bound. We use alphabet size $4$, and window size $24$. ($t$ mentioned in the title is unused here.)
+#+caption: The random minimizer has density $2/(w+1)$, around twice as large as the $1/w$ lower bound, for window size $w=24$ and alphabet size $\sigma=256$.
 #+attr_html: :class inset
-[[./figs/1-background.svg]]
+[[./plots/1a-random.svg]]
+
+Double decycling [cite:@minimum-decycling-set] has lower density.
+
+#+caption: Double decycling is much better, although more complicated to compute. The (horizontal) line indicates the density when choosing $k$ optimally.
+#+attr_html: :class inset
+[[./plots/1b-decycling.svg]]
+
+** Miniception
+
+Miniception [cite:@miniception] samples the smallest /closed syncmer/ from a
+window.
+
+#+caption: A closed syncmer has it's smallest s-mer (or here smallest character, for $s=1$) at one of the ends.
+#+attr_html: :class inset
+[[./figs/closed.svg]]
+
+#+caption: Closed syncmers can be consecutive.
+#+attr_html: :class inset
+[[./figs/closed-dist.svg]]
+
+#+caption: Double decycling is much better, although more complicated to compute.
+#+attr_html: :class inset
+[[./plots/1c-miniception.svg]]
 
 ** Mod-minimizer
 The mod-minimizer is a scheme that asymptotically achieves optimal density $1/w$,
@@ -43,16 +76,26 @@ $0\leq x< w+k-t$. Using this, the k-mer at position $p = (x\bmod w)$ is sampled.
 
 #+caption: The mod-minimizer is much better for large $k$, and asymptotically optimal.
 #+attr_html: :class inset
-[[./figs/2-modmini.svg]]
+[[./plots/2-modmini.svg]]
 
 ** Forward scheme lower bound
 Together with Bryce, we significantly improved the lower bound on the best
-possible density of forward schemes. In fact, we prove that when $k\equiv 1\pmod
+possible density of forward schemes [cite:@sampling-lower-bound]. In fact, we prove that when $k\equiv 1\pmod
 w$ and $\sigma\to\infty$, the mod-minimizer is optimal.
+
+In simplified form, the lower bound is
+$$
+d(f)\geq \frac{\left\lceil\frac{w+k}{w}\right\rceil}{w+k}.
+$$
+For $k<w$ this simplifies to
+$$
+d(f)\geq \frac{2}{w+k},
+$$
+and in this case optimal schemes must /never/ sample k-mers at distance less than $k$.
 
 #+caption: The lower bound is quite close to the mod-minimizer!
 #+attr_html: :class inset
-[[./figs/3-lower-bound.svg]]
+[[./plots/3-lower-bound.svg]]
 
 ** Open syncmer minimizer
 Daniel Liu came up with the idea to build minimizer schemes on top of syncmers [cite/t:@syncmers].
@@ -67,9 +110,20 @@ In particular, open syncmers have the property that they are never close to each
 In each window, the /open minimizer/ simply takes the smallest
 k-mer[fn::Smallest with respect to the hash of the central t-mer.] that is an open
 syncmer (or the smallest kmer if there is no open syncmer).
-#+caption: For small alphabet $\sigma=4$, the open minimizer performs nearly as good as decycling minimizer (not shown), and slightly worse than double decycling minimizers. For large alphabet, the open syncmer minimizer performs very similar to (single) decycling.
+
+
+#+caption: An open syncmer has it's smallest s-mer (or here smallest character, for $s=1$) in the middle.
 #+attr_html: :class inset
-[[./figs/4-open-syncmer.svg]]
+[[./figs/open.svg]]
+
+#+caption: Open syncmers have distance at least $(k-1)/2$.
+#+attr_html: :class inset
+[[./figs/open-dist.svg]]
+
+# #+caption: For small alphabet $\sigma=4$, the open minimizer performs nearly as good as decycling minimizer (not shown), and slightly worse than double decycling minimizers. For large alphabet, the open syncmer minimizer performs very similar to (single) decycling.
+#+caption: For large alphabet and small $k$, the open-minimizer is must better than the closed-minimizer and about as good as decycling.
+#+attr_html: :class inset
+[[./plots/4-open-syncmer.svg]]
 
 ** Open-closed minimizer
 Then Daniel extended this to the /open-closed minimizer/: If there is an
@@ -78,7 +132,7 @@ i.e., a k-mer whose smallest contained t-mer is at the start or end. Otherwise,
 just take the smallest k-mer.
 #+caption: The /open-closed minimizer/ improves the open minimizer, and (for large alphabets) performs very similar to double decycling for $k<w$. For $k>w$, it outperforms double decycling.
 #+attr_html: :class inset
-[[./figs/5-open-closed-syncmer.svg]]
+[[./plots/5-open-closed-syncmer.svg]]
 
 ** New: General mod-minimizer
 Looking at the figure above, one wonders if the smoothness of the methods that
@@ -92,7 +146,7 @@ open-closed minimizer scheme.
 
 #+caption: The /open-closed mod-minimizer/ performs great both for small $k$ and large $k$.
 #+attr_html: :class inset
-[[./figs/6-oc-mod-mini.svg]]
+[[./plots/6-oc-mod-mini.svg]]
 
 ** Variant: Open-closed minimizer using offsets
 We can also make the following variant on the OC-minimizer that performs
@@ -110,7 +164,7 @@ closed syncmers we can take the one with /maximal/ t-mer.
 
 #+caption: The /open-closed mod-offset-minimizer/ that breaks ties using t-mers is often slightly better. Especially just below $k=2w$.
 #+attr_html: :class inset
-[[./figs/7-oc-mod-offset.svg]]
+[[./plots/7-oc-mod-offset.svg]]
 
 * Selection schemes
 
@@ -133,9 +187,13 @@ sequence, the characters at the front can unpredictably influence whether the
 rotation starting at the last position is small or not. Thus, to improve the
 density, the rotations starting in the last $r$ positions are excluded.
 
+#+caption: A bd-anchor samples the position of the smallest rotation.
+#+attr_html: :class inset
+[[./figs/bd.svg]]
+
 #+caption: Bd-anchors need a parameter $r$ that grows roughly as $\log_\sigma(w)$, but are never quite optimal.
 #+attr_html: :class inset
-[[./figs/20-bdanchors.svg]]
+[[./plots/20-bdanchors.svg]]
 
 ** New: Smallest unique substring anchors
 To avoid this instability of bd-anchors, we can simply only look for the
@@ -147,9 +205,17 @@ smallest unique /substring/. Thus, we call these sus-anchors[fn::I'm not quite
 sure yet whether to this means /smallest
 unique substring/ or /smallest unique suffix/.].
 
+#+caption: A sus-anchor samples the position of the /smallest unique suffix/.
+#+attr_html: :class inset
+[[./figs/sus.svg]]
+
+#+caption: Sus-anchors can be consecutive.
+#+attr_html: :class inset
+[[./figs/sus-dist.svg]]
+
 #+caption: Sus-anchors are parameter-free and usually better than bd-anchors.
 #+attr_html: :class inset
-[[./figs/21-sus-anchors.svg]]
+[[./plots/21-sus-anchors.svg]]
 
 ** New: Anti lexicographic sorting
 One drawback of taking the lexicographic smallest substring is that suffixes of
@@ -168,21 +234,29 @@ occurrence of =z= (or =y= if there is no =z=), instead of starting at the next
 =a=.[fn::This situation reminds of the classic problem to compute the
 probability of seeing e.g. =HH= or =HT= or longer patterns in a series of coin flips.]
 
+#+caption: The anti-lexicographic sus-anchor samples the position of the /smallest unique suffix/, where the first character should be large instead of small.
+#+attr_html: :class inset
+[[./figs/anti-lex-sus.svg]]
+
+#+caption: Anti-lex sus-anchors are rarely close to each other.
+#+attr_html: :class inset
+[[./figs/anti-lex-sus-dist.svg]]
+
 #+caption: When doing a 'anti' lexicographic minimum ('scrambled' in the legend), sus-anchors are surprisingly close to optimal.
 #+attr_html: :class inset
-[[./figs/22-scramble.svg]]
+[[./plots/22-scramble.svg]]
 
 #+caption: In the previous figure I was using the simplified bound of Theorem 1 of [cite:@sampling-lower-bound]. Using the more precise version instead, we see that also for small $w$, this anti lexicographic sort is close to optimal. I enlarged it so you can see how the blue and red overlap.
 #+attr_html: :class inset large
-[[./figs/23-scramble.svg][file:./figs/23-scramble.svg]]
+[[./plots/23-scramble.svg][file:./plots/23-scramble.svg]]
 
 #+caption: For alphabet $\sigma=3$, anti lexicographic sus-anchors are also very close to optimal.
 #+attr_html: :class inset large
-[[./figs/24-s3.svg][file:./figs/24-s3.svg]]
+[[./plots/24-s3.svg][file:./plots/24-s3.svg]]
 
 #+caption: For alphabet $\sigma=2$, there is a bit of a gap towards optimality for $6\leq w\leq 18$. Curiously, the gap appears much smaller both for small $w$ and larger $w$.
 #+attr_html: :class inset large
-[[./figs/25-s2.svg][file:./figs/25-s2.svg]]
+[[./plots/25-s2.svg][file:./plots/25-s2.svg]]
 
 One of the reasons that this scheme can perform so well for $k=1$ is that it is
 not, in fact, a /minimizer scheme/, but 'only' a /sampling scheme/. Minimizer
@@ -198,7 +272,7 @@ slightly larger $k$.
 
 #+caption: The /anti-lex sus-anchors/ are near-optimal for $k$ up to $3$, unlike any other scheme so far. We also use them in combination with the mod-minimizer.
 #+attr_html: :class inset
-[[./figs/8-anti-lex.svg]]
+[[./plots/8-anti-lex.svg]]
 
 ** Threshold anchors
 Let's try to understand why the anti-lex sus-anchors are not as good for larger
@@ -228,9 +302,17 @@ For the $\sigma=4$ case, we can simply map =ACG= to =0= and =T= to =1=, so that
 $p=1/4$, and then look for the smallest anti lexicographic substring, that is, a
 string starting with a =1= followed by as many =0='s as possible.
 
+#+caption: Threshold-syncmers start with a /small/ character, followed by /large/ characters.
+#+attr_html: :class inset
+[[./figs/threshold.svg]]
+
+#+caption: Threshold-syncmers have distance at least $k$.
+#+attr_html: :class inset
+[[./figs/threshold-dist.svg]]
+
 #+caption: The /anti-lex threshold minimizers/ are near-optimal for $3\leq k \leq 6$, again unlike any other scheme so far.
 #+attr_html: :class inset
-[[./figs/9-threshold.svg]]
+[[./plots/9-threshold.svg]]
 
 Generally, to match the lower bound, we would like to find a sampling scheme
 that never selects two k-mers within distance $k$ of each other (and otherwise
@@ -280,7 +362,7 @@ when $k=(1\bmod w)$.
 
 #+caption: For large alphabets, the syncmer based methods can use $t=1$ and still have unique t-mers, and their plots shift left to touch the lower bound.
 #+attr_html: :class inset large
-[[./figs/10-s256.svg][file:./figs/10-s256.svg]]
+[[./plots/10-s256.svg][file:./plots/10-s256.svg]]
 
 * Computing the density of forward schemes
 For forward schemes, the density can be computed in multiple ways:
