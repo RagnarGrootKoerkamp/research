@@ -29,7 +29,7 @@ build-content:
 
 .PHONY: build-site
 build-site:
-	rm -rf public
+	rm -rf public/*
 	hugo --minify --cleanDestinationDir --baseURL $(BASE_URL)
 
 .PHONY: build
