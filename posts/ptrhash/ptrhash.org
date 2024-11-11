@@ -2744,7 +2744,61 @@ displace elements, which requires a lot more memory. If we could prevent this,
 memory usage would go down and it may be possible to use larger parts without
 slowing down the construction time so much.
 
-* TODO
-- https://github.com/ByteHamster/GpuRecSplit/issues/2
+* PtrHash, part 2
+After leaving this dormant for a year, it's time to pick it up again and write a paper.
+
+TODO:
+- compare with RecSplit-GPU: [cite/t:@recsplit-gpu]
+- Incorporate Phobic [cite:@phobic;@phobic-thesis]
+
+** Phobic
+- Results:
+  - 0.17bits/key less space
+  - 2.17bits/key GPU construction in 28ns/key
+  - query at 37ns/key
+- Contributions:
+  - Near-optimal bucket size distribution, for reduced construction time and space.
+  - Storing seeds 'transposed', so that they compress better.
+  - GPU implementation.
+- Theoretical results:
+  - Using large bucket sizes quickly gives near-optimal size.
+  - Filling a bucket takes $\Omega(e^\lambda)$ time.
+  - Presented method runs in $O(e^{\lambda(1+\epsilon)})$ time, close to
+    theoretical lower bound.
+- Algorithm:
+  - Split data into partitions of expected size $\rho$.
+  - Construct MPHF per part.
+  - Concatenate into single MPHF.
+  - $B=\rho/\lambda$ buckets per part.
+  - $\gamma: [0, 1]\to [0,1]$ is the /bucket assignment function/, taking a hash
+    and returning a bucket.
+  - Intuitive optimal bucket assignment function:
+    $$
+    \gamma = \Beta(x) = x + (1-x) \ln (1-x)
+    $$
+    - First (very) large buckets, then smaller buckets.
+    - In practice, use $\epsilon x + (1-\epsilon) \Beta(x)$, to avoid too large buckets.
+    - Instead of evaluating $\Beta$, a $2048$-piecewise linear approximation is made.
+  - Given a bucket seed/pilot $s$, pthash finds the position as $h(key) \oplus h(s)$
+    - Phobic: Splits seed $s$ in low and high bits $s_l$ and $s_h$, and maps to
+      position $h(key, s_h) + s_l$. Then when the seed is incremented, first all
+      rotations (up to the part size) are searched before rehashing is required.
+
+- Practicalities:
+  - Many small parts (size 2500 only; PTRhash uses around 100k-500k); encode their starts relative to the expected start.
+  - Compact encoding: all values have the same bit length.
+  - interleaved coding: first code first bucket of every part, then second
+    bucket, and so on, since the $i$'th bucket of each part has a more similar
+    distribution and thus compresses better.
+  - One simple benefit of having all large buckets next to each other is more
+    efficient caching. This will also be great for PTRhash.
+
+*** TODO for PTRhash
+- Try the optimal bucket function and see how much it improves construction time.
+- Try 'rotation' displacement inside a part instead of re-hashing.
+  - This will probably be bad, because $(h(x)+d)\bmod p$ (for part size $p$)
+    does not resolve collisions when $h(x)\bmod p = h(y)\bmod p$.
+  - Maybe $(h(x)\oplus d)\bmod p$ is good enough?
+
 
 #+print_bibliography:

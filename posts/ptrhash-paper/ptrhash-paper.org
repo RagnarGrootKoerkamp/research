@@ -3,7 +3,6 @@
 #+OPTIONS: ^:{}
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+hugo_aliases: /posts/ptrhash-paper
 #+date: <2023-10-23>
 
 * Abstract
@@ -32,3 +31,96 @@ than PTHash while achieving $5$ns/key query throughput, $5\times$ faster than
 state-of-the-art methods.
 
 Source: [[https://github.com/RagnarGrootKoerkamp/pthash-rs][github.com/RagnarGrootKoerkamp/pthash-rs]]
+
+* Introduction
+- Perfect hashing
+- Minimal perfect hashing
+- Application in bioinformatics (SSHash)
+* Background
+** PtHash
+** Phobic
+
+
+* PtrHash
+#+name: overview
+#+caption: Overview of PtrHash.
+#+attr_html: :class inset large
+[[file:./fig.drawio.svg]]
+
+** Overview
+Before going into details, we first briefly explain the fully constructed
+PtrHash data structure and how to query it, see [[overview]] and [[query-code]].
+
+The input is a set of $n$ /keys/ $\{k₀, ̣\dots, k_{n-1}\}$ that we want to hash to
+$n$ /slots/ $[n]:=\{0, \dots, n-1\}$.
+These keys are hashed using a hash function $h$ into
+$\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[H]$ ($H\in
+\{2^{64},2^{128}\}$) is equally partitioned into $P$ /parts/.
+Further, each part is partitioned into $B$ /buckets/.
+Thus, key $k_i$ corresponds to part $part(k_i) = \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
+and bucket $bucket(k_i) = \left\lfloor \frac{h(k_i)}{H} \cdot P\cdot
+B\right\rfloor$, where the fractional hash $h(k_i)/H \in [0, 1)$ is scaled to the
+output range.
+
+Now, the goal is to map the roughly $n/P$ keys in each part to $S\approx
+(n/P)/\alpha$ slots, where $\alpha\approx 0.98$ gives us $\approx 2\%$ extra slots to
+play with.[fn::For convenience later on, $P$ is chosen such that $S = 2^s$ is a power of two of configurable size.]
+The main data structure to achieve this mapping is a list of /pilots/ $\{p_0, \dots,
+p_{P\cdot B-1}\}$, one for each bucket. This controls to which slot the keys in
+each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ and pilot $p_b$
+maps to
+$$
+slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_2(p_b))\bmod S.
+$$
+
+
+The main difficulty is during construction, where we must find values of the
+pilots $p_j$ such that all keys indeed map to different slots.
+
+#+name: query-code
+#+caption: Rust code for a simple implementation of the data structure and query function.
+#+begin_src rust
+struct PtrHash {
+    n: usize, // Number of elements
+    P: usize, // Number of parts
+    B: usize, // Buckets per parts
+    S: usize, // Slots per parts
+    p: Vec<u8>, // P*B pilots
+    remap: Vec<usize>, // P*S-n remap indices
+}
+
+impl PtrHash {
+    fn query(&self, key: Key) -> usize {
+        let h = hash(key);
+        // integer division; omitting 128bit arithmetic
+        let part = (self.P * h) / H;
+        let bucket = (self.P * self.B * h) / H;
+        let pilot = self.pilots[bucket];
+        let slot = part * self.S + (h ^ h2(pilot)) % self.S;
+        if slot < self.n {
+            return slot
+        } else {
+            return self.remap[slot - self.n]
+        }
+    }
+}
+#+end_src
+
+
+
+- simplify all the things
+- overview figure comparing PTHash, Phobic, PtrHash
+** Dropping lookups: 8-bit pilots and displacing
+- Drop EF encoding of pivots; no rank/select needed for querying
+** Fast construction: Parts and global remap
+- Faster construction by localized (to L2 cache) displacement only.
+*** CachelineEF instead of plain EF
+** Larger inputs: Shards
+- Allowing
+** Faster queries: Batching/prefetching
+- Plot of max random-access memory throughput.
+** TODO Perfect bucket function
+** TODO Shift displacement instead of rehashing
+** TODO Chunk vs stream batching?
+
+* Results
