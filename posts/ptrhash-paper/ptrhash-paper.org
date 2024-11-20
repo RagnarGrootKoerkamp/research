@@ -1,31 +1,37 @@
-#+title: [WIP] PTRhash: Improving the PTHash Minimal Perfect Hash Function
+#+title: [WIP] PtrHash: Improving the PTHash Minimal Perfect Hash Function
 #+filetags: @paper mphf wip
-#+OPTIONS: ^:{}
+#+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+date: <2023-10-23>
+#+date: <2024-11-20 Wed>
+
+This is the work-in-progress paper on PtrHash. The original blog post on its
+development is [[../ptrhash][here]].
 
 * Abstract
+:PROPERTIES:
+:UNNUMBERED:
+:END:
 *Motivation:*
-Given a set $S$ of $n$ objects, a minimal perfect hash function (MPHF) is a
-collision-free bijective map $f$ from the elements of $S$ to $\{0, \dots,
+Given a set $K$ of $n$ keys, a minimal perfect hash function (MPHF) is a
+collision-free bijective map $f$ from $K$ to $\{0, \dots,
 n-1\}$. These functions have uses in databases, search engines, and are used in
 bioinformatics indexing tools such as Pufferfish (using BBHash), SSHash, and
 Piscem (both using PTHash). This work presents an MPHF that prioritizes query
 throughput and can be constructed efficiently for billions or more elements
-using $2$ to $4$ bits of memory per key.
+using under $3$ bits of memory per key.
 # Practical MPHFs can be constructed efficiently for billions or more elements, use $2$
 # to $4$ bits of memory per key, and can be queried in low constant time.
 
 *Contributions:*
-PTRHash builds on
+PtrHash builds on
 PTHash by 1) partitioning the table for faster construction, and 2) using cuckoo
-hashing to find $8$bit pilots, 3) making compression redundant. We further
+hashing to find $8$ bit pilots, 3) making compression redundant. We further
 speed up queries by 4) simplifying hash functions and modulo operations, and 5)
-prefetching reads from memory.
+batching queries and prefetching reads from memory.
 
 *Results:*
-We implemented PTRhash in Rust and
+We implemented PtrHash in Rust and
 show that at $3$ bits/key memory usage it is $3\times$ faster to construct
 than PTHash while achieving $5$ns/key query throughput, $5\times$ faster than
 state-of-the-art methods.
@@ -36,18 +42,42 @@ Source: [[https://github.com/RagnarGrootKoerkamp/pthash-rs][github.com/RagnarGro
 - Perfect hashing
 - Minimal perfect hashing
 - Application in bioinformatics (SSHash)
+- Focus on query speed/throughput;
 * Background
-** PtHash
-** Phobic
+** Single large seed.
+** Recsplit?
+** FCH
+** PTHash
+** PHOBIC
+** EF coding
+*** Uniform Partitioned EF
+** Cachelines
+
 
 
 * PtrHash
+
+The core principle of PtrHash[fn::The
+PT in PTHash stand for /Pilot Table/. The
+author of the present paper mistakenly understood it to stand for Pibiri and
+Trani, the authors of the PTHash paper. Due to the current author's
+unconventional last name, and PTGK not sounding great, the first initial (R) was
+appended instead. As things go, nothing is as permanent as a temporary name.
+Furthermore, we follow the Google style guide and avoid a long run of uppercase
+letters.]
+is to simplify PTHash to speed up both query speed
+and construction time, at the cost of using slightly more memory.
+We first give a high level overview of PtrHash ([[*Overview]]). Then, we highlight the
+differences compared to PTHash and PHOBIC ([[#differences]]), after which we explain
+specific parts of PtrHash in more detail.
+
+** Overview
+
 #+name: overview
 #+caption: Overview of PtrHash. In red are four keys belonging to the same bucket in the first part, and in blue are three keys belonging to the same bucket in the second part. The $P\cdot B=10$ buckets in the highlighted area are the main component of the data structure, mapping corresponding keys to slots for the same part. The blue highlighted key is initially mapped to a position $\geq n$, and thus remapped into one of the empty slots $<n$, along with the other yellow marked cells.
 #+attr_html: :class inset large
 [[file:./fig.drawio.svg]]
 
-** Overview
 Before going into details, we first briefly explain the fully constructed
 PtrHash data structure and how to query it, see [[overview]] and [[query-code]].
 
@@ -57,25 +87,54 @@ These keys are hashed using a hash function $h$ into
 $\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[H]$ ($H\in
 \{2^{64},2^{128}\}$) is equally partitioned into $P$ /parts/.
 Further, each part is partitioned into $B$ /buckets/.
-Thus, key $k_i$ corresponds to part $part(k_i) = \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
-and bucket $bucket(k_i) = \left\lfloor \frac{h(k_i)}{H} \cdot P\cdot
+Thus, key $k_i$ maps to part $part(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
+and bucket $bucket(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\cdot
 B\right\rfloor$, where the fractional hash $h(k_i)/H \in [0, 1)$ is scaled to the
-output range.
+output range $[P]$ or $[P\cdot B]$ respectively.
 
-Now, the goal is to map the roughly $n/P$ keys in each part to $S\approx
+Now, the goal is to map the $n/P$ expected keys in each part to $S\approx
 (n/P)/\alpha$ slots, where $\alpha\approx 0.98$ gives us $\approx 2\%$ extra slots to
-play with.[fn::For convenience later on, $P$ is chosen such that $S = 2^s$ is a power of two of configurable size.]
-The main data structure to achieve this mapping is a list of /pilots/ $\{p_0, \dots,
-p_{P\cdot B-1}\}$, one for each bucket. This controls to which slot the keys in
-each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ and pilot $p_b$
-maps to
+play with.
+The main data structure to achieve this mapping is a list of $8$-bit /pilots/ $\{p_0, \dots,
+p_{P\cdot B-1}\}$, one for each bucket. The pilots control to which slot the keys in
+each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ with pilot $p_b$
+maps to slot
 $$
 slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_2(p_b))\bmod S.
 $$
 
+*Remapping.* Since each part has slightly more slots than keys, some keys will map to an
+index $\geq n$, leading to a /non-minimal/ perfect hash function. To fix this,
+those are /remapped/ back into the 'gaps' left behind in slots $<n$, which is
+explained in detail in [[#remapping]].
 
-The main difficulty is during construction, where we must find values of the
+*Construction.* The main difficulty of PtrHash is during construction ([[*Construction]]), where we must find values of the
 pilots $p_j$ such that all keys indeed map to different slots.
+Like other methods, PtrHash sorts the buckets within each part from large to
+small and 'greedily' assigns them the smallest pilot that maps the corresponding
+keys to slots that are still free.
+Unlike other methods though, PtrHash only allows pilots up to $255$. When no
+suitable pilot is found, we use a method similar to (blocked) cuckoo hashing: a pilot with
+a minimal number of collisions is chosen, and the colliding buckets are
+'displaced' and have to find a different pilot.
+
+*Parameter values.*
+In practice, we fix the number of slots per part, $S$, to be
+around $2^{18}\approx 262\ 000$, since this allows the construction of each
+part to fit in the L2 cache of each core. Additionally, we choose $S$ to be a
+power of $2$ since this simplifies some hash functions. The number of parts $P$
+is then $(n/S)/\alpha$.
+The load factor $\alpha$ is around $0.98$, so that each part of $S$ slots has
+$\alpha \cdot S$ keys in expectation. In order to avoid overly full parts with
+more keys than slots, a smaller $\alpha$ is sometimes required when there are
+many parts.
+
+
+Similar to FCH and PTHash, the /total/ number of buckets $P\cdot B$ is roughly
+$c\cdot n / \lg_2(n)$, where $c$ ranges from $\approx 6$ to $\approx 10$ TODO.
+
+TODO: Instead use average bucket size $\lambda$?
+
 
 #+name: query-code
 #+caption: Rust code for a simple implementation of the data structure and query function.
@@ -86,41 +145,235 @@ struct PtrHash {
     B: usize, // Buckets per parts
     S: usize, // Slots per parts
     p: Vec<u8>, // P*B pilots
-    remap: Vec<usize>, // P*S-n remap indices
+    free: Vec<usize>, // P*S-n remap indices
 }
 
 impl PtrHash {
     fn query(&self, key: Key) -> usize {
-        let h = hash(key);
-        // integer division; omitting 128bit arithmetic
-        let part = (self.P * h) / H;
-        let bucket = (self.P * self.B * h) / H;
+        // Assuming a 64bit hash.
+        let h = hash(key) as u128;
+        let part = ((self.P as u128 * h) >> 64) as usize;
+        let bucket = (((self.P * self.B) as u128 * h) >> 64) as usize;
         let pilot = self.pilots[bucket];
         let slot = part * self.S + (h ^ h2(pilot)) % self.S;
         if slot < self.n {
             return slot
         } else {
-            return self.remap[slot - self.n]
+            return self.free[slot - self.n]
         }
     }
 }
 #+end_src
 
 
+** Comparison to PTHash and PHOBIC
+:PROPERTIES:
+:CUSTOM_ID: differences
+:END:
+Compared to PTHash [cite:@pthash], PtrHash has a few differences:
+- *Single bucket size.* Following FCH [cite:@fch], PTHash [cite:@pthash] uses /small/ and /large/ buckets
+  to speed up the construction and decrease memory usage. Similarly, PHOBIC uses
+  a function to create a near-optimal distribution of bucket sizes that saves
+  up to $0.14$ bits/kmer over the small/large buckets [cite:@phobic].
+  For PtrHash we prefer simplicity and all buckets have the same expected size.
+- *Pilot encoding.* PTHash offers a few encoding schemes for the pilots: compact
+  encoding (storing each pilot with exactly as many bits as are needed for the
+  largest pilot), dictionary encoding (storing a list of all pilot values,
+  and replacing each pilot with an index in the list), and Elias-Fano encoding.
+  Additionally the small and large buckets can use different encoding schemes.
+  PHOBIC offers an additional space saving of $0.06$ bits/key by interleaving the pilots of each part.
 
-- simplify all the things
-- overview figure comparing PTHash, Phobic, PtrHash
-** Dropping lookups: 8-bit pilots and displacing
-- Drop EF encoding of pivots; no rank/select needed for querying
-** Fast construction: Parts and global remap
-- Faster construction by localized (to L2 cache) displacement only.
-*** CachelineEF instead of plain EF
+  For PtrHash, all pilots are exactly $8$ bits, and we simply store them as a
+  vector of bytes, removing the need for additional logic and memory accesses during their lookup.
+- *Parts.* PTHash-HEM [cite:@pthash-2] and PHOBIC split the keys into parts, and
+  then work on each part independently. For a part containing $P'$ keys, they
+  use $P'/\alpha$ slots (with $\alpha=1$ for PHOBIC). This means that for each
+  query, a lookup is required to determine the slot where the current part starts.
+
+  PtrHash, on the other hand, assigns the same number of slots to each part, so
+  that no additional lookups are needed.
+- *Part size.* PTHash only uses a single part for all keys. PHOBIC, instead, uses
+  relatively small parts of expected size $2500$. PtrHash chooses the part size such that
+  construction of each part roughly fits in the L2 cache of each CPU core,
+   which is around $250\ 000$ in practice.
+- *Remapping.* PTHash-HEM supports construction by parts and
+  ensures that each part of $P$ elements maps to $P$ consecutive slots, by
+  remapping /per part/. PHOBIC does not use remapping since it does not use an $\alpha<1$.
+  PtrHash, instead, does a global remap over /all/ parts.
+
+  Additionally, PtrHash introduces a new encoding for the remapped values, see [[#remapping]].
+
+- *Streaming queries.* Lastly, PtrHash supports /streaming/ queries, allowing it
+  to prefetch pilots from memory and better use the available memory bandwidth.
+
+** Construction
+Both PTHash-HEM and PHOBIC first partition the keys into parts, and then build
+an MPHF part-by-part. Within each part, the keys are randomly partitioned into
+/buckets/ of expected size $\lambda$ ([[overview]]).
+Then, the buckets are sorted from large to small, and one-by-one /greedily/ assigned a
+/pilot/, such that the keys in the bucket map to /slots/ not yet covered by earlier buckets.
+
+As observed for PTHash, searching for pilots becomes harder as the load factor
+(fraction of already filled slots) increases. Hence, PTHash uses $n/\alpha > n$
+slots to reduce the construction time and decrease the pilots, making their
+encoding more efficient.
+PHOBIC, on the other hand, uses relatively small parts of size $2500$, so that
+the search for the last empty slot usually shouldn't take much more than $2500$ attempts.
+Nevertheless, a drawback of the greedy approach is that pilots have an uneven
+distribution, causing sub-optimal fixed-width compression.
+
+In PtrHash, we instead always use /fixed width/ single byte pilots. To achieve this
+
+
+
+** Remapping using CacheLineEF
+:PROPERTIES:
+:CUSTOM_ID: remapping
+:END:
+Both PTHash and PtrHash use a parameter $0<\alpha\leq 1$ to use a total of
+$n'=n/\alpha$ slots, introducing
+$n'-n$ additional free slots.
+As a result of the additional slots, some, say $R$, of the keys will map to positions $n\leq
+p_0<\dots< p_{R-1}< n'$, causing the perfect hash function to not be /minimal/.
+
+*Remapping.* Since there are a total of $n$ keys, this means there are exactly $R$ empty
+slots ('gaps') left behind in $[n]$, say at positions $L_0$ to $L_{R-1}$.
+We /remap/ the keys that map to positions $\geq n$ to the empty slots at
+positions $< n$ to obtain a /minimal/ perfect hash function.
+
+A simple way to store the remap is as a plain array $free$, such that
+$free[p_i-n] = L_i$.
+PTHash encodes this array using Elias-Fano coding [cite:@elias;@fano], after setting undefined
+positions of $free$ equal to their predecessor.
+The benefit of the plain $free$ array is fast and cache-local lookups, whereas
+Elias-Fano coding provides a more compact encoding that requires multiple
+lookups to memory.
+
+*CacheLineEF.* We propose using Elias-Fano coding on a per-cache line basis, so that each
+lookup only requires a single read from memory.
+First, the list of non-decreasing $free$ positions is split into chunks of
+$C=44$ values $\{v_0, \dots, v_{43}\}$, with the last chunk possibly containing fewer values.
+Then, each chunk is encoded into $64$ bytes that can be stored as single cache
+line, as shown in [[cacheline-ef]].
+
+We first split all indices into their $8$ /low/ bits ($v_i \bmod 2^8$) and $32$
+/high/ bits ($\lfloor v_i/2^8\rfloor$). Further, the high part is split into an
+/offset/ (the high part of $v_0$) and the /relative/ high part:
+$$
+v_i = (v_i\bmod 2^8) + 2^8\cdot\lfloor v_0/256\rfloor + 2^8\cdot \left(\lfloor v_i/256\rfloor - \lfloor v_0/256\rfloor\right).
+$$
+This is stored as follows.
+- First, the $8$ low bits of each $v_i$ are directly written to the $44$ trailing bytes.
+- Next, the $32$ bit offset $\lfloor v_0/256\rfloor$ is stored.
+- Lastly, the relative high parts are encoded into $128$ bits. For each $i\in[44]$, bit $i + \lfloor
+  v_i/256\rfloor - \lfloor v_0/256\rfloor$ is set to =1=.
+  Since the $v_i$ are increasing, each $i$ sets a distinct bit, for a total of $44$ set bits.
+
+#+name: cacheline-ef
+#+caption: Overview of the CacheLineEF datastructure.
+#+attr_html: :class inset large
+[[file:./cacheline-ef.drawio.svg]]
+
+*Lookup.* The value at position $i$ is found by summing (1) the $8$ low bits,
+(2) the offset multiplied by $256$, and (3) the relative high part.
+This last part can be found as $256\cdot(select(i)-i)$, where $select(i)$ gives
+the position of the $i$'th =1= bit. In practice, this can be implemented
+efficiently using the =PDEP= instruction provided by the BMI2 bit manipulation
+instruction set [cite:@fast-select]:
+this operation can /deposit/ the mask =1<<i= onto our bit pattern, so that the
+=1= ends up at the position of the $i$'th one of our pattern. Then, it suffices
+to count the number of trailing zeros, which is provided by the =TZCNT=
+instruction in BMI1.
+
+*Limitations.* CacheLineEF uses $64/44\cdot 8 = 11.6$ bits per value, which is
+more than the usual Elias-Fano, which for example takes $8+2=10$ bits per value for data
+with an average stride of $256$.
+Furthermore, values are limited to $40$ bits, covering $10^{12}$ items.
+The range could be increased to $48$ bit numbers by storing $5$ bytes of the
+offset, but this has not been necessary so far.
+Lastly, each CacheLineEF can only span a range of around $(128-44)\cdot 256 =
+21\ 504$, or an average stride of $500$.
+For PtrHash, we use $\alpha\leq 0.99$, and hence the average distance between
+empty slots is at most $100$, so that in practice, the average distance never
+exceeds $500$.
+
+*Comparison.*
+Compared to Elias-Fano coding, CacheLineEF stores the low order bits as exactly
+a single byte, removing the need for unaligned reads. Further, the select
+data structure on the high-order bits is replaced by a few local bit-wise operations.
+CacheLineEF is also somewhat similar to the /(Uniform) Partitioned Elias-Fano Index/
+of [cite/t:@partitioned-elias-fano], in that both split the data.
+The uniform partitioned index also uses fixed part sizes, but encodes them with
+variable widths, and adds a second level of EF
+to encode the part offsets. Instead, CacheLineEF prefers simplicity and uses
+fixed part sizes with a constant width encoding and simply stores the offsets directly.
+
+
+
+#+name: cacheline-ef-code
+#+caption: Code for constructing and querying CacheLineEF.
+#+attr_html: :class inset large
+#+begin_src rust
+const L: usize = 44; // The number of elements per cache line.
+
+#[repr(C)]
+#[repr(align(64))]   // Align the 64byte object to cache lines.
+pub struct CacheLineEF {
+    high: [u64; 2],  // Encoding of the high bits.
+    offset: u32,     // Offset of the first element.
+    low: [u8; L],    // Low 8 bits of each element.
+}
+
+impl CacheLineEF {
+    fn new(vals: &[u64; L]) -> Self {
+        let offset = vals[0] >> 8;
+        let mut low = [0u8; L];
+        for (i, &v) in vals.iter().enumerate() {
+            low[i] = (v & 0xff) as u8;
+        }
+        let mut high = [0u64; 2];
+        for (i, &v) in vals.iter().enumerate() {
+            let idx = i + ((v >> 8) - offset) as usize;
+            high[idx / 64] |= 1 << (idx % 64);
+        }
+        Self {
+            offset: offset as u32,
+            high,
+            low,
+        }
+    }
+
+    fn get(&self, idx: usize) -> u64 {
+        let p = self.high[0].count_ones() as usize;
+        // Select the position of the 1 using the BMI2 PDEP instruction.
+        let one_pos = if idx < p {
+            self.high[0].select_in_word(idx)
+        } else {
+            64 + self.high[1].select_in_word(idx - p)
+        };
+
+        self.low[idx] as u64
+            + 256 * self.reduced_offset as u64
+            + 256 * (one_pos - idx) as u64
+    }
+}
+#+end_src
+
+*** TODO
+
+
+** Batching/streaming queries
 ** Larger inputs: Shards
 - Allowing
-** Faster queries: Batching/prefetching
-- Plot of max random-access memory throughput.
 ** TODO Perfect bucket function
 ** TODO Shift displacement instead of rehashing
 ** TODO Chunk vs stream batching?
 
+
 * Results
+- Query throughput vs threads
+- Construction time vs part size
+- Plot of max random-access memory throughput.
+
+
+#+print_bibliography:
