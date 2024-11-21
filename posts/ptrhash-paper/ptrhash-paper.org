@@ -95,9 +95,11 @@ These keys are hashed using a hash function $h$ into
 $\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[H]$ ($H\in
 \{2^{64},2^{128}\}$) is equally partitioned into $P$ /parts/.
 Further, each part is partitioned into $B$ /buckets/.
-Thus, key $k_i$ maps to part $part(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
+Each key $k_i$ is uniformly mapped to a part and bucket using the 'fast range'
+method [cite:@fast-range], where
+ $part(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
 and bucket $bucket(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\cdot
-B\right\rfloor$, where the fractional hash $h(k_i)/H \in [0, 1)$ is scaled to the
+B\right\rfloor$. Intuitively, the fractional hash $h(k_i)/H \in [0, 1)$ is scaled to the
 output range $[P]$ or $[P\cdot B]$ respectively.
 
 Now, the goal is to map the $n/P$ expected keys in each part to $S\approx
@@ -110,6 +112,8 @@ maps to slot
 \begin{equation}
 slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_p(p_b))\bmod S.\label{eq:slot}
 \end{equation}
+In practice, we choose $S$ to be a power of $2$, so that the $\!\bmod S$ operation
+is simple.
 
 *Hash functions.*
 Starting simple, the pilots $p_b$ are hashed into pseudo-random $64$ integers by
@@ -149,8 +153,7 @@ a minimal number of collisions is chosen, and the colliding buckets are
 *Parameter values.*
 In practice, we fix the number of slots per part, $S$, to be
 around $2^{18}\approx 262\ 000$, since this allows the construction of each
-part to fit in the L2 cache of each core. Additionally, we choose $S$ to be a
-power of $2$ since this simplifies some hash functions. The number of parts $P$
+part to fit in the L2 cache of each core. The number of parts $P$
 is then $(n/S)/\alpha$.
 The load factor $\alpha$ is around $0.98$, so that each part of $S$ slots has
 $\alpha \cdot S$ keys in expectation. In order to avoid overly full parts with
@@ -178,8 +181,9 @@ struct PtrHash {
 
 impl PtrHash {
     fn query(&self, key: Key) -> usize {
-        // Assuming a 64bit hash.
+        // Assuming a 64 bit hash.
         let h = self.hash(key) as u128;
+        // This compiles to taking the high 64 bits of the 64x64->128 multiplication.
         let part = ((self.P as u128 * h) >> 64) as usize;
         let bucket = (((self.P * self.B) as u128 * h) >> 64) as usize;
         let pilot = self.pilots[bucket];
