@@ -1,4 +1,4 @@
-#+title: [WIP] PtrHash: Improving the PTHash Minimal Perfect Hash Function
+#+title: [WIP] PtrHash: A simple and fast minimal perfect hash function
 #+filetags: @paper mphf wip
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -55,6 +55,7 @@ Its main novelties are:
 ** Recsplit?
 ** FCH
 ** PTHash
+** PTHash-HEM
 ** PHOBIC
 ** EF coding
 *** Uniform Partitioned EF
@@ -83,7 +84,7 @@ specific parts of PtrHash in more detail.
 #+name: overview
 #+caption: Overview of PtrHash. In red are four keys belonging to the same bucket in the first part, and in blue are three keys belonging to the same bucket in the second part. The $P\cdot B=10$ buckets in the highlighted area are the main component of the data structure, mapping corresponding keys to slots for the same part. The blue highlighted key is initially mapped to a position $\geq n$, and thus remapped into one of the empty slots $<n$, along with the other yellow marked cells.
 #+attr_html: :class inset large
-[[file:./fig.drawio.svg]]
+[[file:./overview.drawio.svg]]
 
 Before going into details, we first briefly explain the fully constructed
 PtrHash data structure and how to query it, see [[overview]] and [[query-code]].
@@ -106,9 +107,29 @@ The main data structure to achieve this mapping is a list of $8$-bit /pilots/ $\
 p_{P\cdot B-1}\}$, one for each bucket. The pilots control to which slot the keys in
 each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ with pilot $p_b$
 maps to slot
-$$
-slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_2(p_b))\bmod S.
-$$
+\begin{equation}
+slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_p(p_b))\bmod S.\label{eq:slot}
+\end{equation}
+
+*Hash functions.*
+Starting simple, the pilots $p_b$ are hashed into pseudo-random $64$ integers by
+using Fx Hash for $h_p$,
+which simply multiplies the pilot with a /mixing constant/.
+
+When the keys are $64$ bit integers we use this same Fx Hash algorithm to hash
+them, since multiplying by an odd constant is invertible modulo $2^{64}$ and
+hence a perfect hash.
+For other keys, the hash function depends on the number of elements. When the
+number of elements is not too far above $10^9$, the probability of hash
+collisions with a $64$ bit hash function is sufficiently small, and we use
+the $64$ bit variant of xxHash (TODO).
+When the number of keys goes beyond $2^{32} \approx 4\cdot 10^9$, the
+probability of $64$ bit hash collisions increases, and collisions may be found
+after sorting the hashes. In this case, the $128$ bit variant of xxHash (TODO)
+is used, where the high $64$ bits determine the part and bucket, and the low
+$64$ bits are used in Equation \ref{eq:slot} to determine the slot.
+
+TODO murmur vs xx vs wy, and actually implement this.
 
 *Remapping.* Since each part has slightly more slots than keys, some keys will map to an
 index $\geq n$, leading to a /non-minimal/ perfect hash function. To fix this,
@@ -151,18 +172,18 @@ struct PtrHash {
     P: usize, // Number of parts
     B: usize, // Buckets per parts
     S: usize, // Slots per parts
-    p: Vec<u8>, // P*B pilots
+    pilots: Vec<u8>,  // P*B pilots
     free: Vec<usize>, // P*S-n remap indices
 }
 
 impl PtrHash {
     fn query(&self, key: Key) -> usize {
         // Assuming a 64bit hash.
-        let h = hash(key) as u128;
+        let h = self.hash(key) as u128;
         let part = ((self.P as u128 * h) >> 64) as usize;
         let bucket = (((self.P * self.B) as u128 * h) >> 64) as usize;
         let pilot = self.pilots[bucket];
-        let slot = part * self.S + (h ^ h2(pilot)) % self.S;
+        let slot = part * self.S + (h ^ self.hash_pilot(pilot)) % self.S;
         if slot < self.n {
             return slot
         } else {
@@ -251,8 +272,8 @@ Then, the new bucket is inserted.
 #+begin_src rust
 /// Given the buckets of hashed keys for a part, search for pilot values.
 fn pilots_for_part(&self, buckets: Vec<&[Hash]>) -> Vec<u8> {
-    let mut pilots = vec![0; self.buckets_per_part];     // One pilot per bucket.
-    let mut slots = vec![None; self.slots_per_part];  // One bucket idx per slot.
+    let mut pilots = vec![0; self.B];                    // One pilot per bucket.
+    let mut slots = vec![None; self.S];       // Bucket idx mapping to each slot.
 
     // A priority queue (max-heap) of buckets.
     let mut queue = BinaryHeap::from_iter(
@@ -369,7 +390,7 @@ offset, but this has not been necessary so far.
 Lastly, each CacheLineEF can only span a range of around $(128-44)\cdot 256 =
 21\ 504$, or an average stride of $500$.
 For PtrHash, we use $\alpha\leq 0.99$, and hence the average distance between
-empty slots is at most $100$, so that in practice, the average distance never
+empty slots is at most $100$, so that in practice the average distance never
 exceeds $500$.
 
 *Comparison.*
@@ -382,7 +403,6 @@ The uniform partitioned index also uses fixed part sizes, but encodes them with
 variable widths, and adds a second level of EF
 to encode the part offsets. Instead, CacheLineEF prefers simplicity and uses
 fixed part sizes with a constant width encoding and simply stores the offsets directly.
-
 
 
 #+name: cacheline-ef-code
