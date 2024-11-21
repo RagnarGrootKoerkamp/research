@@ -26,7 +26,7 @@ using under $3$ bits of memory per key.
 *Contributions:*
 PtrHash builds on
 PTHash by 1) partitioning the table for faster construction, and 2) using cuckoo
-hashing to find $8$ bit pilots, 3) making compression redundant. We further
+hashing to find $8$ bit pilots, which 3) makes further compression redundant. We further
 speed up queries by 4) simplifying hash functions and modulo operations, and 5)
 batching queries and prefetching reads from memory.
 
@@ -43,6 +43,13 @@ Source: [[https://github.com/RagnarGrootKoerkamp/pthash-rs][github.com/RagnarGro
 - Minimal perfect hashing
 - Application in bioinformatics (SSHash)
 - Focus on query speed/throughput;
+** Contributions
+We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
+query throughput and construction speed, at the cost of some more memory usage.
+Its main novelties are:
+1. the use of fixed-width $8$ bit pilots, leading to very simple lookups;
+2. cuckoo-hashing-like based construction
+3. construction in parts, with a single /remap/ table, leading to fast construction;
 * Background
 ** Single large seed.
 ** Recsplit?
@@ -213,7 +220,7 @@ an MPHF part-by-part. Within each part, the keys are randomly partitioned into
 Then, the buckets are sorted from large to small, and one-by-one /greedily/ assigned a
 /pilot/, such that the keys in the bucket map to /slots/ not yet covered by earlier buckets.
 
-As observed for PTHash, searching for pilots becomes harder as the load factor
+[Drop/dedup with overview/move to background?] As observed for PTHash, searching for pilots becomes harder as the load factor
 (fraction of already filled slots) increases. Hence, PTHash uses $n/\alpha > n$
 slots to reduce the construction time and decrease the pilots, making their
 encoding more efficient.
@@ -222,9 +229,77 @@ the search for the last empty slot usually shouldn't take much more than $2500$ 
 Nevertheless, a drawback of the greedy approach is that pilots have an uneven
 distribution, causing sub-optimal fixed-width compression.
 
-In PtrHash, we instead always use /fixed width/ single byte pilots. To achieve this
+*Hash-evict[fn::We would have preferred to call this method hash-displace, as
+/displace/ is the term used instead of /evict/ in e.g. the cuckoo  filter by [cite/t:@cuckoo-filter].
+Unfortunately, /hash and displace/ is also the name of another MPHF introduced
+by [cite/t:@hash-displace], that was then extended into /compressed
+hand-and-displace/ (CHD) by [cite/t:@hash-displace-compress]. There, the
+to-be-inserted key (rather than the existing key) is /displaced/ by applying a linear shift
+to its initial position.].* In PtrHash, we instead always use /fixed width/ single byte pilots. To achieve
+this, we use a technique resembling cuckoo hashing [cite:@cuckoo-hashing].
+As before, buckets are greedily /inserted/ from large to small. For some buckets,
+there may be no pilot in $[256]$ such that all its keys map to empty slots. When
+this happens, a pilot is found with the lowest weighted number of /collisions/.
+The weight of a collision with a bucket of size $s$ is $s^2$, to prevent
+collisions with large buckets, as those are harder to place.
+The colliding buckets are then /evicted/ by emptying the slots they map to and
+pushing them back onto the priority queue of remaining buckets.
+Then, the new bucket is inserted.
 
+#+name: construction-code
+#+caption: Conceptual Rust code for determining the pilot values for each part. In practice, a number of optimizations are made.
+#+begin_src rust
+/// Given the buckets of hashed keys for a part, search for pilot values.
+fn pilots_for_part(&self, buckets: Vec<&[Hash]>) -> Vec<u8> {
+    let mut pilots = vec![0; self.buckets_per_part];     // One pilot per bucket.
+    let mut slots = vec![None; self.slots_per_part];  // One bucket idx per slot.
 
+    // A priority queue (max-heap) of buckets.
+    let mut queue = BinaryHeap::from_iter(
+        (0..buckets.len()).iter().map(|i| (buckets[i].len(), i))
+    );
+
+    while let Some((_, i)) = queue.pop() {       // Insert next-largest bucket i.
+        pilots[i] = self.find_pilot(buckets[i], &mut slots);
+        for &h in buckets[i] {
+            let slot = self.slot_for_hashed_key(h, pilots[i]);
+            if let Some(j) = slots[slot] {           // Evict colliding bucket j.
+                for &h_j in buckets[j] {
+                    let slot_j = self.slot_for_hashed_key(h_j, pilots[j]);
+                    slots[slot_j] = None;
+                }
+                todo.push((buckets[j].len(), j));
+            }
+            slots[slot] = Some(i);
+        }
+    }
+
+    pilots
+}
+#+end_src
+
+*Optimizations.* In order to speed up the code to search for pilots, a number of
+optimizations are made to the conceptual idea of [[construction-code]].
+1. *=taken= bit mask.* Instead of determining whether a slot is free by
+   checking the =slots= array for the optional index of the bucket mapping
+   there, we keep a separate bit mask =taken= that takes only $1$ bit instead
+   of $32$ bits per element. This allows for better caching and hence faster access.
+2. *Collision-free hot path.* When searching for pilots, we first test if there
+   is a pilot without any collisions. This is usually the case, and is faster
+   since it only needs access to =taken=, not =slots=. Additionally, where there
+   /is/ a collision, we know a pilot is optimal when it collides with exactly
+   one bucket of minimal size.
+3. *Avoiding loops.* To avoid repeated patterns of the same buckets evicting
+   each other, the search for a pilot starts at a random number in $[256]$,
+   rather than at $0$.
+4. *Avoiding loops more.* Each time a bucket is placed that evicted some other
+   bucket(s), it is added to a list of the $16$ most recently placed buckets.
+   Buckets in this list are never evicted. This avoids short cycles, where for
+   example two buckets keep evicting each other for the same slot.
+
+*Analysis.* Unfortunately, we do not currently have a formal analysis showing
+that the hash-evict method works with high probability given that certain
+criteria are met. In [[*Results]], we will show some practical results.
 
 ** Remapping using CacheLineEF
 :PROPERTIES:
@@ -358,9 +433,6 @@ impl CacheLineEF {
     }
 }
 #+end_src
-
-*** TODO
-
 
 ** Batching/streaming queries
 ** Larger inputs: Shards
