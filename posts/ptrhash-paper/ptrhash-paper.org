@@ -92,14 +92,16 @@ PtrHash data structure and how to query it, see [[overview]] and [[query-code]].
 The input is a set of $n$ /keys/ $\{k₀, ̣\dots, k_{n-1}\}$ that we want to hash to
 $n$ /slots/ $[n]:=\{0, \dots, n-1\}$.
 These keys are hashed using a hash function $h$ into
-$\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[H]$ ($H\in
-\{2^{64},2^{128}\}$) is equally partitioned into $P$ /parts/.
+$\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[2^{64}]$
+is equally partitioned into $P$ /parts/.
 Further, each part is partitioned into $B$ /buckets/.
-Each key $k_i$ is uniformly mapped to a part and bucket using the 'fast range'
+Each key $k_i$ is (nearly) uniformly mapped to a part and bucket using the 'fast range'
 method [cite:@fast-range], where
- $part(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\right\rfloor$
-and bucket $bucket(k_i) := \left\lfloor \frac{h(k_i)}{H} \cdot P\cdot
-B\right\rfloor$. Intuitively, the fractional hash $h(k_i)/H \in [0, 1)$ is scaled to the
+\begin{align}
+part(k_i) &:= \left\lfloor P\cdot h(k_i) / 2^{64}\right\rfloor,\\
+bucket(k_i) &:= \left\lfloor P\cdot B\cdot h(k_i)/2^{64}\right\rfloor.
+\end{align}
+Intuitively, the fractional hash $h(k_i)/2^{64} \in [0, 1)$ is scaled to the
 output range $[P]$ or $[P\cdot B]$ respectively.
 
 Now, the goal is to map the $n/P$ expected keys in each part to $S\approx
@@ -110,15 +112,14 @@ p_{P\cdot B-1}\}$, one for each bucket. The pilots control to which slot the key
 each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ with pilot $p_b$
 maps to slot
 \begin{equation}
-slot(k_i) = part(k_i) \cdot S + (h(k_i) \oplus h_p(p_b))\bmod S.\label{eq:slot}
+slot(k_i) := part(k_i) \cdot S + reduce(h(k_i) \oplus h_p(p_b), S),\label{eq:slot}
 \end{equation}
-In practice, we choose $S$ to be a power of $2$, so that the $\!\bmod S$ operation
-is simple.
+where $reduce(x, S)$ maps the random $64$ bit integer to $[S]$ as explained below.
 
 *Hash functions.*
 Starting simple, the pilots $p_b$ are hashed into pseudo-random $64$ integers by
 using Fx Hash for $h_p$,
-which simply multiplies the pilot with a /mixing constant/.
+which simply multiplies the pilot with a /mixing constant/ $C$.
 
 When the keys are $64$ bit integers we use this same Fx Hash algorithm to hash
 them, since multiplying by an odd constant is invertible modulo $2^{64}$ and
@@ -134,6 +135,20 @@ is used, where the high $64$ bits determine the part and bucket, and the low
 $64$ bits are used in Equation \ref{eq:slot} to determine the slot.
 
 TODO murmur vs xx vs wy, and actually implement this.
+
+*The reduce function.* When $64$ bit hashes are used, we must ensure that the full entropy of
+the hash is used. A simple choice would be $reduce(x,S) = x\bmod S$, which uses
+all bits when $S$ is /not/ a power of $2$ and takes two multiplications using
+'fast mod' [cite:@fast-mod]. Instead, we take $S=2^s$, so that $x\bmod 2^s$ is a simple bit-mask. Unfortunately, this only uses
+the lower $s$ bits of the hash, while the $part$ and $bucket$ functions use the
+high $\log_2(P\cdot B)$ bits, leaving some entropy in the middle bits unused.
+
+As a solution, we first multiply $x$ by the mixing constant $C$, and then take the low
+$s$ bits of the high half. This uses the full entropy of the input and
+takes only a single multiplication, giving around $5\%$ query speedup over fast mod.
+\begin{equation}
+reduce(x, 2^s) := \left\lfloor C\cdot x/2^{64}\right\rfloor \bmod 2^s
+\end{equation}
 
 *Remapping.* Since each part has slightly more slots than keys, some keys will map to an
 index $\geq n$, leading to a /non-minimal/ perfect hash function. To fix this,
@@ -171,10 +186,11 @@ TODO: Instead use average bucket size $\lambda$?
 #+caption: Rust code for a simple implementation of the data structure and query function.
 #+begin_src rust
 struct PtrHash {
-    n: usize, // Number of elements
-    P: usize, // Number of parts
-    B: usize, // Buckets per parts
-    S: usize, // Slots per parts
+    n: usize,         // Number of elements
+    P: usize,         // Number of parts
+    B: usize,         // Buckets per parts
+    S: usize,         // Slots per parts
+    lgS: usize        // S = 2^(log2_S)
     pilots: Vec<u8>,  // P*B pilots
     free: Vec<usize>, // P*S-n remap indices
 }
@@ -187,7 +203,9 @@ impl PtrHash {
         let part = ((self.P as u128 * h) >> 64) as usize;
         let bucket = (((self.P * self.B) as u128 * h) >> 64) as usize;
         let pilot = self.pilots[bucket];
-        let slot = part * self.S + (h ^ self.hash_pilot(pilot)) % self.S;
+        let x = h ^ self.hash_pilot(pilot);
+        let reduced = ((self.C as u128 * x as u128) >> 64) as usize & (self.S - 1);
+        let slot = (part << lgS) + reduced;
         if slot < self.n {
             return slot
         } else {
