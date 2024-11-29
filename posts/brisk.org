@@ -1,0 +1,197 @@
+#+title: Comments on Brisk
+#+filetags: @paper-review minimizers
+#+OPTIONS: ^:{} num: num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2024-11-29 Fri>
+
+These are some (biased) comments on Brisk,
+a dynamic k-mer dictionary [cite:@brisk].
+
+* Overview
+As is common these days, Brisk builds a dynamic k-mer dictionary using
+super-kmers, like e.g. SSHash [cite:@sshash].
+1. It uses double-decycling minimizers for their low density.
+2. Super-kmers are clustered on their minimizer.
+3. A /bucket/ is the set of super-kmers with the same minimizer.
+4. New: To store a bucket, super-kmers are written in 'interleaved' form:
+   =CBA___XYZ= (with =___= being the minimizer) is stored as =___AXBYCZ=.
+5. Even better, the minimizer itself is omitted, so only =AXBYCZ= is stored.
+6. For super-kmers with non-maximal length, like =A___XY=, =N= characters (I'll use =*= for
+   clarity) are
+   used to fill gaps: =**A___XY*=, which is stored as =AX*Y**=.
+7. To search a bucket, we can usually narrow the linear scan over super-kmers to
+   only those sharing a prefix up to the same =N=.
+8. Minimizers are hashed using a bijective hash function, and clustered into
+   superbuckets. While minimizer-counts have a very skew distribution, these
+   superbuckets have more uniform sizes.
+
+* Detailed comments
+** General
+- A number of paragraphs are missing the final =s= for nearly all verbs and/or
+  have multiple ungrammatical sentences.
+- All citations are currently shown as =\citet=, but instead, most ought to be =\citep=.
+- Nothing is said about (not) supporting deletion queries.
+- One of the main benefits of the interleaved representation should be improved
+  query speed, but this is never compared against competitors, nor against a
+  version that only uses linear scanning.
+- (nit: I generally don't see the point in uploading preprints with line numbers enabled.)
+- No DOIs in references :(
+** Abstract
+- What's the $\mathfrak N$-like mark in the author list?
+- exceptional throughput: This claim cannot be made without being more precise:
+  - construction times are not faster than any of the competitors
+  - query throughput is not at all compared to other methods
+- /drop in replacement/: but deletions are not supported, and it's called a proof of concept.
+** 1. Introduction
+- Footnote 1 runs off the page.
+- $O(N.K)$ use $k$ instead, and $\cdot$ instead of the dot.
+- What /exactly/ does it mean to use a k-mer dictionary in 'streaming' way?
+- It is mentioned CBL can use a lot of memory in the worst case because it does
+  not build an SPSS, but neither does Brisk, in my understanding.
+- /k-mer-level dynamism/: it is unclear to me what exactly is meant by this. To
+  me it would imply that individual k-mers can also be removed, but that is not
+  the case.
+** 2. Methods
+*** 2.1 Outline
+- /can be built in streaming/: missing word?
+- /only encoding the prefixes and suffixes before and after the minimizer
+  [cite:@fractional-hitting-sets]./: After a brief skim, I did not find this idea mentioned in the
+  cited paper.
+- $O(S)$ should be $O(|S|)$
+- What is /large minimizers/ referring to?
+*** 2.2 Indexing super-k-mers
+- /A simple scheme based on hashed $m$-mers achieves a near-optimal density of
+  $2/(k-m+1)$ [cite:@modmini]/.
+  - The sentence seems to refer to the random minimizer, which has a density of
+    $2/(k-m+2)$ instead, which is not near-optimal.
+  - The cited paper introduces the mod-minimizer, which is near-optimal in
+    specific cases, but has a completely different density.
+- It should be $(k-m+2)/2$ k-mers per super-kmer. Probably from here onward,
+  every $k-m+1$ should be a $k-m+2$ instead.
+- /In figure 1a, we show the mean super-k-mer size that can be obtained for
+  standard values of $k$ and $m$, and observe that practical results closely
+  match this approximation./
+  - The figure does not show the theoretical prediction.
+- $2(3k-m-1)/(k-m+1)$: it is unclear to me where this comes from.
+- In my experience, decycling minimizers are slower to compute then
+  other minimizer schemes, but indeed, they do have low density.
+- Figure 1b confuses me:
+  - in my experience, (double) decycling is never worse than random minimizers,
+    while in the figure decycling sometimes /is/ worse.
+  - the caption writes /Mean difference in ... and hashed minimizer strategies./
+    Should probably be singular /strategy/?
+  - While comparing to random minimizers is nice, really it would be better to
+    compare to some more of the schemes that are mentioned.
+  - it would be much more clear to simply show a plot of density of the two
+    schemes directly, rather than just the difference.
+- /Since these minimizers can be selected in streaming with minimal
+  computational overhead/: the original decycling set paper
+  [cite:@minimum-decycling-set] does not provide code for streaming computation
+  of the minimizers. It can be done, but it should probably be remarked how.
+*** 2.3 Lazy encoding
+- A brief quantitative comparison between the various bits-per-k-mer ratios in
+  the paper would be beneficial to understand the tradeoff between the bits
+  saved by not having to encode the minimizer, and the bits lost by encoding
+  maximal k-mers only.
+- the reverse-complement of a minimizer is not necessarily a minimizer of the
+  reverse-complement sequence, unless special care is taken. This seems to be
+  assumed though.
+- How does 'only consider canonical m-mers' interact with decycling minimizers?
+  I could see this requirement causing the decycling minimizers to behave much
+  worse than expected.
+- A detailed worked example of this process would be beneficial, as many
+  papers skim details on reverse complements, and so a proposed solution should
+  be very precise.
+- Are there issues when the minimizer of consecutive k-mers is different due to
+  the minimizer changing strands? Is the scheme still /forward/?
+*** 2.4 Probing
+- 'given a given k-mer'
+- 'A set of k-merS'
+- 'in not trivial' => 'is not trivial'
+- 'super-k-mer' => 'super-k-merS' a few times?
+- 'sorting super-k-mers as it is not a good idea': ungrammatical
+- It feels like all trailing =s='s were dropped here (/it give most importance/,
+  /this seem irrelevant/).
+- The text first extends the minimizer on the left, then right, and then
+  alternates. Figure 3 and 4 do the opposite and first extend right and then left.
+- I don't think anything is said about how =N= characters are encoded/compared
+  in practice? Using additional (masking) bits for this seems space inefficient?
+- /we chose the base that base that are the less likely to be a N./ This is
+  unclearly worded, but it seems to imply that a single fixed character of
+  =ACTG= is used as =N=? How is it chosen? In the incremental setting, the
+  least-occurring character in the dataset may change over time. Probably it
+  does not depend on the super-kmer?
+- 'this property do not grant'
+- Figure 4 shows /the result of/ a binary search, not the steps of a binary
+  search itself. (I'm assuming the boundaries of each shown block are bound
+  using an individual binary search.)
+- 'and end it .' => 'and ends it.'
+*** 2.5 Superbuckets
+- Figure 6 is terrible:
+  - The legend is confusing. It should be sorted.
+  - The y-axis is most likely logarithmic, but this is never mentioned.
+  - The y-axis label should be 'bucket count', not 'bucket number'.
+  - The x-axis appears to be labelled as $\log_4(bucket size)$??? Is bucket size
+    $0$ really $0$, or $1$? Are buckets with sizes $[2^i, 2^{i+1})$ batched together?
+  - Caption is missing spaces around 11.
+- The text refers to $2^7$ and $2^{10}$, it appears that this is for $m=13$, but
+  this is not mentioned.
+- 'bucketsPibiri'
+- /C. elegans generates more very small buckets than teh random sequence./ To me
+  it seems to be the opposite, although the difference is small anyway.
+- /Since the problem lies in the non-uniform distribution of minimizers, a
+  simple solution is to use a hash function to achieve a uniform distribution./
+  - It is unclear to me what this achieves. Permuting the minimizer buckets
+    using a bijective hash keeps the distribution of sizes the same.
+  - Since non-lexicographic minimizers are used, there should be little/no
+    correlation between bucket sizes of lexicographically-close minimizers.
+    So hashing the minimizers shouldn't be needed anyway?
+- /using a surjective function would .. allow hash collisions/
+  - This should say /non-injective/ or so. The hash function being
+    surjective or not is really not important here.
+- Figure 5: the =AA:= is weirdly line wrapped.
+- Figure 6 is referenced again, but this seems to have nothing to do with the
+  current text. It appears the correct figure is missing.
+  - Unfortunately, it is hard to appreciate the impact/usefulness of the superbuckets
+    without this missing figure.
+- It is unclear what is the benefit of having a smoother super-bucket size
+  distribution. Isn't it more beneficial to simply have $4^m$ smaller buckets directly?
+
+*** 2.6 Implementation details
+- It is unclear how minimizers are mapped to their bucket.
+- How are duplicate k-mers dealt with? What if a k-mer occurs in multiple
+  super-kmers? How is a canonical location chosen, especially after new
+  super-kmers containing the same k-mer are inserted?
+- Some (pseudo)-code would go a long way to explain what is going on at a high level.
+- Does every sort trigger inserting the buffered super-kmers into the sorted
+  list? Doesn't that move the entire list? Triggering linear time behaviour on
+  every insert/sort.
+
+** 3. Results
+*** 3.1 Parameters
+- Figure 7:
+  - what is $m$?
+  - For $b=17$, memory usage goes up to 500GB, but the benchmark machine only has 128GB.
+    This really needs a remark on virtual memory pages, but rather the real
+    memory usage should be shown instead of virtual memory usage.
+*** 3.2 Multicore
+- 'the dictionary': it was never explained what the main dictionary is
+- 'substructures': too vague to understand
+*** 3.4 Comparison
+- What are $b$ and $m$?
+*** 3.5 Query times
+- nit: Random queries is not exactly the same as negative queries.
+- Why is query throughput not compared to other methods?
+- Fig 11: axes labels are too small.
+** 4. Conclusion
+- Either Brisk is a /proof of concept/, or it's directly usable replacement for
+  existing k-mer dictionaries. Not both.
+- /state-of-the-art throughput/: again, query throughput was not compared.
+- Why can't $k$ be $64$? It's not required to be odd.
+- /any empty position with [a super-k-mer] are never filled/: I do not
+  understand what the empty positions refer to.
+
+
+
+#+print_bibliography:
