@@ -95,14 +95,18 @@ These keys are hashed using a hash function $h$ into
 $\{h(k_0), \dots, h(k_{n-1})\}$. The total space of hashes $[2^{64}]$
 is equally partitioned into $P$ /parts/.
 Further, each part is partitioned into $B$ /buckets/.
-Each key $k_i$ is (nearly) uniformly mapped to a part and bucket using the 'fast range'
-method [cite:@fast-range], where
+Each key $k_i$ is uniformly mapped to a part using the 'fast range'
+method [cite:@fast-range] that interprets $h(k_i)/2^{64}$ as a value in $[0, 1)$.
+Then, it's relative position inside the part, $x$, is passed through a $[0,1)\mapsto[0,1)$ /bucket
+assignment function/ $\beta$ such as $x\mapsto x$ or $x\mapsto x^2$.
+This controls the distribution of expected bucket
+sizes, as explained in detail in [[#bucket-fn]].
+The result is then scaled to a bucket index in $[B]$:
 \begin{align}
-part(k_i) &:= \left\lfloor P\cdot h(k_i) / 2^{64}\right\rfloor,\\
-bucket(k_i) &:= \left\lfloor P\cdot B\cdot h(k_i)/2^{64}\right\rfloor.
+  part(k_i) &:= \left\lfloor P\cdot h(k_i) / 2^{64}\right\rfloor,\\
+  x &:= \big((P\cdot h(k_i)) \bmod 2^{64}\big)/2^{64},\\
+  bucket(k_i) &:= \left\lfloor B\cdot \beta(x)\right\rfloor.
 \end{align}
-Intuitively, the fractional hash $h(k_i)/2^{64} \in [0, 1)$ is scaled to the
-output range $[P]$ or $[P\cdot B]$ respectively.
 
 Now, the goal is to map the $n/P$ expected keys in each part to $S\approx
 (n/P)/\alpha$ slots, where $\alpha\approx 0.98$ gives us $\approx 2\%$ extra slots to
@@ -112,7 +116,7 @@ p_{P\cdot B-1}\}$, one for each bucket. The pilots control to which slot the key
 each bucket map. Specifically, key $k_i$ in bucket $b=bucket(k_i)$ with pilot $p_b$
 maps to slot
 \begin{equation}
-slot(k_i) := part(k_i) \cdot S + reduce(h(k_i) \oplus h_p(p_b), S),\label{eq:slot}
+  slot(k_i) := part(k_i) \cdot S + reduce(h(k_i) \oplus h_p(p_b), S),\label{eq:slot}
 \end{equation}
 where $reduce(x, S)$ maps the random $64$ bit integer to $[S]$ as explained below.
 
@@ -147,7 +151,7 @@ As a solution, we first multiply $x$ by the mixing constant $C$, and then take t
 $s$ bits of the high half. This uses the full entropy of the input and
 takes only a single multiplication, giving around $5\%$ query speedup over fast mod.
 \begin{equation}
-reduce(x, 2^s) := \left\lfloor C\cdot x/2^{64}\right\rfloor \bmod 2^s
+  reduce(x, 2^s) := \left\lfloor C\cdot x/2^{64}\right\rfloor \bmod 2^s
 \end{equation}
 
 *Remapping.* Since each part has slightly more slots than keys, some keys will map to an
@@ -190,22 +194,25 @@ struct PtrHash {
     P: usize,         // Number of parts
     B: usize,         // Buckets per parts
     S: usize,         // Slots per parts
-    lgS: usize        // S = 2^(log2_S)
+    lgS: usize        // S = 2^lgS
     pilots: Vec<u8>,  // P*B pilots
     free: Vec<usize>, // P*S-n remap indices
 }
 
+/// Multiply a and b as if they are fractions of 2^64.
+/// Compiles to taking the high 64 bits of the 64x64->128 multiplication.
+fn mul(a: usize, b: usize) -> usize {
+    ((a as u128 * b as u128) >> 64) as usize
+}
+
 impl PtrHash {
     fn query(&self, key: Key) -> usize {
-        // Assuming a 64 bit hash.
-        let h = self.hash(key) as u128;
-        // This compiles to taking the high 64 bits of the 64x64->128 multiplication.
-        let part = ((self.P as u128 * h) >> 64) as usize;
-        let bucket = (((self.P * self.B) as u128 * h) >> 64) as usize;
+        let h = self.hash(key);
+        let part = mul(self.P, h);
+        let bucket = mul(self.B, self.beta(self.P * h));
         let pilot = self.pilots[bucket];
-        let x = h ^ self.hash_pilot(pilot);
-        let reduced = ((self.C as u128 * x as u128) >> 64) as usize & (self.S - 1);
-        let slot = (part << lgS) + reduced;
+        let slot_bucket = mul(self.C, h ^ self.hash_pilot(pilot)) & (self.S - 1);
+        let slot = (part << self.lgS) + slot_bucket;
         if slot < self.n {
             return slot
         } else {
@@ -258,7 +265,8 @@ Compared to PTHash [cite:@pthash], PtrHash has a few differences:
 
 ** Construction
 Both PTHash-HEM and PHOBIC first partition the keys into parts, and then build
-an MPHF part-by-part. Within each part, the keys are randomly partitioned into
+an MPHF part-by-part, optionally in parallel on multiple threads.
+Within each part, the keys are randomly partitioned into
 /buckets/ of expected size $\lambda$ ([[overview]]).
 Then, the buckets are sorted from large to small, and one-by-one /greedily/ assigned a
 /pilot/, such that the keys in the bucket map to /slots/ not yet covered by earlier buckets.
