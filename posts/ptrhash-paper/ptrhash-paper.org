@@ -484,18 +484,110 @@ impl CacheLineEF {
 }
 #+end_src
 
-** Batching/streaming queries
-** Larger inputs: Shards
-- Allowing
-** TODO Perfect bucket function
-** TODO Shift displacement instead of rehashing
-** TODO Chunk vs stream batching?
+** Bucket assignment functions
+:PROPERTIES:
+:CUSTOM_ID: bucket-fn
+:END:
+The
+
+- Function: $\beta_*(x) = x+(1-x)\ln(1-x)$
+- Practical function: $\beta_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$.
+- Implementation: for a $64$ bit number $x$, $1-x$ is the negation.
+  $\log_2(1-x)$ is the negative of the number of leading zeros, which we can
+  multiply by a scaling factor $\ln 2$.
+
+
+** Parallel queries
+*Throughput.*
+In practice in bioinformatics applications (such as SSHash), we expect many
+independent queries to the MPHF. This means that queries can be answered in
+parallel, instead of one by one. Thus, we should optimize for query /throughput/
+(queries per second, but usually reported as /inverse throughput/ in amortized
+seconds per query) rather than individual query latency (seconds per query).
+
+*Pipelining.*
+A typical MPHF on $10^9$ keys requires memory at least $2bits/key \cdot 10^9
+keys = 250MB$, which is much larger than the L3 cache of size around
+$16MB$. Thus, most queries require reading from main memory (RAM), which usually
+has a latency around $80ns$.
+Nevertheless, existing MPHFs such as FCH [cite:@fch] achieve an inverse throughput as
+low as $35ns/query$ on such a dataset [cite:@pthash].
+This is achieved by /pipelining/ and the /reorder buffer/:
+Intel Skylake CPUs can execute over $200$ instructions ahead while waiting for memory
+to become available [cite:@measuring-rob;@measuring-rob-skylake]. This allows the CPU to already start processing 'future'
+queries and fetch the required cache lines from RAM while waiting for the
+current query. Thus, when each iteration requires less than $100$ instructions
+and there are no branch-misses, this effectively makes up to two reads in
+parallel. A large part of ensuring faster queries is then to reduce the length of
+each iteration to allow pipelining to fetch memory more iterations ahead.
+
+*Prefetching.*
+Instead of relying on the CPU hardware to parallellize requests to memory, we can also
+explicitly /prefetch/[fn::There are typically multiple types of prefetching
+instructions that prefetch into a different level of the cache hierarchy. We
+prefetch into all levels of cache using =prefetch0=.] cache lines from software.
+Each prefetch requires a /line fill buffer/ to store the result before it is
+copied into the L1 cache. Skylake has $12$ line fill buffers
+[cite:@line-fill-buffer-skylake], and hence can support up to $12$ parallel
+reads from memory.
+This gives a maximal theoretical throughput around $80ns/query/12 = 6.67
+ns/query$ as long as each query only requires a single read from main memory.
+
+We consider two models to implement prefetching: batching and streaming.
+
+#+name: streaming
+#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and it's corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallellism than batching (left).
+#+attr_html: :class inset
+[[file:./streaming.drawio.svg]]
+
+*Batching.*
+In this approach, the queries are split into chunks of size
+$B$, and chunks are then processed one by one ([[streaming]], left). In each chunk, each key is hashed, its
+bucket it determined, and the cache line containing the corresponding pilot is prefetched.
+Then, the buffered hashes are iterated again, and the corresponding slots are
+computed.
+
+*Streaming.*
+A drawback of batching is that at the start and end of each batch, the maximal
+number of parallel prefetches is not fully saturated. The streaming approach
+fixes this by prefetching the cache line for the pilot $B$ iterations
+ahead of the current one, and is able to sustain the maximum possible number of
+parallel prefetches throughout, apart from at the very start and end ([[streaming]], right).
+
+
+** External memory construction: Shards
 
 
 * Results
+- =lscpu | grep CPU= CPU: Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz
+  - Running at 3.6GHz
+  - Cache sizes 32KiB/256KiB/12MiB
+  - 12 line fill buffers
+  - hyperthreading disabled
+- Ram: =sudo lshw -short -C memory= 2x 32GiB SODIMM DDR4 synchronous 3200 MHz.
+
+
 - Query throughput vs threads
+  - Plot of max random-access memory throughput.
 - Construction time vs part size
-- Plot of max random-access memory throughput.
+- Single bucket size vs 2-way split vs PHOBIC
+  - Construction speed
+  - Sequential lookup
+  - Prefetching
+- Measure at 25M keys (which at 10MB fits in 12MB L3 cache) and 1G keys (which is 20x larger than L3)
+- Comparison of bucketing functions; plot over 'construction time' with pilot
+  value and number of displacements.
+- Prefetching
+  - streaming/batching
+  - distance 1..128
+  - CPU freq 2.6 and 3.6 GHz?
+  - with/without remap
+  - Compare prefetch0/1/2/NTA
+
+
+
+
+
 
 
 #+print_bibliography:
