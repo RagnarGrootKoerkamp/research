@@ -525,7 +525,7 @@ each iteration to allow pipelining to fetch memory more iterations ahead.
 Instead of relying on the CPU hardware to parallellize requests to memory, we can also
 explicitly /prefetch/[fn::There are typically multiple types of prefetching
 instructions that prefetch into a different level of the cache hierarchy. We
-prefetch into all levels of cache using =prefetch0=.] cache lines from software.
+prefetch into all levels of cache using =prefetcht0=.] cache lines from software.
 Each prefetch requires a /line fill buffer/ to store the result before it is
 copied into the L1 cache. Skylake has $12$ line fill buffers
 [cite:@line-fill-buffer-skylake], and hence can support up to $12$ parallel
@@ -586,6 +586,87 @@ parallel prefetches throughout, apart from at the very start and end ([[streamin
 
 
 
+
+* Appendix
+** Rust and assembly code for streaming
+[[streaming-code]] shows the Rust code for the streaming version of PtrHash, and
+[[streaming-asm]] shows the corresponding assembly code with =perf record= results.
+
+#+name: streaming-code
+#+caption: Rust code for streaming indexing that prefetches $B$ iterations ahead.
+#+begin_src rust
+pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
+    &'a self,
+    keys: impl IntoIterator<Item = &'a Key> + 'a,
+) -> impl Iterator<Item = usize> + 'a {
+    // Append B values at the end of the iterator to make sure we wrap sufficiently.
+    let mut hashes = keys.into_iter().map(|x| self.hash_key(x)).chain([0; B]);
+
+    // Ring buffers to cache the hash and bucket of upcoming queries.
+    let mut next_hashes: [Hx::H; B] = [Hx::H::default(); B];
+    let mut next_buckets: [usize; B] = [0; B];
+
+    // Initialize and prefetch first B values.
+    for idx in 0..B {
+        next_hashes[idx] = hashes.next().unwrap();
+        next_buckets[idx] = self.bucket(next_hashes[idx]);
+        crate::util::prefetch_index(self.pilots, next_buckets[idx]);
+    }
+    hashes.enumerate().map(move |(idx, next_hash)| {
+        let idx = idx % B;
+        let cur_hash = next_hashes[idx];
+        let cur_bucket = next_buckets[idx];
+        let pilot = self.pilots[cur_bucket];
+        let mut slot = self.slot(cur_hash, pilot);
+        if MINIMAL && slot >= self.n {
+            slot = self.remap.index(slot - self.n) as usize;
+        };
+
+        // Prefetch B iterations ahead.
+        next_hashes[idx] = next_hash;
+        next_buckets[idx] = self.bucket(next_hashes[idx]);
+        crate::util::prefetch_index(self.pilots, next_buckets[idx]);
+
+        slot
+    })
+}
+#+end_src
+
+#+name: streaming-asm
+#+caption: Assembly code of streaming indexing (without the final =remap=) that prefetches 32 iterations ahead, with =perf record= measurement of time time spent on each line. TODO: Update for latest version.
+#+begin_src asm
+  2.57 │ a0:   lea        (%r14,%rbp,1),%r12d
+  0.95 │       mov        0x8(%rsp),%rdx
+ 16.93 │       mov        (%rdx,%r14,8),%rdx
+  0.80 │       imul       %r11,%rdx
+  2.30 │       and        $0x1f,%r12d
+  0.90 │       mov        0x8(%rcx,%r12,8),%rsi
+  1.36 │       mulx       %rbx,%r8,%r9
+  2.24 │       mov        0x108(%rcx,%r12,8),%r10
+  0.92 │       mov        %rdx,0x8(%rcx,%r12,8)
+  0.48 │       mov        %r8,%rdx
+  2.99 │       mulx       %r8,%rdx,%rdx
+  1.03 │       mov        0x20(%rsp),%r8
+  1.44 │       mulx       %r8,%rdx,%rdx
+  2.15 │       imul       0x18(%rsp),%r9
+  1.08 │       add        %rdx,%r9
+  0.83 │       mov        %r9,0x108(%rcx,%r12,8)
+ 46.61 │       prefetcht0 (%r15,%r9,1)            ; Nearly half the time is spent here.
+  1.39 │       movzbl     (%r15,%r10,1),%r8d
+  0.54 │       imul       %r11,%r8
+  0.31 │       xor        %rsi,%r8
+  2.34 │       mov        %rsi,%rdx
+  1.43 │       mulx       %rbx,%rdx,%rdx
+  0.30 │       shlx       %r13,%rdx,%rdx
+  2.43 │       add        %rdx,%rax
+  0.87 │       mov        %r8,%rdx
+  0.72 │       mulx       %r11,%rdx,%rdx
+  2.37 │       and        %rdi,%rdx
+  0.98 │       add        %rdx,%rax
+  0.51 │       inc        %r14
+       │       cmp        %r14,0x28(%rsp)
+  0.23 │     ↑ jne        a0
+#+end_src
 
 
 
