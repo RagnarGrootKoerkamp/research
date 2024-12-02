@@ -49,6 +49,7 @@ Its main novelties are:
 2. cuckoo-hashing-like based construction
 3. construction in parts, with a single /remap/ table, leading to fast construction;
 * Background
+- GB vs GiB
 ** Single large seed.
 ** Recsplit?
 ** FCH
@@ -159,13 +160,14 @@ explained in detail in [[#remapping]].
 
 *Construction.* The main difficulty of PtrHash is during construction ([[*Construction]]), where we must find values of the
 pilots $p_j$ such that all keys indeed map to different slots.
-Like other methods, PtrHash sorts the buckets within each part from large to
+Like other methods, PtrHash processes multiple parts in parallel.
+It sorts the buckets within each part from large to
 small and 'greedily' assigns them the smallest pilot that maps the corresponding
 keys to slots that are still free.
 Unlike other methods though, PtrHash only allows pilots up to $255$. When no
 suitable pilot is found, we use a method similar to (blocked) cuckoo hashing: a pilot with
 a minimal number of collisions is chosen, and the colliding buckets are
-'displaced' and have to find a different pilot.
+'evicted' and have to find a different pilot.
 
 *Parameter values.*
 In practice, we fix the number of slots per part, $S$, to be
@@ -555,6 +557,29 @@ parallel prefetches throughout, apart from at the very start and end ([[streamin
 
 ** External memory construction: Shards
 
+When the number of keys is large, say $>10^{10}$, their $64$ bit hashes may not all fit
+in memory at the same time, even though the final PtrHash datastructure (the
+list of pilots) would fit. Thus, we can not simply sort all hashes in
+memory to partition them. Instead, we split the set of all $n$ hashes into, say
+$s=\lceil n/2^{32}\rceil$ /shards/,
+where the $i$'th shard corresponds to hash values in $s_i:=[2^{64}\cdot i/s,
+2^{64}\cdot (i+1)/s)$.
+Then, the hashes in each shard are sorted and split into parts, after which the
+parts are constructed as usual.
+This way, the shards only play a role during construction, and the final
+constructed data structure is independent of which sharding strategy is used.
+
+*In memory sharding.*
+The first approach to sharding is to iterate over the set of keys $s$ times.
+In the $i$'th iteration, all keys are hashed, and only those hashes in the
+corresponding interval $s_i$ are stored and processed.
+This way, no additional on-disk memory is needed for construction.
+
+*On disk sharding.*
+A drawback of the first approach is that keys are potentially hashed many times.
+This can be avoided by writing hashes to disk. Specifically, we can create one
+file per shard and append hashes to their corresponding file.
+These files are then read and processed one by one.
 
 * Results
 - =lscpu | grep CPU= CPU: Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz
@@ -574,7 +599,7 @@ parallel prefetches throughout, apart from at the very start and end ([[streamin
   - Prefetching
 - Measure at 25M keys (which at 10MB fits in 12MB L3 cache) and 1G keys (which is 20x larger than L3)
 - Comparison of bucketing functions; plot over 'construction time' with pilot
-  value and number of displacements.
+  value and number of evictions.
 - Prefetching
   - streaming/batching
   - distance 1..128
@@ -583,7 +608,18 @@ parallel prefetches throughout, apart from at the very start and end ([[streamin
   - Compare prefetch0/1/2/NTA
 
 
+- Parameters for small cases,
+- 10^10 or 10^11 construction with both sharding variants.
 
+* Conclusion and future work
+
+*Future work.*
+- Faster than memory is possible, when most queries can be answered from a
+  smaller cache.
+
+* Acknowledgements
+- Giulio for ongoing discussions
+- Sebastiano for trying the 10^12 construction.
 
 * Appendix
 ** Rust and assembly code for streaming
