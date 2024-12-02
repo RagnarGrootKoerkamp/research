@@ -1,4 +1,4 @@
-#+title: [WIP] PtrHash: A simple and fast minimal perfect hash function
+#+title: [WIP] PtrHash: perfect hashing at the speed of memory
 #+filetags: @paper mphf wip
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -18,10 +18,8 @@ collision-free bijective map $f$ from $K$ to $\{0, \dots,
 n-1\}$. These functions have uses in databases, search engines, and are used in
 bioinformatics indexing tools such as Pufferfish (using BBHash), SSHash, and
 Piscem (both using PTHash). This work presents an MPHF that prioritizes query
-throughput and can be constructed efficiently for billions or more elements
+throughput and can be constructed efficiently for a billion or more elements
 using under $3$ bits of memory per key.
-# Practical MPHFs can be constructed efficiently for billions or more elements, use $2$
-# to $4$ bits of memory per key, and can be queried in low constant time.
 
 *Contributions:*
 PtrHash builds on
@@ -31,12 +29,12 @@ speed up queries by 4) simplifying hash functions and modulo operations, and 5)
 batching queries and prefetching reads from memory.
 
 *Results:*
-We implemented PtrHash in Rust and
+(TODO: update numbers. TODO: add something about speed of memory) We implemented PtrHash in Rust and
 show that at $3$ bits/key memory usage it is $3\times$ faster to construct
 than PTHash while achieving $5$ns/key query throughput, $5\times$ faster than
 state-of-the-art methods.
 
-Source: [[https://github.com/RagnarGrootKoerkamp/pthash-rs][github.com/RagnarGrootKoerkamp/pthash-rs]]
+*Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
 
 * Introduction
 - Perfect hashing
