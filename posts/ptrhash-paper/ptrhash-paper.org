@@ -96,15 +96,15 @@ is equally partitioned into $P$ /parts/.
 Further, each part is partitioned into $B$ /buckets/.
 Each key $k_i$ is uniformly mapped to a part using the 'fast range'
 method [cite:@fast-range] that interprets $h(k_i)/2^{64}$ as a value in $[0, 1)$.
-Then, it's relative position inside the part, $x$, is passed through a $[0,1)\mapsto[0,1)$ /bucket
-assignment function/ $\beta$ such as $x\mapsto x$ or $x\mapsto x^2$.
-This controls the distribution of expected bucket
+Then, its relative position inside the part, $x$, is passed through a /bucket
+assignment function/ $\gamma: [0,1)\mapsto[0,1)$ such as $x\mapsto x$ or $x\mapsto x^2$
+that controls the distribution of expected bucket
 sizes, as explained in detail in [[#bucket-fn]].
 The result is then scaled to a bucket index in $[B]$:
 \begin{align}
   part(k_i) &:= \left\lfloor P\cdot h(k_i) / 2^{64}\right\rfloor,\\
   x &:= \big((P\cdot h(k_i)) \bmod 2^{64}\big)/2^{64},\\
-  bucket(k_i) &:= \left\lfloor B\cdot \beta(x)\right\rfloor.
+  bucket(k_i) &:= \left\lfloor B\cdot \gamma(x)\right\rfloor.
 \end{align}
 
 Now, the goal is to map the $n/P$ expected keys in each part to $S\approx
@@ -185,6 +185,16 @@ $c\cdot n / \lg_2(n)$, where $c$ ranges from $\approx 6$ to $\approx 10$ TODO.
 
 TODO: Instead use average bucket size $\lambda$?
 
+#+name: parameters
+#+caption: Parameters and variables used.
+| Name                                       | Definition                                                        |
+| $n$                                        | Total number of keys.                                             |
+| $\alpha = 0.98$                            | Load factor. Expected number of keys per part is $\alpha\cdot S$. |
+| $\lambda=3.5$                             | Expected number of elements per bucket.                           |
+| $S = 2^{18}$                               | Number of slots per part.                                         |
+| $P = \lceil n/(\alpha \cdot S)\rceil$      | Number of parts.                                                  |
+| $B = \lceil(\alpha \cdot S)/\lambda\rceil$ | Number of buckets per part.                                       |
+| $\gamma: [0,1)\mapsto [0,1)$               | Bucket function controlling relative bucket sizes.                |
 
 #+name: query-code
 #+caption: Rust code for a simple implementation of the data structure and query function.
@@ -209,10 +219,10 @@ impl PtrHash {
     fn query(&self, key: Key) -> usize {
         let h = self.hash(key);
         let part = mul(self.P, h);
-        let bucket = mul(self.B, self.beta(self.P * h));
+        let bucket = mul(self.B, self.gamma(self.P * h));
         let pilot = self.pilots[bucket];
-        let slot_bucket = mul(self.C, h ^ self.hash_pilot(pilot)) & (self.S - 1);
-        let slot = (part << self.lgS) + slot_bucket;
+        let slot_in_part = mul(self.C, h ^ self.hash_pilot(pilot)) & (self.S - 1);
+        let slot = (part << self.lgS) + slot_in_part;
         if slot < self.n {
             return slot
         } else {
@@ -484,11 +494,18 @@ impl CacheLineEF {
 }
 #+end_src
 
-** Bucket assignment functions
+** TODO Bucket assignment functions
 :PROPERTIES:
 :CUSTOM_ID: bucket-fn
 :END:
-The
+During construction, slots slowly fill up as more buckets are
+placed. Because of this, the first buckets are much easier to place than the
+later ones, when only a few empty slots are left.
+As a result,
+
+The bucket assignment function $\gamma$ controls the relative expected size of
+all buckets. When $\gamma(x) = x$, all buckets have the same expected size
+$\lambda$.
 
 - Function: $\beta_*(x) = x+(1-x)\ln(1-x)$
 - Practical function: $\beta_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$.
@@ -536,7 +553,7 @@ ns/query$ as long as each query only requires a single read from main memory.
 We consider two models to implement prefetching: batching and streaming.
 
 #+name: streaming
-#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and it's corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallellism than batching (left).
+#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallellism than batching (left).
 #+attr_html: :class inset
 [[file:./streaming.drawio.svg]]
 
@@ -555,7 +572,7 @@ ahead of the current one, and is able to sustain the maximum possible number of
 parallel prefetches throughout, apart from at the very start and end ([[streaming]], right).
 
 
-** External memory construction: Shards
+** Sharding
 
 When the number of keys is large, say $>10^{10}$, their $64$ bit hashes may not all fit
 in memory at the same time, even though the final PtrHash datastructure (the
