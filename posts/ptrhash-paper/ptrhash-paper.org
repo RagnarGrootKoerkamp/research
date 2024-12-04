@@ -41,6 +41,8 @@ state-of-the-art methods.
 - Minimal perfect hashing
 - Application in bioinformatics (SSHash)
 - Focus on query speed/throughput;
+  - Only a single RAM access per query, ideally
+- Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
 ** Contributions
 We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
 query throughput and construction speed, at the cost of some more memory usage.
@@ -494,24 +496,52 @@ impl CacheLineEF {
 }
 #+end_src
 
-** TODO Bucket assignment functions
+** Bucket assignment functions
 :PROPERTIES:
 :CUSTOM_ID: bucket-fn
 :END:
+
+#+name: bucket-fn
+#+caption: The left shows various bucket assignment functions $\gamma$, such as the piecewise linear function used by FCH (TODO CHECK) and PTHash, and the optimal function introduced by PHOBIC. Flatter slopes at $x=0$ create larger buckets, while steeper slopes at $x=1$ create more small buckets, as shown on the right, as the distribution of relative expected bucket sizes given by $(\gamma^{-1})'$.
+| [[file:bucket-fn.svg]] | [[file:bucket-size.svg]] |
+
 During construction, slots slowly fill up as more buckets are
 placed. Because of this, the first buckets are much easier to place than the
-later ones, when only a few empty slots are left.
-As a result,
+later ones, when only few empty slots are left.
+To compensate for this, we can introduce an uneven distribution of bucket
+sizes, so that the first buckets are much larger and the last buckets
+are smaller.
+FCH [cite:@fch] accomplishes this by a /skew/ mapping that assigns $60\%$ of the
+elements to $30\%$ of the
+buckets, so that those $30\%$ are /large/ buckets while the remaining $70\%$
+is /small/ ([[bucket-fn]]). This is also the scheme used by PTHash.
 
-The bucket assignment function $\gamma$ controls the relative expected size of
-all buckets. When $\gamma(x) = x$, all buckets have the same expected size
-$\lambda$.
+*The perfect bucket function.*
+PHOBIC [cite:@phobic] provides a more thorough analysis and uses the optimal[fn::Under the
+assumption that bucket sizes are continuous.] function
+$\gamma(x) = x + (1-x)\ln (1-x)$. This function has derivative $0$ at $x=0$,
+which in practice causes the largest buckets to have size much larger than $\sqrt S$.
+Such buckets are hard to place, because by the birthday paradox they are likely
+to have multiple elements hashing to the same slot. To fix this, they ensure the
+slope of $\gamma$ is at least $\varepsilon=1/(5\cdot \sqrt B)$ by using
+$\gamma(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$ instead.
+Since this function is slow to compute in practice, PHOBIC uses a
+$2048$-piecewise linear approximation using a lookup table and linear interpolation.
 
-- Function: $\beta_*(x) = x+(1-x)\ln(1-x)$
-- Practical function: $\beta_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$.
-- Implementation: for a $64$ bit number $x$, $1-x$ is the negation.
-  $\log_2(1-x)$ is the negative of the number of leading zeros, which we can
-  multiply by a scaling factor $\ln 2$.
+*Approximations.*
+For PtrHash, we would like to only use simple computations and avoid lookups as
+much as possible, to avoid the CPU becoming a bottleneck in query throughput.
+To this end, we replace the $\ln (1-x)$ by its
+first order Taylor approximation at $x=0$, $\ln(1-x) \approx -x$, giving
+the quadratic $\gamma(x) = x^2$. Using the second order approximation $\ln(1-x) \approx
+-x-x^2/2$ results in the cubic $\gamma(x) = (x^2+x^3)/2$. This version again
+suffers from too large buckets, so in practice we use $\gamma(x) =
+\frac{127\cdot (x^2+x^3)/2 + 1\cdot x}{128}$.
+
+These values can all be computed efficiently by using that the input and output
+of $\gamma$ are $64$ bit unsigned integers representing a fraction of $2^{64}$,
+so that e.g. $x^2$ can be computed as the upper $64$ bits of the widening $64\times64\to 128$ bit
+product $x\cdot x$.
 
 
 ** Parallel queries
@@ -599,34 +629,48 @@ file per shard and append hashes to their corresponding file.
 These files are then read and processed one by one.
 
 * Results
+** Setup
 - =lscpu | grep CPU= CPU: Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz
   - Running at 3.6GHz
   - Cache sizes 32KiB/256KiB/12MiB
   - 12 line fill buffers
   - hyperthreading disabled
 - Ram: =sudo lshw -short -C memory= 2x 32GiB SODIMM DDR4 synchronous 3200 MHz.
-
-
-- Query throughput vs threads
-  - Plot of max random-access memory throughput.
+- Measure at 25M keys (which at 10MB fits in 12MB L3 cache) and 1G keys (which is 20x larger than L3)
+*** Parameters
+- Parameters for small cases,
+** PtrHash construction
 - Construction time vs part size
 - Single bucket size vs 2-way split vs PHOBIC
   - Construction speed
   - Sequential lookup
   - Prefetching
-- Measure at 25M keys (which at 10MB fits in 12MB L3 cache) and 1G keys (which is 20x larger than L3)
 - Comparison of bucketing functions; plot over 'construction time' with pilot
   value and number of evictions.
+- Remap:
+  - plain vec
+  - ef
+  - cachelineef
+- Sharding
+  - 10^10 or 10^11 construction with both sharding variants.
+** PtrHash query throughput
+- Latency around 80ns
+- Max single-threaded throughput:
+- Max RAM transfer rate: 25.6GB/s
+*** Bucket Fn effect
+*** Prefetching
 - Prefetching
   - streaming/batching
   - distance 1..128
   - CPU freq 2.6 and 3.6 GHz?
   - with/without remap
-  - Compare prefetch0/1/2/NTA
+*** Multithreading
+- Query throughput vs threads
+  - Plot of max random-access memory throughput.
+** Comparison with competitors
 
 
-- Parameters for small cases,
-- 10^10 or 10^11 construction with both sharding variants.
+** TODO
 
 * Conclusion and future work
 
@@ -720,6 +764,16 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 #+end_src
 
 
+
+* TODO further ideas
+- rattle kicking?
+- always compute remap to avoid branch?
+- 4bit pilots with buckets of half the size -> doesn't work.
+- sichash [cite:@sichash]
+- shockhash [cite:@shockhash]
+- bipartite shockhash [cite:@bipartite-shockhash]
+- check out https://github.com/ByteHamster/MPHF-Experiments for evals
+- Mention epserde support?
 
 
 #+print_bibliography:
