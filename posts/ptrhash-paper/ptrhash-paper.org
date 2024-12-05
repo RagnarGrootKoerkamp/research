@@ -53,6 +53,10 @@ Its main novelties are:
 * Background
 - GB vs GiB
 ** Single large seed.
+** Other work
+- sichash [cite:@sichash]
+- shockhash [cite:@shockhash]
+- bipartite shockhash [cite:@bipartite-shockhash]
 ** Recsplit?
 ** FCH
 ** PTHash
@@ -73,7 +77,7 @@ Trani, the authors of the PTHash paper. Due to the current author's
 unconventional last name, and PTGK not sounding great, the first initial (R) was
 appended instead. As things go, nothing is as permanent as a temporary name.
 Furthermore, we follow the Google style guide and avoid a long run of uppercase
-letters.]
+letters, and write PtrHash instead of PTRHash.]
 is to simplify PTHash to speed up both query speed
 and construction time, at the cost of using slightly more memory.
 We first give a high level overview of PtrHash ([[*Overview]]). Then, we highlight the
@@ -132,14 +136,12 @@ hence a perfect hash.
 For other keys, the hash function depends on the number of elements. When the
 number of elements is not too far above $10^9$, the probability of hash
 collisions with a $64$ bit hash function is sufficiently small, and we use
-the $64$ bit variant of xxHash (TODO).
+the $64$ bit variant of xxHash.
 When the number of keys goes beyond $2^{32} \approx 4\cdot 10^9$, the
 probability of $64$ bit hash collisions increases, and collisions may be found
-after sorting the hashes. In this case, the $128$ bit variant of xxHash (TODO)
+after sorting the hashes. In this case, the $128$ bit variant of xxHash
 is used, where the high $64$ bits determine the part and bucket, and the low
 $64$ bits are used in Equation \ref{eq:slot} to determine the slot.
-
-TODO murmur vs xx vs wy, and actually implement this.
 
 *The reduce function.* When $64$ bit hashes are used, we must ensure that the full entropy of
 the hash is used. A simple choice would be $reduce(x,S) = x\bmod S$, which uses
@@ -173,30 +175,26 @@ a minimal number of collisions is chosen, and the colliding buckets are
 
 *Parameter values.*
 In practice, we fix the number of slots per part, $S$, to be
-around $2^{18}\approx 262\ 000$, since this allows the construction of each
+$2^{18}\approx 262\ 000$, since this allows the construction of each
 part to fit in the L2 cache of each core. The number of parts $P$
 is then $(n/S)/\alpha$.
 The load factor $\alpha$ is around $0.98$, so that each part of $S$ slots has
 $\alpha \cdot S$ keys in expectation. In order to avoid overly full parts with
-more keys than slots, a smaller $\alpha$ is sometimes required when there are
-many parts.
-
-
-Similar to FCH and PTHash, the /total/ number of buckets $P\cdot B$ is roughly
-$c\cdot n / \lg_2(n)$, where $c$ ranges from $\approx 6$ to $\approx 10$ TODO.
-
-TODO: Instead use average bucket size $\lambda$?
+more keys than slots, a smaller $\alpha$ is sometimes required when the number
+of parts is large, for example when using $10^{12}$ keys.
+Similar to PHOBIC, the number of buckets per part is set to $B = (\alpha\cdot
+S)/\lambda$, where $\lambda$ is the expected size of each bucket and is around $4$.
 
 #+name: parameters
-#+caption: Parameters and variables used.
-| Name                                       | Definition                                                        |
-| $n$                                        | Total number of keys.                                             |
-| $\alpha = 0.98$                            | Load factor. Expected number of keys per part is $\alpha\cdot S$. |
-| $\lambda=3.5$                             | Expected number of elements per bucket.                           |
-| $S = 2^{18}$                               | Number of slots per part.                                         |
-| $P = \lceil n/(\alpha \cdot S)\rceil$      | Number of parts.                                                  |
-| $B = \lceil(\alpha \cdot S)/\lambda\rceil$ | Number of buckets per part.                                       |
-| $\gamma: [0,1)\mapsto [0,1)$               | Bucket function controlling relative bucket sizes.                |
+#+caption: Input parameters with typical values, and computed variables.
+| Name                                                                  | Definition                                                        |
+| $S = 2^{18}$                                                          | Number of slots per part.                                         |
+| $\alpha = 0.98$                                                       | Load factor. Expected number of keys per part is $\alpha\cdot S$. |
+| $\lambda=4$                                                           | Expected number of elements per bucket.                           |
+| $\gamma(x) = \frac{255}{256}\cdot (x^2+x^3)/2 + \frac{1}{256}\cdot x$ | Bucket function controlling relative bucket sizes.                |
+| $n$                                                                   | Total number of keys.                                             |
+| $P = \lceil n/(\alpha \cdot S)\rceil$                                 | Number of parts.                                                  |
+| $B = \lceil(\alpha \cdot S)/\lambda\rceil$                            | Number of buckets per part.                                       |
 
 #+name: query-code
 #+caption: Rust code for a simple implementation of the data structure and query function.
@@ -502,7 +500,7 @@ impl CacheLineEF {
 :END:
 
 #+name: bucket-fn
-#+caption: The left shows various bucket assignment functions $\gamma$, such as the piecewise linear function used by FCH (TODO CHECK) and PTHash, and the optimal function introduced by PHOBIC. Flatter slopes at $x=0$ create larger buckets, while steeper slopes at $x=1$ create more small buckets, as shown on the right, as the distribution of relative expected bucket sizes given by $(\gamma^{-1})'$.
+#+caption: The left shows various bucket assignment functions $\gamma$, such as the piecewise linear function used by FCH and PTHash, and the optimal function introduced by PHOBIC. Flatter slopes at $x=0$ create larger buckets, while steeper slopes at $x=1$ create more small buckets, as shown on the right, as the distribution of expected bucket sizes given by $(\gamma^{-1})'$ when the expected bucket size is $\lambda=4$.
 | [[file:bucket-fn.svg]] | [[file:bucket-size.svg]] |
 
 During construction, slots slowly fill up as more buckets are
@@ -518,12 +516,13 @@ is /small/ ([[bucket-fn]]). This is also the scheme used by PTHash.
 
 *The perfect bucket function.*
 PHOBIC [cite:@phobic] provides a more thorough analysis and uses the optimal[fn::Under the
-assumption that bucket sizes are continuous.] function
+assumption that bucket sizes are continuous, and that the target load factor is
+$1$.] function
 $\gamma(x) = x + (1-x)\ln (1-x)$. This function has derivative $0$ at $x=0$,
 which in practice causes the largest buckets to have size much larger than $\sqrt S$.
 Such buckets are hard to place, because by the birthday paradox they are likely
 to have multiple elements hashing to the same slot. To fix this, they ensure the
-slope of $\gamma$ is at least $\varepsilon=1/(5\cdot \sqrt B)$ by using
+slope of $\gamma$ is at least $\varepsilon=1/(5 \sqrt S)$ by using
 $\gamma(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$ instead.
 Since this function is slow to compute in practice, PHOBIC uses a
 $2048$-piecewise linear approximation using a lookup table and linear interpolation.
@@ -536,7 +535,7 @@ first order Taylor approximation at $x=0$, $\ln(1-x) \approx -x$, giving
 the quadratic $\gamma(x) = x^2$. Using the second order approximation $\ln(1-x) \approx
 -x-x^2/2$ results in the cubic $\gamma(x) = (x^2+x^3)/2$. This version again
 suffers from too large buckets, so in practice we use $\gamma(x) =
-\frac{127\cdot (x^2+x^3)/2 + 1\cdot x}{128}$.
+\frac{255}{256}\cdot (x^2+x^3)/2 + \frac{1}{256}\cdot x$.
 
 These values can all be computed efficiently by using that the input and output
 of $\gamma$ are $64$ bit unsigned integers representing a fraction of $2^{64}$,
@@ -552,21 +551,21 @@ parallel, instead of one by one. Thus, we should optimize for query /throughput/
 (queries per second, but usually reported as /inverse throughput/ in amortized
 seconds per query) rather than individual query latency (seconds per query).
 
-*Pipelining.*
+*Out-of-order execution.*
 A typical MPHF on $10^9$ keys requires memory at least $2bits/key \cdot 10^9
 keys = 250MB$, which is much larger than the L3 cache of size around
 $16MB$. Thus, most queries require reading from main memory (RAM), which usually
 has a latency around $80ns$.
 Nevertheless, existing MPHFs such as FCH [cite:@fch] achieve an inverse throughput as
 low as $35ns/query$ on such a dataset [cite:@pthash].
-This is achieved by /pipelining/ and the /reorder buffer/:
-Intel Skylake CPUs can execute over $200$ instructions ahead while waiting for memory
+This is achieved by /pipelining/ and the /reorder buffer/.
+For example, Intel Skylake CPUs can execute over $200$ instructions ahead while waiting for memory
 to become available [cite:@measuring-rob;@measuring-rob-skylake]. This allows the CPU to already start processing 'future'
 queries and fetch the required cache lines from RAM while waiting for the
 current query. Thus, when each iteration requires less than $100$ instructions
 and there are no branch-misses, this effectively makes up to two reads in
 parallel. A large part of ensuring faster queries is then to reduce the length of
-each iteration to allow pipelining to fetch memory more iterations ahead.
+each iteration to out-of-order execution to fetch memory more iterations ahead.
 
 *Prefetching.*
 Instead of relying on the CPU hardware to parallellize requests to memory, we can also
@@ -616,17 +615,22 @@ parts are constructed as usual.
 This way, the shards only play a role during construction, and the final
 constructed data structure is independent of which sharding strategy is used.
 
-*In memory sharding.*
+*In-memory sharding.*
 The first approach to sharding is to iterate over the set of keys $s$ times.
 In the $i$'th iteration, all keys are hashed, and only those hashes in the
 corresponding interval $s_i$ are stored and processed.
-This way, no additional on-disk memory is needed for construction.
+This way, no disk space is needed for construction.
 
-*On disk sharding.*
+*On-disk sharding.*
 A drawback of the first approach is that keys are potentially hashed many times.
 This can be avoided by writing hashes to disk. Specifically, we can create one
 file per shard and append hashes to their corresponding file.
 These files are then read and processed one by one.
+
+*On-disk PtrHash.*
+When the number of keys is so large that the pilots do not fit in memory, they
+can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde].
+
 
 * Results
 ** Setup
@@ -647,16 +651,26 @@ These files are then read and processed one by one.
   - Prefetching
 - Comparison of bucketing functions; plot over 'construction time' with pilot
   value and number of evictions.
+*** Remap
 - Remap:
   - plain vec
   - ef
   - cachelineef
-- Sharding
-  - 10^10 or 10^11 construction with both sharding variants.
+*** Part size
+*** Sharding
+- 10^10 or 10^11 construction with both sharding variants.
+*** Recommended parameters
+- large and reliable
+- medium and aggressive for query throughput
+- small and loose
 ** PtrHash query throughput
 - Latency around 80ns
 - Max single-threaded throughput:
 - Max RAM transfer rate: 25.6GB/s
+- Single bucket size vs 2-way split vs PHOBIC
+  - Construction speed
+  - Sequential lookup
+  - Prefetching
 *** Bucket Fn effect
 *** Prefetching
 - Prefetching
@@ -668,9 +682,7 @@ These files are then read and processed one by one.
 - Query throughput vs threads
   - Plot of max random-access memory throughput.
 ** Comparison with competitors
-
-
-** TODO
+- check out https://github.com/ByteHamster/MPHF-Experiments for evals
 
 * Conclusion and future work
 
@@ -765,15 +777,12 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 
 
 
-* TODO further ideas
+* DONE Failed ideas
+- always compute remap to avoid branch:
+  - Instead, an additional layer of prefetching helps a bit, but too complicated
+    and annoying.
 - rattle kicking?
-- always compute remap to avoid branch?
 - 4bit pilots with buckets of half the size -> doesn't work.
-- sichash [cite:@sichash]
-- shockhash [cite:@shockhash]
-- bipartite shockhash [cite:@bipartite-shockhash]
-- check out https://github.com/ByteHamster/MPHF-Experiments for evals
-- Mention epserde support?
 
 
 #+print_bibliography:
