@@ -41,12 +41,15 @@ def invert(f, y):
     return l
 
 
+lmbda = 4
+
+
 def bucket_sz(f, y):
     y1 = y
     y2 = y + 0.001
     x1 = invert(f, y1)
     x2 = invert(f, y2)
-    return (x2 - x1) * 1000
+    return lmbda * (x2 - x1) * 1000
 
 
 xs = [x / 1000 for x in range(1000)]
@@ -73,7 +76,7 @@ plt.ylabel("Normalized bucket index")
 # Add horizontal grid lines
 plt.grid(axis="y", lw=0.5)
 
-plt.savefig("bucket-fn.svg", bbox_inches="tight")
+plt.savefig("plots/bucket-fn.svg", bbox_inches="tight")
 plt.close()
 
 ## PLOT 2
@@ -93,11 +96,14 @@ plt.gca().spines["top"].set_visible(False)
 plt.gca().spines["right"].set_visible(False)
 # x and y from 0 to 1
 plt.xlim(0, 1)
-plt.ylim(0, 3)
+plt.ylim(0, 11.5)
 plt.xlabel("Normalized bucket index")
-plt.ylabel("Relative expected bucket size")
+plt.ylabel("Expected bucket size for $\lambda = 4$")
 # Add horizontal grid lines
-plt.grid(axis="y", lw=0.5)
+plt.grid(axis="y", lw=0.5, which="major")
+plt.grid(axis="y", lw=0.5, which="minor", alpha=0.4)
+# Add minor tickes lines every 1
+plt.yticks(range(0, 12, 1), minor=True)
 
-plt.savefig("bucket-size.svg", bbox_inches="tight")
+plt.savefig("plots/bucket-size.svg", bbox_inches="tight")
 plt.close()

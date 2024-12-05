@@ -501,7 +501,7 @@ impl CacheLineEF {
 
 #+name: bucket-fn
 #+caption: The left shows various bucket assignment functions $\gamma$, such as the piecewise linear function used by FCH and PTHash, and the optimal function introduced by PHOBIC. Flatter slopes at $x=0$ create larger buckets, while steeper slopes at $x=1$ create more small buckets, as shown on the right, as the distribution of expected bucket sizes given by $(\gamma^{-1})'$ when the expected bucket size is $\lambda=4$.
-| [[file:bucket-fn.svg]] | [[file:bucket-size.svg]] |
+| [[file:plots/bucket-fn.svg]] | [[file:plots/bucket-size.svg]] |
 
 During construction, slots slowly fill up as more buckets are
 placed. Because of this, the first buckets are much easier to place than the
@@ -633,22 +633,28 @@ can also be stored to disk and read on-demand while querying. This is supported 
 
 
 * Results
-** Setup
-- =lscpu | grep CPU= CPU: Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz
-  - Running at 3.6GHz
-  - Cache sizes 32KiB/256KiB/12MiB
-  - 12 line fill buffers
-  - hyperthreading disabled
-- Ram: =sudo lshw -short -C memory= 2x 32GiB SODIMM DDR4 synchronous 3200 MHz.
-- Measure at 25M keys (which at 10MB fits in 12MB L3 cache) and 1G keys (which is 20x larger than L3)
-*** Parameters
-- Parameters for small cases,
-** PtrHash construction
-- Construction time vs part size
-- Single bucket size vs 2-way split vs PHOBIC
-  - Construction speed
-  - Sequential lookup
-  - Prefetching
+In this section we investigate PtrHash construction and query throughput for
+different parameters, and compare PtrHash to competitors.
+All experiments are run on an Intel Core i7-10750H CPU with 6 cores and
+hyper-threading disabled.
+The frequency is pinned to 2.6GHz.
+Cache sizes are 32KiB L1 and 256KiB L2 per core, and 12MiB shared L3 cache. Main
+memory is 64GiB DDR4 at 3200MHz, split over two 32GiB banks.
+
+All experiments use either 20 million keys, for which the pilots take around
+6MB and easily fit in L3 cache, or $10^9$ keys, for which the pilots take around
+300MB and are much larger than L3.
+
+** PtrHash parameters
+*** Buckets function
+
+#+name: bucket-fn-plot
+#+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. On the left (first five plots), $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For all methods, placing buckets of size $1$ is fast due to the load factor $\alpha<1$, and the bottleneck is placing the last buckets of size $2$ and $3$. Cubic has the least amount of evictions, and hence is fastest to construct. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
+#+attr_html: :class full-width
+| [[file:plots/build_stats_l35.svg]] | [[file:plots/build_stats_l40.svg]]  |
+
+*** $\alpha$, $\lambda$, and bucket function
+- Table of parameters, and time and space used
 - Comparison of bucketing functions; plot over 'construction time' with pilot
   value and number of evictions.
 *** Remap
