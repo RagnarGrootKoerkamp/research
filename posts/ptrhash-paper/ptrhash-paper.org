@@ -12,26 +12,29 @@ development is [[../ptrhash][here]].
 :PROPERTIES:
 :UNNUMBERED:
 :END:
-*Motivation:*
+*Motivation.*
 Given a set $K$ of $n$ keys, a minimal perfect hash function (MPHF) is a
 collision-free bijective map $f$ from $K$ to $\{0, \dots,
 n-1\}$. These functions have uses in databases, search engines, and are used in
-bioinformatics indexing tools such as Pufferfish (using BBHash), SSHash, and
-Piscem (both using PTHash). This work presents an MPHF that prioritizes query
-throughput and can be constructed efficiently for a billion or more elements
+bioinformatics indexing tools such as Pufferfish (using BBHash), and
+Piscem (both using PTHash).
+Our main motivating usage is that as in SSHash, where PTHash only takes $5\%$ of the
+total space.
+Thus, this work presents a (minimal) perfect hash function that first prioritizes query
+throughput, while also allowing efficient construction for $10^9$ or more elements
 using under $3$ bits of memory per key.
 
-*Contributions:*
+*Contributions.*
 PtrHash builds on
 PTHash by 1) partitioning the table for faster construction, and 2) using cuckoo
 hashing to find $8$ bit pilots, which 3) makes further compression redundant. We further
 speed up queries by 4) simplifying hash functions and modulo operations, and 5)
-batching queries and prefetching reads from memory.
+streaming multiple queries in parallel and prefetching memory reads.
 
-*Results:*
+*Results.*
 (TODO: update numbers. TODO: add something about speed of memory) We implemented PtrHash in Rust and
 show that at $3$ bits/key memory usage it is $3\times$ faster to construct
-than PTHash while achieving $5$ns/key query throughput, $5\times$ faster than
+than PTHash while achieving $8$ns/key query throughput, $5\times$ faster than
 state-of-the-art methods.
 
 *Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
@@ -43,6 +46,8 @@ state-of-the-art methods.
 - Focus on query speed/throughput;
   - Only a single RAM access per query, ideally
 - Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
+** Motivation
+SSHash, throughput first
 ** Contributions
 We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
 query throughput and construction speed, at the cost of some more memory usage.
@@ -127,10 +132,10 @@ where $reduce(x, S)$ maps the random $64$ bit integer to $[S]$ as explained belo
 
 *Hash functions.*
 Starting simple, the pilots $p_b$ are hashed into pseudo-random $64$ integers by
-using Fx Hash for $h_p$,
+using FxHash for $h_p$,
 which simply multiplies the pilot with a /mixing constant/ $C$.
 
-When the keys are $64$ bit integers we use this same Fx Hash algorithm to hash
+When the keys are $64$ bit integers we use this same FxHash algorithm to hash
 them, since multiplying by an odd constant is invertible modulo $2^{64}$ and
 hence a perfect hash.
 For other keys, the hash function depends on the number of elements. When the
@@ -252,7 +257,7 @@ Compared to PTHash [cite:@pthash], PtrHash has a few differences:
 
   For PtrHash, all pilots are exactly $8$ bits, and we simply store them as a
   vector of bytes, removing the need for additional logic and memory accesses during their lookup.
-- *Parts.* PTHash-HEM [cite:@pthash-2] and PHOBIC split the keys into parts, and
+- *Parts.* PTHash-HEM [cite:@pthash-2] (TODO: Replace by published version) and PHOBIC split the keys into parts, and
   then work on each part independently. For a part containing $P'$ keys, they
   use $P'/\alpha$ slots (with $\alpha=1$ for PHOBIC). This means that for each
   query, a lookup is required to determine the slot where the current part starts.
@@ -542,13 +547,14 @@ of $\gamma$ are $64$ bit unsigned integers representing a fraction of $2^{64}$,
 so that e.g. $x^2$ can be computed as the upper $64$ bits of the widening $64\times64\to 128$ bit
 product $x\cdot x$.
 
+TODO: $\alpha$-adjusted perfect function.
 
 ** Parallel queries
 *Throughput.*
 In practice in bioinformatics applications (such as SSHash), we expect many
 independent queries to the MPHF. This means that queries can be answered in
 parallel, instead of one by one. Thus, we should optimize for query /throughput/
-(queries per second, but usually reported as /inverse throughput/ in amortized
+(queries per second, but usually implicitly reported as /inverse throughput/ in amortized
 seconds per query) rather than individual query latency (seconds per query).
 
 *Out-of-order execution.*
@@ -629,7 +635,7 @@ These files are then read and processed one by one.
 
 *On-disk PtrHash.*
 When the number of keys is so large that the pilots do not fit in memory, they
-can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde].
+can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde;@webgraph].
 
 
 * Results
@@ -644,19 +650,96 @@ memory is 64GiB DDR4 at 3200MHz, split over two 32GiB banks.
 All experiments use either 20 million keys, for which the pilots take around
 6MB and easily fit in L3 cache, or $10^9$ keys, for which the pilots take around
 300MB and are much larger than L3.
+To avoid the time needed for hashing keys, and since our motivating application
+is indexing $k$-mers that fit in $64$ bits, we always use random $64$ bit integer keys, and hash then using FxHash.
+
+*A note on benchmarking query throughput.*
+To our knowledge, all recent papers on (minimal) perfect hashing measure query
+speed by first creating a list of keys, and then querying all keys in the list,
+as shown in [[query-throughput-1]]. One might think this measures the average
+latency of a query, but that is not the case, as the CPU will execute
+instructions from adjacent iterations at the same time.
+Indeed, as we will see (TODO table ref), this loop can be as fast as $12
+ns/key$ for $n=10^9$, which is over $6$ times faster than the RAM latency of $\approx 80ns$,
+and thus, at least $6$ iterations are being processed in parallel.
+
+Hence, we argue that existing benchmarks measure (and optimize for)
+throughput and that they assume that the list of keys to query is known in advance.
+We make this assumption explicit by changing the API to benchmark all queries at
+once, as shown in [[query-throughput-2]]. This way, we can explicitly process
+multiple queries in parallel as described in [[*parallel queries]].
+
+We also argue that properly optimizing for throughput is relevant for
+applications. SSHash, for example, queries all minimizers of a DNA sequence,
+which can be done by first computing and storing those minimizers, followed by
+querying them all at once.
+
+#+name: query-throughput-1
+#+caption: The typical code used to benchmark (minimal) perfect hash functions takes a list of keys, and measures the time it takes to =query= them one by one. This implicitly processes multiple queries in parallel. =black_box= is a Rust standard library function that ensures the query is not optimized away.
+#+begin_src rust
+fn benchmark(&self, keys: &Vec<Key>) -> Duration {
+    let start = Instant::now()
+    for key in keys {
+        black_box(self.query(key));
+    }
+    start.elapsed()
+}
+#+end_src
+
+#+name: query-throughput-2
+#+caption: To allow explicit parallel processing of queries using prefetching, we change the benchmark to a single =query_all= function.
+#+begin_src rust
+fn benchmark(&self, keys: &Vec<Key>) -> Duration {
+    let start = Instant::now()
+    black_box(self.query_all(keys));
+    start.elapsed()
+}
+#+end_src
 
 ** PtrHash parameters
-*** Buckets function
+*** Bucket functions
 
 #+name: bucket-fn-plot
-#+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. On the left (first five plots), $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For all methods, placing buckets of size $1$ is fast due to the load factor $\alpha<1$, and the bottleneck is placing the last buckets of size $2$ and $3$. Cubic has the least amount of evictions, and hence is fastest to construct. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
+#+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. On the left (first five plots), $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For all methods, placing buckets of size $1$ is fast due to the load factor $\alpha<1$, and the bottleneck is placing the last buckets of size $2$ and $3$. Cubic has the least amount of evictions, and hence is fastest to construct. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
 #+attr_html: :class full-width
-| [[file:plots/build_stats_l35.svg]] | [[file:plots/build_stats_l40.svg]]  |
+| [[file:plots/bucket_fn_stats_l35.svg]] | [[file:plots/bucket_fn_stats_l40.svg]] |
 
-*** $\alpha$, $\lambda$, and bucket function
-- Table of parameters, and time and space used
-- Comparison of bucketing functions; plot over 'construction time' with pilot
-  value and number of evictions.
+- Linear is simple
+- Cubic is best for construction
+- In the remainder, we use linear for speed and simplicity (especially for small
+  datastructures), and cubic for space efficiency.
+
+*** Construction and size
+#+name: construction
+#+caption: Construction size and time
+#+attr_html: :class inset
+[[file:plots/size.svg]]
+- $n=10^9$
+- $\alpha \in \{0.98, 0.99\}$
+  - Larger alpha such as $0.995$ are not reliable:
+    - too sparse for cacheline ef
+    - overly large parts for large n
+- bucket functions linear and cubic
+- lambda variable $\{3.0, ..., 4.5\}$
+- remap using CacheLineEF
+- observations:
+  - construction time grows exponentially, until it fails
+  - fails usually because eviction chains become too long.
+  - cubic can handle much large $\lambda$, and makes smaller overall size
+  - $\alpha=0.98$ is faster, but around $0.1bit/key$ larger
+  - $\alpha=0.99$ fails before $\alpha=0.98$, partially because for large $n$,
+    there will be variance in slots per part, and some parts will have load
+    factor too close to $1$, or even larger than $1$.
+- What are these $20ns$ spent on?
+  - 1ns hashing
+  - 5ns radix sorting
+  - 12ns finding pilots
+  - 1ns remapping
+- two proposed configurations:
+  - Simple and fast: Linear, $\lambda = 3.0$, $\alpha=0.99$, 2.79 bits/key
+  - Space efficient: Cubic, $\lambda = 4.0$, $\alpha=0.98$, 2.24 bits/key
+    (for large $\lambda$ we avoid $\alpha=0.99$ since it is less reliable)
+
 *** Remap
 - Remap:
   - plain vec
@@ -665,6 +748,7 @@ All experiments use either 20 million keys, for which the pilots take around
 *** Part size
 *** Sharding
 - 10^10 or 10^11 construction with both sharding variants.
+*** Time breakdown of construction
 *** Recommended parameters
 - large and reliable
 - medium and aggressive for query throughput
