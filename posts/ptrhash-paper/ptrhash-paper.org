@@ -671,7 +671,7 @@ still allow buckets of size $1$ to find a pilot within $256 tries.
 
 Overall, we propose two sets of parameters, /simple/ and /compact/.
 
-** PtrHash parameters
+** Construction
 *** Bucket functions
 
 #+name: bucket-fn-plot
@@ -735,6 +735,16 @@ Overall, we propose two sets of parameters, /simple/ and /compact/.
 |                                                       |                   |  17.83 |    8.00 | CacheLineEF |  0.24 |   20.97 |    10.45 |
 |                                                       |                   |  18.32 |    8.33 | EF          |  0.17 |   23.17 |    14.14 |
 
+#+name: remap-new
+#+caption:
+| alpha | lambda | bucketfn | pilots | q1_phf | q32_phf | remap_type  | remap | q1_mphf | q32_mphf |
+|-------+--------+----------+--------+--------+---------+-------------+-------+---------+----------|
+| 0.995 |  3.000 | Linear   |  2.668 | 13.713 |   8.575 | Vec < u32 > | 0.179 |  12.164 |    8.707 |
+| 0.995 |  3.000 | Linear   |  2.668 | 13.779 |   8.588 | EF          | 0.056 |  13.400 |    9.199 |
+| 0.990 |  4.000 | CubicEps |  2.000 | 17.663 |   7.841 | Vec < u32 > | 0.330 |  19.514 |    8.427 |
+| 0.990 |  4.000 | CubicEps |  2.000 | 17.707 |   7.933 | CacheLineEF | 0.120 |  19.857 |   10.520 |
+| 0.990 |  4.000 | CubicEps |  2.000 | 17.711 |   7.941 | EF          | 0.094 |  20.841 |   11.110 |
+
 - Remap:
   - plain vec of =u32=
   - cachelineef
@@ -757,7 +767,7 @@ Overall, we propose two sets of parameters, /simple/ and /compact/.
     keys/part expected with $10000$ buffer, that's $10\sigma$ space, which is
     plenty for a reliable construction.
 - 10^10 or 10^11 construction with both sharding variants.
-** PtrHash query throughput
+** Query throughput
 - Latency around 80ns
 - Max single-threaded throughput:
 - Max RAM transfer rate: 25.6GB/s
@@ -767,7 +777,7 @@ Overall, we propose two sets of parameters, /simple/ and /compact/.
   - Prefetching
 
 
-*A note on benchmarking query throughput.*
+*** A note on benchmarking query throughput
 To our knowledge, all recent papers on (minimal) perfect hashing measure query
 speed by first creating a list of keys, and then querying all keys in the list,
 as shown in [[query-throughput-1]]. One might think this measures the average
@@ -811,18 +821,29 @@ fn benchmark(&self, keys: &Vec<Key>) -> Duration {
 #+end_src
 
 *** Batch size
+#+name: batching
+#+caption: Batching
+#+attr_html: :class inset
+[[file:plots/query_batching.svg]]
+- Compact is slow on small inputs because the loop is vectorized with SIMD,
+  which ends up being slower.
 - Query experiments always do 1G queries.
 - n=20M n=1G
 - linear/0.99/3.0 vs cubic/0.98/4.0
 - no remap
 - loop vs streaming vs batching
 - 24: 1..128 batch size: 1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96,112,128
-*** Remap & multithreading
+*** Throughput
+#+name: throughput
+#+caption: throughput
+#+attr_html: :class inset
+[[file:plots/query_throughput.svg]]
 - 2: Linear/0.99/3.0 vs Cubic/0.98/4.0
 - 2: loop vs streaming with known batch size
 - 2: with/out remap (Vec & CachelineEF)
 - 6: with 1..6 threads
   - random access memory throughput
+
 ** Comparison with competitors
 - check out https://github.com/ByteHamster/MPHF-Experiments for evals
 
@@ -831,6 +852,7 @@ fn benchmark(&self, keys: &Vec<Key>) -> Duration {
 *Future work.*
 - Faster than memory is possible, when most queries can be answered from a
   smaller cache.
+- SIMD, although the widening multiplication complicates things
 
 * Acknowledgements
 - Giulio for ongoing discussions
