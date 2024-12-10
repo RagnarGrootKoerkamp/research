@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 from math import log, floor, ceil
 from matplotlib.ticker import MultipleLocator
 from matplotlib.lines import Line2D
+from matplotlib.collections import PatchCollection
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import tabulate
 
 
 def bucket_fn_plots():
@@ -77,6 +79,7 @@ def bucket_fn_plots():
     plt.grid(axis="y", lw=0.5)
 
     plt.savefig("plots/bucket-fn.svg", bbox_inches="tight")
+    plt.show()
     plt.close()
 
     ## PLOT 2
@@ -108,6 +111,7 @@ def bucket_fn_plots():
     plt.yticks(range(0, 12, 1), minor=True)
 
     plt.savefig("plots/bucket-size.svg", bbox_inches="tight")
+    plt.show()
     plt.close()
 
 
@@ -216,6 +220,7 @@ def build_stats(f, out, l):
             ax2.yaxis.set_visible(False)
 
     plt.savefig(out, bbox_inches="tight")
+    plt.show()
     plt.close()
 
 
@@ -224,69 +229,106 @@ def space(f, out):
         data = json.load(f)
     # Convert json to dataframe
     df = pd.DataFrame(data)
-    print(df)
 
     df["c"] = 1000000000 * df["construction_6"] / df["n"]
 
     # A plot with lambda on the x-axis, and two y-axes with build time and size.
     # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
-    fig, ax = plt.subplots(1, 1, figsize=(7, 4), layout="constrained")
+    fig, ax = plt.subplots(1, 1, figsize=(9, 5), layout="constrained")
     ax2 = ax.twinx()
 
     ax.set_xlabel("$\\lambda$")
     ax.set_ylabel("Construction time (ns/key)")
     ax2.set_ylabel("Size (bits/key)")
 
-    groups = df.groupby(["n", "alpha", "bucketfn"])
+    # TODO DROP
+    df = df[df["alpha"] != 0.999]
+    df = df[df["alpha"] != 0.997]
+
+    alpha_size = {
+        0.998: 0.8,
+        0.995: 1.2,
+        0.99: 1.6,
+        0.98: 2.0,
+    }
+
+    groups = df.groupby(["n", "alpha", "bucketfn", "real_alpha"])
     for k, g in groups:
-        n, alpha, bucketfn = k
+        print(k)
+        n, alpha, bucketfn, real_alpha = k
         ls = "solid"
-        lw = 1
-        a = 1
-        if n < 10**9:
-            # ls = 'dashed'
-            a = 0.3
-        else:
-            pass
+        lw = alpha_size[alpha]
+        a = 0.8
         if bucketfn == "Linear":
             color = "blue"
         else:
             color = "red"
-        if alpha == 0.99:
-            lw = 1.2
-        if alpha == 0.98:
-            lw = 2.5
         ax.plot(g["lambda"], g["c"], label=f"{k}", ls=ls, color=color, lw=lw, alpha=a)
-        if bucketfn == "CubicEps" and n == 10**9:
-            ax2.plot(
-                g["lambda"],
-                g["total"],
-                ls=ls,
-                color="black",
-                lw=lw,
-                alpha=a,
-            )
 
     ls = df["lambda"].unique()
     ys = [8 / l for l in ls]
-    ax2.plot(ls, ys, lw=2.5, label="Space (pilots)", color="black", alpha=0.3)
+    ax2.plot(ls, ys, lw=1, label="Space (pilots)", color="black")
+    # Plot space with remap
+    for alpha in df.alpha.unique():
+        lw = alpha_size[alpha]
+        ax2.plot(
+            ls,
+            [8 / l + 32 * (1 / alpha - 1) for l in ls],
+            lw=lw,
+            color="green",
+            alpha=0.9,
+        )
+        if alpha < 0.995:
+            ax2.plot(
+                ls,
+                [8 / l + (512 / 44) * (1 / alpha - 1) for l in ls],
+                lw=lw,
+                color="orange",
+                alpha=0.9,
+            )
 
-    ax.set_xlim(2.95, 4.15)
-    ax.set_ylim(0, 120)
-    ax2.set_ylim(0, 3)
+    # Add dots for the simple configuration
+    l = 3.0
+    a = 0.995
+    y = df[(df.alpha == a) & (df.bucketfn == "Linear") & (df["lambda"] == l)].c
+    ax.plot(l, y, "bo", ms=9)
+    y = 8 / l + 32 * (1 / a - 1)
+    ax2.plot(l, y, "o", color="green", ms=8, mew=2, mec="blue")
+
+    # Add dots for the compact configuration
+    l = 4.0
+    a = 0.99
+    y = df[(df.alpha == a) & (df.bucketfn == "CubicEps") & (df["lambda"] == l)].c
+    ax.plot(l, y, "ro", ms=9)
+    y = 8 / l + (512 / 44) * (1 / a - 1)
+    # Red outline to marker
+    ax2.plot(l, y, "o", color="orange", ms=8, mew=2, mec="red")
+
+    ax.set_xlim(2.66, 4.24)
+    ax.set_ylim(0, 140)
+    ax2.set_ylim(0, 3.5)
     ax2.grid(axis="y", lw=0.5)
+    ax.grid(axis="x", lw=0.5)
+    ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+    ax2.set_yticks([2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8, 2.9], minor=True)
+    ax2.grid(axis="y", lw=0.5, which="minor", alpha=0.4)
 
     # Build legend
-    llinear = mpatches.Patch(color="blue", label="Linear $\\gamma$ construction time")
-    lcubic = mpatches.Patch(color="red", label="Cubic $\\gamma$ construction time")
-    lspace = Line2D([0], [0], label="Total space", lw=2, color="black")
-    lpilots = Line2D([0], [0], label="Pilots space", lw=2, color="black", alpha=0.3)
-    la099 = Line2D([0], [0], label="$\\alpha = 0.99$", lw=1.5, color="black")
-    la098 = Line2D([0], [0], label="$\\alpha = 0.98$", lw=2.25, color="black")
+    llinear = mpatches.Patch(color="blue", label="Linear $\\gamma$")
+    lcubic = mpatches.Patch(color="red", label="Cubic $\\gamma$")
+    lpilots = Line2D([0], [0], label="Pilots space", lw=2, color="black")
+    lfill = Line2D([], [], label="", lw=0)
+    lvec = Line2D([0], [0], label="Total space, Vec<u32>", lw=2, color="green")
+    lclef = Line2D([0], [0], label="Total space, CLEF", lw=2, color="orange")
+    la = []
+    for a in sorted(df.alpha.unique(), reverse=True):
+        lw = alpha_size[a]
+        l = Line2D([0], [0], label=f"$\\alpha = {a}$", lw=lw, color="black")
+        la.append(l)
     plt.legend(
-        handles=[llinear, lcubic, lpilots, lspace, la099, la098],
+        handles=[llinear, lcubic, lfill, lpilots, lvec, lclef] + la,
         loc="lower right",
-        ncols=3,
+        ncols=5,
     )
 
     ax.spines["top"].set_visible(False)
@@ -301,7 +343,273 @@ def space(f, out):
     plt.close()
 
 
+def remap(f):
+    with open(f) as f:
+        data = json.load(f)
+    # Convert json to dataframe
+    df = pd.DataFrame(data)
+    # Print dataframe with two digits precision.
+    df = df[
+        [
+            "alpha",
+            "lambda",
+            "bucketfn",
+            "pilots",
+            "q1_phf",
+            "q32_phf",
+            "remap_type",
+            "remap",
+            "q1_mphf",
+            "q32_mphf",
+        ]
+    ]
+
+    print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".3f"))
+
+    # Two side by side plots
+    # fig, axs = plt.subplots(1, 2, figsize=(7, 4), layout="constrained")
+    # groups = df.groupby(["bucketfn"])
+    # for ax, (k, g) in zip(axs, groups):
+    #     # Bar plot, x = remap_typ
+    #     # y = total, q_mphf
+
+    #     ax.plot(g["remap_type"], g["q_phf"], label="Q-PHF", color="red")
+    #     ax.plot(g["remap_type"], g["q_mphf"], label="Q-MPHF", color="blue")
+    #     ax.set_ylim(0, 25)
+
+    #     ax2 = ax.twinx()
+    #     ax2.plot(g["remap_type"], g["total"], label="Total", color="black")
+    #     ax2.plot(g["remap_type"], g["pilots"], label="Pilots", color="black")
+
+    #     ax2.set_ylim(0, 3.5)
+
+    # plt.show()
+    # plt.close()
+
+
+def query_batching(f, out):
+    with open(f) as f:
+        data = json.load(f)
+    # Convert json to dataframe
+    df = pd.DataFrame(data)
+
+    # A plot with lambda on the x-axis, and two y-axes with build time and size.
+    # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
+    fig, axs = plt.subplots(1, 2, figsize=(7, 3), layout="constrained")
+
+    for ax in axs:
+        ax.set_xlabel("Batch or lookahead size")
+    axs[0].set_ylabel("Query throughput (ns/key)")
+
+    groups = df.groupby(["n", "alpha", "bucketfn", "mode"])
+    for k, g in groups:
+        n, alpha, bucketfn, mode = k
+        ls = "solid"
+        lw = 1
+        a = 0.8
+        ax = axs[1]
+        if n < 10**9:
+            # a = 0.5
+            # lw += 1
+            ax = axs[0]
+        if bucketfn == "Linear":
+            color = "blue"
+        else:
+            color = "red"
+        if mode == "stream":
+            ls = "dashed"
+        if mode == "batch":
+            ls = "dashdot"
+            continue
+        if mode == "batch2":
+            # ls = "dashdot"
+            ls = "dotted"
+        ax.plot(g["batch_size"], g["q_phf"], ls=ls, color=color, lw=lw, alpha=a)
+
+        if mode == "loop":
+            # Horizontal line at height g['q_phf']
+            assert len(g) == 1
+            ax.axhline(y=g["q_phf"].values[0], color=color, lw=lw, ls=ls)
+
+    for ax in axs:
+        ax.set_xscale("log")
+        ax.set_xticks([2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128])
+        ax.set_xticks([1, 3, 5, 7, 10, 14, 20, 28, 40, 56, 80, 112], minor=True)
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: int(x)))
+        ax.xaxis.set_minor_formatter(plt.FuncFormatter(lambda x, _: None))
+        ax.set_xlim(1, 64)
+        ax.grid(axis="y", lw=0.5)
+        ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
+    axs[0].set_ylim(0, 20)
+    axs[1].set_ylim(0, 20)
+
+    for ax in axs:
+        ax.spines["top"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    # Build legend
+    lcompact = mpatches.Patch(color="red", label="Compact")
+    lsimple = mpatches.Patch(color="blue", label="Simple")
+    lloop = Line2D([0], [0], label="Looping", lw=2, color="black", ls="solid")
+    lbatch = Line2D([0], [0], label="Batching", lw=2, color="black", ls="dotted")
+    lstream = Line2D([0], [0], label="Streaming", lw=2, color="black", ls="dashed")
+    lfill = Line2D([], [], label="", lw=0)
+    axs[0].legend(
+        handles=[lcompact, lsimple, lfill, lloop, lbatch, lstream],
+        loc="upper left",
+        ncols=2,
+    )
+
+    plt.savefig(out, bbox_inches="tight")
+    plt.show()
+    plt.close()
+
+
+class MulticolorPatch(object):
+    def __init__(self, label, styles):
+        self.styles = styles
+        self.label = label
+
+    def get_label(self):
+        return self.label
+
+
+# define a handler for the MulticolorPatch object
+class MulticolorPatchHandler(object):
+    def legend_artist(self, legend, orig_handle, fontsize, handlebox):
+        width, height = handlebox.width, handlebox.height
+        patches = []
+        for i, style in enumerate(orig_handle.styles):
+            patches.append(
+                plt.Rectangle(
+                    [
+                        width / len(orig_handle.styles) * i - handlebox.xdescent,
+                        -handlebox.ydescent,
+                    ],
+                    width / len(orig_handle.styles),
+                    height,
+                    edgecolor="none",
+                    linewidth=0,
+                    **style,
+                )
+            )
+
+        patch = PatchCollection(patches, match_original=True)
+
+        handlebox.add_artist(patch)
+        return patch
+
+
+def query_throughput(f, out):
+    with open(f) as f:
+        data = json.load(f)
+    # Convert json to dataframe
+    df = pd.DataFrame(data)
+
+    # A plot with lambda on the x-axis, and two y-axes with build time and size.
+    # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
+    fig, axs = plt.subplots(1, 1, figsize=(4, 3), layout="constrained")
+    axs = [axs]
+
+    print("Fastest: ", df["q_phf"].min())
+
+    print(df[(df["alpha"] == 0.995) & (df["threads"] == 1) & (df["n"] == 10**9)])
+
+    aa = 0.4
+
+    for ax in axs:
+        ax.set_xlabel("#threads")
+    axs[0].set_ylabel("Query throughput (ns/key)")
+
+    groups = df.groupby(["n", "alpha", "bucketfn", "mode", "remap_type"])
+    for k, g in groups:
+        print(k)
+        print(g)
+        n, alpha, bucketfn, mode, remap_type = k
+        ls = "solid"
+        lw = 2
+        ax = axs[0]
+
+        if bucketfn == "CubicEps" and remap_type != "CacheLineEF":
+            continue
+
+        if n < 10**9:
+            continue
+            ax = axs[0]
+        if bucketfn == "Linear":
+            c1 = "blue"
+            c2 = "green"
+        else:
+            c1 = "red"
+            c2 = "orange"
+        if mode == "stream":
+            ls = "dashed"
+        if mode == "batch":
+            ls = "dotted"
+        ax.plot(g["threads"], g["q_phf"], ls=ls, color=c1, lw=1.5, alpha=1.0)
+        ax.plot(g["threads"], g["q_mphf"], ls=ls, color=c1, lw=2, alpha=aa)
+
+    # Perfect scaling plot.
+    xs = [1, 2, 3, 4, 5, 6, 7]
+    ax.plot(
+        xs,
+        [df[(df["n"] == 10**9) & (df["threads"] == 1)]["q_phf"].min() / x for x in xs],
+        color="black",
+        lw=0.5,
+    )
+
+    for ax in axs:
+        ax.grid(axis="y", lw=aa)
+        ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
+    axs[0].set_ylim(0, 21.5)
+    axs[0].set_xlim(0.8, 6.2)
+
+    axs[0].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
+
+    for ax in axs:
+        ax.spines["top"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    # Build legend
+    lcompact = MulticolorPatch(
+        "Compact", [{"color": "red", "alpha": 1.0}, {"color": "red", "alpha": aa}]
+    )
+    lsimple = MulticolorPatch(
+        "Simple", [{"color": "blue", "alpha": 1.0}, {"color": "blue", "alpha": aa}]
+    )
+    lphf = MulticolorPatch(
+        "PHF", [{"color": "red", "alpha": 1.0}, {"color": "blue", "alpha": 1.0}]
+    )
+    lmphf = MulticolorPatch(
+        "MPHF", [{"color": "red", "alpha": aa}, {"color": "blue", "alpha": aa}]
+    )
+    lloop = Line2D([0], [0], label="Looping", lw=1.5, color="black", ls="solid")
+    lstream = Line2D([0], [0], label="Streaming", lw=2, color="black", ls="dashed")
+    lopt = Line2D([0], [0], label="RAM throughput", lw=1, color="black", ls="dotted")
+    lscaling = Line2D(
+        [0], [0], label="Perfect scaling", lw=0.5, color="black", ls="solid"
+    )
+    axs[0].legend(
+        handles=[lcompact, lsimple, lphf, lmphf, lloop, lstream, lopt, lscaling],
+        loc="upper right",
+        ncols=2,
+        handler_map={MulticolorPatch: MulticolorPatchHandler()},
+    )
+
+    plt.savefig(out, bbox_inches="tight")
+    plt.show()
+    plt.close()
+
+
 # bucket_fn_plots()
 # build_stats("data/bucket_fn_stats_l35.json", "plots/bucket_fn_stats_l35.svg", 3.5)
 # build_stats("data/bucket_fn_stats_l40.json", "plots/bucket_fn_stats_l40.svg", 4.0)
-space("data/size.json", "plots/size.svg")  #
+# space("data/size.json", "plots/size.svg")
+remap("data/remap.json")
+# NOTE: compact looping is slow because of SIMD.
+# query_batching("data/query_batching.json", "plots/query_batching.svg")
+# query_throughput("data/query_throughput.json", "plots/query_throughput.svg")
+
+# TODO: sharding
