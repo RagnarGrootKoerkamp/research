@@ -1934,11 +1934,11 @@ position =i+k= at the same time. Thus, we separate the updates for the start and
 end positions of the window. We should then also initialize =self.chars_k= with the
 leading bits.
 
-#+caption: When using bit-packed data, we must read the position-=i= and position-=i+k= data separately. Runtime goes from =1.05 ns/kmer= to =0.17 ns/kmer=.
+#+caption: When using bit-packed data, we must read the position-=i= and position-=i+k= data separately. Runtime goes from =1.05 ns/kmer= to =0.62 ns/kmer=.
 #+begin_src rust
 let read = |i| {
-    let oi1 = self.offsets.wrapping_add(Simd::splat(i));
-    let oi2 = self.offsets_next.wrapping_add(Simd::splat(i));
+    let oi1 = self.offsets.wrapping_add(Simd::splat(i / 4));
+    let oi2 = self.offsets_next.wrapping_add(Simd::splat(i / 4));
     let chars_i1: Simd<u32, 8> = transmute(Simd::<u64, 4>::gather_ptr(transmute(oi1)));
     let chars_i2: Simd<u32, 8> = transmute(Simd::<u64, 4>::gather_ptr(transmute(oi2)));
     chars_i1.deinterleave(chars_i2)
@@ -1957,17 +1957,14 @@ if (i + self.k) % 32 == 16 {
 }
 #+end_src
 
-Yes, you read that right, =0.17 ns/kmer= :) That's =0.44 cycles/kmer=, and /way/
-faster than anything we had before.
+Almost a =2x= improvement!
 
-#+attr_shortcode: bug
+#+attr_shortcode: note
 #+begin_notice
-It turns out I made some bugs here. First, the
-array indexing in the code above should use index =i/4= instead of =i=.
-Second, and more importantly, for an input of $n$ bytes, I was only doing $n$
-instead of $4n$ iterations. Thus, all numbers reported from here onwards
-are roughly 4 times slower in practice. I will update them once I have some
-proper tests in place.
+Originally, I made a bug here where I measured sequences of length $n/4$ rather
+than length $n$. This has been fixed now, and timings are corrected.
+They appear to be around =0.10 ns/kmer= slower than my original benchmarks, but
+it is what it is.
 #+end_notice
 
 #+attr_shortcode: "The full code for SIMD-based hashing of bitpacked data is here."
@@ -1993,7 +1990,7 @@ Then $k$ iterations later, $i$ itself is equal to that same value, and exactly
 the same data is read. Thus, we can buffer the data read for position $i+k$ and
 use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
 32$. For larger $k$. For larger $k$, it could still be done but needs a larger buffer.
-#+caption: Reusing the =gather= at position $i+k$ for position $i$ when $k\leq 32$. Runtime goes from =0.17 ns/kmer= to =0.155 ns/kmer=.
+#+caption: Reusing the =gather= at position $i+k$ for position $i$ when $k\leq 32$. Runtime goes from =0.62 ns/kmer= to =0.57 ns/kmer=.
 #+begin_src diff
  pub struct NtHashPackedSimdIt<'a> {
      ...
@@ -2027,13 +2024,13 @@ use it the next time $i\bmod 32 = 0$. But note that this only works when $k\leq
 In each iteration we now check whether $i\bmod 32 \equiv 0$ and $i\bmod 32\equiv
 16$. It's more efficient to first do a single check whether $i\bmod 16\equiv 0$,
 and only then check which of the two cases it is, since that saves a compare and
-jump in the main loop. That brings the runtime down to =0.145 ns/kmer=, or
-precisely 3 clock cycles per 8 hashes.
+jump in the main loop. That brings the runtime down to =0.57 ns/kmer=, or
+around 1.5 clock cycle per hash.
 
 One drawback of the above is that when $k$ is indeed small, we now have a
 useless if statement and a bunch of unnecessary code for =read(i)= is generated.
 So let's put this condition behind a generic:
-#+caption: Checking whether $k\leq 32$ ahead of time saves a branch.chars_i= and =self.chars_k= variables in registers again. Runtime goes from =0.145 ns/kmer= to =0.135 ns/kmer=.
+#+caption: Checking whether $k\leq 32$ ahead of time saves a branch.chars_i= and =self.chars_k= variables in registers again. Runtime goes from =0.57 ns/kmer= to =0.52 ns/kmer=.
 #+begin_src diff
 -pub struct NtHashSimd;
 +pub struct NtHashSimd<const SMALL_K: bool>;
@@ -2082,24 +2079,27 @@ requires e.g. =Hasher::hash_kmers= to take a =&mut self=: so that it can use and
 modify this state.
 
 The new caching hasher looks like this:
-#+caption: The new =Cached= hasher reuses the allocated buffer between usages. Runtime goes from =0.135 ns/kmer= to =0.102 ns/kmer=.
-#+include: "code/blog/hash.rs" src rust :lines "151-"
+#+caption: The new =Cached= hasher reuses the allocated buffer between usages. Runtime goes from =0.52 ns/kmer= to =0.39 ns/kmer=.
+#+include: "code/blog/hash.rs" src rust :lines "176-"
 
 Now, =perf= again shows that over 90% of time is spent in the =hash_kmers=
-function, and indeed the runtime improves significantly: =0.102
-ns/kmer=![fn::Maybe it's time to switch to picoseconds (ps)?]
+function, and indeed the runtime improves significantly: =0.39
+ns/kmer=, or exactly one cycle per kmer![fn::Maybe it's time to switch to picoseconds (ps)?]
 And also, we're at exactly =3 IPC= now, which at last seems quite reasonable.
 
 #+attr_shortcode: takeaway
 #+begin_notice
-We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.102 ns/kmer= by using
+We've gone from =2.9 ns/kmer= for the =nthash= crate to =0.39 ns/kmer= by using
 32-bit hashes, a bit-packed input, and by using SIMD to parallellize over chunks
-of the input. 28x speedup!
+of the input. 7x speedup! Roughly, the first factor 2 is by making nthash more
+efficient, while the remaining factor 3.5 is from using SIMD.
+
+In the end, we need one cycle per kmer.
 #+end_notice
 
 Note that instead of returning a vector, we could also benchmark just the time
 to compute all the results, e.g. by summing all the output hashes. That only takes
-=0.90 ns/kmer=. But for consistency, it is simpler to always require an actual
+=0.35 ns/kmer=. But for consistency, it is simpler to always require an actual
 vector as output.
 
 *** One last branch
@@ -2228,10 +2228,11 @@ IPC:               4.84
 Block RThroughput: 5.0
 #+end_src
 We see that the it reports the maximum throughput of this block at one iteration
-every 5 cycles. But our benchmark already showed that we can do 1 iteration
-every 3 cycles, so I'm confused here. Also the dispatch width of 6 and =4.84
-IPC= seem unreasonably high, but maybe I was using the wrong numbers for my CPU
-(a =i7 10750H=).
+every 5 cycles. Our benchmarks need 1 cycle per kmer, or 8 cycles per iteration
+that computes 8 values, which
+is indeed just above the 5, and makes sense taking into account that a
+relatively large portion of time is spent on the =gather= instructions that
+occur only once every =32= iterations.
 
 Then, we get a table of latency and throughput values.
 #+attr_shortcode: "Latency and throughput table"
@@ -2404,14 +2405,14 @@ instead. In fact, I have seen a few cases where a register /is/ used directly,
 but I can't make it work reliably.
 
 ** Finals thoughts
-Now that we've reached =0.1 ns/kmer=, and nearly 30x speedup over a previous
+Now that we've reached =0.39 ns/kmer=, and nearly 7.5x speedup over a previous
 implementation, I think it's finally time to call it a day[fn::Week, rather, for
 this section.].
 
 To recap, our speed is:
-- =0.1 ns/kmer=
-- =0.26 cycles/kmer=
-- =2.08 cycles/8kmers=, i.e., 2 cycles per iteration of the main loop that produces 8
+- =0.39 ns/kmer=
+- =1.01 cycles/kmer=
+- =8.08 cycles/8kmers=, i.e., 8 cycles per iteration of the main loop that produces 8
   hashes in a SIMD.
 
 And for completeness, here's the full source code.
@@ -2462,7 +2463,7 @@ optimized to be very efficient.
 
 By re-using all the work we already did to efficiently gather the data from the
 sequence, this is now fairly straightforward:
-#+caption: Using FxHash instead of ntHash takes =75 ps/kmer=, down from =102 ps/kmer=!
+#+caption: Using FxHash instead of ntHash takes =0.32 ns/kmer=, down from =0.39 ns/kmer=!
 #+begin_src rust
 // upcoming_chars contains the next 32bits for each lane, and is gathered as before.
 // Extract the last 2 bits of each character.
@@ -2485,7 +2486,7 @@ return self.chars * self.constant;
 #+include: "code/blog/fxhash.rs" src rust
 #+end_details
 
-Again faster, with =75 ps/kmer= now, or 1.56 cycles per iteration!
+Again faster, with =0.32 ns/kmer= now, or 0.83 cycles per kmer!
 
 One drawback of course is that this really only works for small $k$. For
 $16<k\leq 32$ the same could be done by doing two 32-bit multiplications, but
@@ -2523,25 +2524,27 @@ leftmost minimizer. Some details:
 
 We can benchmark this code in a few ways:
 1. Take a test, compute hashes, and then directly stream them into the sliding window minima.
-2. Take a text, compute hashes to a vector, then read the vector to compute
+2. Take a text, compute hashes to a (reused) vector, then read the vector to compute
    sliding window minima.
 3. Like 2, but only measure the time for the sliding window minima.
 
-As expected, method 2 reports close to =0.1ns= more than method 3, exactly the
+As expected, method 2 reports close to =0.4ns= more than method 3, exactly the
 time taken to compute hashes.
 As output, we test both taking just the sum of all positions, and writing all
 positions to a vector.
 
 #+caption: Runtime of computing hashes and taking sliding window minima. The first column indicates whether hashes are streamed directly to the window minima or first written to a vector.
 #+attr_html: :class small
-| =ps/window= | sum positions | collect positions |
-| streaming hashes | 158 |     226 |
-| buffered hashes | 192 |     210 |
+| =ns/window=      |  sum | collect |
+| streaming hashes | 0.63 |    1.21 |
+| buffered hashes  | 0.78 |    0.81 |
 
 We see that the fully streaming option that doesn't use any memory is clearly
 the fastest. Collecting the final result is faster when the intermediate results
 are already in a vector. I'm not quite sure why. Possibly the allocation is
-reused, but I don't think that is actually the case.
+reused, but I don't think that is actually the case. Another reason could be
+that our returned iterators currently do not implement =ExactSizeIterator=, and
+hence calling =Vec::extend(iterator)= may not be as efficient as it could be.
 
 Either way, this seems to be plenty fast, and I don't see any more easy wins
 here. Comparing =(hash, pos)= tuples as a single integer seems inevitable for
@@ -2555,16 +2558,15 @@ also again, a quick and dirty test was quite a bit slower.
 
 #+attr_shortcode: takeaway
 #+begin_notice
-We can now do sliding window minima in =0.158 ns/kmer=, or =3.3 cycles/8kmers=.
-That's 60x faster than =RescanDaniel=, and 160x faster than =QueueIgor=!
+We can now do sliding window minima in =0.63 ns/kmer=, or =1.6 cycles/kmers=.
+That's 15x faster than =RescanDaniel=, and 40x faster than =QueueIgor=!
 #+end_notice
 
 *** Human genome results
-For a human genome, consisting of roughly 3Gbp, we measure a runtime of =496
-ms=[fn::Compare that to the 40 seconds it takes to convert the byte-encoded
+For a human genome, consisting of roughly 3Gbp, we measure a runtime of =2 s=[fn::Compare that to the 40 seconds it takes to convert the byte-encoded
 FASTA sequence to a bit-packed representation using some lazy code. Why aren't
 we using bit-packed on-disk file formats anyway?],
-which corresponds to =0.156 ns/kmer=. Thus, the results we see transfer to
+which corresponds to =0.66 ns/kmer=. Thus, the results we see transfer to
 larger datasets without problems!
 
 * TODO Cleanup, Testing, Super-k-mers, and canonical k-mers
