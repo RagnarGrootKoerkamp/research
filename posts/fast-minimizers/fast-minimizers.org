@@ -42,16 +42,21 @@ left, and footnotes on the right.]:
 The end result that we will be working towards here is twofold:
 1. An implementation of *32-bit ntHash* rolling hash that takes
    around =0.4ns/kmer=, or around 1 CPU cycle per hash. This is *7x faster* than the [[https://crates.io/crates/nthash][=nthash=]] crate by [[https://twitter.com/luizirber][Luiz Irber]].
-2. An implementation of *random minimizers* that takes around =0.6ns/window=, or
-   1.5CPU cycle per window. This is *15x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *40x
+2. An implementation of *random minimizers* and super-k-mers that takes around
+   =1.6 ns/window=, or
+   4 CPU cycles per window. This is *5x faster* than [[https://twitter.com/daniel_c0deb0t][Daniel Liu]]'s [[https://gist.github.com/Daniel-Liu-c0deb0t/7078ebca04569068f15507aa856be6e8][gist]] and *15x
    faster* than the [[https://github.com/rust-seq/minimizer-iter][=rust-seq/minimizer-iter=]] crate by [[https://twitter.com/IgorMartayan][Igor Martayan]][fn::I had a
    bug in earlier benchmarks that caused my timings to be 4x too fast.].
 
    It computes all window minimizers of a 2-bit packed human genome (with
-   non-=ACGT= stripped) in *two seconds*.
+   non-=ACGT= stripped) in *5.4 seconds*.
+3. An implementation of *canonical minimizers* that runs in =1.9 ns/window=, or
+   *6.4 seconds* for a human genome.
 
-I plan to upstream these algorithms into the =rust-seq/nthash= and
-=rust-seq/minimizer-iter= crates soon, after polishing the implementation,
+Some of the code to iterate bases is already available in the [[https://github.com/rust-seq/packed-seq][=packed-seq=]] crate
+in the [[https://github.com/rust-seq][=rust-seq=]] org.
+The remaining algorithms are planned to be upstreamed to =rust-seq/nthash= and/or
+=rust-seq/minimizer-iter= crates, after polishing the implementation,
 adding tests[fn::Headsup: all code I'm about to show is completely untested currently.], and designing a nice API[fn::On that matter, specific requests are welcome.].
 
 I welcome any (critical) feedback on both the content and styling of this post!
@@ -566,7 +571,7 @@ bench:
     cargo criterion --plotting-backend disabled --output-format quiet
 #+end_src
 
-When we now do =just bench=, we see this (TODO update):
+When we now do =just bench=, we see this:
 
 #+begin_export html
 <script src="https://asciinema.org/a/EQtJkYBEXYzHsEBnhrMLOp29l.js" id="asciicast-EQtJkYBEXYzHsEBnhrMLOp29l" async="true"></script>
@@ -2569,24 +2574,414 @@ we using bit-packed on-disk file formats anyway?],
 which corresponds to =0.66 ns/kmer=. Thus, the results we see transfer to
 larger datasets without problems!
 
-* TODO Cleanup, Testing, Super-k-mers, and canonical k-mers
-1. Currently most code is only written to get measure throughput, and not set up to
-   handle edge cases where e.g. the input length is not a multiple of $8$. This
-   needs fixing, and then also some testing for correctness.
-2. Most likely, an API that returns an iterator over super-k-mers (i.e., the
-   range of windows have the same minimizer) that possibly also includes the
-   bit-representation of the minimizer itself would be more convenient than the
-   current API that only returns the minimizer for each window.
-3. In most bioinformatics applications, canonical k-mers are used instead. Most
-   likely this will require doubling large parts of the pipeline to compute
-   reverse-complement hashes and their minimizers, and then take the minimum
-   between the two, with some special tie-breaking in cases where the minimum is
-   shared.
-4. Also the API should probably contain a fast method to convert between byte
-   and packed representations.
+* Extending into something useful
 
-- https://arxiv.org/pdf/2310.13212
-- https://uica.uops.info/
-- Compare with https://github.com/rchikhi/ntHash-AVX512
+(This section was added December 2024.)
+
+** Collecting minimizer positions
+At this point, we compute for every window the absolute position of its
+minimizer. This is returned as a =Vec<Simd<u32, 8>>=, where the =8= SIMD lanes
+correspond to separate chunks of the input.
+In practice, we would prefer a simple =Vec<u32>=, without processing =8= lanes
+in parallel, which should be a hidden implementation detail.
+
+We /transpose/ our output as follows: first, we collect 8 =Simd<u32, 8>=
+elements into an =[Simd<u32, 8>; 8]=, corresponding to the next elements for
+each of the 8 lanes. Then, we transpose this 8x8 matrix, to get for each lane
+a single SIMD vector with the next 8 elements. Then those 8 SIMDs of upcoming
+elements can be efficiently written to the output =Vec= in parallel.
+
+The matrix transform code comes from [[https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2][stackoverflow]] and looks like this.
+#+caption: SIMD code to transpose a 8x8 matrix =[Simd<u32, 8>; 8]=, adapted from [[https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2][this stackoverflow answer]].
+#+begin_src rust
+fn transpose(m: [S; 8]) -> [S; 8] {
+    unsafe {
+        use std::arch::x86_64::*;
+        let m: [__m256; 8] = transmute(m);
+        let x0 = _mm256_unpacklo_ps(m[0], m[1]);
+        let x1 = _mm256_unpackhi_ps(m[0], m[1]);
+        let x2 = _mm256_unpacklo_ps(m[2], m[3]);
+        let x3 = _mm256_unpackhi_ps(m[2], m[3]);
+        let x4 = _mm256_unpacklo_ps(m[4], m[5]);
+        let x5 = _mm256_unpackhi_ps(m[4], m[5]);
+        let x6 = _mm256_unpacklo_ps(m[6], m[7]);
+        let x7 = _mm256_unpackhi_ps(m[6], m[7]);
+        let y0 = _mm256_shuffle_ps(x0, x2, _mm_shuffle(1, 0, 1, 0));
+        let y1 = _mm256_shuffle_ps(x0, x2, _mm_shuffle(3, 2, 3, 2));
+        let y2 = _mm256_shuffle_ps(x1, x3, _mm_shuffle(1, 0, 1, 0));
+        let y3 = _mm256_shuffle_ps(x1, x3, _mm_shuffle(3, 2, 3, 2));
+        let y4 = _mm256_shuffle_ps(x4, x6, _mm_shuffle(1, 0, 1, 0));
+        let y5 = _mm256_shuffle_ps(x4, x6, _mm_shuffle(3, 2, 3, 2));
+        let y6 = _mm256_shuffle_ps(x5, x7, _mm_shuffle(1, 0, 1, 0));
+        let y7 = _mm256_shuffle_ps(x5, x7, _mm_shuffle(3, 2, 3, 2));
+        let mut t: [__m256; 8] = [transmute([0; 8]); 8];
+        t[0] = _mm256_permute2f128_ps(y0, y4, 0x20);
+        t[1] = _mm256_permute2f128_ps(y1, y5, 0x20);
+        t[2] = _mm256_permute2f128_ps(y2, y6, 0x20);
+        t[3] = _mm256_permute2f128_ps(y3, y7, 0x20);
+        t[4] = _mm256_permute2f128_ps(y0, y4, 0x31);
+        t[5] = _mm256_permute2f128_ps(y1, y5, 0x31);
+        t[6] = _mm256_permute2f128_ps(y2, y6, 0x31);
+        t[7] = _mm256_permute2f128_ps(y3, y7, 0x31);
+        transmute(t)
+    }
+}
+#+end_src
+
+The code to collect the transposed data into a single vector is as follows, and
+takes =1.3 ns/kmer=, compared to =1.0 ns/kmer= for the version that naively
+collects into a =Vec<Simd<u32, 8>>=.
+
+#+caption: Code to collect an iterator over =Simd<u32, 8>= into a =Vec<u32>=. Runs in =1.3 ns/kmer=, up from =1.0 ns/kmer= for collecting into a =Vec<Simd<u32, 8>>=.
+#+begin_src rust
+pub fn collect(
+    par_head: impl ExactSizeIterator<Item = S>,
+    tail: impl ExactSizeIterator<Item = u32>,
+) -> Vec<u32> {
+    let len = par_head.len();
+    let mut v = vec![0; len * 8 + tail.len()];
+
+    let mut m = [unsafe { transmute([0; 8]) }; 8];
+    let mut i = 0;
+    par_head.for_each(|x| {
+        m[i % 8] = x;
+        if i % 8 == 7 {
+            // Transpose the last 8 values into 8 lanes.
+            let t = transpose(m);
+            // Write each of the lanes to its own place.
+            for j in 0..8 {
+                unsafe {
+                    ,*v.get_unchecked_mut(j * len + 8 * (i / 8)..j * len + 8 * (i / 8) + 8)
+                        .split_first_chunk_mut::<8>()
+                        .unwrap()
+                        .0 = transmute(t[j]);
+                }
+            }
+        }
+        i += 1;
+    });
+
+    // Manually write the unfinished parts of length k=i%8.
+    let t = transpose(m);
+    let k = i % 8;
+    for j in 0..8 {
+        unsafe {
+            v[j * len + 8 * (i / 8)..j * len + 8 * (i / 8) + k]
+                .copy_from_slice(&transmute::<_, [u32; 8]>(t[j])[..k]);
+        }
+    }
+
+    // Manually write the explicit tail.
+    for (i, x) in tail.enumerate() {
+        v[8 * len + i] = x;
+    }
+
+    v
+}
+#+end_src
+
+** Deduplicating the minimizer positions
+Now that we have a =Vec<u32>= of the minimizers positions of all windows, we
+would like to deduplicate it, so that each unique position is listed only once.
+
+For this, we adapt [[https://lemire.me/blog/2017/04/10/removing-duplicates-from-lists-quickly/][this post]] on Daniel Lemire's blog, which contains a function
+that takes a =Simd<u32, 8>= of =new= values and a corresponding one of =old=
+values (to decide whether the first element of =new= is distinct). It computes
+which of the =new= elements are distinct from their previous element and appends
+those to a vector.
+
+#+caption: Code to extract the unique elements from a =Simd<u32, 8>=, adapted from [[https://lemire.me/blog/2017/04/10/removing-duplicates-from-lists-quickly/][this post]] on Daniel Lemire's blog.
+#+begin_src rust
+pub fn write_unique(
+    old: __m256i,
+    new: __m256i,
+    v: &mut [u32],
+    write_idx: &mut usize,
+) {
+    unsafe {
+        use std::arch::x86_64::*;
+
+        // Replace the highest index element of `new` with the one from `old`.
+        let recon = _mm256_blend_epi32(old, new, 0b01111111);
+        // Rotate lanes by one.
+        let movebyone_mask = _mm256_set_epi32(6, 5, 4, 3, 2, 1, 0, 7);
+        let prev = _mm256_permutevar8x32_epi32(recon, movebyone_mask);
+
+        // Compare each lane of `new` to the `prev` element.
+        let m = _mm256_movemask_ps(transmute(_mm256_cmpeq_epi32(prev, new))) as usize;
+        let numberofnewvalues = WIDTH - m.count_ones() as usize;
+        // This is a 256-long lookup table that stores which elements move where.
+        let key = UNIQSHUF[m];
+        // Move the distinct-from-prev elements of `new` to the front.
+        let val = _mm256_permutevar8x32_epi32(new, key);
+        // Append the full list of values to the output.
+        _mm256_storeu_si256(v.as_mut_ptr().add(*write_idx) as *mut __m256i, val);
+        // Increment the write-index accordingly.
+        *write_idx += numberofnewvalues;
+    }
+}
+#+end_src
+
+Then all that's left is to write a simple wrapper that iterates over a
+=Vec<u32>= and calls the function above for each 8 elements, which takes =1.6
+ns/kmer=, up from =1.3 ns/kmer= for the version without deduplication.
+
+In practice, it is slightly inefficient to first collect the transposed data
+into a =Vec<u32>= that is only then deduplicated. Instead, we can use a
+=[Vec<u32>; 8]= with a buffer for each lane, and deduplicate each lane directly
+in =collect()=, before writing its results.
+For small inputs, this does not make much of a difference, but for larger inputs
+this version does not use an intermediate buffer, and hence slows down less.
+
+** Super-k-mers
+We can now efficiently compute the list of all minimizer positions, but
+unfortunately that information is not sufficient to exactly recover all
+super-k-mers, i.e., all minimizers together with the interval of windows for
+which they are minimal.
+
+We can fix this by not only returning minimizer positions, but also the index of
+the first window for which they are minimal.
+This turns out quite simple by slightly modifying the =write_unique()= function
+above. If we assume that the number of kmers in a window $w$ is below $2^{16}$,
+distinct consecutive minimizer positions always differ in the low 16 bits. Thus,
+it is sufficient to do a 16-bit dedup. Then, we can use the high 16 bits to
+store (the low 16 bits of) the absolute index of each element.
+We add an additional argument to the =write_unique= function, so that the mask
+of values-to-be-stored is computed with only the minimizer positions, but the
+actual stored values are those that also include the absolute positions of the windows.
+
+The returned values will now contain both the minimizer positions, and the
+first windows where they occurred. Retrieving absolute positions rather than
+mod-$2^{16}$ positions is easy by incrementing an offset whenever the index goes down.
+
+This runs in =1.65 ns/kmer=, up from =1.60 ns/kmer= for simply returning
+deduplicated minimizer positions without including super-k-mer information.
+
+** Canonical k-mers
+In most bioinformatics applications, canonical k-mers are used instead, that are
+invariant under taking the reverse-complement of the sequence. This requires a
+few modifications.
+
+
+*** NtHash
+First, we use the canonical version of NtHash that sums the hash of a kmer
+and its reverse complement, so that it's invariant under reverse complement.
+This requires duplicating most of the inner NtHash code, but is quite
+straightforward. Since the stream of input characters only has to be read
+once, this is less than 2x overhead.
+
+This takes =1.83 ns/kmer=, up from =1.60 ns/kmer= for the version that does not
+use canonical NtHash.
+
+*** Leftmost-rightmost sliding min
+When the minimum kmer hash occurs twice in a single window, we must make sure
+that the two strands choose the same occurrence. To do that, we will track both
+the leftmost /and/ rightmost occurrence of the minimum. (Other options are also
+possible.)
+
+Most of the code in the sliding window algorithm can simply be duplicated, where
+for the rightmost position of the minimum, we instead invert the hash, and take
+the max of =(!hash, pos)=, alongside the existing minimum of =(hash, pos)=.
+
+*** Tiebreaking
+Lastly, we must consistently choose between choosing the leftmost and rightmost
+occurrence.
+We do this using the idea introduced by [cite/t:@refined-minimizer]: we count
+the number of =AC= characters in a window, and say the window is /canonical/
+when this is more than half the characters. When the length of the window is
+odd, it can never equal exactly half, and hence every window is either canonical
+or a reverse-complement. For canonical windows we choose the leftmost occurrence
+of the minimum, and for reverse-complement windows we choose the rightmost
+occurrence instead.
+
+Overall, this runs in =1.91 ns/kmer=, which is less than 2x slower than the =1.0
+ns/kmer= we needed for simply collecting all (non-canonical) minimizer positions
+for all windows. That's quite impressive! Especially since we do quite a bit
+more work now:
+- transposing the output,
+- deduplicating the output,
+- canonical NtHash,
+- left-and-rightmost sliding min, and
+- tiebreaking.
+
+#+attr_shortcode: assumption
+#+begin_notice
+The number of characters in a window is odd, so strandedness is well-defined.
+#+end_notice
+
+Note that we do not require $k$ itself to be odd! Tiebreaking is an operation
+that happens for a window, and hence only those need to have odd length.
+
+*** Further reusing iterated bases
+Currently we use the input strings' bases in four ways:
+- NtHash iterates over pairs of the character entering the new kmer, and the character
+  leaving the new kmer, which reuses the same =gather= ([[*Reusing the gathers]]).
+- The tiebreaking iterates over pairs of the character entering the new window (which is
+  the same as the one entering the new kmer), and the character leaving the new
+  window.
+We would like to only do a single =gather= and use that for all three required positions.
+
+Up to now, NtHash and the sliding minimum had a signature as in [[signature-old]], which
+somewhat hinders this: since NtHash takes as input the input sequence directly,
+and constructs the iterator over characters internally, we can't use it for the
+tiebreaking iterator.
+#+name: signature-old
+#+caption: Signatures of NtHash and sliding minimum, taking ownership of an input iterator and returning a new iterator.
+#+begin_src rust
+fn hash_kmers(
+    &mut self,
+    k: usize,
+    t: &[u8]
+) -> impl Iterator<Item = [Self::Out; L]>;
+
+pub fn sliding_min(
+    &self,
+    w: usize,
+    it: impl Iterator<Item = [u32; 8]>
+) -> impl Iterator<Item = [u32; 8]>;
+#+end_src
+
+Instead, we change our design to the following: the hash function and sliding
+minimum simply return a closure with some internal state, and each time the
+closure is called (with a pair of characters to be added and removed, or the new
+hash), the
+internal state is updated and the next hash or next sliding minimum is returned.
+This turns out much simpler, and also optimized slightly better in some cases, [[signature-new]].
+#+name: signature-new
+#+caption: New signatures of NtHash and sliding minimum, returning a closure/'mapper' that takes elements one at a time.
+#+begin_src rust
+/// Returns a function taking pairs (a, r)
+/// of characters added and removed from the last *kmer*,
+/// that returns the new hash.
+pub fn nthash_mapper(
+    k: usize,
+    w: usize
+) -> impl FnMut((S, S)) -> S + Clone;
+
+/// Returns a function taking new hashes,
+/// and returning the new sliding window minimum.
+pub fn sliding_min_mapper(
+    w: usize,
+    len: usize
+) -> impl FnMut(S) -> S;
+
+
+/// Returns a function taking pairs (a, r)
+/// of characters added and removed from the last *window*,
+/// that returns whether the new window is canonical
+/// (when #AC is more than half).
+pub fn canonical_mapper(
+    k: usize,
+    w: usize
+) -> impl FnMut((S, S)) -> S;
+#+end_src
+
+For example, the =canonical_mapper= looks like [[canonical-mapper]]. Note though
+that the prefix of values returned while the first window isn't completely
+'filled' yet should be skipped/ignored.
+
+#+name: canonical-mapper
+#+caption: Function that initializes the 'canonical mapper' that tracks whether a window is canonical.
+#+begin_src rust
+/// NOTE: First l-1 returned values are bogus.
+pub fn canonical_mapper(k: usize, w: usize) -> impl FnMut((S, S)) -> S {
+    let l = k + w - 1;
+    assert!(
+        l % 2 == 1,
+        "Window length must be odd to guarantee canonicality"
+    );
+
+    // Count of odd characters, offset by -l/2 so >0 is canonical and <=0 is not.
+    let mut cnt = Simd<i32, 8>::splat(-(l as i32) / 2);
+    let zero = Simd<i32, 8>::splat(0);
+    let one = Simd<i32, 8>::splat(1);
+
+    // (a, r): character added and remvoed.
+    move |(a, r)| {
+        cnt += a & one;
+        cnt -= r & one;
+        cnt.cmp_gt(zero)
+    }
+}
+#+end_src
+
+
+Using this, we can now extract the base-iteration to a separate function
+returning triples of characters =(new, last-in-kmer, last-in-window)=, and map
+them as in [[mapper]].
+
+#+name: mapper
+#+caption: The canonical minimizer can be implemented cleanly using 'mapper' functions for NtHash, the sliding minimium, and the canonical determination.
+#+begin_src rust
+// Iterate characters, with a 'trailing' char `k-1` and `l` behind.
+// `k-1` is first char of the kmer.
+// `l` is the one to be dropped from the window.
+let (char_triples, tail) = seq.par_iter_bp_delayed_2(k + w - 1, k - 1, l);
+
+// Canonical nthash
+let mut nthash = nthash_mapper::<true>(k, w);
+// True/false whether a window is canonical.
+let mut canonical = canonical_mapper(k, w);
+// Leftmost and rightmost window minimum position.
+let mut sliding_min = sliding_lr_min_mapper(w, char_triples.size_hint().0);
+
+let mut iterator = char_triples.map(move |(a, rk, rl)| {
+    let nthash = nthash((a, rk));
+    let canonical = canonical((a, rl));
+    let (lmin, rmin) = sliding_min(nthash);
+    // Choose leftmost or rightmost min based on whether window is canonical.
+    canonical.blend(lmin, rmin)
+});
+#+end_src
+
+To implement the =delayed_2= iterator that returns triples of characters, the
+new one and two 'delayed' streams, we extend the idea from [[*Reusing the gathers]]:
+instead of storing the last read =gather= in a temporary variable, we write all
+gathered data into a =Vec<S>= ring buffer that is long enough to cover the
+entire window. The delayed streams then replicate the original logic, but read
+from this buffer instead of issuing new gather instructions.
+
+** AntiLex hash
+
+In my [[../practical-minimizers][practical minimizers]] post, I introduce the 'anti-lexicographical'
+(AntiLex) kmer order. This is very close to a classical lexicographical sort,
+but whereas the classical sort has density worse than random ($2/(w+1)$),
+AntiLex has better-than-random density. They work by /inverting/ the first
+character of the string (as in =A <-> Z= or =0 <-> 3=) and then doing a normal comparison.
+
+The benefit of this method is that unlike NtHash, it does not require a table
+lookup, and thus avoids some of the more complicated SIMD instructions.
+
+I have not yet implemented and tested a reverse-complement variant of this, but
+the forward version takes =1.40 ns/kmer= to collect and deduplicate, compared to
+=1.55 ns/kmer= for forward NtHash.
+
+* Conclusion
+We now have a very optimized SIMD implementation to compute canonical minimizers,
+taking under =2 ns/kmer= (or =5 cycles/kmer=).
+
+#+name: summary
+#+caption: Summary of the final timings for parts of the final algorithm.
+#+attr_html: :class small
+|                            | time (ns/kmer) |
+| NtHash (sum)               | =0.39=         |
+| + Sliding window min (sum) | =0.63=         |
+| + Vector output            | =1.00=         |
+| + Collect/transpose        | =1.30=         |
+| + Dedup                    | =1.60=         |
+| + Super-k-mer              | =1.65=         |
+| + Canonical                | =1.90=         |
+
+** Future work
+Next up is to find some usage for this library, for example in my Rust
+implementation of SSHash.
+Additional extensions are possible of course:
+- Implement and test a canonical version of =AntiLex=.
+- Generalize the matrix-transpose and deduplication SIMD code to ARM and NEON
+  instruction sets.
+- In general, implement and test other low-density schemes such as the mod-minimizer.
+Also, I think it has not been much investigated how general low-density schemes
+can be transformed in to a canonical version, and how well they then perform.
+
 
 #+print_bibliography:
