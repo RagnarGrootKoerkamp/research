@@ -4,6 +4,8 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
+#+hugo_level_offset: 0
+#+hugo_paired_shortcodes: %notice details
 #+date: <2024-06-16 Sun>
 
 This (planned) series of posts has the aim to write a *high performance search
@@ -42,7 +44,9 @@ rather than writing to memory.
 
 Code can be found in this repository [TODO].
 
-* Hardware
+* Introduction
+
+** Hardware
 First, lets get some idea of my hardware.
 - *CPU:* ~lscpu | grep model~: Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz, a high
   end laptop CPU released in 2020.
@@ -63,7 +67,8 @@ lstopo --no-index --no-legend --output-format svg
 #+RESULTS:
 [[file:topology.svg]]
 
-* Details of caches and memory
+
+** Details of caches and memory
 Before of discovering the characteristics and limitations of memory through experiments, I will summarize
 the highlights here. This is just to give some highlights and relevant
 notes-to-self. Google is your friend to learn more about details of any of these.
@@ -110,7 +115,7 @@ can see a lot of details, but this comes with the drawback that I do not always
 have answers (yet) explaining these details. I have marked some *questions* in
 bold below.
 
-* Latency, bandwidth, and throughput
+** Latency, bandwidth, and throughput
 
 The CPU memory, caches, and instructions (and algorithms in general) have two important properties:
 - Latency :: The time it takes to fetch/process some data to the CPU after
@@ -123,7 +128,7 @@ Also related:
   consecutive units of work, e.g. 1ns. This can be easily compared to latency,
   and is typically lower/better than the latency.
 
-* Measuring latency
+* Latency & pointer chasing
 
 In this section we measure the latency of caches and RAM.
 
@@ -132,7 +137,7 @@ In this section we measure the latency of caches and RAM.
 ** Pointer chasing
 We start with a simple /pointer chasing/ experiment: we create a large array in
 which each position contains the index of another position and then follow the chain.
-In particular, we ensure that the array is a random /derangement/, a permutation
+In particular, we ensure that the array is a random /derangement/, or rather, a permutation
 that is just one long cycle, so that memory
 cannot be prefetched by the hardware prefetcher.
 
@@ -206,6 +211,8 @@ black_box(i);
 
 Although not faster, the generated assembly is much more concise.
 
+#+name: latency-2-asm
+#+caption: The compiled assembly code simply contains a list of array lookups, with the for loop unrolled 8 times.
 #+begin_src asm
  12.12 │ 70:┌─→mov        (%rax,%rdx,8),%rdx        ; Do 8 consecutive lookups.
  12.62 │    │  mov        (%rax,%rdx,8),%rdx
@@ -229,7 +236,7 @@ effect, we pad each element to occupy 64 bytes.
 #+name: latency-3-code
 #+caption: Pointer chasing with one element per cache line.
 #+begin_src rust
-/// 64B sized object that is aligned to a cacheline.
+/// 64B sized object that is aligned to a cache line.
 #[repr(align(64))]
 struct PaddedUsize{
     value: usize,
@@ -283,49 +290,74 @@ for _ in 0..*STEPS {
 #+caption: Direct pointer chasing is usually slightly faster than using array offsets, because the explicit multiplication by 64 isn't needed anymore.
 [[./plots/latency-4.svg][file:plots/latency-4.svg]]
 
-
+#+name: latency-4-asm
+#+caption: This code is even simpler than Code Snippet [[latency-2-asm]], and contains 8 unrolled direct pointer dereferences.
 #+begin_src asm
  12.40 │ 70:┌─→mov        (%r12),%rdx
  12.44 │    │  mov        (%rdx),%rdx
-    ...
+ 12.44 │    │  mov        (%rdx),%rdx
+ 12.44 │    │  mov        (%rdx),%rdx
+ 12.44 │    │  mov        (%rdx),%rdx
+ 12.44 │    │  mov        (%rdx),%rdx
+ 12.44 │    │  mov        (%rdx),%rdx
  12.38 │    │  mov        (%rdx),%r12
        │    ├──add        $0xfffffffffffffff8,%rcx
        │    └──jne        70
 #+end_src
 
+#+attr_shortcode: takeaway
+#+begin_notice
+Raw pointer indexing is slightly faster than array indexing.
+#+end_notice
+
 ** Aligned memory & Hugepages
 There is a weird but consistent improvement in performance once the array
-reaches size 2^25=32MB.
-My hunch is that this has to do with /transparent hugepages/: the operating
-system can automatically detect large allocations and use 2M hugepages for them
-instead of the default 4K pages. But it is unclear to me when exact this
-optimization kicks in. Instead, we can encourage the system to always use
-hugepages by allocating a multiple of 2M at a 2M boundary. I used the
+reaches size ~2^25=32MiB~.
+This appears to be the point where the kernel decides that instead of reusing
+some memory from the already allocated heap, it will make a completely new
+allocation.
+Most likely, the reason this is faster is because /transparent hugepages/ kick
+in: the operating system can automatically detect large allocations and use
+=2MiB= hugepages for them instead of the default =4KiB= pages. This reduces
+pressure the /translation lookaside buffer/ (TLB) that maps vertical memory
+pages to physical memory addresses.
+
+To avoid the slight slowdown just before =32MiB=, we can instead /always/ use hugepages,
+by allocating a multiple of 2M at a 2M boundary. I use the
 [[https://crates.io/search?q=alloc-madvise][=alloc-madvise=]] crate for this which also indicates to the system that hugepages
 should be used. To make this work reliably, we now over-allocate all arrays at
-the next size that is a multiple of 2M.
+the next size that is a multiple of =2MiB=.
+In fact, it turns out that arrays of, say, =2MiB= still get allocated on the
+program heap which uses =4KiB= pages. If we allocate the next multiple of
+(and at least) =32MiB= instead, this is fixed, and hugepages work consistently.
 
 #+name: latency-5
 #+attr_html: :class inset
-#+caption: Hugepages and 2MB aligned allocations.
+#+caption: Hugepages and 2MiB aligned allocations.
 [[./plots/latency-5.svg][file:plots/latency-5.svg]]
 
-Although it may not seem like much, I like that now the spike at 2^25 is gone,
-even though I don't really understand where it came from.
+Indeed, the spike at =2^25= is gone! Very satisfying!
+And generally performance improves across the L3 range.
+Sizes just below L3 capacity are slightly noisy, since other ongoing processes
+also compete for the last bit of L3 cache.
 
-Also, performance is now perfectly constant for all L2 sizes. Before, the 4K
-(2^12) sized blocks where probably at random offsets. Due to associativity, each
+Also, performance is now perfectly constant for all L2 sizes. Before, the =4KiB=
+(=2^12=) sized blocks where probably at random hardware offsets. Due to associativity, each
 memory address can only be cached at a small (4-16) number of possible
 cache lines. When the pages are randomly positioned, there will be some sets that
 are over-used, while some sets that and under-used. This means that even though
 the array size is less than the size of L2, it may not be possible to cache it
-in its entirety. With 2M page sizes, the
+in its entirety. With =2MiB= page sizes, the
 entire allocation is a single block, and the distribution over cache lines is
-perfectly uniform. Thus, the entire array can be cached at once.
+perfectly uniform. Thus, the entire array can be cached in L2 at once.
 
-A new *question* though: Why does performance slightly improve for size 2^22?
-It's not a fluke, since the experiment was run 3 times, each with exactly the
-same result.
+#+attr_shortcode: takeaway
+#+begin_notice
+To effectively use hugepages, we must allocate at least =32MiB= to avoid the
+pre-allocated heap.
+When used, they slightly improve performance in L2 and L3 and make results
+more consistent.
+#+end_notice
 
 ** Summary
 
@@ -333,28 +365,260 @@ To wrap up, here is a summary of results.
 #+name: latency-table
 #+caption: Latency of each method, evaluated at sizes L1/2=2^14, L2/2=2^17,
 #+caption: L3/3=2^22, and RAM=2^28. Note that L1 operations take an exact number of clock cycles. Key metrics to remember in bold.
-| Method                         | ns |  L1 |  L2 |   L3 |    RAM | cycles |  L1 |   L2 |   L3 |     RAM |
-|--------------------------------+----+-----+-----+------+--------+--------+-----+------+------+---------|
-| Pointer Chasing Checked        |    | 1.9 | 4.3 | 18.0 |   77.9 |        | 5.0 | 11.2 | 46.8 |   202.7 |
-| Pointer Chasing                |    | 1.9 | 4.0 | 18.9 |   77.6 |        | 5.0 | 10.5 | 49.2 |   201.8 |
-| Pointer Chasing Padded         |    | 2.3 | 5.3 | 19.9 |   78.5 |        | 6.0 | 13.9 | 51.8 |   204.1 |
-| Raw Pointer Chasing Padded     |    | 1.6 | 5.6 | 19.5 |   78.1 |        | 4.0 | 14.4 | 50.8 |   203.0 |
-| Pointer Chasing Padded Aligned |    | 2.3 | 5.1 | 18.1 | *78.6* |        | 6.0 | 13.1 | 47.0 | *204.3* |
+#+attr_html: :class small
+|                                    | ns |  L1 |  L2 |   L3 |  RAM | cycles |  L1 |   L2 |   L3 |   RAM |
+|------------------------------------+----+-----+-----+------+------+--------+-----+------+------+-------|
+| Pointer Chasing Checked            |    | 1.9 | 4.9 | 18.9 | 77.3 |        | 5.1 | 12.6 | 49.2 | 200.9 |
+| Pointer Chasing                    |    | 1.9 | 5.2 | 19.6 | 77.4 |        | 5.1 | 13.6 | 51.0 | 201.3 |
+| Pointer Chasing Padded             |    | 2.3 | 6.1 | 20.3 | 78.3 |        | 6.1 | 15.9 | 52.7 | 203.6 |
+| Raw Pointer Chasing                |    | 1.7 | 4.0 | 19.1 | 77.7 |        | 3.2 | 10.3 | 49.6 | 202.1 |
+| Raw Pointer Chasing Padded         |    | 1.6 | 4.6 | 18.7 | 78.5 |        | 4.0 | 12.1 | 48.7 | 204.2 |
+| Pointer Chasing Padded Aligned     |    | 2.3 | 5.1 | 15.7 | 78.8 |        | 6.0 | 13.3 | 40.8 | 204.9 |
+| Raw Pointer Chasing Padded Aligned |    | 1.5 | 4.6 | 15.3 | *78.6* |        | 4.0 | 12.1 | 39.8 | *204.3* |
 
-Based on this evaluation, we will from now on use:
-- uncheck indexing,
-- cacheline-size array elements,
-- aligned memory hugepages,
-- but no raw pointer indices since they don't generalize well, and can't be
-  stored as more compact =u32= integers.
+Based on this evaluation, we will from now on assume all the above optimizations:
+- unchecked indexing,
+- cache line-size array elements,
+- aligned =2MiB= hugepages using a multiple of =32MiB= allocation,
+- raw pointer indices.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+RAM has a latency of just below =80ns=.
+#+end_notice
+
+* Random access throughput & batching
+In this section we measure the random access throughput of caches and RAM.
+
+*TL;DR:* By using batches of size $>12$ and prefetching, we can fully saturate the memory
+ bandwidth with random memory accesses.
+
+** Batching
+
+So far we have only been looking at /latency/, where we process a single RAM
+access at a time. Instead, we can also consider the /throughput/ of random
+accesses, where we do multiple independent accesses in parallel.
+
+To measure this, we use /batching/ with /batches/ of size =B=:
+instead of a single pointer chasing chain, we process =B= chains in parallel.
+To ensure that they do not interfere with each other or access the same cache
+lines, we initialize them equally spaced on the single long cycle of pointers.
+
+#+name: batch-1-source
+#+caption: With batching, we advance =B= independent pointers at a time, for a total of =STEPS / B= iterations.
+#+begin_src rust
+let v: AlignedVec<PaddedPointer> = ...;
+// B pointers to element 0, n/B, 2n/B, 3n/B, ... of the cycle.
+let mut is: [*const usize; B] = ...;
+for _ in 0..*STEPS / B {
+    for i in &mut is {
+        // `i` has type `&mut *const usize`.
+        // First deref gets us `*const usize`,
+        // and second gets the actual pointed-to-value,
+        // which is casted to a pointer and written to `*i`.
+        ,*i = unsafe { **i } as *const usize;
+    }
+}
+black_box(is);
+#+end_src
+
+#+name: batch-1
+#+attr_html: :class inset
+#+caption: When using a batch size =B>1=, there is a =B=-fold speedup, until it saturates around ~B=16~.
+#+caption: The best result from before is dotted and labelled Latency.
+[[file:plots/batch-1.svg]]
+
+As expected, batch size 1 behaves the same as the best result from before.
+We observe that larger batch sizes improve throughput linearly, until it
+saturates at batch size 8 in L3 and 16 in RAM!
+(Batch sizes 64 and 128 (not shown) provide no further improvement.)
+
+#+attr_shortcode: takeaway
+#+begin_notice
+The best throughput in RAM is =7.4ns= per cache line, or =8.6GB/s=.
+#+end_notice
+
+The reason that the CPU is able to improve so much over the latency variant of
+before is pipelining and out-of-order execution: multiple instructions can be
+executed in parallel, and when some instructions are slow, for example because
+they are waiting for memory, upcoming instructions that do not depend on the
+result can already be started.
+This way, the CPU is able to execute over 10 instructions/memory requests at a time.
+
+#+name: batch-1-asm
+#+caption: Assembly code for batch size 8: a four times unrolled loop of 8 pointer accesses.
+#+begin_src asm
+   3.53 │ b0:   movq       (%r8),%r8
+   3.14 │       movq       (%r9),%r9
+   3.28 │       movq       (%r10),%r10
+   2.77 │       movq       (%r11),%r11
+   2.77 │       movq       (%r12),%r12
+   2.77 │       movq       (%r13),%r13
+   2.77 │       movq       (%r14),%r14
+   2.77 │       movq       (%r15),%r15
+        │     ; ...
+        │     ; three more copies of the above
+        │     ; ...
+        │       addq       $-4,%rcx
+        │     ↑ jne        b0
+#+end_src
+
+#+attr_shortcode: takeaway
+#+begin_notice
+The CPU uses out-of-order execution and pipelining to execute multiple instructions
+in advance and in parallel while previous ones are e.g. pending memory. This
+hides latency of independent reads.
+#+end_notice
+
+
+** Line fill buffers
+
+Looking closer, we see that the throughput saturates at batch size 12. This
+corresponds to my CPU having 12 /line fill buffers/:
+each request to memory that is not already present in L1 reserves a line fill
+buffer as a placeholder where the cache line will be stored once it is
+available. This means that each CPU core can only have 12 ongoing requests at a
+time, and hence batch sizes beyond this do not increase throughput.
+
+#+name: batch-2
+#+attr_html: :class inset
+#+caption: The throughput saturates at batch size 12.
+[[file:plots/batch-2.svg]]
+
+#+attr_shortcode: takeaway
+#+begin_notice
+We should use a batch size of at least 12, or in practice usually 16, to fully
+use the random access RAM bandwidth available to each core.
+#+end_notice
+
+** The reorder-buffer
+We just saw that the CPU can execute up to 12 memory request at a time by
+'looking ahead' and executing multiple instructions in parallel. But this has
+its limits.
+
+Let's say that we are not just chasing pointers, but also doing some work on
+each result, as in [[batch-3-source]]. We have a template parameter =WORK= that
+controls how often we iterate over the result of each lookup. The content of the
+iterations are just there to keep the CPU busy, and include a $64\times64\to128$
+bit =widening_mul= to prevent SIMD vectorization.
+
+[[batch-3]] shows the results for 3, 6, and 12 iterations of work.
+
+#+name: batch-3-source
+#+caption: We let the CPU work a bit for =WORK= iterations on each looked up pointer.
+#+begin_src diff
+ let v: AlignedVec<PaddedPointer> = ...;
+ // B pointers to element 0, n/B, 2n/B, 3n/B, ... of the cycle.
+ let mut is: [*const usize; B] = ...;
+
++let loops = black_box(WORK);
++let v0 = v.as_ptr() as *const usize;
++let mut sum = 0;
+
+ for _ in 0..*STEPS / B {
+     for i in &mut is {
+         ,*i = unsafe { **i } as *const usize;
+
++        // Take the index of the current pointer
++        // and do `WORK` iterations on it.
++        let mut x = unsafe { (*i).offset_from(v0) } as usize;
++        let mut y = x;
++        let mut z = x;
++        for _ in 0..loops {
++            x = x + (x >> 1);
++            y = y.widening_mul(x).1;
++            z += y;
++        }
+         sum += z;
+     }
+ }
+ black_box(is);
++black_box(sum);
+#+end_src
+
+#+name: batch-3
+#+attr_html: :class inset
+#+attr_org: :width 50%
+#+caption: Batching as before, but with some additional work (3/6/12 iterations) on each result. Runtimes explode once things overflow to RAM.
+[[file:plots/batch-3.svg]]
+
+We observe a few things:
+1. Naturally, doing more work is slower when everything hits in L1, but all
+   methods are at most =14ns=.
+2. All three methods with work slow down significantly in RAM.
+3. The 12-work version is consistently slower than just the latency of pointer chasing.
+4. The 6-work version is around 2x faster, so much prefetch one iteration ahead.
+5. The 3-work version is roughly another 2x faster, so much prefetch three iterations ahead.
+
+Thus, the CPU can only look so far ahead. In fact, my CPU should have a
+/reorder buffer/ (ROB) of around 200 instructions. But for this task, it only
+manages less than 12 iterations, for around 80 instructions.
+
+#+attr_shortcode: takeaway
+#+begin_notice
+While out-of-order execution can hide memory latency, this only works when
+sufficiently many independent memory accesses are sufficiently close together
+
+More in-between work can prevent the CPU from seeing far enough ahead to the next memory
+access.
+#+end_notice
+
+** Prefetching
+
+But! We don't have to rely on the CPU to parallelize memory accesses. We can
+also do this explicitly using =prefetch= instructions, that simply tell the CPU
+to read some data (a cache line) from memory into L1 cache.
+
+#+name: batch-4-source
+#+caption: We explicitly prefetch the cache line needed in the next iteration of the batch.
+#+begin_src diff
+ let v: AlignedVec<PaddedPointer> = ...;
+ // B pointers to element 0, n/B, 2n/B, 3n/B, ... of the cycle.
+ let mut is: [*const usize; B] = ...;
+
+ let loops = black_box(WORK);
+ let v0 = v.as_ptr() as *const usize;
+ let mut sum = 0;
+
+ for _ in 0..*STEPS / B {
+     for i in &mut is {
+         ,*i = unsafe { **i } as *const usize;
++        // Prefetch the next cache line pointed to by `*i`.
++        prefetch(*i)
+
+         // Take the index of the current pointer
+         // and do `WORK` iterations on it.
+         let mut x = unsafe { (*i).offset_from(v0) } as usize;
+         let mut y = x;
+         let mut z = x;
+         for _ in 0..loops {
+             x = x + (x >> 1);
+             y = y.widening_mul(x).1;
+             z += y;
+         }
+         sum += z;
+     }
+ }
+ black_box(is);
+ black_box(sum);
+#+end_src
+
+#+name: batch-4
+#+attr_html: :class inset
+#+caption: With explicit prefetching, we can almost completely hide the memory latency again.
+[[file:plots/batch-4.svg]]
+
+#+attr_shortcode: takeaway
+#+begin_notice
+Prefetching is an effective way to hide memory latency when iterations are too
+long for the CPU's reorder buffer.
+#+end_notice
+
 
 * TODO Memory bandwidth
 - Experiments measuring the maximum speed of linearly reading an array.
+** TODO Multithreading
 
-* TODO High throughput random access
-- Experiments that maximize single-threaded random memory access throughput.
-- Generalize to multithreaded setting, see how close 1 thread is to saturating
-  the full bandwidth.
 
 * NOTES
 - L3 is typically inclusive of L1 and L2
@@ -364,10 +628,8 @@ Based on this evaluation, we will from now on use:
 
   https://stackoverflow.com/a/59847035/2716069
 
--
 
-
-* TODO
+** TODO
 - https://book.easyperf.net/perf_book
 - https://stackoverflow.com/questions/22597324/what-cache-invalidation-algorithms-are-used-in-actual-cpu-caches
 - https://github.com/travisdowns/uarch-bench/wiki/How-much-bandwidth-does-the-L2-have-to-give,-anyway%3F
@@ -386,3 +648,9 @@ Based on this evaluation, we will from now on use:
 - https://stackoverflow.com/questions/19472036/does-software-prefetching-allocate-a-line-fill-buffer-lfb
 - https://blog.stuffedcow.net/2013/05/measuring-rob-capacity/
 #+print_bibliography:
+
+
+
+# Local Variables:
+# org-image-actual-width: 400
+# End:
