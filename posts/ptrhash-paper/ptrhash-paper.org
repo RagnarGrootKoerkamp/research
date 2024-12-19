@@ -593,6 +593,9 @@ We consider two models to implement prefetching: batching and streaming.
 #+attr_html: :class inset
 [[file:./streaming.drawio.svg]]
 
+TODO: in practice, batching will also have some overlap due to pipelining, but
+streaming doesn't need this.
+
 *Batching.*
 In this approach, the queries are split into chunks of size
 $B$, and chunks are then processed one by one ([[streaming]], left). In each chunk, each key is hashed, its
@@ -766,7 +769,25 @@ Overall, we propose two sets of parameters, /simple/ and /compact/.
     $\sqrt(np(1-p))\approx \sqrt(n/P) =1000$. With $\alpha=0.99$ and $990000$
     keys/part expected with $10000$ buffer, that's $10\sigma$ space, which is
     plenty for a reliable construction.
-- 10^10 or 10^11 construction with both sharding variants.
+- 5*10^10:
+  - 24 shards
+  - In-memory: 3314s
+  - Hybrid: 3996s
+  - pilots: ~82s/shard
+  - sorting buckets: ~15s/shard
+  - hybrid: ~45s/shard to hash/write/read keys
+    - 197s to hash + write *1/8
+    - 21s to read
+  - memory: ~65s/shard to re-hash all keys
+  - Around 50GB of RAM needed.
+    - 12.8GB pilots
+    - 6.3GB taken bitvec
+  - size:
+    - pilots: 2.05 bits/key
+    - remap: 0.12 bits/key
+    - total: 2.17 bits/key, 13.6GB
+  - 10^11 and larger would be possible with support for constructing the
+    datastructure itself on disk instead of in memory.
 ** Query throughput
 - Latency around 80ns
 - Max single-threaded throughput:
