@@ -2,7 +2,7 @@
 title = "[WIP] Progress on fast suffix array searching"
 authors = ["František Kmječ", "Ragnar Groot Koerkamp"]
 date = 2024-10-01T00:00:00+00:00
-tags = ["suffix-array", "wip"]
+tags = ["suffix-array", "wip", "search-index"]
 categories = ["lablog"]
 draft = false
 +++
