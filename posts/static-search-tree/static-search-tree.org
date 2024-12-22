@@ -1,6 +1,6 @@
 #+title: [WIP] Static search trees
 #+filetags: @results @walkthrough hpc wip search-index
-#+OPTIONS: ^:{} num:
+#+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
@@ -12,9 +12,13 @@
 In this post, we will implement a static search tree (S+ tree) for
 high-throughput searching of sorted data, as [[https://en.algorithmica.org/hpc/data-structures/s-tree/][introduced]] on Algorithmica.
 We'll mostly take the code presented there as a starting point, and optimize it
-to its limits.
+to its limits. For a large part, I'm simply taking the 'future work' ideas of that post
+and implementing them. And then there will be a bunch of looking at assembly
+code to shave off all the instructions we can.
+Lastly, there will be one big addition to optimize throughput: /batching/.
 
-*Code:* [[https://github.com/RagnarGrootKoerkamp/suffix-array-searching][github:RagnarGrootKoerkamp/suffix-array-searching]].
+
+All *source code*, including benchmarks and plotting code, is at [[https://github.com/RagnarGrootKoerkamp/suffix-array-searching/tree/master/static-search-tree][github:RagnarGrootKoerkamp/suffix-array-searching]].
 
 * Introduction
 ** Problem statement
@@ -25,11 +29,15 @@ element of =vals= that is at least $q$, or =u32::MAX= if no such element exists.
 Optionally, the index of this element may also be returned.
 
 *Metric.* We optimize /throughput/. That is, the number of (independent) queries
-that can be answered per second. The typical case is where we have a =queries:
-Vec<u32>= as input that is sufficiently long, and return a corresponding =answers: Vec<u32>=.
+that can be answered per second. The typical case is where we have a
+sufficiently long =queries:
+&[u32]= as input, and return a corresponding =answers: Vec<u32>=.
+
+Note that we'll usually report reciprocal throughput as =ns/query= (or just
+=ns=), instead of =queries/s=. You can think of this as amortized (not /average/) time spent per query.
 
 *Benchmarking setup.* For now, we will assume that both the input and queries
-are simply uniform random sampled 32bit integers.
+are simply uniform random sampled 31bit integers[fn::You'll see later why not 32bit].
 
 *Code.*
 In code, this can be modelled by the trait shown in [[trait]].
@@ -37,37 +45,41 @@ In code, this can be modelled by the trait shown in [[trait]].
 #+caption: Trait that our solution should implement.
 #+begin_src rust
 trait SearchIndex {
-    /// Construct the data structure from a sorted vector.
-    fn new(vals: &Vec<u32>) -> Self;
-
     /// Two functions with default implementations in terms of each other.
-    fn query_one(query: u32) -> u32 {
+    fn query_one(&self, query: u32) -> u32 {
         Self::query(&vec![query])[0]
     }
-    fn query(queries: &Vec<u32>) -> Vec<u32> {
+    fn query(&self, queries: &[u32]) -> Vec<u32> {
         queries.iter().map(|&q| Self::query_one(q)).collect()
     }
 }
 #+end_src
 
-** Related reading
+** Recommended reading
 The classical solution to this problem is *binary search*, which we will briefly
 visit in the next section. A great paper on this and other search layouts is
 [cite/title/b:@khuong-array-layouts] by [cite/t:@khuong-array-layouts].
 Algorithmica also has a [[https://en.algorithmica.org/hpc/data-structures/binary-search/][case study]] based on that paper.
 
 This post will focus on *S+ trees*, as introduced on Algorithmica in the
-followup post, [[https://en.algorithmica.org/hpc/data-structures/s-tree/][static B-trees]].
+followup post, [[https://en.algorithmica.org/hpc/data-structures/s-tree/][static B-trees]]. In the interest of my time, I will mostly assume
+that you are familiar with that post.
 
 I also recommend reading my work-in-progress [[../cpu-benchmarks][introduction to CPU performance]],
 which contains some benchmarks pushing the CPU to its limits. We will use the
-metrics obtained there as baseline to understand our optimization attemps.
+metrics obtained there as baseline to understand our optimization attempts.
 
 Also helpful is the [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#=undefined&techs=AVX_ALL][Intel Intrinsics Guide]] when looking into SIMD instructions.
+Note that we'll only be using =AVX2= instructions here, as in, we're assuming
+intel. And we're not assuming less available =AVX512= instructions (in
+particular, since my laptop doesn't have them).
 
 ** Binary search and Eytzinger layout
 
+As a baseline, we will use the Rust standard library binary search implementation.
+
 #+name: binary-search
+#+caption: The binary search in the Rust standard library.
 #+begin_src rust
 pub struct SortedVec {
     vals: Vec<u32>,
@@ -81,9 +93,27 @@ impl SortedVec {
 }
 #+end_src
 
+The main conclusion of the array layouts paper [cite:@khuong-array-layouts] is
+that the Eytzinger layout is one of the best in practice.
+This layout reorders the values in memory: the binary search effectively is a
+binary search tree on the data, the root the middle node, then the nodes at
+positions $\frac 14 n$ and $\frac 34 n$, then $\frac 18n, \frac 38n, \frac 58n,
+\frac 78n$, and so on. The main benefit of this layout is that all values needed
+for the first steps of the binary search are close together, so they can be
+cached efficiently. If we put the root at index $1$, the two children of the
+node at index $i$ are at $2i$ and $2i+1$. This means that we can effectively
+prefetch the next cache line, before knowing whether we need index $2i$ or
+$2i+1$. This can be taken a step further and we can prefetch the cache line
+containing indices $16i$ to $16i+15$, which are exactly the values needed 4
+iterations from now.
+For a large part, this can quite effectively hide the latency associated with
+the traversal of the tree.
+
 #+name: eytzinger
+#+caption: Implementation of searching the Eytzinger layout, with $L=4$ levels of prefetching.
 #+begin_src rust
 pub struct Eytzinger {
+    /// The root of the tree is at index 1.
     vals: Vec<u32>,
 }
 
@@ -95,6 +125,7 @@ impl Eytzinger {
             idx = 2 * idx + (q > self.get(idx)) as usize;
             prefetch_index(&self.vals, (1 << L) * idx);
         }
+        // The last few iterations don't need prefetching anymore.
         while idx < self.vals.len() {
             idx = 2 * idx + (q > self.get(idx)) as usize;
         }
@@ -103,69 +134,196 @@ impl Eytzinger {
         self.get(idx)
     }
 }
-
 #+end_src
 
+If we plot these two, we see that Eytzinger layout performs as good as binary
+search when the array fits in L2 cache (=256kB= for me, the middle red line), but starts to be much
+better than binary search as the array grows to be much larger than the L3 cache (=12MB=).
+In the end, Eytzinger search is around 4 times faster, which nicely corresponds
+to being able to prefetch 4 iterations of cache lines from memory at a time.
+
 #+attr_html: :class inset large
-#+caption:
+#+caption: Query throughput of binary search and Eytzinger layout as the size of the input increases. At =1GB= input, binary search needs around =900ns/query=, while Eytzinger is 3.5x faster at =240ns/query=.
 [[file:plots/1-binary-search.svg][file:plots/1-binary-search.svg]]
 
-** B-trees, B+ trees, and S-trees
+** A note on benchmarking
+The plots have the size of the input data on the logarithmic (bottom) x-axis. On the top,
+they show the corresponding number of elements in the vector, which is 4 times
+less, since each element is a =u32= spanning 4 bytes.
+Measurements are taken at values $2^i$, $1.25 \cdot 2^i$, $1.5\cdot 2^i$, and
+$1.75\cdot 2^i$.
+
+The y-axis shows measured time per query. In the plot above, it says
+/latency/, since it is benchmarked as =for q in queries { index.query(q); }=.
+Even then, the pipelining and out-of-order execution of the CPU will make it
+execute multiple iterations in parallel. Specifically, while it is waiting for
+the last cache lines of iteration $i$, it can already start executing the first
+instructions of the next query. To measure the true latency, we would have to
+introduce a /loop carried dependency/ by making query $i+1$ dependent on the
+result of query $i$.
+However, the main goal of this post is to optimize for /throughput/, so we won't
+bother with that.
+
+Thus, all plots will show the throughput of doing =index.query(all_queries)=.
+
+For the benchmarks, I'm using my laptop's =i7-10750H= CPU, with the frequency
+fixed to =2.6GHz= using [[pin]].[fn::One might argue that this is unrealistic since
+in practice processors /do/ have dynamic frequencies, but here I prefer reproducible
+benchmarks over realistic benchmarks.]
+
+#+name: pin
+#+caption: Pinning the CPU frequency to =2.6GHz=.
+#+begin_src sh
+sudo cpupower frequency-set -g powersave -d 2.6GHz -u 2.6GHz
+#+end_src
+
+Also relevant are the sizes of the caches: =32KiB= L1 cache per core, =256KiB=
+L2 cache per core, and =12MiB= L3 cache shared between the physical 6 cores.
+Furthermore, hyper-threading is disabled.
+
+All measurements are done 5 times. The line follows the median, and we show the
+spread of the 2nd to 4th value (i.e., after discarding the minimum and maximum).
+Observe that in most of the plot above, the spread is barely visible! Thus,
+while especially the graph for binary search looks very noisy, that 'noise' is
+in fact completely reproducible. Indeed, it's caused by effects of /cache
+associativity/, as explained in the array layouts paper
+([cite/t:@khuong-array-layouts]; this post is long enough already).
+
+** Cache lines
+
+Main memory and the caches work at the level of /cache lines/ consisting of 64
+bytes (at least on my machine), or 16 =u32= values. Thus, even if you only read a single byte, if
+the cache line containing that byte is not yet in the L1 cache, the entire thing
+will be fetched from RAM or L3 or L2 into L1.
+
+Plain binary search typically only uses a single value of each cache line,
+until it gets to the end of the search where the last 16 values span just 1 or 2
+cache lines.
+
+They Eytzinger layout suffers the same problem: even though the next cache line
+can be prefetched, it still only uses a single value in each.
+This fundamentally means that both these search schemes are using the available
+memory bandwidth quite inefficiently, and since most of what they are doing is
+waiting for memory to come through, that's not great.
+Also, while that's not relevant /yet/, when doing this with many threads in
+parallel, or with batching, single-core RAM throughput and the throughput of the
+main memory itself become a bottleneck.
+
+It would be much better if /somehow/, we could use the information in each cache
+line much more efficiently ;)
+
+We can do that by storing our data in a different way. Instead of storing it
+layer by layer, so that each iteration goes into a new layer,
+we can store 4 layers of the tree at a time ([[node]]). That takes 15 values, and could
+nicely be padded into a full cache line. Then when we fetch a cache line, we can
+use it for 4 iterations at once -- much better!
+On the other hand, now we can't prefetch upcoming cache lines in advance
+anymore, so that overall the latency will be the same. But we fetch up to 4
+times fewer cache lines overall, which should help throughput.
+
+Unfortunately, I don't have code and plots here, because what I really want to
+focus on is the next bit.
+
+#+name: node
+#+caption: The first two rows show how we could pack four layers of the Eytzinger search into a single cache line. The first follows a classic binary search layout, while the second applies the Eytzinger layout recursively. The third row shows an S-tree node instead. For simplicity and clarity, I'm using consecutive values, but in practice, this would be any list of sorted numbers.
+#+attr_html: :class inset large
+[[./packed-eytzinger.svg][file:packed-eytzinger.svg]]
+
+** S-trees and B-trees
+
+We just ended with a /node/ of 15 values that represent a height-4 search tree
+in which we can binary search. From there, it's just a small step to S-trees.
+
+*B-trees.* But first I have to briefly mention B-trees though ([[https://en.wikipedia.org/wiki/B-tree][wikipedia]]). Those are
+the more classic dynamic variant, where nodes are linked together via pointers.
+As wikipedia writes, they are typically used with much larger block sizes, for
+example 4kB, since files read from disk usually come in 4kB chunks. Thus, they
+also have much larger branching factors.
+
+*S-trees.* But we will instead use S-trees, as named so by Algorithmica.  They
+are a nice middle ground between the high branching factor of B-trees, and the
+compactness of the Eytzinger layout.
+Instead of interpreting the 15 values as a search tree, we can also store them
+in a sorted way, and consider them as a 16-ary search tree: the 15 values simply
+split the data in the subtree into 16 parts, and we can do a linear scan to find
+which part to recurse into.
+But if we store 15 values and one padding in a cache line, we might as well make
+it 16 values and have a branching factor of 17 instead.
+
+*S+ trees.* B-trees and S-trees only store each value once, either in a leaf node or
+in an internal node. This turns out to be somewhat annoying, since we must track
+in which layer the result was found. To simplify this, we can store /all/ values
+as a leaf, and /duplicate/ them in the internal nodes. This is then called a B+
+tree or S+ tree. However, I will be lazy and just use S-tree to include this modification.
 
 #+name: stree-full
-#+caption:
+#+caption: An example of a 'full' S+ tree (that I will from now just call S-tree) on 18 values with nodes of size $B=2$ and branching factor $B+1=3$. Each internal node stores the smallest value in the subtree on its right. In memory, the layers are simply packed together behind each other.
 #+attr_html: :class inset large
 [[./full.svg][file:full.svg]]
 
+A full S-tree can be navigated in a way similar to the Eytzinger layout: The
+node (note: not[fn::;)] value) at index $i$ has its $B+1$ child-nodes at indices $(B+1)\cdot i + 1 + \{0, \dots, B\}$.
+
+When the tree is only partially filled, the full layout can waste a lot of space
+([[stree-partial]]). Instead, we can /pack/ the layers together, by storing the
+offset $o_\ell$ of each layer.
+
+The children of node $o_\ell + i$ are then at $o_{\ell+1} + (B+1)\cdot i + \{0, \dots, B\}$.
+
 #+name: stree-partial
-#+caption:
-#+attr_html: :class inset
+#+caption: The /full/ representation can be inefficient. The /packed/ representation removes the empty space, and explicitly stores the offset $o_\ell$ where each layer starts.
+#+attr_html: :class inset large
 [[./partial.svg][file:partial.svg]]
+
+At last, let's have a look at some code. Each node in the tree is simply
+represented as a list of $N=16$ =u32= values. We explicitly ask that nodes are
+aligned to 64byte cache line boundaries.
 
 #+name: node
 #+caption: Search tree node, aligned to a 64 byte cache line. For now, N is always 16. The values in a node must always be sorted.
 #+begin_src rust
 #[repr(align(64))]
-pub struct BTreeNode<const N: usize> {
+pub struct TreeNode<const N: usize> {
     data: [u32; N],
 }
 #+end_src
 
-NOTE: In code I'll just write =STree=, so I'll also use S-tree instead of S+
-tree, since the algorithmica blog already showed that the non-plus S-tree
-doesn't really make sense here anyway.
+The S-tree itself is simply a list of nodes, and the offsets where each layer starts.
 
 #+name: stree
-#+caption:
+#+caption: The S-tree data structure. It depends on the number of values per node $B$ (usually 16 but sometimes 15) and the size of each node $N$ (always 16).
 #+begin_src rust
 /// N: #elements in a node, always 16.
 /// B: branching factor <= N+1. Typically 17.
-#[derive(Debug)]
 pub struct STree<const B: usize, const N: usize> {
     /// The list of tree nodes.
-    tree: Vec<BTreeNode<N>>,
+    tree: Vec<TreeNode<N>>,
     /// The root is at index tree[offsets[0]].
     /// It's children start at tree[offsets[1]], and so on.
     offsets: Vec<usize>,
 }
 #+end_src
 
-Construction TODO: When B<N, ensure that next node value is copied in to
-previous node.
+To save some space, and focus on the interesting part (to me, at least), I will
+not show any code for constructing S-trees. It's a whole bunch of uninteresting
+fiddling with indices, and takes a lot of time to get right. Also, construction
+is not optimized at all currently. Anyway, find the code [[https://github.com/RagnarGrootKoerkamp/suffix-array-searching/tree/master/static-search-tree/src][here]].
 
 TODO: Reverse offsets.
 
+What we /will/ look at, is code for searching S-trees.
+
 #+name: search-one
-#+caption: Initial code, directly adapted from https://en.algorithmica.org/hpc/data-structures/s-tree/#searching, with a customizable =find= function.
+#+caption: Initial code for searching S-trees, directly adapted from https://en.algorithmica.org/hpc/data-structures/s-tree/#searching. The =find= function finds the index of the child of the current node.
 #+begin_src rust
-fn search(&self, q: u32, find: impl Fn(&BTreeNode<N>, u32) -> usize) -> u32 {
+fn search(&self, q: u32, find: impl Fn(&TreeNode<N>, u32) -> usize) -> u32 {
     let mut k = 0;
-    for o in self.offsets[1..self.offsets.len()].into_iter().rev() {
+    for o in self.offsets[0..self.offsets.len()-1] {
         let jump_to = find(self.node(o + k), q);
         k = k * (B + 1) + jump_to;
     }
 
-    let o = self.offsets[0];
+    let o = self.offsets.last().unwrap();
     // node(i) returns tree[i] using unchecked indexing.
     let mut idx = find(self.node(o + k), q);
     // get(i, j) returns tree[i].data[j] using unchecked indexing.
@@ -173,10 +331,18 @@ fn search(&self, q: u32, find: impl Fn(&BTreeNode<N>, u32) -> usize) -> u32 {
 }
 #+end_src
 
+Our first step will be optimizing the =find= function.
+
 * Optimizing =find=
 ** Linear
-#+name: linear-break
-#+caption:
+Let's first precisely define what we want =find= to do:
+it's input is a node with 16 sorted values and a query value $q$, and it should return
+the index of the first element that is at least $q$.
+
+Some simple code for this is [[find-linear]].
+
+#+name: find-linear
+#+caption: A linear scan for the first element $\geq q$, that breaks as soon as it is found.
 #+begin_src rust
 pub fn find_linear(&self, q: u32) -> usize {
     for i in 0..N {
@@ -188,17 +354,49 @@ pub fn find_linear(&self, q: u32) -> usize {
 }
 #+end_src
 
-** Hugepages
-- 2MB vs 32MB
+The results are not very impressive yet.
 
 #+attr_html: :class inset large
-#+caption:
-[[file:plots/2-hugepages.svg][file:plots/2-hugepages.svg]]
+#+caption: The initial version of our S-tree search is quite a bit slower than the Eytzinger layout. In this and following plots, 'old' lines will be dimmed, and the best previous and best new line slightly highlighted. Colours will be consistent from one plot to the next.
+[[file:plots/2-find-linear.svg][file:plots/2-find-linear.svg]]
 
-** Autovectorization
+*** Aside: hugepages
+For all S-tree experiments, I make sure to allocate the tree using =2MB= /hugepages/
+by default, instead of the usual =4kB= pages.
+This reduces pressure on the /translation lookaside buffer/ (TLB) that
+translates virtual memory addresses to hardware memory addresses, since its
+internal table of pages is much smaller when using hugepages, and hence can be
+cached better.
+
+I wanted to show a plot here, but this turned out a bit tricky. With
+/transparent hugepages/ enabled, they should be automatically given out whenever
+allocating an exact multiple of =2MB=, and so the allocation for the tree size
+is always rounded up to that. However, it turns out that small allocations below
+=32MB= still go on the programs /heap/, rather than asking the kernel for new
+memory pages, causing them to not actually be hugepages. Thus, all allocations
+are actually rounded up to the next multiple of =32MB= instead.
+
+All together, hugepages sometimes makes a small difference when the dataset is
+indeed between =1MB= and =32MB= in size. Smaller data structures don't really need
+hugepages anyway, and I suspect that larger ones are automatically using
+hugepages anyway.
+But when I re-did the plot, the difference completely disappeared. I suspect
+because the version without explicit hugepages used them anyway.
+
+So anyway, hugepages are turned on for all experiments, just to reduce any noise
+that comes from it.
+
+** Auto-vectorization
+
+As it turns out, the =break;= in [[find-linear]] is really bad for performance,
+since the branch predictor can't do a good job on it.
+
+Instead, we can /count/ the number of values less than $q$, and return that as
+the index of the first value $\geq q$. (Example: all values $\geq q$ index
+gives index 0.)
 
 #+name: linear-count
-#+caption:
+#+caption: Counting values $< q$ instead of an early break. The =if self.data[i] < q= can be optimized into branchless code.
 #+begin_src rust
 pub fn find_linear_count(&self, q: u32) -> usize {
     let mut count = 0;
@@ -211,28 +409,42 @@ pub fn find_linear_count(&self, q: u32) -> usize {
 }
 #+end_src
 
+In fact, the code is not just branchless, but actually it's auto-vectorized into
+SIMD instructions!
+
 #+name: linear-count-asm
-#+caption: linear-count is auto-vectorized :)
+#+caption: Code Snippet [[linear-count]] is auto-vectorized!
 #+begin_src asm
-vmovdqu      (%rax,%rcx), %ymm1
-vmovdqu      32(%rax,%rcx), %ymm2
-vpbroadcastd %xmm0, %ymm0
-vpmaxud      %ymm0, %ymm2, %ymm3
-vpcmpeqd     %ymm3, %ymm2, %ymm2
-vpmaxud      %ymm0, %ymm1, %ymm0
-vpcmpeqd     %ymm0, %ymm1, %ymm0
-vpackssdw    %ymm2, %ymm0, %ymm0
-vpcmpeqd     %ymm1, %ymm1, %ymm1
-vpxor        %ymm1, %ymm0, %ymm0
-vextracti128 $1, %ymm0, %xmm1
-vpacksswb    %xmm1, %xmm0, %xmm0
-vpshufd      $216, %xmm0, %xmm0
-vpmovmskb    %xmm0, %ecx
-popcntl      %ecx, %ecx
+vmovdqu      (%rax,%rcx), %ymm1     ; load data[..8]
+vmovdqu      32(%rax,%rcx), %ymm2   ; load data[8..]
+vpbroadcastd %xmm0, %ymm0           ; 'splat' the query value
+vpmaxud      %ymm0, %ymm2, %ymm3    ; v
+vpcmpeqd     %ymm3, %ymm2, %ymm2    ; v
+vpmaxud      %ymm0, %ymm1, %ymm0    ; v
+vpcmpeqd     %ymm0, %ymm1, %ymm0    ; 4x compare query with values
+vpackssdw    %ymm2, %ymm0, %ymm0    ;
+vpcmpeqd     %ymm1, %ymm1, %ymm1    ; v
+vpxor        %ymm1, %ymm0, %ymm0    ; 2x negate result
+vextracti128 $1, %ymm0, %xmm1       ; v
+vpacksswb    %xmm1, %xmm0, %xmm0    ; v
+vpshufd      $216, %xmm0, %xmm0     ; v
+vpmovmskb    %xmm0, %ecx            ; 4x extract mask
+popcntl      %ecx, %ecx             ; popcount the 16bit mask
 #+end_src
 
+To save some space: you can find this and further results for this section in
+[[find-results]] at the end of the section.
+
+This auto-vectorized version is over two times faster than the linear find,
+and now clearly beats Eytzinger layout!
 
 ** Trailing zeros
+We can also roll our own SIMD. The SIMD version of the original linear scan idea
+does 16 comparisons in parallel, converts that to a bitmask, and then counts the
+number of trailing zeros. Using =#[feature(portable_simd)]=, that looks like this:
+
+#+name: find-ctz
+#+caption: A =find= implementation using the /count-trailing-zeros/ instruction.
 #+begin_src rust
 pub fn find_ctz(&self, q: u32) -> usize {
     let data: Simd<u32, N> = Simd::from_slice(&self.data[0..N]);
@@ -242,6 +454,7 @@ pub fn find_ctz(&self, q: u32) -> usize {
 }
 #+end_src
 
+#+caption: Assembly code for Code Snippet [[find-ctz]]. Instead of ending with =popcntl=, this ends with =tzcntl=.
 #+begin_src asm
 vpminud      32(%rsi,%r8), %ymm0, %ymm1  ; take min of data[8..] and query
 vpcmpeqd     %ymm1, %ymm0, %ymm1         ; does the min equal query?
@@ -256,12 +469,14 @@ orl          $65536,%r8d                 ; set bit 16, to cover the unwrap_or(N)
 tzcntl       %r8d,%r15d                  ; count trailing zeros
 #+end_src
 
+Now, let's look at this generated code in a bit more detail.
+
 First up: why does ~simd_le~ translate into =min and =cmpeq=?
 
 From checking the [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#=undefined&techs=AVX_ALL&text=_mm256_cmp][Intel Intrinsics Guide]], we find out that there are only signed
 comparisons, while our data is unsigned. For now, let's just assume that all
 values fit in 31 bits and are at most =i32::MAX=. Then, we can transmute our input
-to =Simd<i32, 8>=.
+to =Simd<i32, 8>= without changing its meaning.
 
 #+attr_shortcode: assumption
 #+begin_notice
@@ -273,6 +488,7 @@ Eventually we can fix this by either taking =i32= input directly, or by shifting
 
 
 #+name: ctz-signed
+#+caption: Same as before, but now using =i32= values instead of =u32=.
 #+begin_src diff
  pub fn find_ctz_signed(&self, q: u32) -> usize
  where
@@ -288,23 +504,31 @@ Eventually we can fix this by either taking =i32= input directly, or by shifting
 #+end_src
 
 #+name: ctz-signed-asm
-#+caption: The two =vpminud= and =vpcmpeqd= instructions are gone now and merged into =vpcmpgtd=, but instead we got a =vpxor= back :/
-#+begin_src asm
-vpcmpgtd     32(%rsi,%rdi), %ymm1, %ymm2 ; is query(%ymm1) > data[8..]?
-vpcmpgtd     (%rsi,%rdi), %ymm1, %ymm1   ; is query(%ymm1) > data[..8]?
-vpackssdw    %ymm2, %ymm1, %ymm1         ; pack results
-vpxor        %ymm0, %ymm1, %ymm1         ; negate results (ymm0 is all-ones)
-vextracti128 $1, %ymm1, %xmm2            ; extract u16x16
-vpacksswb    %xmm2, %xmm1, %xmm1         ; shuffle
-vpshufd      $216, %xmm1, %xmm1          ; extract u8x16
-vpmovmskb    %xmm1, %edi                 ; extract u16 mask
-orl          $65536,%edi                 ; 16 when none set
-tzcntl       %edi,%edi                   ; count trailing zeros
+#+caption: The two =vpminud= and =vpcmpeqd= instructions are gone now and merged into =vpcmpgtd=, but instead we got a =vpxor= back :/ (Ignore the different registers being used in the old versus the new version.)
+#+begin_src diff
+-vpminud      32(%rsi,%r8), %ymm0, %ymm1
+-vpcmpeqd     %ymm1, %ymm0, %ymm1
++vpcmpgtd     32(%rsi,%rdi), %ymm1, %ymm2 ; is query(%ymm1) > data[8..]?
+-vpminud      (%rsi,%r8), %ymm0, %ymm2
+-vpcmpeqd     %ymm2, %ymm0, %ymm2
++vpcmpgtd     (%rsi,%rdi), %ymm1, %ymm1   ; is query(%ymm1) > data[..8]?
+ vpackssdw    %ymm2, %ymm1, %ymm1         ; pack results
++vpxor        %ymm0, %ymm1, %ymm1         ; negate results (ymm0 is all-ones)
+ vextracti128 $1, %ymm1, %xmm2            ; extract u16x16
+ vpacksswb    %xmm2, %xmm1, %xmm1         ; shuffle
+ vpshufd      $216, %xmm1, %xmm1          ; extract u8x16
+ vpmovmskb    %xmm1, %edi                 ; extract u16 mask
+ orl          $65536,%edi                 ; add bit to get 16 when none set
+ tzcntl       %edi,%edi                   ; count trailing zeros
 #+end_src
 
 It turns out there is only a =>= instruction in SIMD, and not ~>=~, and so there
 is no way to avoid inverting the result.
 
+We also see a =vpshufd= instruction that feels /very/ out of place. What's
+happening is that while packing the result of the 16 =u32= comparisons down to a
+single 16bit value, data is interleaved in an unfortunate way, and we need to
+fix that.
 Here, Algorithmica takes the approach of 'pre-shuffling' the values in each
 node to counter for the unshuffle instruction.
 They also suggest using =popcount= instead, which is indeed what we'll do next.
@@ -312,10 +536,11 @@ They also suggest using =popcount= instead, which is indeed what we'll do next.
 ** Popcount
 As we saw, the drawback of the trailing zero count approach is that the order of
 the lanes must be preserved. Instead, we'll now simply count the number of lanes
-with a value less than the query, so that the order of lanes doesn't matter.
+with a value less than the query, similar to the auto-vectorized SIMD before,
+so that the order of lanes doesn't matter.
 
 #+name: popcount-1
-#+caption:
+#+caption: Using popcount instead of trailing zeros.
 #+begin_src diff
  pub fn find_popcnt_portable(&self, q: u32) -> usize
  where
@@ -332,22 +557,24 @@ with a value less than the query, so that the order of lanes doesn't matter.
 
 #+name: popcount-1-asm
 #+caption: the =xor= and =or= instructions are gone, but we are still stuck with the sequence of 5 instructions to go from the comparison results to an integer bitmask.
-#+begin_src asm
-vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm1
-vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm0
-vpackssdw    %ymm1, %ymm0, %ymm0     ; 1
-vextracti128 $1, %ymm0, %xmm1        ; 2
-vpacksswb    %xmm1, %xmm0, %xmm0     ; 3
-vpshufd      $216, %xmm0, %xmm0      ; 4
-vpmovmskb    %xmm0, %edi             ; 5
-popcntl      %edi, %edi
+#+begin_src diff
+ vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm1
+ vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm0
+ vpackssdw    %ymm1, %ymm0, %ymm0     ; 1
+-vpxor        %ymm0, %ymm1, %ymm1
+ vextracti128 $1, %ymm0, %xmm1        ; 2
+ vpacksswb    %xmm1, %xmm0, %xmm0     ; 3
+ vpshufd      $216, %xmm0, %xmm0      ; 4
+ vpmovmskb    %xmm0, %edi             ; 5
+-orl          $65536,%edi
++popcntl      %edi, %edi
 #+end_src
 
 
 Ideally we would like to =movmsk= directly on the =u16x16= output of the first
-pack instruction, =vpackssdw=.
+pack instruction, =vpackssdw=, to get the highest bit of each of the 16 16-bit values.
 Unfortunately, we are again let down by AVX2: there are =movemask= [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#=undefined&techs=AVX_ALL&text=movms][instructions]]
-for =u8=, =u32=, and =u16=, but not for =u16=.
+for =u8=, =u32=, and =u64=, but not for =u16=.
 
 Also, the =vpshufd= instruction is now provably useless, so it's slightly
 disappointing the compiler didn't elide it. Time to write the SIMD by hand instead.
@@ -357,10 +584,14 @@ As it turns out, we can get away without most of the packing!
 Instead of using =vpmovmskb= (=_mm256_movemask_epi8=) on 8bit data, we can
 actually just use it directly on the 16bit output of =vpackssdw=!
 Since the comparison sets each lane to all-zeros or all-ones, we can safely read
-the most significant /and/ middle bit, and divide the count by two at the end.
+the most significant /and/ middle bit, and divide the count by two at the
+end.[fn::
+It would be really cool if we could teach compilers this trick. It already
+auto-vectorized the counting code anyway, so this is not that much more work I'd
+say.]
 
 #+name: popcount
-#+caption: New version
+#+caption: Manual version of the SIMD code, by explicitly using the intrinsics. This is kinda ugly now, and there's a lot of transmuting (casting) going on between =[u32; 8]=, =Simd<u32, 8>= and the native =__m256i= type, but we'll have to live with it.
 #+begin_src rust
 pub fn find_popcnt(&self, q: u32) -> usize {
     // We explicitly require that N is 16.
@@ -382,28 +613,75 @@ pub fn find_popcnt(&self, q: u32) -> usize {
 #+end_src
 
 #+name: popcount-asm
-#+caption: Only 5 instructions total are left now. Note that there is no explicit division by 2, since this is absorbed into the pointer arithmetic in the remainder.
-#+begin_src asm
-vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1
-vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0
-vpackssdw    %ymm0, %ymm1, %ymm0
-vpmovmskb    %ymm0, %edi
-popcntl      %edi, %edi
+#+caption: Only 5 instructions total are left now. Note that there is no explicit division by 2, since this is absorbed into the pointer arithmetic in the remainder, after the function is inlined.
+#+begin_src diff
+ vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1
+ vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0
+ vpackssdw    %ymm0, %ymm1, %ymm0
+-vextracti128 $1, %ymm0, %xmm1
+-vpacksswb    %xmm1, %xmm0, %xmm0
+-vpshufd      $216, %xmm0, %xmm0
+-vpmovmskb    %xmm0, %edi
++vpmovmskb    %ymm0, %edi
+ popcntl      %edi, %edi
 #+end_src
 
+Now let's have a look at the results of all this work.
+
+#+name: find-results
 #+attr_html: :class inset large
-#+caption:
+#+caption: Using the S-tree with an optimized =find= function improves throughput from =240ns/query= for Eytzinger to =140ns/query= for the auto-vectorized one, and down to =115ns/query= for the final hand-optimized version, which is over 2x speedup!
 [[file:plots/3-find.svg][file:plots/3-find.svg]]
 
-From now on, this is the version we will be using.
+As can be seen very nicely in this plot, each single instruction that we remove
+gives a small but consistent improvement in throughput. The biggest improvement
+comes from the last step, where we indeed shaved off 3 instructions.
+
+In fact, we can analyse this plot a bit more:
+- For input up to $2^6=64$ bytes, the performance is constant, since in this
+  case the 'search tree' only consists of the root node.
+- Up to input of size $2^{10}$, the thee has two layers, and the performance is constant.
+- Similarly, we see the latency jumping up at size $2^{14}$, $2^{18}$, $2^{22}$
+  and $2^{26}$, each time because a new layer is added to the tree. (Or rather,
+  the jumps are at powers of the branching factor $B+1=17$ instead of $2^4=16$, but you get the idea.)
+- In a way, we can also (handwaivily) interpret the x-axis as time: each time
+  the graph jumps up, the height of the jump is pretty much the time spent on
+  processing that one extra layer of the tree.
+- Once we exceed the size of L3 cache, things slow down quickly. At that
+  point, each extra layer of the tree adds a significant amount of time, since
+  waiting for RAM is inherently slow.
+- On the other hand, once we hit RAM, the slowdown is more smooth rather than
+  stepwise. This is because L3 is still able to cache a fraction of the
+  data structure, and that fraction only decreases slowly.
+- Again handwavily, we can also interpret the x-axis as a snapshot of space
+  usage at a fixed moment in time: the first three layers of the tree fit in L1.
+  The 4th and 5th layers fit in L2 and L3. Once the three is 6 layers deep, the
+  reads of that layer will mostly hit RAM, and any additional layers for sure
+  are going to RAM.
+
+From now on, this last version, =find_popcnt=, is the one we will be using.
 
 * Optimizing the search
 ** Batching
+As promised, the first improvement we'll make is /batching/.
+Instead of processing one query at a time, we can process multiple (many) queries
+at once. This allows the CPU to work on multiple queries at the same time, and
+in particular, it can have multiple (up to 10-12) in-progress requests to RAM at
+a time. That way, instead of waiting for a latency of 80ns per read, we
+effectively wait for 10 reads at the same time, lowering the amortized wait time
+to around 8ns.
+
+Batching very much benefits from the fact that we use an S+ tree instead of
+S-tree, since each element is find in the last layer (at the same depth), and
+hence the number of seach steps through the tree is the same for every element
+in the batch.
+
 #+name: batch
+#+caption: The batching code is very similar to processing one query at a time. We just insert an additional loop over the batch of $P$ items.
 #+begin_src rust
 fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
     let mut k = [0; P];
-    for [o, o2] in self.offsets.array_windows() {
+    for [o, _o2] in self.offsets.array_windows() {
         for i in 0..P {
             let jump_to = self.node(o + k[i]).find(qb[i]);
             k[i] = k[i] * (B + 1) + jump_to;
@@ -419,12 +697,36 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 #+end_src
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: Batch size 1 (red) performs very similar to our non-batched version (blue), around =115ns/query=. Increasing the batch size to 2, 4, and 8 each time significantly improves performance, until it saturates at =45ns/query= (2.5x faster) around 16.
 [[file:plots/4-batching.svg][file:plots/4-batching.svg]]
+
+One interesting observation is that going from batch size 1 to 2 does /not/
+double the performance. I suspect this is because the CPU's out-of-order
+execution was already deep enough to effectively execute (almost) 2 queries in
+parallel anyway. Going to a batch size of 4 and then 8 does provide a
+significant speedup. Again going to 4 the speedup is relatively a bit less than
+when going to 8, so probably even with batch size 4 the CPU is somewhat looking
+ahead into the next batch of 4 already 🤯.
+
+Throughput saturates at batch size 16 (or really, around 12 already), which
+corresponds to the CPU having 12 /line fill buffers/ and thus being able to
+read up to 12 cache lines in parallel.
+
+Nevertheless, we will settle on a batch size of 128, mostly because it leads to
+slightly cleaner plots in the remainder. It is also every so slightly faster,
+probably because the constant overhead of initializing a batch is smaller when
+batches are larger.
 
 ** Prefetching
 
+The CPU is already fetching multiple reads in parallel using out-of-order
+execution, but we can also help out a bit by doing this explicitly using /prefetching/.
+After processing a node, we determine the child node =k= that we need to visit
+next, so we can directly request that node to be read from memory before
+continuing with the rest of the batch.
+
 #+name: prefetch
+#+caption: Prefetching the cache line/node for the next iteration ahead.
 #+begin_src diff
  fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
@@ -443,11 +745,29 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      })
  }
 #+end_src
+
 #+attr_html: :class inset large
-#+caption:
+#+caption: Prefetching helps speeding things up once the data does not fit in L2 cache anymore, and gets us down from =45ns/query= to =30ns/query= for =1GB= input.
 [[file:plots/5-prefetch.svg][file:plots/5-prefetch.svg]]
+
+We observe a few things: first prefetching slightly slow things down while data
+fits in L1 already, since in that case the instruction just doesn't do anything anyway.
+In L2, it makes the graph slightly more flat, indicating that already there, the
+latency is already a little bit of a bottleneck.
+In L3 this effect gets larger, and we get a nice smooth/horizontal graph, until
+we hit RAM size. There, prefetching provides the biggest gains.
+
 ** Pointer arithmetic
+Again, it's time to look at some assembly code, now to optimize the search
+function itself. Results are down below in [[pointer-arithmetic]].
 *** Up-front splat
+First, we can note that the =find= function =splat='s the query from a =u32= to
+a =Simd<u32, 8>= on each call. It's slightly nicer (but not really faster,
+actually) to splat all the queries
+up-front, and then reuse those.
+
+#+name: splat
+#+caption: /Hoisting/ the =splat= out of the /loop/ is slightly nicer, but not faster.
 #+begin_src diff
  pub fn batch_splat<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
@@ -470,7 +790,45 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      })
  }
 #+end_src
-*** Pointer indexing
+
+
+The assembly code for each iteration of the first loop now looks like this:
+#+caption: Assembly code for each iteration of Code Snippet [[splat]]. (Actually it's unrolled into two copied of this, but they're identical.)
+#+begin_src asm
+movq         (%rsp,%r11),%r15
+leaq         (%r9,%r15),%r12
+shlq         $6, %r12
+vmovdqa      1536(%rsp,%r11,4),%ymm0
+vpcmpgtd     (%rsi,%r12), %ymm0, %ymm1
+vpcmpgtd     32(%rsi,%r12), %ymm0, %ymm0
+vpackssdw    %ymm0, %ymm1, %ymm0
+vpmovmskb    %ymm0, %r12d
+popcntl      %r12d, %r12d
+shrl         %r12d
+movq         %r15,%r13
+shlq         $4, %r13
+addq         %r15,%r13
+addq         %r12,%r13
+movq         %r13,(%rsp,%r11)
+shlq         $6, %r13
+prefetcht0   (%r10,%r13)
+#+end_src
+
+*** Byte-based pointers
+Looking at the code above, we see two =shlq $6= instructions that multiply the
+given value by $64$. That's because our tree nodes are 64 bytes large, and
+hence, to get the $i$'th element of the array, we need to read at byte $64\cdot
+i$. For smaller element sizes, there are dedicated read instructions that
+inline, say, an index multiplication by 8. But for a stride of 64, the compiler
+has to generate 'manual' multiplications in the form of a shift.
+
+Additionally, direct pointer-based lookups can be slightly more efficient here than
+array-indexing: when doing =self.tree[o + k[i]]=, we can effectively pre-compute
+the pointer to =self.tree[o]=, so that only =k[i]= still has to be added. Let's
+first look at that diff:
+
+#+name: ptr
+#+caption: Using pointer-based indexing instead of array indexing.
 #+begin_src diff
  pub fn batch_ptr<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
@@ -501,7 +859,11 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
  }
 #+end_src
 
-*** Byte-based pointers
+Now, we can avoid all the multiplications by 64, by just multiplying all =k[i]=
+by 64 to start with:
+
+#+name: ptr64
+#+caption: We multiply =k[i]= by 64 up-front, and then call =byte_add= instead of the usual =add=.
 #+begin_src diff
  pub fn batch_byte_ptr<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
@@ -526,14 +888,50 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 
      let o = offsets.last().unwrap();
      from_fn(|i| {
--        let idx = self.node(o     +    k[i])  .find_splat(q_simd[i]);
+-        let idx = unsafe { *o.     add(k[i]) }.find_splat(q_simd[i]);
 +        let idx = unsafe { *o.byte_add(k[i]) }.find_splat(q_simd[i]);
-         unsafe { (o.byte_add(k[i]) as *const u32).add(idx).read() }
+-        unsafe { *(*o.add(k[i] + idx / N)).data.get_unchecked(idx % N) }
++        unsafe { (o.byte_add(k[i]) as *const u32).add(idx).read() }
      })
  }
 #+end_src
-*** More efficient multiplication
 
+Indeed, the generated code now goes down from 17 to 15 instructions, and we can
+see in [[pointer-arithmetic]] that this gives a significant speedup!
+
+#+name: byte_ptr
+#+caption: When using byte-based pointers, we avoid some multiplications by 64.
+#+begin_src asm
+movq         32(%rsp,%rdi),%r8
+vmovdqa      1568(%rsp,%rdi,4),%ymm0
+vpcmpgtd     (%rsi,%r8), %ymm0, %ymm1
+vpcmpgtd     32(%rsi,%r8), %ymm0, %ymm0
+vpackssdw    %ymm0, %ymm1, %ymm0
+vpmovmskb    %ymm0, %r9d
+popcntl      %r9d, %r9d
+movq         %r8,%r10
+shlq         $4, %r10
+addq         %r8,%r10
+shll         $5, %r9d
+andl         $-64,%r9d
+addq         %r10,%r9
+movq         %r9,32(%rsp,%rdi)
+prefetcht0   (%rcx,%r9)
+#+end_src
+
+*** The final version
+One particularity about the code above is the =andl $-64,%r9d=.
+In line 6, the bitmask gets written there. Then in line 7, it's popcounted.
+Life 11 does a =shll $5=, i.e., a multiplication by 32, which is a combination
+of the =/2= to compensate for the double-popcount and the =* 64=. Then, it does
+the =and $-64=, where the mask of -64 is =111..11000000= which ends in 6 zeros.
+But we just multiplied by 32, so all this does is zeroing out a single bit, in
+case the popcount was odd. But we know for a fact that that can never be, so we
+don't actually need this =and= instruction.
+
+To avoid it, we do this =/2*64 => *32= optimization manually.
+
+#+caption: Manually merging =/2= and =*64= into =*32=.
 #+begin_src diff
  pub fn find_splat64(&self, q_simd: Simd<u32, 8>) -> usize {
      let low: Simd<u32, 8> = Simd::from_slice(&self.data[0..N / 2]);
@@ -550,7 +948,7 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      }
  }
 
- pub fn batch_byte_ptr2<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
+ pub fn batch_byte_ptr<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
      let q_simd = qb.map(|q| Simd::<u32, 8>::splat(q));
 
@@ -578,17 +976,53 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
  }
 #+end_src
 
+Again, this gives a small speedup.
+
+#+name: pointer-arithmetic
 #+attr_html: :class inset large
-#+caption:
+#+caption: Results of improving the search function bit by bit. Like before, the improvements are small but consistent. Throughput on =1GB= input improves from =31ns/query= to =28ns/query=.
 [[file:plots/6-improvements.svg][file:plots/6-improvements.svg]]
+
 ** Skip prefetch
+Now we know that the first three levels of the graph fit in L1 cache, so
+probably we can simply skip prefetching for those levels.
+
 #+attr_html: :class inset large
-#+caption:
+#+caption: Skipping the prefetch for the first layers is slightly slower.
 [[file:plots/7-skip-prefetch.svg][file:plots/7-skip-prefetch.svg]]
+
+As it turns out, skipping the prefetch does not help. Probably because the
+prefetch is cheap if the data is already available, and there is a small chance
+that the data we need was evicted to make room for other things, in which case
+the prefetch /is/ useful.
+
 ** Interleave
+One other observation is that the first few layer are CPU bound, while the last
+few layers are memory throughput bound. Thus, maybe we could process two batches
+of queries at the same time but offset by half the layers and interleave them
+(so that level $i$ and $i+height/2$ get processed at the same time).
+I implemented this, but unfortunately the result is underwhelming.
+
+Maybe we need to do more fine grained interleaving, and interleave operations
+from /all/ levels. But that sounds really annoying to implement.
+
+Or maybe we can split the work as: interleave the last level of one half
+with /all but the last/ level of the other half? That turns out slower in
+practice.
+
+What does give a small speedup: process the first *2* levels of the next batch
+interleaved with the last prefetch of the current batch. Still the result is
+only around =2ns= speedup, while code the (not shown ;") gets significantly more
+messy. So we'll leave this as something that's more of theoretical than
+practical interest, and not use it going forward.
+
+
+TODO: update figure
+
 #+attr_html: :class inset large
 #+caption:
 [[file:plots/8-interleave.svg][file:plots/8-interleave.svg]]
+
 
 * Optimizing the tree layout
 ** 'Flipped' tree
@@ -598,6 +1032,7 @@ fn batch<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 #+attr_html: :class inset large
 [[./flipped.svg][file:flipped.svg]]
 ** Reverse offsets
+*TODO*: Fix existing benchmarks to be forward by default.
 - forward vs original reverse direction
 
 #+name: layouts
@@ -794,6 +1229,9 @@ What we have now.
 ** Overlapping subtrees
 ** Packing data smaller
 - After doing a 16bit prefix lookup, it suffices to only store 16 bits per element.
+** Range queries
+returning both first and last occurrence of a value.
 
+** Returning indices in original data
 
 #+print_bibliography:
