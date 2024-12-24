@@ -997,52 +997,180 @@ that the data we need was evicted to make room for other things, in which case
 the prefetch /is/ useful.
 
 ** Interleave
-One other observation is that the first few layer are CPU bound, while the last
-few layers are memory throughput bound. Thus, maybe we could process two batches
-of queries at the same time but offset by half the layers and interleave them
-(so that level $i$ and $i+height/2$ get processed at the same time).
-I implemented this, but unfortunately the result is underwhelming.
-
-Maybe we need to do more fine grained interleaving, and interleave operations
-from /all/ levels. But that sounds really annoying to implement.
+One other observation is that the first few layers are CPU bound, while the last
+few layers are memory throughput bound.
+By merging the two domains, we should be able to get a higher total throughput.
+(Somewhat similar to how for a piece wise linear convex function $f$, $f((x+y)/2) >
+(f(x)+f(y))/2$ when $x$ and $y$ are on different pieces.)
+Thus, maybe we could process two batches
+of queries at the same time by processing layer $i$ of one batch at the same
+time as layer $i+L/2$ of the other batch (where $L$ is the height of the tree).
+I implemented this, but unfortunately the result is not faster than what we had.
 
 Or maybe we can split the work as: interleave the last level of one half
-with /all but the last/ level of the other half? That turns out slower in
-practice.
+with /all but the last/ level of the other half? Since the last-level memory
+read takes most of the time. Also that turns out slower in practice.
 
-What does give a small speedup: process the first *2* levels of the next batch
+What does give a small speedup: process the first /two/ levels of the next batch
 interleaved with the last prefetch of the current batch. Still the result is
 only around =2ns= speedup, while code the (not shown ;") gets significantly more
-messy. So we'll leave this as something that's more of theoretical than
-practical interest, and not use it going forward.
+messy.
 
+What /does/ work great, is interleaving /all/ layers of the search: when the
+tree has $L$ layers, we can interleave $L$ batches at a time, and then process
+layer $i$ of the $i$'th in-progress batch. Then we 'shift out' the completed
+batch and store the answers to those queries, and 'shift in' a new batch.
+This we, completely average the different workloads of all the layers, and
+should achieve near-optimal performance given the CPU's memory bandwidth to L3
+and RAM (at least, that's what I assume is the bottleneck now).
 
-TODO: update figure
+#+attr_shortcode: "Click to show code for interleaving."
+#+begin_details
+#+caption: In code, we interleave all layers by compiling a separate function for each height of the tree. Then the compiler can unroll the loop over the layers. There is a bunch of overhead in the code for the first and last iterations that's omitted.
+#+begin_src rust
+pub fn batch_interleave_full_128(&self, qs: &[u32]) -> Vec<u32> {
+    match self.offsets.len() {
+        // 1 batch of size 128
+        1 => self.batch_interleave_full::<128, 1, 128>(qs),
+        // 2 batches of size 64 in parallel, with product 128
+        2 => self.batch_interleave_full::<64, 2, 128>(qs),
+        // 3 batches of size 32 in parallel with product 96
+        3 => self.batch_interleave_full::<32, 3, 96>(qs),
+        4 => self.batch_interleave_full::<32, 4, 128>(qs),
+        5 => self.batch_interleave_full::<16, 5, 80>(qs),
+        6 => self.batch_interleave_full::<16, 6, 96>(qs),
+        7 => self.batch_interleave_full::<16, 7, 112>(qs),
+        8 => self.batch_interleave_full::<16, 8, 128>(qs),
+        _ => panic!("Unsupported tree height {}", self.offsets.len()),
+    }
+}
+
+pub fn batch_interleave_full<const P: usize, const L: usize, const PL: usize>(
+    &self,
+    qs: &[u32],
+) -> Vec<u32> {
+    assert_eq!(self.offsets.len(), L);
+
+    let mut out = Vec::with_capacity(qs.len());
+    let mut ans = [0; P];
+
+    // Iterate over chunks of size P of queries.
+    // Omitted: initialize
+    let first_i = L-1;
+    for chunk in qs.array_chunks::<P>() {
+        let i = first_i;
+
+        // Decrement first_i, modulo L.
+        if first_i == 0 {
+            first_i = L;
+        }
+        first_i -= 1;
+
+        // Process 1 element per chunk, starting at element first_i.
+        // (Omitted: process first up-to L elements.)
+        // Write output and read new queries from index j.
+        let mut j = 0;
+        loop {
+            // First L-1 levels: do the usual thing.
+            // The compiler will unroll this loop.
+            for l in 0..L - 1 {
+                let jump_to = unsafe { *offsets[l].byte_add(k[i]) }.find_splat64(q_simd[i]);
+                k[i] = k[i] * (B + 1) + jump_to;
+                prefetch_ptr(unsafe { offsets[l + 1].byte_add(k[i]) });
+                i += 1;
+            }
+
+            // Last level: read answer.
+            ans[j] = {
+                let idx = unsafe { *ol.byte_add(k[i]) }.find_splat(q_simd[i]);
+                unsafe { (ol.byte_add(k[i]) as *const u32).add(idx).read() }
+            };
+            // Last level: reset index, and read new query.
+            k[i] = 0;
+            q_simd[i] = Simd::splat(chunk[j]);
+
+            i += 1;
+            j += 1;
+
+            if i > PL - L {
+                break;
+            }
+        }
+        // (Omitted: process last up-to L elements.)
+
+        out.extend_from_slice(&ans);
+    }
+
+    out
+}
+#+end_src
+#+end_details
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: Interleaving all layers of the search binary search improves throughput from =29ns/query= to =24ns/query=.
 [[file:plots/8-interleave.svg][file:plots/8-interleave.svg]]
 
 
+
 * Optimizing the tree layout
-** 'Flipped' tree
+** Left-tree
+So far, every internal node of the tree stores the minimum of the subtree on
+it's right ([[stree-full]], reproduced below).
+
+#+caption: Usually in B+ trees, each node stores the minimum of it's right subtree. Let's call this a /right/ (S+/B+) tree.
+#+attr_html: :class inset large
+[[./full.svg][file:full.svg]]
+
+This turns out somewhat inefficient when searching values that are exactly in
+between two subtrees (as /also/ already suggested by Algorithmica), such as
+$5.5$. In that case, the search descends into the
+leftmost (green) subtree with node $[2, 4]$. Then, it goes to the rightmost
+(red) node $[4,5]$. There, we realize $5.5 > 5$, and thus we need the next value
+in the red layer (which is stored as a single array), which is $6$. The problem
+now is that the red tree nodes exactly correspond to cache lines, and thus, the
+$6$ will be in a new cache line that needs to be fetched from memory.
+
+Now consider the /left/ tree below:
 
 #+name: flipped
-#+caption:
+#+caption: In the /left/ S+ tree, each internal node contains the maximum of its /left/ subtree.
 #+attr_html: :class inset large
 [[./flipped.svg][file:flipped.svg]]
-** Reverse offsets
-*TODO*: Fix existing benchmarks to be forward by default.
-- forward vs original reverse direction
+
+Now if we search for $5.5$, we descend into the middle subtree rooted at
+$[7,9]$. Then we go left to the $[6,7]$ node, and end up reading $6$ as the
+first value $\geq 5.5$. Note that now the search directly steers toward the node
+that actually contains the answer, instead of the one just before.
+
+#+attr_html: :class inset large
+#+caption: The left-S tree brings runtime down from =24ns/query= for the interleaved version to =22ns/query now.
+[[file:plots/9-params.svg][file:plots/9-flipped.svg]]
+
+** Memory layouts
+TODO: Interleaved result.
+
+Let's now consider some alternative memory layouts.
+So far, we were packing all layers in forward order, but the Algorithmica post
+actually stores them in reverse, so we'll try that too. The query code is
+exactly the same, since the offsets will just reverse their order.
+
+Another potential improvement is to always store a /full/ array. This may seem
+very inefficient, but is actually not that bad when we make sure to use
+uninitialized memory. In that case, untouched memory pages will simply never be
+mapped, so that, we waste on average only about 2MB
+per layer when hugepages are enabled, and 14MB when there are 7 layers and the
+entire array takes 1GB.
 
 #+name: layouts
-#+caption:
+#+caption: So far we have been using the packed layouts. We now also try the /reversed/ layout as used by Algorithmica, and the /full/ layout that allows simple arithmetic for indexing.
 #+attr_html: :class inset large
 [[./layouts.svg][file:layouts.svg]]
-** Full table
-- wasted memory
-- faster pointer arithmetic?
 
+A benefit of storing the full array is that instead of using the offsets, we can
+again simply compute the index in the next layer directly, as we did for the
+Eytzinger search.
+
+#+caption: When storing the array in full, we can drop the per-layer offsets and instead compute indices directly.
 #+begin_src diff
  pub fn batch_ptr3_full<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let mut k = [0; P];
@@ -1051,7 +1179,7 @@ TODO: update figure
 +    let o = self.tree.as_ptr();
 
 -    for [o, o2] in offsets.array_windows() {
-+    for _h      in 0..self.offsets.len() - 1 {
++    for _l      in 0..self.offsets.len() - 1 {
          for i in 0..P {
              let jump_to = unsafe { *o.byte_add(k[i]) }.find_splat64(q_simd[i]);
 -            k[i] = k[i] * (B + 1) + jump_to     ;
@@ -1068,26 +1196,64 @@ TODO: update figure
 #+end_src
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: Comparison with reverse and full memory layout, and full memory layout with using a dedicated =_full= search that computes indices directly.
 [[file:plots/9-params.svg][file:plots/9-params.svg]]
-** Node size $B=15$.
+
+As it turns out, neither of those layouts improves performance, and so we will
+not use them going onwards.
+
+** Node size $B=15$
+TODO: Interleaved result.
+
+We can also try storing only 15 values per node, so that the branching factor
+is 16. This has the benefit of making the multiplication by $B+1$ (17 so far)
+slightly simpler, since it replaces ~x = (x<<4)+x~ by ~x = x<<4~.
+
 #+attr_html: :class inset large
-#+caption:
+#+caption: Storing 15 values per node.
 [[file:plots/10-base15.svg][file:plots/10-base15.svg]]
 
+When the tree has up to 5 layers and the data fits in L3 cache, using $B=15$ is
+indeed slightly faster when the number of layers in the tree is the same. On the
+other hand, the lower branching factor needs an additional layer a it sooner than
+when using branching factor $17$. And when the input does not fit in L3 cache
+anymore the speedup disappears anyway, probably because memory becomes a common bottleneck.
 
 ** Summary
-What we have now.
 #+attr_html: :class inset large
-#+caption:
+#+caption: A summary of all the improvements we made so far.
 [[file:plots/11-summary.svg][file:plots/11-summary.svg]]
-* Beyond search trees
-** Prefix lookup
+
+Of all the improvements so far, only the interleaving is maybe a bit too much:
+it is the only method that does not work batch-by-batch, but really benefits
+from having the  full input at once. And also its code is three times longer
+than the plain batched query methods because the first and last few
+iterations of each loop are handled separately.
+
+* Prefix lookup
+So far, we've been doing a purely /comparison-based search/.
+Now, it is time for something new: /partitioning/ the input values.
+
+The simplest form of the idea is to simply partition values by their top $b$
+bits, into $2^b$ parts. Then we can build $2^b$ independent search trees and
+search each query in one of them. If $b=12$, this saves the first two levels of
+the search (or slightly less, actually, since $2^{12} = 16^3 < 17^3$).
+
+** Full layout
+In memory, we can store these tree very similar to the /full/ layout we had
+before, with the main differences that the first few layers are skipped and that
+now there will be padding at the end of each part, rather than once at the end.
+
 #+name: prefix
-#+caption:
+#+caption: The /full/ partitioned layout concatenates the full trees for all parts 'horizontally'. As a new detail, when a part is not full, the smallest value of the next part is appended in the leaf layer.
 #+attr_html: :class inset large
 [[./prefix.svg][file:prefix.svg]]
 
+Once construction is done, the code for querying is very similar to before: we
+only have to start the search for each query at the index of its part, given by
+=q >> shift= for some value of =shift=, rather than at index $0$.
+
+#+caption: Searching the full layout of the partitioned tree starts in the partition in which each query belongs.
 #+begin_src diff
  pub fn search_prefix<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let offsets = self
@@ -1221,17 +1387,21 @@ What we have now.
 #+attr_html: :class inset large
 #+caption:
 [[file:plots/22-l1.svg][file:plots/22-l1.svg]]
+** TODO Map-to-subtree packing
+** TODO Human data
 ** Summary
 #+attr_html: :class inset large
 #+caption:
 [[file:plots/23-summary.svg][file:plots/23-summary.svg]]
+* Multithreaded comparison
 * Future ideas
-** Overlapping subtrees
+** Interpolation search
+- Could potentially reduce RAM accesses.
 ** Packing data smaller
 - After doing a 16bit prefix lookup, it suffices to only store 16 bits per element.
 ** Range queries
 returning both first and last occurrence of a value.
-
 ** Returning indices in original data
+- Significantly easier without packing
 
 #+print_bibliography:
