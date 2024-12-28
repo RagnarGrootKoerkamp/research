@@ -143,8 +143,29 @@ In the end, Eytzinger search is around 4 times faster, which nicely corresponds
 to being able to prefetch 4 iterations of cache lines from memory at a time.
 
 #+attr_html: :class inset large
-#+caption: Query throughput of binary search and Eytzinger layout as the size of the input increases. At =1GB= input, binary search needs around =900ns/query=, while Eytzinger is 3.5x faster at =240ns/query=.
+#+caption: Query throughput of binary search and Eytzinger layout as the size of the input increases. At =1GB= input, binary search needs around =1150ns/query=, while Eytzinger is 6x faster at =200ns/query=.
 [[file:plots/1-binary-search.svg][file:plots/1-binary-search.svg]]
+
+** Hugepages
+For all experiments, we'll make sure to allocate the tree using =2MB= /hugepages/
+by default, instead of the usual =4kB= pages.
+This reduces pressure on the /translation lookaside buffer/ (TLB) that
+translates virtual memory addresses to hardware memory addresses, since its
+internal table of pages is much smaller when using hugepages, and hence can be
+cached better.
+
+With /transparent hugepages/ enabled, they are automatically given out whenever
+allocating an exact multiple of =2MB=, and so we always round up the allocation
+for the tree to the next multiple of =2MB=. However, it turns out that small
+allocations below =32MB= still go on the program's /heap/, rather than asking
+the kernel for new memory pages, causing them to not actually be hugepages.
+Thus, all allocations we do are actually rounded up to the next multiple of
+=32MB= instead.
+
+All together, hugepages sometimes makes a small difference when the dataset is
+indeed between =1MB= and =32MB= in size. Smaller data structures don't really need
+hugepages anyway. Enabling them for the Eytzinger layout as in the plot above
+also gives a significant speedup for larger sizes.
 
 ** A note on benchmarking
 The plots have the size of the input data on the logarithmic (bottom) x-axis. On the top,
@@ -360,32 +381,6 @@ The results are not very impressive yet.
 #+caption: The initial version of our S-tree search is quite a bit slower than the Eytzinger layout. In this and following plots, 'old' lines will be dimmed, and the best previous and best new line slightly highlighted. Colours will be consistent from one plot to the next.
 [[file:plots/2-find-linear.svg][file:plots/2-find-linear.svg]]
 
-*** Aside: hugepages
-For all S-tree experiments, I make sure to allocate the tree using =2MB= /hugepages/
-by default, instead of the usual =4kB= pages.
-This reduces pressure on the /translation lookaside buffer/ (TLB) that
-translates virtual memory addresses to hardware memory addresses, since its
-internal table of pages is much smaller when using hugepages, and hence can be
-cached better.
-
-I wanted to show a plot here, but this turned out a bit tricky. With
-/transparent hugepages/ enabled, they should be automatically given out whenever
-allocating an exact multiple of =2MB=, and so the allocation for the tree size
-is always rounded up to that. However, it turns out that small allocations below
-=32MB= still go on the programs /heap/, rather than asking the kernel for new
-memory pages, causing them to not actually be hugepages. Thus, all allocations
-are actually rounded up to the next multiple of =32MB= instead.
-
-All together, hugepages sometimes makes a small difference when the dataset is
-indeed between =1MB= and =32MB= in size. Smaller data structures don't really need
-hugepages anyway, and I suspect that larger ones are automatically using
-hugepages anyway.
-But when I re-did the plot, the difference completely disappeared. I suspect
-because the version without explicit hugepages used them anyway.
-
-So anyway, hugepages are turned on for all experiments, just to reduce any noise
-that comes from it.
-
 ** Auto-vectorization
 
 As it turns out, the =break;= in [[find-linear]] is really bad for performance,
@@ -471,7 +466,7 @@ tzcntl       %r8d,%r15d                  ; count trailing zeros
 
 Now, let's look at this generated code in a bit more detail.
 
-First up: why does ~simd_le~ translate into =min and =cmpeq=?
+First up: why does ~simd_le~ translate into =min= and =cmpeq=?
 
 From checking the [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#=undefined&techs=AVX_ALL&text=_mm256_cmp][Intel Intrinsics Guide]], we find out that there are only signed
 comparisons, while our data is unsigned. For now, let's just assume that all
@@ -1000,7 +995,7 @@ the prefetch /is/ useful.
 One other observation is that the first few layers are CPU bound, while the last
 few layers are memory throughput bound.
 By merging the two domains, we should be able to get a higher total throughput.
-(Somewhat similar to how for a piece wise linear convex function $f$, $f((x+y)/2) >
+(Somewhat similar to how for a piece wise linear convex function $f$, $f((x+y)/2) <
 (f(x)+f(y))/2$ when $x$ and $y$ are on different pieces.)
 Thus, maybe we could process two batches
 of queries at the same time by processing layer $i$ of one batch at the same
@@ -1130,44 +1125,42 @@ in the red layer (which is stored as a single array), which is $6$. The problem
 now is that the red tree nodes exactly correspond to cache lines, and thus, the
 $6$ will be in a new cache line that needs to be fetched from memory.
 
-Now consider the /left/ tree below:
+Now consider the /left-max/ tree below:
 
 #+name: flipped
-#+caption: In the /left/ S+ tree, each internal node contains the maximum of its /left/ subtree.
+#+caption: In the /left-max/ S+ tree, each internal node contains the maximum of its /left/ subtree.
 #+attr_html: :class inset large
 [[./flipped.svg][file:flipped.svg]]
 
 Now if we search for $5.5$, we descend into the middle subtree rooted at
 $[7,9]$. Then we go left to the $[6,7]$ node, and end up reading $6$ as the
-first value $\geq 5.5$. Note that now the search directly steers toward the node
+first value $\geq 5.5$. Now, the search directly steers toward the node
 that actually contains the answer, instead of the one just before.
 
 #+attr_html: :class inset large
-#+caption: The left-S tree brings runtime down from =24ns/query= for the interleaved version to =22ns/query now.
-[[file:plots/9-params.svg][file:plots/9-flipped.svg]]
+#+caption: The left-S tree brings runtime down from =24ns/query= for the interleaved version to =22ns/query= now.
+[[file:plots/9-left-max-tree.svg][file:plots/9-left-max-tree.svg]]
 
 ** Memory layouts
-TODO: Interleaved result.
-
 Let's now consider some alternative memory layouts.
 So far, we were packing all layers in forward order, but the Algorithmica post
 actually stores them in reverse, so we'll try that too. The query code is
-exactly the same, since the offsets will just reverse their order.
+exactly the same, since the order of the layers is already encoded into the offsets.
 
 Another potential improvement is to always store a /full/ array. This may seem
 very inefficient, but is actually not that bad when we make sure to use
 uninitialized memory. In that case, untouched memory pages will simply never be
-mapped, so that, we waste on average only about 2MB
+mapped, so that we waste on average only about 2MB
 per layer when hugepages are enabled, and 14MB when there are 7 layers and the
 entire array takes 1GB.
 
 #+name: layouts
-#+caption: So far we have been using the packed layouts. We now also try the /reversed/ layout as used by Algorithmica, and the /full/ layout that allows simple arithmetic for indexing.
+#+caption: So far we have been using the packed layout. We now also try the /reversed/ layout as used by Algorithmica, and the /full/ layout that allows simple arithmetic for indexing.
 #+attr_html: :class inset large
 [[./layouts.svg][file:layouts.svg]]
 
 A benefit of storing the full array is that instead of using the offsets, we can
-again simply compute the index in the next layer directly, as we did for the
+simply compute the index in the next layer directly, as we did for the
 Eytzinger search.
 
 #+caption: When storing the array in full, we can drop the per-layer offsets and instead compute indices directly.
@@ -1200,24 +1193,37 @@ Eytzinger search.
 [[file:plots/9-params.svg][file:plots/9-params.svg]]
 
 As it turns out, neither of those layouts improves performance, and so we will
-not use them going onwards.
+not use them going forward.
 
 ** Node size $B=15$
-TODO: Interleaved result.
-
 We can also try storing only 15 values per node, so that the branching factor
 is 16. This has the benefit of making the multiplication by $B+1$ (17 so far)
 slightly simpler, since it replaces ~x = (x<<4)+x~ by ~x = x<<4~.
 
+#+name: b15
 #+attr_html: :class inset large
-#+caption: Storing 15 values per node.
+#+caption: Storing 15 values per node. The lines in the bottom part of the plot show the overhead that each data structure has relative to the size of the input, capped at 1 (which corresponds to take double the size).
 [[file:plots/10-base15.svg][file:plots/10-base15.svg]]
 
 When the tree has up to 5 layers and the data fits in L3 cache, using $B=15$ is
 indeed slightly faster when the number of layers in the tree is the same. On the
-other hand, the lower branching factor needs an additional layer a it sooner than
-when using branching factor $17$. And when the input does not fit in L3 cache
-anymore the speedup disappears anyway, probably because memory becomes a common bottleneck.
+other hand, the lower branching factor of $16$ requires an additional layer for smaller sizes than
+when using branching factor $17$. When the input is much larger than L3 cache
+the speedup disappears, because RAM throughput becomes a common bottleneck.
+
+*** Data structure size
+Plain binary search and the Eytzinger layout have pretty much no overhead.
+Our S+ tree so far has around $1/16=6.25\%$ overhead: $1/17$ of the
+values in the final layer is duplicated in the layer above, and $1/17$ of
+/those/ is duplicated again, and so on, for a total of $1/17 + 1/17^2 + \cdots =
+1/16$.
+
+Using node size $15$ instead, increases the overhead:
+Each node now only stores $15$ instead of $16$ elements, so that we already have
+an overhead of $1/15$. Furthermore the reduced branching factor increases the
+duplication overhead fro $1/16$ to $1/15$ as well, for a total overhead of $2/15
+= 13.3\%$, which matches the dashed blue line in [[b15]].
+
 
 ** Summary
 #+attr_html: :class inset large
@@ -1230,7 +1236,7 @@ from having the  full input at once. And also its code is three times longer
 than the plain batched query methods because the first and last few
 iterations of each loop are handled separately.
 
-* Prefix lookup
+* Prefix partitioning
 So far, we've been doing a purely /comparison-based search/.
 Now, it is time for something new: /partitioning/ the input values.
 
@@ -1240,7 +1246,7 @@ search each query in one of them. If $b=12$, this saves the first two levels of
 the search (or slightly less, actually, since $2^{12} = 16^3 < 17^3$).
 
 ** Full layout
-In memory, we can store these tree very similar to the /full/ layout we had
+In memory, we can store these trees very similar to the /full/ layout we had
 before, with the main differences that the first few layers are skipped and that
 now there will be padding at the end of each part, rather than once at the end.
 
@@ -1248,6 +1254,12 @@ now there will be padding at the end of each part, rather than once at the end.
 #+caption: The /full/ partitioned layout concatenates the full trees for all parts 'horizontally'. As a new detail, when a part is not full, the smallest value of the next part is appended in the leaf layer.
 #+attr_html: :class inset large
 [[./prefix.svg][file:prefix.svg]]
+
+For some choices of $b$, it could happen that up to $15/16$ of each tree is
+padding. To reduce this overhead, we attempt to shrink $b$ while keeping the
+height of all trees the same: as long as all pairs of adjacent trees would
+fit together in the same space, we decrease $b$ by one. This way, all parts will
+be filled for at least $50\%$ when the elements are evenly distributed.
 
 Once construction is done, the code for querying is very similar to before: we
 only have to start the search for each query at the index of its part, given by
@@ -1287,14 +1299,42 @@ only have to start the search for each query at the index of its part, given by
 #+end_src
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: The 'simple' partitioned tree, for $b_{\textrm{max}}\in \{4,8,12,16,20\}$, shown as dotted lines.
 [[file:plots/20-prefix.svg][file:plots/20-prefix.svg]]
-** A more compact layout
+
+
+We see that indeed, the partitioned tree has a space overhead varying between
+$0$ and $1$, making this not yet useful in practice.
+Larger $b$ reduce the height of the remaining trees, and indeed we
+see that queries are faster for larger $b$. Especially for small trees there is
+a significant speedup over interleaving. Somewhat surprisingly, none of the
+partition sizes has faster queries than interleaving for large inputs. Also
+important to note is that while partitioning is very fast for sizes up to L1
+cache, this is only possible because they have $\gg 1$ space overhead.
+
+
+** Compact subtrees
+
+Just like we used the /packed/ layout before, we can also do that now, by simply
+concatenating the representation of all packed subtrees.
+We ensure that all subtrees are still padded into the same total size, but now
+we only add as much padding as needed for the largest part, rather than padding
+to /full/ trees. Then, we give each tree the same layout in memory.
+
+We'll have offsets $o_\ell$ of where each layer starts in the first tree, and we
+store the constant size of the trees. That way, we can easily index each layer
+of each part.
+
 #+name: compact
-#+caption:
+#+caption: Compared to before, [[prefix]], the lowest level of each subtree now only takes 2 instead of 3 nodes.
 #+attr_html: :class inset large
 [[./prefix-compact.svg][file:prefix-compact.svg]]
 
+The code for querying does become slightly more complicated. Now, we must
+explicitly track the part that each query belongs to, and compute all indices
+based on the layer offset, the in-layer offset =k[i]=, /and/ the part offset.
+
+#+caption: The indexing for the packed subtrees requires explicitly tracking the part of each query. This slows things down a bit.
 #+begin_src diff
  pub fn search<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let offsets = self
@@ -1333,23 +1373,46 @@ only have to start the search for each query at the index of its part, given by
 #+end_src
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: Compared to the the simple/full layout before (dark blue dots for $b=16$), the compact layout (e.g. red dots for $b=16$) consistently uses less memory, but is slightly slower.
 [[file:plots/21-compact.svg][file:plots/21-compact.svg]]
-** The best of both
+
+For fixed $b_{\textrm{max}}$, memory overhead of the compact layout is small as
+long as the input is sufficiently large and the trees have sufficiently many
+layers. Thus, this tree could be practical.
+Unfortunately though, querying them is slightly slower than before,
+because we must explicitly track the part of each query.
+
+** The best of both: compact first level
+As we just saw, storing the trees one by one slows queries down, so we would
+like to avoid that. But on the other hand, the full layout can waste space.
+
+Here, we combine the two ideas. We would like to store the /horizontal/
+concatenation of the packed trees (each packed to the same size), but this is
+complicated, because then levels would have a non-constant branching factor.
+Instead, we can fully omit the last few (level 2) subtrees from each
+tree, and pad those subtrees that /are/ present to full subtrees.
+This way, only the first level has a configurable branching factor $B_1$, which we can
+simply store after construction is done.
+
+This layout takes slightly more space than before because the subtrees must
+be full, but the overhead should typically be on the order of $1/16$,
+since (for uniform data) each tree will have $\geq 9$ subtrees, of which only
+the last is not full.
+
 #+name: l1
-#+caption:
+#+caption: We can also store the horizontal concatenation of all trees. Here, the number of subtrees can be fixed to be less than $B+1$, and is $2$ instead of $B+1=3$. Although not shown, deeper layers must always be full and have a $B+1$ branching factor.
 #+attr_html: :class inset large
 [[./prefix-l1.svg][file:prefix-l1.svg]]
 
+#+caption: Now, the code is simple again, in that we don't need to explicitly track part indices. All that changes is that we handle the first iteration of the for loop separately, and use branching factor =self.b1= instead of =B+1= there.
 #+begin_src diff
- pub fn search_l1<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
+ pub fn search_b1<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
      let offsets = self
          .offsets
          .iter()
          .map(|o| unsafe { self.tree.as_ptr().add(*o) })
          .collect_vec();
 
-     // Initial parts, and prefetch them.
      let o0 = offsets[0];
      let mut k: [usize; P] = qb.map(|q| {
           (q as usize >> self.shift) * 64
@@ -1361,7 +1424,7 @@ only have to start the search for each query at the index of its part, given by
          for i in 0..P {
              let jump_to = unsafe { *o.byte_add(k[i]) }.find_splat64(q_simd[i]);
 -            k[i] = k[i] * (B + 1) + jump_to;
-+            k[i] = k[i] * self.l1 + jump_to;
++            k[i] = k[i] * self.b1 + jump_to;
              prefetch_ptr(unsafe { o2.byte_add(k[i]) });
          }
      }
@@ -1378,30 +1441,292 @@ only have to start the search for each query at the index of its part, given by
      let o = offsets.last().unwrap();
      from_fn(|i| {
          let idx = unsafe { *o.byte_add(k[i]) }.find_splat(q_simd[i]);
-
          unsafe { (o.byte_add(k[i]) as *const u32).add(idx).read() }
      })
  }
 #+end_src
 
 #+attr_html: :class inset large
-#+caption:
+#+caption: When compressing the first level, space usage is very similar to the compact layout before, and query speed is as fast as the full layout before.
 [[file:plots/22-l1.svg][file:plots/22-l1.svg]]
-** TODO Map-to-subtree packing
-** TODO Human data
-** Summary
+
+** Overlapping trees
+A drawback of all the above methods is that memory usage is heavily influenced by the
+largest part, since all parts must be at least as large. This is especially a
+problem when the distribution of part sizes is very skewed.
+We can avoid this by sharing storage between adjacent trees.
+Let $S_p$ be the number of subtrees for each part $p$, and $S_{max} = \max_p S_p$.
+Then, we can define the /overlap/ $0\leq v\leq B$, and append only
+$B_1 = S_{max}-v$ new subtrees for each new part, rather than $S_{max}$ as we
+did before.
+The values for each part are then simply appended where the previous part left
+off, unless that subtree is 'out-of-reach' for the current part, in which
+case first some padding is added.
+This way, consecutive
+parts can overlap and exchange memory, and we can somewhat 'buffer' the effect
+of large parts.
+
+#+name: overlap
+#+caption: In this example, the third tree has $6$ values in $[8, 12)$ and requires $S_{max}=3$ subtrees. We have an overlap of $v=1$, so that for each additional tree, only $2$ subtrees are added. We add padding elements in grey to ensure all elements are reachable from their own tree.
 #+attr_html: :class inset large
-#+caption:
-[[file:plots/23-summary.svg][file:plots/23-summary.svg]]
-* Multithreaded comparison
-* Future ideas
-** Interpolation search
-- Could potentially reduce RAM accesses.
-** Packing data smaller
-- After doing a 16bit prefix lookup, it suffices to only store 16 bits per element.
-** Range queries
-returning both first and last occurrence of a value.
-** Returning indices in original data
-- Significantly easier without packing
+[[./prefix-overlapping.svg][file:prefix-overlapping.svg]]
+
+When the overlap is $1$, as in the example above, the nodes in the first layer
+each contain the maximum value of $B$ subtrees. When the overlap is larger than
+$1$, the nodes in the first layer would contain overlapping values. Instead, we
+store a single list of values, in which we can do /unaligned/ reads to get the
+right slice of $B$ values that we need.
+
+#+caption: Each part now contains $16-v$ values, instead of the original 16. We use =read_unaligned= since we do not always read at 16-value boundaries anymore.
+#+begin_src diff
+ pub fn search<const P: usize, const PF: bool>(&self, qb: &[u32; P]) -> [u32; P] {
+     let offsets = self
+         .offsets
+         .iter()
+         .map(|o| unsafe { self.tree.as_ptr().add(*o) })
+         .collect_vec();
+
+     let o0 = offsets[0];
+     let mut k: [usize; P] = qb.map(|q| {
+-        (q as usize >> self.shift) * 4 *  16
++        (q as usize >> self.shift) * 4 * (16 - self.overlap)
+     });
+     let q_simd = qb.map(|q| Simd::<u32, 8>::splat(q));
+
+     if let Some([o1, o2]) = offsets.array_windows().next() {
+         for i in 0..P {
++            // First level read may be unaligned.
+-            let jump_to = unsafe { *o.byte_add(k[i])                  }.find_splat64(q_simd[i]);
++            let jump_to = unsafe {  o.byte_add(k[i]).read_unaligned() }.find_splat64(q_simd[i]);
+             k[i] = k[i] * self.l1 + jump_to;
+             prefetch_ptr(unsafe { o2.byte_add(k[i]) });
+         }
+     }
+
+     for [o, o2] in offsets[1..].array_windows() {
+         for i in 0..P {
+             let jump_to = unsafe { *o.byte_add(k[i]) }.find_splat64(q_simd[i]);
+             k[i] = k[i] * (B + 1) + jump_to;
+             prefetch_ptr(unsafe { o2.byte_add(k[i]) });
+         }
+     }
+
+     let o = offsets.last().unwrap();
+     from_fn(|i| {
+-        let idx = unsafe { *o.byte_add(k[i])                  }.find_splat(q_simd[i]);
++        let idx = unsafe {  o.byte_add(k[i]).read_unaligned() }.find_splat(q_simd[i]);
+         unsafe { (o.byte_add(k[i]) as *const u32).add(idx).read() }
+     })
+ }
+#+end_src
+
+#+attr_html: :class inset large
+#+caption: Overlapping trees usually use less memory than the equivalent version with first-level compression, while being about as fast.
+[[file:plots/23-overlap.svg][file:plots/23-overlap.svg]]
+
+** Human data
+So far we've been testing with uniform random data, where the largest part
+deviates form the mean size by around $\sqrt n$. Now, let's look at some real
+data: k-mers of a human genome. DNA consists of =ACGT= characters that can be
+encoded as 2 bits, so each string of $k=16$ characters defines a 32 bit
+integer[fn::We throw away the most significant bit to get 31 bit values.].
+We then look at the first $n$ k-mers of the human genome, starting at chromosome 1.
+
+To give an idea, the plot below show for each k-mer of length $k=12$ how often
+it occurs in the full human genome. In total, there are around 3G
+k-mers, and so the expected count for each k-mer is around 200. But instead,
+we see k-mers that occur over 2 million times! So if we were to partition on the
+first 24 bits, the size of the largest part is only around $2^{-10}$ of the input,
+rather than $2^{-24}$.
+
+The accumulated counts are shown in orange, where we also see a number of flat
+regions caused by underrepresented k-mers.
+
+#+attr_html: :class inset
+#+caption: A plot showing k-mer counts for all $4^{12} = 16M$ $k=12$-mers of the human genome. On random data each k-mer would occur around 200 times, but here we see some k-mers occurring over 2 million times.
+[[file:rank-curve.png][file:rank-curve.png]]
+
+#+attr_html: :class inset large
+#+caption: Building the overlapping trees for k-mers of the human genome takes much more space, and even using only 16 parts regularly requires up to 50% overhead, making this data structure not quite practical.
+[[file:plots/23-overlap-human.svg][file:plots/23-overlap-human.svg]]
+
+** Prefix map
+We need a way to handle unbalanced partition sizes, instead of mapping
+everything linearly.
+We can do this by simply storing the full tree compactly as we did before,
+preceded by an array (in blue below) that points to the index of the first
+subtree containing elements of the part. Like for the overlapping trees before,
+the first layer is simply a list of the largest elements of all subtrees that
+can be indexed anywhere (potentially unaligned).
+
+#+caption: The prefix map, in blue, stores $2^b$ elements, that for each $b$-bit prefix stores the index of the first subtree that contains an element of that prefix.
+#+attr_html: :class inset large
+[[./prefix-map.svg][file:prefix-map.svg]]
+
+To answer a query, we first find its part, then read the block (16 elements)
+starting at the pointed-to element, and then proceed as usual from the sub-tree onward.
+
+#+caption: In code, the only thing that changes compared to the previous overlapping version is that instead of computing the start index linearly (and adapting the element layout accordingly), we use the =prefix_map= to jump directly to the right place in the packed tree representation.
+#+begin_src diff
+ pub fn search<const P: usize, const PF: bool>(&self, qb: &[u32; P]) -> [u32; P] {
+     let offsets = self
+         .offsets
+         .iter()
+         .map(|o| unsafe { self.tree.as_ptr().add(*o) })
+         .collect_vec();
+
+     let o0 = offsets[0];
+     let mut k: [usize; P] = qb.map(|q| {
+-                 4 * (16 - self.overlap)         * (q as usize >> self.shift)
++        unsafe { 4 * *self.prefix_map.get_unchecked(q as usize >> self.shift) }
+     });
+     let q_simd = qb.map(|q| Simd::<u32, 8>::splat(q));
+
+     if let Some([o1, o2]) = offsets.array_windows().next() {
+         for i in 0..P {
+             let jump_to = unsafe {  o.byte_add(k[i]).read_unaligned() }.find_splat64(q_simd[i]);
+             k[i] = k[i] * self.l1 + jump_to;
+             prefetch_ptr(unsafe { o2.byte_add(k[i]) });
+         }
+     }
+
+     for [o, o2] in offsets[1..].array_windows() {
+         for i in 0..P {
+             let jump_to = unsafe { *o.byte_add(k[i]) }.find_splat64(q_simd[i]);
+             k[i] = k[i] * (B + 1) + jump_to;
+             prefetch_ptr(unsafe { o2.byte_add(k[i]) });
+         }
+     }
+
+     let o = offsets.last().unwrap();
+     from_fn(|i| {
+         let idx = unsafe {  o.byte_add(k[i]).read_unaligned() }.find_splat(q_simd[i]);
+         unsafe { (o.byte_add(k[i]) as *const u32).add(idx).read() }
+     })
+ }
+#+end_src
+
+#+attr_html: :class inset large
+#+caption: As long as there are more elements than parts and the tree has at least two layers, the space overhead of this representation is close to $1/16$ again.
+[[file:plots/24-map.svg][file:plots/24-map.svg]]
+
+Although memory usage is now similar to the unpartitioned version, queries for
+large inputs are slightly slower than those previous layouts due to the
+additional index required.
+
+We can also again do the interleaving queries. These are slightly faster for
+small inputs, and around as fast as interleaving was without the partitioning.
+
+#+attr_html: :class inset large
+#+caption: Prefix-map index with interleaving queries on random data.
+[[file:plots/25-map-interleave.svg][file:plots/25-map-interleave.svg]]
+
+On human data, we see that the partitioned index is a bit faster in L1 and L2,
+and consistently saves the time of roughly one layer in L3. For larger indices,
+performance is still very similar to not using partitioning at all.
+
+#+attr_html: :class inset large
+#+caption: Prefix-map with interleaving on human data.
+[[file:plots/25-map-interleave-human.svg][file:plots/25-map-interleave-human.svg]]
+
+** Summary
+:PROPERTIES:
+:CUSTOM_ID: prefix-summary
+:END:
+#+attr_html: :class inset large
+#+caption: Summary of partitioning results. Overall, it seems that partitioning does not provide when we already interleave queries.
+[[file:plots/27-summary.svg][file:plots/27-summary.svg]]
+
+* Multi-threaded comparison
+#+name: find-results
+#+attr_html: :class inset large
+#+caption: When using 6 threads, runtime goes down from =27ns= to =7ns=. Given that the speedup is less than 4x, we are now bottlenecked by total RAM throughput, and indeed methods that are slower for a single thread also reach near-optimal throughput now.
+[[file:plots/28-threads.svg][file:plots/28-threads.svg]]
+
+* Conclusion
+All together, we went from =1150ns/query= for binary search on 4GB input to
+=27ns= for the optimized S-tree with interleaved queries, over =40x= speedup!
+A large part of this improvement is due to *batching* queries and *prefetching*
+upcoming nodes. To get even higher throughput, *interleaving* queries at different
+levels helps to balance the CPU-bound part of the computation with the
+memory-bound part, so that we get a higher overall throughput. Using a *15
+elements per node* instead of 16 also improves throughput somewhat, but doubles
+the overhead of the data structure from 6.25% to 13.3%. For inputs that fit in
+L3 cache that's fine and the speedup is worthwhile, while for larger inputs the
+speed is memory-bound anyway, so that there is no speedup while the additional
+memory requirements are somewhat large.
+
+We also looked into *partitioning* the data by prefix. While this does give some speedup,
+it turns out that on skewed input data, the benefits quickly
+diminish since the tree either requires a lot of buffer space, or else requires
+an additional lookup to map each part to its location in the first level of the tree.
+In the end, I'd say the additional complexity and dependency on the shape of
+the input data of partitioning is not worth the speedup compared to simply using interleaved
+queries directly.
+
+** Future work
+*** Branchy search
+All methods we considered are /branchless/ and use the exact same number of
+iterations for each query. Especially in combination with partitioning, it may
+be possible to handle the few large parts independently from the usual
+smaller parts. That way we could answer most queries with slightly fewer
+iterations.
+
+On the other hand, the layers saved would mostly be the quick lookups near the
+root of the tree, and introducing branches to the code could possibly cause
+quite a bit of delay due to mispredictions.
+
+*** Interpolation search
+As we saw in the last plot above, total RAM throughput (rather than per-core
+throughput) becomes a bottleneck once we're using multiple threads.
+Thus, the only way to improve total query throughput is to use strictly fewer RAM
+accesses per query.
+Prefix lookups won't help, since they only replace the layers of the tree
+that would otherwise fit in the cache. Instead, we could use /interpolation
+search/ ([[https://en.wikipedia.org/wiki/Interpolation_search][wikipedia]]), where the estimated position of a query $q$ is linearly
+interpolated between known positions of surrounding elements. On random data, this only takes
+$O(\lg \lg n)$ iterations, rather than $O(\lg n)$ for binary search, and could
+save some RAM accesses. On the
+other hand, when data is not random its worst case performance is $O(n)$ rather
+than the statically bounded $O(\lg n)$.
+
+The PLA-index [cite:@pla-index] also uses a single interpolation step in a
+precisely constructed piece wise linear approximation. The error after the
+approximation is determined by some global upper bound, so that the number of remaining
+search steps can be bounded as well.
+
+*** Packing data smaller
+Another option to use the RAM lookups more efficiently would be to pack values
+into 16 bits rather than the 32 bits we've been using so far. Especially if we
+first do a 16 bit prefix lookup, we already know those bits anyway, so it would
+suffice to only compare the last 16 bits of the query and values. This increases
+the branching factor from 17 to 33, which reduces the number of layers of the
+tree by around 1.5 for inputs of 1GB.
+
+*** Returning indices in original data
+For various applications, it may be helpful to not only return the smallest
+value $\geq q$, but also the index in the original list of sorted values, for
+example when storing an array with additional data for each item.
+
+Since we use the S+ tree that stores all data in the bottom layer, this is
+mostly straightforward. The /prefix map/ partitioned tree also natively supports
+this, while the other partitioned variants do not: they include buffer/padding
+elements in their bottom layer, and hence we would need to store and look up the position
+offset of each part separately.
+
+*** Range queries
+We could extend the current query methods to a version that return both the
+first value $\geq q$ and the first value $>q$, so that the range of positions
+corresponding to value $q$ can be determined. In practice, the easiest way to do
+this is by simply doubling the queries into $q$ and $q+1$. This will cause some
+CPU overhead in the initial layers, but the query execution will remain
+branch-free. When $q$ is not found or only occurs a few times, they will mostly
+fetch the same cache lines, so that memory is efficiently reused and the
+bandwidth can be used for other queries.
+
+In practice though, this seems only around 20% faster per individual query for 4GB input, so
+around 60% slower for a range than for a single query. For small inputs, the
+speedup is less, and sometimes querying ranges is even more than twice slower
+than individual random queries.
 
 #+print_bibliography:
