@@ -20,6 +20,8 @@ Lastly, there will be one big addition to optimize throughput: /batching/.
 
 All *source code*, including benchmarks and plotting code, is at [[https://github.com/RagnarGrootKoerkamp/suffix-array-searching/tree/master/static-search-tree][github:RagnarGrootKoerkamp/suffix-array-searching]].
 
+Discuss on [[https://www.reddit.com/r/programming/comments/1hqo19u/static_search_trees_40x_faster_than_binary_search/][r/programming]], [[https://news.ycombinator.com/item?id=42562847][hacker news]], [[https://x.com/curious_coding/status/1873714665416802707][twitter]], or [[https://bsky.app/profile/did:plc:olhpu3lwhpafue3jjmhat4mj/post/3lefovqut3c2g][bsky]].
+
 * Introduction
 ** Problem statement
 *Input.* A sorted list of $n$ 32bit unsigned integers =vals: Vec<u32>=.
@@ -31,7 +33,11 @@ Optionally, the index of this element may also be returned.
 *Metric.* We optimize /throughput/. That is, the number of (independent) queries
 that can be answered per second. The typical case is where we have a
 sufficiently long =queries:
-&[u32]= as input, and return a corresponding =answers: Vec<u32>=.
+&[u32]= as input, and return a corresponding =answers: Vec<u32>=.[fn::For those
+not familiar with Rust syntax, =Vec<u32>= is simply an allocated vector of 32
+bit unsigned integers, like =std::vector= in C++. =&[u32]= is a /slice/ (or
+/view/) pointing to some non-owned memory. =[u32; 8]= is an array of 8 elements,
+like =std::array<unsigned int, 8>=.]
 
 Note that we'll usually report reciprocal throughput as =ns/query= (or just
 =ns=), instead of =queries/s=. You can think of this as amortized (not /average/) time spent per query.
@@ -330,8 +336,6 @@ not show any code for constructing S-trees. It's a whole bunch of uninteresting
 fiddling with indices, and takes a lot of time to get right. Also, construction
 is not optimized at all currently. Anyway, find the code [[https://github.com/RagnarGrootKoerkamp/suffix-array-searching/tree/master/static-search-tree/src][here]].
 
-TODO: Reverse offsets.
-
 What we /will/ look at, is code for searching S-trees.
 
 #+name: search-one
@@ -442,7 +446,9 @@ number of trailing zeros. Using =#[feature(portable_simd)]=, that looks like thi
 #+caption: A =find= implementation using the /count-trailing-zeros/ instruction.
 #+begin_src rust
 pub fn find_ctz(&self, q: u32) -> usize {
+    // Simd<u32, N> is the protable-rust type for a SIMD vector of N(=16) u32 values.
     let data: Simd<u32, N> = Simd::from_slice(&self.data[0..N]);
+    // splat takes a single u32 value, and copies it to all N lanes.
     let q = Simd::splat(q);
     let mask = q.simd_le(data);
     mask.first_set().unwrap_or(N)
@@ -1015,7 +1021,7 @@ What /does/ work great, is interleaving /all/ layers of the search: when the
 tree has $L$ layers, we can interleave $L$ batches at a time, and then process
 layer $i$ of the $i$'th in-progress batch. Then we 'shift out' the completed
 batch and store the answers to those queries, and 'shift in' a new batch.
-This we, completely average the different workloads of all the layers, and
+This way, we completely average the different workloads of all the layers, and
 should achieve near-optimal performance given the CPU's memory bandwidth to L3
 and RAM (at least, that's what I assume is the bottleneck now).
 
@@ -1703,6 +1709,11 @@ suffice to only compare the last 16 bits of the query and values. This increases
 the branching factor from 17 to 33, which reduces the number of layers of the
 tree by around 1.5 for inputs of 1GB.
 
+Another option, also [[https://news.ycombinator.com/item?id=42564997][suggested]] by ant6n on hacker news, would be some kind of
+'variable depth' encoding, where the root node stores, say, the top 16 bits of
+every value, and as we go down the tree, we store some 'middle' 16 bits,
+skipping the first $p$ bits that are shared between all elements in the bucket.
+
 *** Returning indices in original data
 For various applications, it may be helpful to not only return the smallest
 value $\geq q$, but also the index in the original list of sorted values, for
@@ -1728,5 +1739,30 @@ In practice though, this seems only around 20% faster per individual query for 4
 around 60% slower for a range than for a single query. For small inputs, the
 speedup is less, and sometimes querying ranges is even more than twice slower
 than individual random queries.
+
+*** Sorting queries
+Another thing that we did not at all consider so far, but was [[https://news.ycombinator.com/item?id=42563407][brought up]] by orlp
+on hacker news, is to batch /queries/. If we assume for the moment that the
+queries are sorted, we know that we have maximal possible reusing of all nodes,
+and they all need to be fetched from memory only once. If the number of queries
+is large (say at least $n/16$) then many nodes at the last level will have more
+than one query hitting them, and fetching them only once will reduce memory
+pressure. Similarly, if we have at least around $n/256$ queries, we can avoid
+fetching before-last layer nodes multiple times.
+
+In practice, I'm not quite sure how much time the sorting of queries would take,
+but something simple would be to do one or two rounds of 8-bit radix sort, so we
+sort into $256=16^2$ or $65536=16^4$ parts, and we can then skip the first two or
+four first layers of the search.
+
+*** Suffix array searching
+The next step of this project is to integrate this into a fast suffix array
+([[https://en.wikipedia.org/wiki/Suffix_array][wikipedia]]) search scheme. The idea is to build this S-tree on, say, every 4th
+suffix, and then use the first 32 bits (or maybe 64) of each suffix as the value
+in the S-tree. Given a query, we can then quickly determine the range
+corresponding to its first 32 bits, and binary search only in the (likely
+small) remaining range to determine the final slice of the suffix array that
+corresponds to the query.
+
 
 #+print_bibliography:
