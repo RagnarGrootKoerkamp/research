@@ -61,6 +61,20 @@ trait SearchIndex {
 }
 #+end_src
 
+** Motivation
+Aside from doing this project just for the fun of it, there /is/ some higher
+goal.
+One of the big goals of bioinformatics is to make efficient datastructures to
+index DNA, say a single human genome (3 billion basepairs/characters) or even a
+bunch of them. One such datastructure is the /suffix array/ ([[https://en.wikipedia.org/wiki/Suffix_array][wikipedia]]), that
+sorts the suffixes of the input string. Classically, one can then find the
+locations where a string occurs by binary searching the suffix array.
+
+This project is a first step towards speeding up the suffix array search.
+
+Also note that we indeed assume that the input data is /static/, since usually
+we use a fixed reference genome.
+
 ** Recommended reading
 The classical solution to this problem is *binary search*, which we will briefly
 visit in the next section. A great paper on this and other search layouts is
@@ -81,7 +95,6 @@ intel. And we're not assuming less available =AVX512= instructions (in
 particular, since my laptop doesn't have them).
 
 ** Binary search and Eytzinger layout
-
 As a baseline, we will use the Rust standard library binary search implementation.
 
 #+name: binary-search
