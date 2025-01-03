@@ -46,14 +46,14 @@ Note that we'll usually report reciprocal throughput as =ns/query= (or just
 are simply uniform random sampled 31bit integers[fn::You'll see later why not 32bit].
 
 *Code.*
-In code, this can be modelled by the trait shown in [[trait]].
+In code, this can be modelled like this:
 #+name: trait
 #+caption: Trait that our solution should implement.
 #+begin_src rust
 trait SearchIndex {
     /// Two functions with default implementations in terms of each other.
     fn query_one(&self, query: u32) -> u32 {
-        Self::query(&vec![query])[0]
+        Self::query(&[query])[0]
     }
     fn query(&self, queries: &[u32]) -> Vec<u32> {
         queries.iter().map(|&q| Self::query_one(q)).collect()
@@ -115,11 +115,11 @@ impl SortedVec {
 The main conclusion of the array layouts paper [cite:@khuong-array-layouts] is
 that the Eytzinger layout is one of the best in practice.
 This layout reorders the values in memory: the binary search effectively is a
-binary search tree on the data, the root the middle node, then the nodes at
+binary search tree on the data, with as root the middle node, then the nodes at
 positions $\frac 14 n$ and $\frac 34 n$, then $\frac 18n, \frac 38n, \frac 58n,
-\frac 78n$, and so on. The main benefit of this layout is that all values needed
+\frac 78n$, and so on. The main benefit of the Eytzinger layout is that all values needed
 for the first steps of the binary search are close together, so they can be
-cached efficiently. If we put the root at index $1$, the two children of the
+cached efficiently: we put the root at index $1$ and the two children of the
 node at index $i$ are at $2i$ and $2i+1$. This means that we can effectively
 prefetch the next cache line, before knowing whether we need index $2i$ or
 $2i+1$. This can be taken a step further and we can prefetch the cache line
@@ -1657,7 +1657,6 @@ performance is still very similar to not using partitioning at all.
 [[file:plots/27-summary.svg][file:plots/27-summary.svg]]
 
 * Multi-threaded comparison
-#+name: find-results
 #+attr_html: :class inset large
 #+caption: When using 6 threads, runtime goes down from =27ns= to =7ns=. Given that the speedup is less than 4x, we are now bottlenecked by total RAM throughput, and indeed methods that are slower for a single thread also reach near-optimal throughput now.
 [[file:plots/28-threads.svg][file:plots/28-threads.svg]]
