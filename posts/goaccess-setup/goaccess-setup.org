@@ -1,0 +1,230 @@
+#+title: Setting up traffic monitoring using GoAccess
+#+filetags: @devops linux
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2025-01-04 Sat>
+
+GoAccess ([[https://goaccess.io/][goaccess.io]], [[https://github.com/allinurl/goaccess][github]]) is a tool that analyses server logs and gives real-time
+statistics on network traffic.
+It took me some time to figure out exactly how to get the real-time websocket
+server working through Nginx, so I'm just sharing my configuration here.
+
+Install via your package manager, e.g. =sudo pacman -S goaccess= on Arch.
+
+The result will look like this.
+#+caption: (Click it to open in new tab.)
+#+attr_html: :class inset large
+[[file:goaccess.png][file:goaccess.png]]
+
+* Nginx setup
+First we make sure that nginx logs all requests. I have a bunch of nginx
+=server= blocks, so I'm logging the =curiouscoding.nl= logs to their own file:
+
+#+caption: Nginx access log setup.
+#+begin_src nginx
+# /etc/nginx/sites-available/curiouscoding.nl
+server {
+	server_name curiouscoding.nl;
+	root /srv/nginx/...;
+	listen [::]:80;
+	listen [::]:443 ssl http2;
+	include /etc/nginx/ssl_settings.conf;
+
+	# Write logs here
+	access_log "/var/log/nginx/access-curiouscoding.log";
+
+	...
+}
+#+end_src
+
+* GoAccess configuration
+Now we'll do some configuration to parse =nginx= logs. I'm not quite sure all
+of these are strictly needed, but this is what I currently have. See the full
+file on your system for docs for each option.
+
+#+caption: GoAccess configuration file.
+#+begin_src conf
+# /etc/goaccess/goaccess.conf
+# nginx uses the combined format by default. Important!
+log-format COMBINED
+# The nginx logs can be found here.
+log-file /var/log/nginx/access-curiouscoding.log
+
+# default time & date formats
+time-format %H:%M:%S
+date-format %d/%b/%Y
+datetime-format %d/%b/%Y:%H:%M:%S %z
+
+# Some UI tweaks (most are defaults)
+config-dialog false
+hl-header true
+json-pretty-print false
+agent-list false
+http-method yes
+http-protocol no
+no-query-string false
+no-term-resolver false
+444-as-404 false
+4xx-to-unique-count false
+all-static-files true
+browsers-file /etc/goaccess/browsers.list
+# Show the initial 'visitors per day' by hour.
+date-spec hr
+double-decode false
+# Eanble some additional panels
+enable-panel REFERRERS
+enable-panel GEO_LOCATION
+# Show the 'time distribution' graph per 10-minutes rather than hours.
+hour-spec min
+ignore-crawlers true
+crawlers-only false
+unknowns-as-crawlers false
+ignore-statics panels
+real-os true
+#+end_src
+
+You should now be able to run =goaccess --output /tmp/index.html= on your
+server. You can either =cp= it somewhere into the =public/= directory of your
+site or =scp= it to your local machine to view it in a browser.
+
+* Systemd setup
+We'd like to have goaccess running in the background.
+
+First, create the =goaccess= user:
+#+begin_src sh
+sudo useradd goaccess --system --no-create-home
+#+end_src
+
+Then, create =/srv/nginx/goaccess=, owned by the =goaccess= user, which is where
+we'll host the static =index.html= page.
+#+begin_src sh
+sudo mkdir /srv/nginx/goaccess
+sudo chown goaccess:goaccess /srv/nginx/goaccess
+#+end_src
+
+Now, we can crate a systemd service:
+#+name: systemd
+#+caption: Systemd service.
+#+begin_src service
+# /etc/systemd/system/goaccess.service
+[Unit]
+Description=GoAccess
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/goaccess --real-time-html --output /srv/nginx/goaccess/index.html
+ExecStop=/bin/kill ${MAINPID}
+PrivateTmp=false
+RestartSec=100
+User=goaccess
+Group=goaccess
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+#+end_src
+
+Now start and enable the service.
+#+begin_src sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now goaccess
+#+end_src
+
+This should now write =/srv/nginx/goaccess/index.html=.
+
+* Serving the static file
+Now we want to view =/srv/nginx/goaccess/index.html=. Add the following =server=
+block:
+#+begin_src nginx
+# /etc/nginx/sites-available/goaccess
+server {
+	# (I'm actually hosting it somewhere else.)
+	server_name goaccess.curiouscoding.nl;
+	root /srv/nginx/goaccess/;
+	listen [::]:80;
+	listen [::]:443 ssl http2;
+	include /etc/nginx/ssl_settings_wildcard.conf;
+
+	# Add http authentication to it.
+	auth_basic "Authentication required";
+	auth_basic_user_file /etc/nginx/.htpasswd;
+}
+#+end_src
+
+Now =sudo systemctl restart nginx= and go to =goaccess.curiouscoding.nl= to see
+the generated report.
+
+* Serving live statistics
+By default, we just see the generated =index.html= file, and we have to restart
+=goaccess.service= to regenerate it. But GoAccess also supports a websocket
+server that can show real-time statistics. This was slightly more tricky to get
+working, but ends up being very nice!
+
+Heads-up: while the static page shows up to 366 table rows per panel, the live
+view only shows up to 50 to save data. See
+[[https://github.com/allinurl/goaccess/issues/2777][this issue]] for possible workarounds if you want to see the full data anyway.
+(To work around this, I created a second =goaccess-static= =one-shot= systemd service that drops
+the =--realtime-html= flag and the =Restart= and =RestartSec= lines, that writes
+to =.../index-static.html=.)
+
+First, make sure that you add the =--real-time-html= flag to the systemd
+service, as I already did in [[systemd]].
+
+Then, update the goaccess configuration with:
+
+#+caption: Updated goaccess configuration for websocket server.
+#+begin_src conf
+# /etc/goaccess/goaccess.conf
+# The goaccess server listens on this port.
+port 7890
+# (Not actually sure we need this.)
+pid-file /var/run/goaccess.pid
+# The browser can find the websocket server here.
+ws-url wss://goaccess.curiouscoding.nl:443/ws
+#+end_src
+
+Also update the nginx configuration for =goaccess.curiouscoding.nl= like this:
+#+begin_src nginx
+# /etc/nginx/sites-available/goaccess
+server {
+	server_name goaccess.curiouscoding.nl;
+	...
+
+	# Redirect requests to /ws to local port 7890, where goaccess is listening.
+	# Note: No trailing slash after /ws!
+	location /ws {
+		proxy_connect_timeout 7d;
+		proxy_send_timeout 7d;
+		proxy_read_timeout 7d;
+		proxy_pass http://localhost:7890;
+		proxy_set_header Connection "upgrade";
+		proxy_set_header Connection "keep-alive";
+		proxy_http_version 1.1;
+		# Drop the leading /ws from the passed-through url.
+		rewrite ^/ws(.*) /$1 break;
+	}
+}
+#+end_src
+
+Now =sudo systemctl restart nginx=, and go to =goaccess.curiouscoding.nl=. You
+should see a green dot in the top left indicating the websocket server is working.
+
+* GeoIP database
+
+If you want to see where your users are coming from, you'll need a database for it.
+As linked in =goaccess.conf=, I went to
+https://db-ip.com/db/download/ip-to-city-lite and downloaded the 'IP to city
+lite =MMDB='. Copy that to =/usr/local/share/GeoIP=, and then add the following
+to the goaccess configuration:
+
+#+begin_src conf
+# /etc/goaccess/goaccess.conf
+# Make sure to update the date to your version.
+geoip-database /usr/local/share/GeoIP/dbip-city-lite-2024-12.mmdb
+#+end_src
+
+Now =sudo systemctl restart goaccess= and refresh =goaccess.curiouscoding.nl=.
+
+#+attr_html: :class inset large
+[[file:geoip.png][file:geoip.png]]
