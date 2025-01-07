@@ -240,7 +240,7 @@ Plain binary search typically only uses a single value of each cache line,
 until it gets to the end of the search where the last 16 values span just 1 or 2
 cache lines.
 
-They Eytzinger layout suffers the same problem: even though the next cache line
+The Eytzinger layout suffers the same problem: even though the next cache line
 can be prefetched, it still only uses a single value in each.
 This fundamentally means that both these search schemes are using the available
 memory bandwidth quite inefficiently, and since most of what they are doing is
@@ -654,7 +654,7 @@ comes from the last step, where we indeed shaved off 3 instructions.
 In fact, we can analyse this plot a bit more:
 - For input up to $2^6=64$ bytes, the performance is constant, since in this
   case the 'search tree' only consists of the root node.
-- Up to input of size $2^{10}$, the thee has two layers, and the performance is constant.
+- Up to input of size $2^{10}$, the tree has two layers, and the performance is constant.
 - Similarly, we see the latency jumping up at size $2^{14}$, $2^{18}$, $2^{22}$
   and $2^{26}$, each time because a new layer is added to the tree. (Or rather,
   the jumps are at powers of the branching factor $B+1=17$ instead of $2^4=16$, but you get the idea.)
@@ -669,7 +669,7 @@ In fact, we can analyse this plot a bit more:
   data structure, and that fraction only decreases slowly.
 - Again handwavily, we can also interpret the x-axis as a snapshot of space
   usage at a fixed moment in time: the first three layers of the tree fit in L1.
-  The 4th and 5th layers fit in L2 and L3. Once the three is 6 layers deep, the
+  The 4th and 5th layers fit in L2 and L3. Once the tree is 6 layers deep, the
   reads of that layer will mostly hit RAM, and any additional layers for sure
   are going to RAM.
 
@@ -686,7 +686,7 @@ effectively wait for 10 reads at the same time, lowering the amortized wait time
 to around 8ns.
 
 Batching very much benefits from the fact that we use an S+ tree instead of
-S-tree, since each element is find in the last layer (at the same depth), and
+S-tree, since each element is found in the last layer (at the same depth), and
 hence the number of seach steps through the tree is the same for every element
 in the batch.
 
@@ -727,7 +727,7 @@ corresponds to the CPU having 12 /line fill buffers/ and thus being able to
 read up to 12 cache lines in parallel.
 
 Nevertheless, we will settle on a batch size of 128, mostly because it leads to
-slightly cleaner plots in the remainder. It is also every so slightly faster,
+slightly cleaner plots in the remainder. It is also ever so slightly faster,
 probably because the constant overhead of initializing a batch is smaller when
 batches are larger.
 
@@ -936,7 +936,7 @@ prefetcht0   (%rcx,%r9)
 *** The final version
 One particularity about the code above is the =andl $-64,%r9d=.
 In line 6, the bitmask gets written there. Then in line 7, it's popcounted.
-Life 11 does a =shll $5=, i.e., a multiplication by 32, which is a combination
+Line 11 does a =shll $5=, i.e., a multiplication by 32, which is a combination
 of the =/2= to compensate for the double-popcount and the =* 64=. Then, it does
 the =and $-64=, where the mask of -64 is =111..11000000= which ends in 6 zeros.
 But we just multiplied by 32, so all this does is zeroing out a single bit, in
@@ -1240,7 +1240,7 @@ values in the final layer is duplicated in the layer above, and $1/17$ of
 Using node size $15$ instead, increases the overhead:
 Each node now only stores $15$ instead of $16$ elements, so that we already have
 an overhead of $1/15$. Furthermore the reduced branching factor increases the
-duplication overhead fro $1/16$ to $1/15$ as well, for a total overhead of $2/15
+duplication overhead from $1/16$ to $1/15$ as well, for a total overhead of $2/15
 = 13.3\%$, which matches the dashed blue line in [[b15]].
 
 
