@@ -1,6 +1,6 @@
 #+title: FM-index implementations
 #+filetags: @survey
-#+OPTIONS: ^:{} num: num:t
+#+OPTIONS: ^:{} num:
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+date: <2024-10-02 Wed>
@@ -8,14 +8,14 @@
 Here I'll briefly list some FM-index and related implementations around the web.
 Implementations seem relatively inconsistent, mostly because the FM-index is
 more of a 'wrapper' type around a given Burrows-Wheeler-transform and an
-/occurrences/ list. Both can be implemented in various ways. In particular
-occurrences should be stored using a wavelet tree for optimal compressing.
+/occurrences/ list implementation. Both can be implemented in various ways. In particular
+occurrences should be stored using a wavelet tree for optimal compression.
 
 - The [[https://github.com/wafflespeanut/nucleic-acid/blob/2adbf5181081245423f974a88b5ccf53d7bf26ac/src/bwt.rs#L96][nucleic-acid repo]] contains a completely unoptimised version.
 - The Rust-bio crate contains a [[https://github.com/rust-bio/rust-bio/blob/master/src/data_structures/fmindex.rs#L209][generic FM-index]]. It stores a [[https://github.com/rust-bio/rust-bio/blob/master/src/data_structures/bwt.rs#L75-L94][sampled
   occurrences array]], so that space is relatively small but lookups take $O(k)$
   time for sampling factor $k$.
-- SDSL contains a [[https://github.com/simongog/sdsl-lite/blob/c32874cb2d8524119f25f3b501526fe692df29f4/include/sdsl/wavelet_][wavelet tree]] and [[https://github.com/simongog/sdsl-lite/blob/master/include/sdsl/csa_wt.hpp#L48][compressed suffix array]] implementation based
+- SDSL-lite contains a [[https://github.com/simongog/sdsl-lite/blob/c32874cb2d8524119f25f3b501526fe692df29f4/include/sdsl/wavelet_][wavelet tree]] and [[https://github.com/simongog/sdsl-lite/blob/master/include/sdsl/csa_wt.hpp#L48][compressed suffix array]] implementation based
   on it, that provides the same functionality as an FM-index.
 - There is the [[https://github.com/rossanoventurini/qwt][Quad Wavelet Tree]] (QWT) Rust crate [cite:@qwt]. This uses a 4-ary
   tree instead of the usual binary wavelet tree, and improves latency by around
@@ -25,3 +25,21 @@ occurrences should be stored using a wavelet tree for optimal compressing.
 - [[https://github.com/achacond/gem-cutter][GEM-Cutter]] contain a GPU implementation of the FM-index [cite:@gemcutter].
 - There is also [[https://github.com/lh3/ropebwt3][RopeBWT3]] [cite:@ropebwt3], which is basically a run-length
   compressed BWT with a B+ tree on top for fast queries.
+
+* A note on SDSL versions
+- [[https://github.com/simongog/sdsl][github:simongog/sdsl]] is the original, with last commit in 2013.
+- [[https://github.com/simongog/sdsl-lite][github:simongog/sdsl-lite]] is v2, with last commit in 2019, and seems the most
+  used currently.
+- [[https://github.com/xxsds/sdsl-lite][github:xxsds/sdsl-lite]] is v3 and seems to be actively maintained at the time
+  of writing (Jan 2025), and is [[https://www.reddit.com/r/rust/comments/nlxhym/comment/gzpqejn/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button][recommended]] by the original developers. From a
+  quick glance, I think it's somewhat restructured and truly a v3, not just a v2.1.
+  However, it seems to be much less popular.
+- [[https://github.com/vgteam/sdsl-lite][github:vgteam/sdsl-lite]] is a fork of the original =sdsl-lite=, with, I think,
+  a number of small bug fixes and some updates for recent compiler versions.
+
+Then there are also some rust versions:
+- [[https://github.com/sdsl-rs/sdsl-rs][github:sdsl-rs/sdsl-rs]]: Rust bindings for SDSL. Only partially done and
+  seems to have stalled.
+- [[https://github.com/jltsiren/simple-sds][github:jltsiren/simple-sds]]: A complete reimplementation in Rust. Seems to
+  roughly follow the original API and naming, but only a reasonable subset.
+  (Hence probably significantly easier to use.)
