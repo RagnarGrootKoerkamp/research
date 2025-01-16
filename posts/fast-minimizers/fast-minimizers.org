@@ -1840,9 +1840,9 @@ data from memory into the SIMD registers is the bottleneck here. What is
 somewhat surprising is that line 15 and 16 of [[simd-gather-4]] are each turned into
 two =gather= instructions. As it turns out, there are [[https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#ig_expand=554,3771,3707,3771,3768,3707,3771,3707&techs=AVX_ALL&text=_mm256_i*gather_epi32][two very similar gather
 instructions]]:
-- =_mm256_i64father_epi32=, which takes a 256-bit SIMD register with four 64-bit
+- =_mm256_i64gather_epi32=, which takes a 256-bit SIMD register with four 64-bit
   indices and returns a 128-bit SIMD register with four 32-bit values.
-- =_mm256_i32father_epi32=, which takes a 256-bit SIMD register with eight 32-bit
+- =_mm256_i32gather_epi32=, which takes a 256-bit SIMD register with eight 32-bit
   indices and returns a 256-bit SIMD register with eight 32-bit values.
 It would be slightly nicer to use the second version, but in the end I suspect
 it wouldn't matter much for performance, since the same number of entries is
