@@ -1,42 +1,122 @@
-#+title: Title
+#+title: Optimal throughput bioinformatics
 #+hugo_section: slides
 #+filetags: slides
-#+OPTIONS: ^:{} num: num:t
+#+OPTIONS: ^:{} num: num:t toc:nil
 #+hugo_front_matter_key_replace: author>authors
-#+toc: headlines 3
+# #+toc: depth 2
+#+reveal_theme: white
 #+reveal_extra_css: /css/slide.min.css
+#+export_file_name: ../static/slides/sample
+#+hugo_paired_shortcodes: %notice
 #+date: <2024-08-09 Fri>
 # Export using C-c C-e R R
-# Copy the generated file to /static/slides/*.html
 
-* First part
-hello
-- list 1
-- more list
+* High performance +computing+ *bioinformatics*
+:PROPERTIES:
+:CUSTOM_ID: part1
+:END:
+** What is bioinformatics?
+:PROPERTIES:
+:CUSTOM_ID: bioinformatics
+:END:
+** A*PA
+:PROPERTIES:
+:CUSTOM_ID: A*PA
+:END:
+** A*PA2
+:PROPERTIES:
+:CUSTOM_ID: A*PA2
+:END:
+* +High+ *Optimal* performance bioinformatics
+:PROPERTIES:
+:CUSTOM_ID: part2
+:END:
 
-asdf
-1. first
-2. second
+#+reveal: split
+#+attr_shortcode: proposition
+#+begin_notice
+/Optimal/ does not mean anything.
+#+end_notice
 
-| col | col |
-| val | val |
+** Optimal?
+:PROPERTIES:
+:CUSTOM_ID: optimal
+:END:
+- Which metric?
+  - Space?
+  - Time?
+  - Theory? Practice?
+- How optimal?
+  - Within some constant factor? ($O(n)$)
+  - Sublinear space overhead? ($o(n)$)
+  - Within $2×$?
 
-** subsection
+** Big-$O$
+:PROPERTIES:
+:CUSTOM_ID: big-o
+:END:
 
-centered
+#+attr_shortcode: proposition
+#+begin_notice
+Big-$O$ was nice, but does not align with modern hardware.
+- If you /have/ the memory, use it!
+- CPUs are not turing machines.
+#+end_notice
 
-#+begin_cols
-#+begin_col
-col 1
-| tab | more |
-|   2 |    1 |
-#+end_col
-#+begin_col
-col 2
-| tab | more |
-|   2 |    1 |
-#+end_col
-#+end_cols
+- SDSL is /succinct/ in theory: $o(n)$ overhead on theoretical minimum space.
+  - ... but practice is hard,
+  - ... and also up to $1000\times$ slower to query!
+  - Using $10\%$ extra space is /fine/, and can avoid all the slowdown.
+- Not all $O(1)$ are equal:
+  - one =100ns= cache miss per character? (FM-index, /cough/)
+  - one =0.003ns= comparison per character?
+  - $O(\log n)$ or even $O(\sqrt n)$ fast steps is better than $O(1)$ slow steps!
 
 
-* Second part
+** Minimizers
+:PROPERTIES:
+:CUSTOM_ID: minimizers
+:END:
+
+** Minimizers: a lower bound
+:PROPERTIES:
+:CUSTOM_ID: minimizer-bound
+:END:
+** Mod-minimizers: a near-optimal scheme
+:PROPERTIES:
+:CUSTOM_ID: mod-mini
+:END:
+** Outlook:: future schemes
+:PROPERTIES:
+:CUSTOM_ID: minimizers-outlook
+:END:
+* Optimal +performance+ *throughput* bioinformatics
+:PROPERTIES:
+:CUSTOM_ID: part3
+:END:
+
+#+reveal: split
+#+attr_shortcode: proposition
+#+begin_notice
+Most bioinformatics applications need /throughput/, not latency.
+#+end_notice
+
+** Why throughput?
+:PROPERTIES:
+:CUSTOM_ID: throughput
+:END:
+- /Performance/ can be anything!
+- /Throughput/, not /latency/!
+
+** Fast minimizers
+:PROPERTIES:
+:CUSTOM_ID: fast-minimizers
+:END:
+** Fast binary search
+:PROPERTIES:
+:CUSTOM_ID: binary-search
+:END:
+** PtrHash
+:PROPERTIES:
+:CUSTOM_ID: ptrhash
+:END:
