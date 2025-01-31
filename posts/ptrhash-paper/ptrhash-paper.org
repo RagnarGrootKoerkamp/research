@@ -13,6 +13,7 @@ $$
 \newcommand{\h}{\mathsf{h}}
 \newcommand{\hp}{\mathsf{h}_{\mathsf{p}}}
 \newcommand{\C}{\mathsf{C}}
+\newcommand{\select}{\mathsf{select}}
 \newcommand{\free}{F}
 \newcommand{\mphf}{\mathsf{H_{mphf}}}
 $$
@@ -112,7 +113,7 @@ Its main novelties are:
 
 * PtrHash
 
-The core principle of PtrHash[fn::The
+The core design goal of PtrHash[fn::The
 PT in PTHash stand for /Pilot Table/. The
 author of the present paper mistakenly understood it to stand for Pibiri and
 Trani, the authors of the PTHash paper. Due to the current author's
@@ -434,7 +435,7 @@ v_0/256\rfloor\right)}_{\text{Relative high part}}
 This is stored as follows.
 - First, the $32$ bit offset $\lfloor v_0/256\rfloor$ is stored.
 - Then, the relative high parts are encoded into $128$ bits. For each $i\in[44]$, bit $i + \lfloor
-  v_i/256\rfloor - \lfloor v_0/256\rfloor$ is set to =1=.
+  v_i/256\rfloor - \lfloor v_0/256\rfloor$ is set to 1.
   Since the $v_i$ are increasing, each $i$ sets a distinct bit, for a total of $44$ set bits.
 - Lastly, the low $8$ bits of each $v_i$ are directly written to the $44$ trailing bytes.
 
@@ -445,12 +446,12 @@ This is stored as follows.
 
 *Lookup.* The value at position $i$ is found by summing the terms of Equation
 \ref{eq:clef}. The offset and low bits can be read directly.
-This relative high part can be found as $256\cdot(select(i)-i)$, where $select(i)$ gives
-the position of the $i$'th =1= bit. In practice, this can be implemented
+This relative high part can be found as $256\cdot(\select(i)-i)$, where $\select(i)$ gives
+the position of the $i$'th 1 bit. In practice, this can be implemented
 efficiently using the =PDEP= instruction provided by the BMI2 bit manipulation
 instruction set [cite:@fast-select]:
 [DROP?] this operation can /deposit/ the mask =1<<i= onto our bit pattern, so that the
-=1= ends up at the position of the $i$'th one of our pattern. Then, it suffices
+1 ends up at the position of the $i$'th one of our pattern. Then, it suffices
 to count the number of trailing zeros, which is provided by the =TZCNT=
 instruction in BMI1.
 
@@ -559,8 +560,9 @@ Such buckets are hard to place, because by the birthday paradox they are likely
 to have multiple elements hashing to the same slot. To fix this, PHOBIC ensures the
 slope of $\gamma$ is at least $\varepsilon=1/(5 \sqrt S)$ by using
 $\gamma_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$ instead.
-Since this function is slow to compute in practice, a
-$2048$-piecewise linear approximation is used instead, using a lookup table and linear interpolation.
+We fix $varepsilon = 1/256$.
+# Since this function is slow to compute in practice, a
+# $2048$-piecewise linear approximation is used instead, using a lookup table and linear interpolation.
 
 *Approximations.*
 For PtrHash, we would like to only use simple computations and avoid lookups as
@@ -727,7 +729,7 @@ speed, and the cubic $\gamma_3$ for space efficiency.
 *** Tuning parameters for construction
 
 #+name: construction
-#+caption: This plot shows the construction time (blue and red, left axis) and datastructure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /small/ parameter configurations.
+#+caption: This plot shows the construction time (blue and red, left axis) and datastructure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /compact/ parameter configurations.
 #+attr_html: :class inset
 [[file:plots/size.svg]]
 
@@ -764,25 +766,36 @@ dots and redo experiments]
 
 *** [Appendix?] Remap
 #+name: remap
-#+caption: [TODO: Update numbers] Comparison of space usage and query throughput when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing, without remap, and for minimal perfect hashing, with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead.
+#+caption: Comparison of space usage and query throughput when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead.
 | Parameters                                              |     Pilots | Query |    PHF | Remap       |      Remap | Query |   MPHF |
-|                                                         | (bits/key) |   For | Stream |             | (bits/key) |   For | Stream |
+|                                                         | (bits/key) |  Loop | Stream |             | (bits/key) |  Loop | Stream |
 |---------------------------------------------------------+------------+-------+--------+-------------+------------+-------+--------|
-| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |       2.67 | 14.01 |   8.57 | Vec<u32>    |       0.33 | 12.56 |   8.80 |
-|                                                         |            |       |        | CacheLineEF |       0.12 | 12.77 |   9.19 |
-|                                                         |            |       |        | EF          |       0.09 | 14.37 |   9.84 |
-| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |       2.00 | 17.82 |   8.07 | Vec<u32>    |       0.66 | 20.37 |   9.11 |
-|                                                         |            |       |        | CacheLineEF |       0.24 | 20.97 |  10.45 |
-|                                                         |            |       |        | EF          |       0.17 | 23.17 |  14.14 |
+| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |       2.67 |  11.5 |    8.6 | Vec<u32>    |       0.33 |  12.5 |    8.8 |
+|                                                         |            |       |        | CacheLineEF |       0.12 |  12.9 |    8.8 |
+|                                                         |            |       |        | EF          |       0.09 |  14.2 |    9.7 |
+| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |       2.00 |  17.7 |    8.0 | Vec<u32>    |       0.33 |  20.3 |    8.6 |
+|                                                         |            |       |        | CacheLineEF |       0.12 |  20.9 |    8.6 |
+|                                                         |            |       |        | EF          |       0.09 |  21.7 |    9.7 |
 
 In [[remap]], we compare the space usage and query throughput of the different remap
-data structures for both the fast and compact parameters. We observe that
-CacheLineEF is $2.75\times$ smaller than a plain vector, and only $40\%$ larger
-than true Elias-Fano encoding. On the other hand, CacheLineEF is only slightly
-slower than the plain vector, and significantly faster than the Elias-Fano
-lookup, both when doing queries one by one and when prefetching.
-Thus, we choose CacheLineEF when using compact parameters, but prefer the faster
-plain vector for fast parameters.
+data structures for both the fast and compact parameters, for $n=10^9$ keys. We observe that
+the overhead of CacheLineEF is $2.75\times$ smaller than a plain vector, and only $40\%$ larger
+than true Elias-Fano encoding.
+
+The speed of non-minimal (PHF) queries that do not remap does not depend
+on the remap structure used.
+
+For /minimal/ (MPHF) queries with the for loop, EF is significantly slower
+(14.2ns) with the fast parameters than the plain vector (12.5ns), while
+CacheLineEF (12.9ns) is only slightly slower.
+The difference is much smaller with the compact parameters, because the
+additional computations for the cubic $\gamma_3$ reduce the number of iterations
+the processor can work ahead.
+When streaming queries, for both parameter choices CacheLineEF is less than 0.1ns slower than the
+plain vector, while EF is 1ns slower.
+
+In the end, we choose CacheLineEF when using compact parameters, but prefer the
+simpler and slightly faster plain vector for fast parameters.
 
 *** Sharding
 We tested the in-memory and hybrid sharding by constructing PtrHash on $5\cdot
@@ -833,7 +846,7 @@ query throughput.
 
 *** [Appendix?] Batching and streaming
 #+name: batching
-#+caption: [TODO: prevent auto-vectorization] [Run with updated params; update caption names] [TODO: Add 7.4ns horizontal line to right plot.] Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
+#+caption: Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
 #+attr_html: :class inset
 [[file:plots/query_batching.svg]]
 
@@ -853,30 +866,30 @@ distribution of bucket sizes with more large buckets. When the pilots for these
 large buckets are cached, they are more likely to be hit by subsequent queries,
 and hence avoid some accesses to main memory.
 
-For further experiments we choose streaming over batching, and use a lookeahead
+For further experiments we choose streaming over batching, and use a lookahead
 of 32 iterations.
 The final throughput of 8ns per query is very close to the optimal throughput of
 7.4ns per random memory read.
 
-[TODO: Rerun and check that compact for small $n$ is not slower anymore.]
 *** [Appendix?] Multi-threaded throughput
 #+name: throughput
-#+caption: [TODO rerun & update caption names; fix bad-auto-vectorization] [TODO drop perfect scaling] [TODO: Swap bright and dimmed and update text.] In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. On the right, the solid black line shows the maximum throughput based on 7.4ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6GB/s.
+#+caption: In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. On the right, the solid black line shows the maximum throughput based on 7.4ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6GB/s.
 #+attr_html: :class inset
 [[file:plots/query_throughput.svg]]
 
 In [[throughput]] we compare the throughput of the fast and compact parameters for
 multiple threads. When $n=20\cdot 10^6$ is small and the entire datastructure
 fits in L3 cache, the scaling to multiple threads is nearly perfect. As
-expected, minimal perfect hashing (dimmed) tends to be slightly slower than
-perfect hashing, but the difference is small. The fast $\gamma_1$ is faster than
+expected, minimal perfect hashing (bright) tends to be slightly slower than
+perfect hashing (dimmed), but the difference is small. The fast $\gamma_1$ is faster than
 the compact $\gamma_3$, and streaming provides only a small benefit over a for
 loop.
 For large $n=10^9$, all methods converge towards the limit imposed by the full
 RAM throughput of 25.6GB/s. Streaming variants hit this starting at around 4
 threads, and remain faster than the for loop. As before, the compact version is
-slightly faster because of its more efficient use of the caches, and minimal
-perfect hashing is only slightly slower than perfect hashing.
+slightly faster because of its more efficient use of the caches, and is even
+slightly better than the maximum throughput of random reads to RAM.
+Minimal perfect hashing is only slightly slower than perfect hashing.
 
 ** Comparison with competitors
 - check out https://github.com/ByteHamster/MPHF-Experiments for evals

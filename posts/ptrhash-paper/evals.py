@@ -116,7 +116,7 @@ def bucket_fn_plots():
 
 
 def build_stats(f, out, l):
-    alpha = 0.98
+    alpha = 0.99
 
     with open(f) as f:
         all_data = json.load(f)
@@ -241,10 +241,6 @@ def space(f, out):
     ax.set_ylabel("Construction time (ns/key)")
     ax2.set_ylabel("Size (bits/key)")
 
-    # TODO DROP
-    df = df[df["alpha"] != 0.999]
-    df = df[df["alpha"] != 0.997]
-
     alpha_size = {
         0.998: 0.8,
         0.995: 1.2,
@@ -254,7 +250,6 @@ def space(f, out):
 
     groups = df.groupby(["n", "alpha", "bucketfn", "real_alpha"])
     for k, g in groups:
-        print(k)
         n, alpha, bucketfn, real_alpha = k
         ls = "solid"
         lw = alpha_size[alpha]
@@ -287,9 +282,9 @@ def space(f, out):
                 alpha=0.9,
             )
 
-    # Add dots for the simple configuration
+    # Add dots for the fast configuration
     l = 3.0
-    a = 0.995
+    a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "Linear") & (df["lambda"] == l)].c
     ax.plot(l, y, "bo", ms=9)
     y = 8 / l + 32 * (1 / a - 1)
@@ -304,7 +299,7 @@ def space(f, out):
     # Red outline to marker
     ax2.plot(l, y, "o", color="orange", ms=8, mew=2, mec="red")
 
-    ax.set_xlim(2.66, 4.24)
+    ax.set_xlim(2.7, 4.20)
     ax.set_ylim(0, 140)
     ax2.set_ylim(0, 3.5)
     ax2.grid(axis="y", lw=0.5)
@@ -348,6 +343,11 @@ def remap(f):
         data = json.load(f)
     # Convert json to dataframe
     df = pd.DataFrame(data)
+
+    # For for-loop variants, take min over with/without black_box() to prevent SIMD.
+    df["q1_phf"] = df[["q1_phf", "q1_phf_bb"]].min(axis=1)
+    df["q1_mphf"] = df[["q1_mphf", "q1_mphf_bb"]].min(axis=1)
+
     # Print dataframe with two digits precision.
     df = df[
         [
@@ -355,16 +355,16 @@ def remap(f):
             "lambda",
             "bucketfn",
             "pilots",
-            "q1_phf",
-            "q32_phf",
             "remap_type",
             "remap",
+            "q1_phf",
+            "q32_phf",
             "q1_mphf",
             "q32_mphf",
         ]
     ]
 
-    print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".3f"))
+    print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".2f"))
 
     # Two side by side plots
     # fig, axs = plt.subplots(1, 2, figsize=(7, 4), layout="constrained")
@@ -401,6 +401,7 @@ def query_batching(f, out):
         ax.set_xlabel("Batch or lookahead size")
     axs[0].set_ylabel("Query throughput (ns/key)")
 
+    df.loc[df["mode"] == "loop_bb", "mode"] = "loop"
     groups = df.groupby(["n", "alpha", "bucketfn", "mode"])
     for k, g in groups:
         n, alpha, bucketfn, mode = k
@@ -419,17 +420,18 @@ def query_batching(f, out):
         if mode == "stream":
             ls = "dashed"
         if mode == "batch":
+            # Batch2 has more consistent performance.
             ls = "dashdot"
             continue
         if mode == "batch2":
-            # ls = "dashdot"
             ls = "dotted"
         ax.plot(g["batch_size"], g["q_phf"], ls=ls, color=color, lw=lw, alpha=a)
 
         if mode == "loop":
             # Horizontal line at height g['q_phf']
-            assert len(g) == 1
-            ax.axhline(y=g["q_phf"].values[0], color=color, lw=lw, ls=ls)
+            # Min over loop and loop_bb
+            assert len(g) == 2
+            ax.axhline(y=g["q_phf"].values.min(), color=color, lw=lw, ls=ls)
 
     for ax in axs:
         ax.set_xscale("log")
@@ -440,8 +442,9 @@ def query_batching(f, out):
         ax.set_xlim(1, 64)
         ax.grid(axis="y", lw=0.5)
         ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
-    axs[0].set_ylim(0, 20)
-    axs[1].set_ylim(0, 20)
+    axs[0].set_ylim(0, 21)
+    axs[1].set_ylim(0, 21)
+    axs[1].axhline(y=7.4, color="black", lw=0.5)
 
     for ax in axs:
         ax.spines["top"].set_visible(False)
@@ -450,15 +453,23 @@ def query_batching(f, out):
 
     # Build legend
     lcompact = mpatches.Patch(color="red", label="Compact")
-    lsimple = mpatches.Patch(color="blue", label="Simple")
-    lloop = Line2D([0], [0], label="Looping", lw=2, color="black", ls="solid")
-    lbatch = Line2D([0], [0], label="Batching", lw=2, color="black", ls="dotted")
-    lstream = Line2D([0], [0], label="Streaming", lw=2, color="black", ls="dashed")
+    lsimple = mpatches.Patch(color="blue", label="Fast")
+    lloop = Line2D([0], [0], label="Loop", lw=2, color="black", ls="solid")
+    lbatch = Line2D([0], [0], label="Batch", lw=2, color="black", ls="dotted")
+    lstream = Line2D([0], [0], label="Stream", lw=2, color="black", ls="dashed")
     lfill = Line2D([], [], label="", lw=0)
     axs[0].legend(
         handles=[lcompact, lsimple, lfill, lloop, lbatch, lstream],
         loc="upper left",
         ncols=2,
+    )
+
+    lopt1 = Line2D(
+        [0], [0], label="Single-core RAM throughput", lw=0.5, color="black", ls="solid"
+    )
+    axs[1].legend(
+        handles=[lopt1],
+        loc="lower right",
     )
 
     plt.savefig(out, bbox_inches="tight")
@@ -509,12 +520,9 @@ def query_throughput(f, out):
 
     # A plot with lambda on the x-axis, and two y-axes with build time and size.
     # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
-    fig, axs = plt.subplots(1, 1, figsize=(4, 3), layout="constrained")
-    axs = [axs]
+    fig, axs = plt.subplots(1, 2, figsize=(7, 3), layout="constrained")
 
     print("Fastest: ", df["q_phf"].min())
-
-    print(df[(df["alpha"] == 0.995) & (df["threads"] == 1) & (df["n"] == 10**9)])
 
     aa = 0.4
 
@@ -522,21 +530,20 @@ def query_throughput(f, out):
         ax.set_xlabel("#threads")
     axs[0].set_ylabel("Query throughput (ns/key)")
 
+    df.loc[df["mode"] == "loop_bb", "mode"] = "loop"
     groups = df.groupby(["n", "alpha", "bucketfn", "mode", "remap_type"])
     for k, g in groups:
-        print(k)
-        print(g)
         n, alpha, bucketfn, mode, remap_type = k
         ls = "solid"
         lw = 2
-        ax = axs[0]
+        ax = axs[int(n == 10**9)]
 
         if bucketfn == "CubicEps" and remap_type != "CacheLineEF":
             continue
 
-        if n < 10**9:
-            continue
-            ax = axs[0]
+        # if n < 10**9:
+        #     continue
+        #     ax = axs[0]
         if bucketfn == "Linear":
             c1 = "blue"
             c2 = "green"
@@ -547,69 +554,105 @@ def query_throughput(f, out):
             ls = "dashed"
         if mode == "batch":
             ls = "dotted"
-        ax.plot(g["threads"], g["q_phf"], ls=ls, color=c1, lw=1.5, alpha=1.0)
-        ax.plot(g["threads"], g["q_mphf"], ls=ls, color=c1, lw=2, alpha=aa)
+        if mode == "loop_bb":
+            ls = "dashdot"
 
-    # Perfect scaling plot.
+        # Take min over loop and loop_bb
+        g = g.groupby(["threads"]).min().reset_index()
+
+        ax.plot(g["threads"], g["q_phf"], ls=ls, color=c1, lw=2, alpha=aa)
+        ax.plot(g["threads"], g["q_mphf"], ls=ls, color=c1, lw=1.5, alpha=1.0)
+
     xs = [1, 2, 3, 4, 5, 6, 7]
-    ax.plot(
-        xs,
-        [df[(df["n"] == 10**9) & (df["threads"] == 1)]["q_phf"].min() / x for x in xs],
-        color="black",
-        lw=0.5,
-    )
+    for n, ax in zip(sorted(df.n.unique()), axs):
+        g = df[(df["n"] == n) & (df["threads"] == 1)]
+        g = list(g["q_phf"]) + list(g["q_mphf"])
+        # Fill light grey between the two above plots.
+        # ax.fill_between(
+        #     xs,
+        #     [min(g) / x for x in xs],
+        #     [max(g) / x for x in xs],
+        #     color="grey",
+        #     alpha=0.1,
+        #     edgecolor="none",
+        #     lw=0,
+        # )
 
     for ax in axs:
         ax.grid(axis="y", lw=aa)
         ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
-    axs[0].set_ylim(0, 21.5)
-    axs[0].set_xlim(0.8, 6.2)
+        ax.set_ylim(0, 21.5)
+        ax.set_xlim(0.8, 6.2)
 
-    axs[0].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
-
-    for ax in axs:
         ax.spines["top"].set_visible(False)
         ax.spines["left"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
+    axs[1].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
+    axs[1].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
+    axs[1].plot(
+        xs,
+        [7.4 / x for x in xs],
+        color="black",
+        ls="solid",
+        lw=0.5,
+    )
+
     # Build legend
     lcompact = MulticolorPatch(
-        "Compact", [{"color": "red", "alpha": 1.0}, {"color": "red", "alpha": aa}]
+        "Compact", [{"color": "red", "alpha": aa}, {"color": "red", "alpha": 1.0}]
     )
     lsimple = MulticolorPatch(
-        "Simple", [{"color": "blue", "alpha": 1.0}, {"color": "blue", "alpha": aa}]
+        "Fast", [{"color": "blue", "alpha": aa}, {"color": "blue", "alpha": 1.0}]
     )
     lphf = MulticolorPatch(
-        "PHF", [{"color": "red", "alpha": 1.0}, {"color": "blue", "alpha": 1.0}]
+        "PHF", [{"color": "red", "alpha": aa}, {"color": "blue", "alpha": aa}]
     )
     lmphf = MulticolorPatch(
-        "MPHF", [{"color": "red", "alpha": aa}, {"color": "blue", "alpha": aa}]
+        "MPHF", [{"color": "red", "alpha": 1.0}, {"color": "blue", "alpha": 1.0}]
     )
-    lloop = Line2D([0], [0], label="Looping", lw=1.5, color="black", ls="solid")
-    lstream = Line2D([0], [0], label="Streaming", lw=2, color="black", ls="dashed")
-    lopt = Line2D([0], [0], label="RAM throughput", lw=1, color="black", ls="dotted")
-    lscaling = Line2D(
-        [0], [0], label="Perfect scaling", lw=0.5, color="black", ls="solid"
-    )
+    lloop = Line2D([0], [0], label="Loop", lw=1.5, color="black", ls="solid")
+    lstream = Line2D([0], [0], label="Stream", lw=2, color="black", ls="dashed")
+    # lscaling = mpatches.Patch(color="black", label="Perfect scaling", alpha=0.1, lw=0)
     axs[0].legend(
-        handles=[lcompact, lsimple, lphf, lmphf, lloop, lstream, lopt, lscaling],
+        handles=[lcompact, lphf, lloop, lsimple, lmphf, lstream],
         loc="upper right",
         ncols=2,
         handler_map={MulticolorPatch: MulticolorPatchHandler()},
     )
 
+    lopt = Line2D(
+        [0], [0], label="Total RAM throughput", lw=1, color="black", ls="dotted"
+    )
+    lopt1 = Line2D(
+        [0], [0], label="Single-core RAM throughput", lw=0.5, color="black", ls="solid"
+    )
+    axs[1].legend(
+        handles=[lopt1, lopt],
+        loc="upper right",
+    )
+
     plt.savefig(out, bbox_inches="tight")
     plt.show()
-    plt.close()
 
 
+plt.close("all")
+
+# 3.4
 # bucket_fn_plots()
+
+# 4.1.1
 # build_stats("data/bucket_fn_stats_l35.json", "plots/bucket_fn_stats_l35.svg", 3.5)
 # build_stats("data/bucket_fn_stats_l40.json", "plots/bucket_fn_stats_l40.svg", 4.0)
-# space("data/size.json", "plots/size.svg")
-remap("data/remap.json")
-# NOTE: compact looping is slow because of SIMD.
-# query_batching("data/query_batching.json", "plots/query_batching.svg")
-# query_throughput("data/query_throughput.json", "plots/query_throughput.svg")
 
-# TODO: sharding
+# 4.1.2
+# space("data/size.json", "plots/size.svg")
+
+# 4.1.2
+# remap("data/remap.json")
+
+# 4.2.1
+query_batching("data/query_batching.json", "plots/query_batching.svg")
+
+# 4.2.2
+# query_throughput("data/query_throughput.json", "plots/query_throughput.svg")
