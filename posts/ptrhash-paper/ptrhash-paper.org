@@ -697,6 +697,7 @@ In the remainder, we will test the linear $\gamma_1$ for simplicity and lookup
 speed, and the cubic $\gamma_3$ for space efficiency.
 
 *** Tuning parameters for construction
+
 #+name: construction
 #+caption: This plot shows the construction time (blue and red, left axis) and datastructure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /small/ parameter configurations.
 #+attr_html: :class inset
@@ -735,38 +736,26 @@ dots and redo experiments]
 
 *** [Appendix?] Remap
 #+name: remap
-#+caption: [TODO: Update numbers]
-| Parameters                                            | Pilots (bits/key) | q1_phf | q32_phf | remap_type  | remap | q1_mphf | q32_mphf |
-|-------------------------------------------------------+-------------------+--------+---------+-------------+-------+---------+----------|
-| simple: $\alpha=0.99$, $\lambda=3.0$, $\gamma$ linear |              2.67 |  14.01 |    8.57 | Vec < u32 > |  0.33 |   12.56 |     8.80 |
-|                                                       |                   |  13.80 |    8.58 | CacheLineEF |  0.12 |   12.77 |     9.19 |
-|                                                       |                   |  13.91 |    8.65 | EF          |  0.09 |   14.37 |     9.84 |
-| compact: $\alpha=0.98$, $\lambda=4.0$, $\gamma$ cubic |              2.00 |  17.82 |    8.07 | Vec < u32 > |  0.66 |   20.37 |     9.11 |
-|                                                       |                   |  17.83 |    8.00 | CacheLineEF |  0.24 |   20.97 |    10.45 |
-|                                                       |                   |  18.32 |    8.33 | EF          |  0.17 |   23.17 |    14.14 |
+#+caption: [TODO: Update numbers] Comparison of space usage and query throughput when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing, without remap, and for minimal perfect hashing, with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead.
+| Parameters                                              |     Pilots | Query |    PHF | Remap       |      Remap | Query |   MPHF |
+|                                                         | (bits/key) |   For | Stream |             | (bits/key) |   For | Stream |
+|---------------------------------------------------------+------------+-------+--------+-------------+------------+-------+--------|
+| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |       2.67 | 14.01 |   8.57 | Vec<u32>    |       0.33 | 12.56 |   8.80 |
+|                                                         |            |       |        | CacheLineEF |       0.12 | 12.77 |   9.19 |
+|                                                         |            |       |        | EF          |       0.09 | 14.37 |   9.84 |
+| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |       2.00 | 17.82 |   8.07 | Vec<u32>    |       0.66 | 20.37 |   9.11 |
+|                                                         |            |       |        | CacheLineEF |       0.24 | 20.97 |  10.45 |
+|                                                         |            |       |        | EF          |       0.17 | 23.17 |  14.14 |
 
-#+name: remap-new
-#+caption:
-| alpha | lambda | bucketfn | pilots | q1_phf | q32_phf | remap_type  | remap | q1_mphf | q32_mphf |
-|-------+--------+----------+--------+--------+---------+-------------+-------+---------+----------|
-| 0.995 |  3.000 | Linear   |  2.668 | 13.713 |   8.575 | Vec < u32 > | 0.179 |  12.164 |    8.707 |
-| 0.995 |  3.000 | Linear   |  2.668 | 13.779 |   8.588 | EF          | 0.056 |  13.400 |    9.199 |
-| 0.990 |  4.000 | CubicEps |  2.000 | 17.663 |   7.841 | Vec < u32 > | 0.330 |  19.514 |    8.427 |
-| 0.990 |  4.000 | CubicEps |  2.000 | 17.707 |   7.933 | CacheLineEF | 0.120 |  19.857 |   10.520 |
-| 0.990 |  4.000 | CubicEps |  2.000 | 17.711 |   7.941 | EF          | 0.094 |  20.841 |   11.110 |
+In [[remap]], we compare the space usage and query throughput of the different remap
+data structures for both the fast and compact parameters. We observe that
+CacheLineEF is $2.75\times$ smaller than a plain vector, and only $40\%$ larger
+than true Elias-Fano encoding. On the other hand, CacheLineEF is only slightly
+slower than the plain vector, and significantly faster than the Elias-Fano
+lookup, both when doing queries one by one and when prefetching.
+Thus, we choose CacheLineEF when using compact parameters, but prefer the faster
+plain vector for fast parameters.
 
-- Remap:
-  - plain vec of =u32=
-  - cachelineef
-  - ef
-- observations:
-  - CLEF is 2.75x smaller than plain vec
-  - CLEF is only 1.4x larger than EF
-  - CLEF has slightly slower queries, than plain vec, but much faster than EF,
-    both when doing queries one at a time and with explicit streaming and prefetching.
-- Params:
-  - Simple: =Vec<u32>=
-  - Compact: =CacheLineEF=
 *** Sharding
 - Use $2^{20} \approx 10^6$ slots per part, to avoid having parts with more keys
   than slots (even for $\alpha=0.99$):
