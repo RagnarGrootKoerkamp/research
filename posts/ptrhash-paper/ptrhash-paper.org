@@ -588,7 +588,9 @@ Each prefetch requires a /line fill buffer/ to store the result before it is
 copied into the L1 cache. Skylake has $12$ line fill buffers
 [cite:@line-fill-buffer-skylake], and hence can support up to $12$ parallel
 reads from memory.
-This gives a maximal throughput around $80ns/12 = 6.67 ns$ per query when each query only requires a single read from main memory.
+In theory, this gives a maximal throughput around $80ns/12 = 6.67 ns$ per read
+from memory, but in practice experiments show that the limit is $7.4 ns$ per read.
+Thus, our goal is to achieve a query throughput of $7.4 ns$.
 
 We consider two models to implement prefetching: batching and streaming.
 
@@ -779,29 +781,21 @@ writing hashes to disk, and 21s is spent reading hashes from disk, which
 together is faster than the 65s that was previously spent on hashing all keys.
 
 ** Query throughput
-- Latency around 80ns
-- Max single-threaded throughput:
-- Max RAM transfer rate: 25.6GB/s
-- Single bucket size vs 2-way split vs PHOBIC
-  - Construction speed
-  - Sequential lookup
-  - Prefetching
 
-
-*** A note on benchmarking query throughput
 To our knowledge, all recent papers on (minimal) perfect hashing measure query
 speed by first creating a list of keys, and then querying all keys in the list,
-as shown in [[query-throughput-1]]. One might think this measures the average
+as in =for key in keys { ptr_hash.query(key); }=. One might think this measures the average
 latency of a query, but that is not the case, as the CPU will execute
 instructions from adjacent iterations at the same time.
-Indeed, as we will see (TODO table ref), this loop can be as fast as $12
-ns/key$ for $n=10^9$, which is over $6$ times faster than the RAM latency of $\approx 80ns$,
+Indeed, as can be seen in [[remap]], this loop can be as fast as $12
+ns/key$ for $n=10^9$, which is over $6$ times faster than the RAM latency of
+$\approx 80ns$ (for an input of size 300MB),
 and thus, at least $6$ iterations are being processed in parallel.
 
 Hence, we argue that existing benchmarks measure (and optimize for)
 throughput and that they assume that the list of keys to query is known in advance.
 We make this assumption explicit by changing the API to benchmark all queries at
-once, as shown in [[query-throughput-2]]. This way, we can explicitly process
+once, as in =ptr_hash.query_all(keys)=. This way, we can explicitly process
 multiple queries in parallel as described in [[*Parallel queries]].
 
 We also argue that properly optimizing for throughput is relevant for
@@ -809,42 +803,36 @@ applications. SSHash, for example, queries all minimizers of a DNA sequence,
 which can be done by first computing and storing those minimizers, followed by
 querying them all at once.
 
-#+name: query-throughput-1
-#+caption: The typical code used to benchmark (minimal) perfect hash functions takes a list of keys, and measures the time it takes to =query= them one by one. This implicitly processes multiple queries in parallel. =black_box= is a Rust standard library function that ensures the query is not optimized away.
-#+begin_src rust
-fn benchmark(&self, keys: &Vec<Key>) -> Duration {
-    let start = Instant::now()
-    for key in keys {
-        black_box(self.query(key));
-    }
-    start.elapsed()
-}
-#+end_src
+We now explore the effect of the batch size and number of parallel threads on
+query throughput.
 
-#+name: query-throughput-2
-#+caption: To allow explicit parallel processing of queries using prefetching, we change the benchmark to a single =query_all= function.
-#+begin_src rust
-fn benchmark(&self, keys: &Vec<Key>) -> Duration {
-    let start = Instant::now()
-    black_box(self.query_all(keys));
-    start.elapsed()
-}
-#+end_src
-
-*** Batch size
+*** [Appendix?] Batching and streaming
 #+name: batching
-#+caption: Batching
+#+caption: [TODO: prevent auto-vectorization] [Run with updated params; update caption names] Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
 #+attr_html: :class inset
 [[file:plots/query_batching.svg]]
-- Compact is slow on small inputs because the loop is vectorized with SIMD,
-  which ends up being slower.
-- Query experiments always do 1G queries.
-- n=20M n=1G
-- linear/0.99/3.0 vs cubic/0.98/4.0
-- no remap
-- loop vs streaming vs batching
-- 24: 1..128 batch size: 1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96,112,128
-*** Throughput
+
+In [[batching]], we compare the query throughput of a simple for loop with the
+batching and streaming variants with various batch/lookahead sizes. We see that
+both for small $n=20\cdot 10^6$ and large $n=10^9$, the simple parameters yield
+higher throughput than the compact parameters when using a for loop. This is
+because of the overhead of computing $\gamma_3(x)$. For small $n$, batching and
+streaming do not provide much benefit, indicating that memory latency is not a
+bottleneck. However, for large $n$, both batching and streaming improve over the
+plain for loop. As expected, streaming is faster than batching here. For
+streaming, throughput saturates when prefetching around 16 iterations ahead. At
+this point, memory throughput is the bottleneck, and the difference between the
+compact and simple parameters disappears. In fact, compact parameters with
+$\gamma_3$ are slightly /faster/. This is because $\gamma_3$ has a more skew
+distribution of bucket sizes with more large buckets. When the pilots for these
+large buckets are cached, they are more likely to be hit by subsequent queries,
+and hence avoid some accesses to main memory.
+
+The final throughput of 8ns per query is very close to the optimal throughput of
+7.4ns per memory read.
+
+[TODO: Rerun and check that compact for small $n$ is not slower anymore.]
+*** [Appendix?] Multi-threaded throughput
 #+name: throughput
 #+caption: throughput
 #+attr_html: :class inset
@@ -854,6 +842,7 @@ fn benchmark(&self, keys: &Vec<Key>) -> Duration {
 - 2: with/out remap (Vec & CachelineEF)
 - 6: with 1..6 threads
   - random access memory throughput
+- Max RAM transfer rate: 25.6GB/s
 
 ** Comparison with competitors
 - check out https://github.com/ByteHamster/MPHF-Experiments for evals
@@ -961,6 +950,29 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 
 * Appendix
 ** TODO Choosing the part size
+
+* Graveyard
+#+name: query-throughput-1
+#+caption: The typical code used to benchmark (minimal) perfect hash functions takes a list of keys, and measures the time it takes to =query= them one by one. This implicitly processes multiple queries in parallel. =black_box= is a Rust standard library function that ensures the query is not optimized away.
+#+begin_src rust
+fn benchmark(&self, keys: &Vec<Key>) -> Duration {
+    let start = Instant::now()
+    for key in keys {
+        black_box(self.query(key));
+    }
+    start.elapsed()
+}
+#+end_src
+
+#+name: query-throughput-2
+#+caption: To allow explicit parallel processing of queries using prefetching, we change the benchmark to a single =query_all= function.
+#+begin_src rust
+fn benchmark(&self, keys: &Vec<Key>) -> Duration {
+    let start = Instant::now()
+    black_box(self.query_all(keys));
+    start.elapsed()
+}
+#+end_src
 
 
 #+print_bibliography:
