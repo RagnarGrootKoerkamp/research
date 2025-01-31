@@ -588,7 +588,7 @@ Each prefetch requires a /line fill buffer/ to store the result before it is
 copied into the L1 cache. Skylake has $12$ line fill buffers
 [cite:@line-fill-buffer-skylake], and hence can support up to $12$ parallel
 reads from memory.
-In theory, this gives a maximal throughput around $80ns/12 = 6.67 ns$ per read
+In theory, this gives a maximal random memory throughput around $80ns/12 = 6.67 ns$ per read
 from memory, but in practice experiments show that the limit is $7.4 ns$ per read.
 Thus, our goal is to achieve a query throughput of $7.4 ns$.
 
@@ -808,7 +808,7 @@ query throughput.
 
 *** [Appendix?] Batching and streaming
 #+name: batching
-#+caption: [TODO: prevent auto-vectorization] [Run with updated params; update caption names] Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
+#+caption: [TODO: prevent auto-vectorization] [Run with updated params; update caption names] [TODO: Add 7.4ns horizontal line to right plot.] Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
 #+attr_html: :class inset
 [[file:plots/query_batching.svg]]
 
@@ -828,21 +828,30 @@ distribution of bucket sizes with more large buckets. When the pilots for these
 large buckets are cached, they are more likely to be hit by subsequent queries,
 and hence avoid some accesses to main memory.
 
+For further experiments we choose streaming over batching, and use a lookeahead
+of 32 iterations.
 The final throughput of 8ns per query is very close to the optimal throughput of
-7.4ns per memory read.
+7.4ns per random memory read.
 
 [TODO: Rerun and check that compact for small $n$ is not slower anymore.]
 *** [Appendix?] Multi-threaded throughput
 #+name: throughput
-#+caption: throughput
+#+caption: [TODO rerun & update caption names; fix bad-auto-vectorization] [TODO drop perfect scaling] [TODO: Swap bright and dimmed and update text.] In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. On the right, the solid black line shows the maximum throughput based on 7.4ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6GB/s.
 #+attr_html: :class inset
 [[file:plots/query_throughput.svg]]
-- 2: Linear/0.99/3.0 vs Cubic/0.98/4.0
-- 2: loop vs streaming with known batch size
-- 2: with/out remap (Vec & CachelineEF)
-- 6: with 1..6 threads
-  - random access memory throughput
-- Max RAM transfer rate: 25.6GB/s
+
+In [[throughput]] we compare the throughput of the fast and compact parameters for
+multiple threads. When $n=20\cdot 10^6$ is small and the entire datastructure
+fits in L3 cache, the scaling to multiple threads is nearly perfect. As
+expected, minimal perfect hashing (dimmed) tends to be slightly slower than
+perfect hashing, but the difference is small. The fast $\gamma_1$ is faster than
+the compact $\gamma_3$, and streaming provides only a small benefit over a for
+loop.
+For large $n=10^9$, all methods converge towards the limit imposed by the full
+RAM throughput of 25.6GB/s. Streaming variants hit this starting at around 4
+threads, and remain faster than the for loop. As before, the compact version is
+slightly faster because of its more efficient use of the caches, and minimal
+perfect hashing is only slightly slower than perfect hashing.
 
 ** Comparison with competitors
 - check out https://github.com/ByteHamster/MPHF-Experiments for evals
