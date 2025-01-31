@@ -14,6 +14,7 @@ $$
 \newcommand{\hp}{\mathsf{h}_{\mathsf{p}}}
 \newcommand{\C}{\mathsf{C}}
 \newcommand{\free}{F}
+\newcommand{\mphf}{\mathsf{H_{mphf}}}
 $$
 
 This is the work-in-progress paper on PtrHash. The original blog post on its
@@ -51,22 +52,46 @@ state-of-the-art methods.
 *Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
 
 * Introduction
-- *Problem statement*
-- Perfect hashing
-- Minimal perfect hashing
-- Application in bioinformatics (SSHash)
-- Focus on query speed/throughput;
-  - Only a single RAM access per query, ideally
+*Problem statement.*
+Given a set of $n$ keys $\{k_0, \dots, k_{n-1}\}$, construct a /minimal perfect hash function/
+data structure $\mphf$ that injectively maps the keys to $[n] =
+\{0, \dots, n-1\}$.
+
+Such a hash function is called /perfect/ because it is /collision free/ when no
+two keys map to the same element. It is called /minimal/ because the co-domain has
+size $n$, and thus the function is surjective and leaves no gaps in its image.
+Non-minimal perfect hash functions are also of interest, and usually have
+codomain $[n'] = \{0, \dots, n'-1\}$ for some $n'$ slightly larger than $n$.
+
+*Metrics.*
+There are several aspects to this problem. First, for random input keys, there
+is a space lower bound on the size of $\mphf$ of $\log_2(e)=1.44$ bits per key [TODO cite]. Many recent
+works have focused on constructing minimal perfect hash functions that use
+space close to this lower bound, going as low as 1.5 bits/key [TODO cite]. These
+methods tend to be relatively complex and hence slow to query.
+Instead, here we focus on construction speed and query speed.
+This continues the line of work started by FCH [cite:@fch], PTHash
+[cite:@pthash;@pthash-2], and PHOBIC [cite:@phobic].
+
+*Goal.*
+In this paper, our aim is to construct an mphf that is fast to build and only needs a single access
+to main memory for each query, while using not more than 3 bits per key.
+
+*Motivation.*
+- Application in bioinformatics SSHash, throughput first
+
+*Background.*
 - Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
-** Motivation
-SSHash, throughput first
-** Contributions
+
+*Contributions.*
 We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
 query throughput and construction speed, at the cost of some more memory usage.
 Its main novelties are:
 1. the use of fixed-width $8$ bit pilots, leading to very simple lookups;
 2. cuckoo-hashing-like based construction
 3. construction in parts, with a single /remap/ table, leading to fast construction;
+
+*Results.*
 * Background
 - GB vs GiB
 ** Single large seed.
