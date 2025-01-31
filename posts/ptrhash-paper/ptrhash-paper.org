@@ -437,8 +437,10 @@ The range could be increased to $48$ bit numbers by storing $5$ bytes of the
 offset, but this has not been necessary so far.
 Lastly, each CacheLineEF can only span a range of around $(128-44)\cdot 256 =
 21\ 504$, or an average stride of $500$.
-This means that for PtrHash, we must use $\alpha\leq 0.998$, so that the
-average distance between empty slots is at most $500$.
+This means that for PtrHash, we only use CacheLineEF when $\alpha\leq 0.99$, so that the
+average distance between empty slots is $100$ and the average stride of $500$ is
+not exceeded in practice. When $\alpha > 0.99$, a simple plain array can be used
+without much overhead.
 
 [DROP?] *Comparison.*
 Compared to Elias-Fano coding, CacheLineEF stores the low order bits as exactly
@@ -591,7 +593,7 @@ This gives a maximal throughput around $80ns/12 = 6.67 ns$ per query when each q
 We consider two models to implement prefetching: batching and streaming.
 
 #+name: streaming
-#+caption: [DROP?] Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallellism than batching (left).
+#+caption: [DROP?] Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallelism than batching (left).
 #+attr_html: :class inset
 [[file:./streaming.drawio.svg]]
 
@@ -649,8 +651,8 @@ can also be stored to disk and read on-demand while querying. This is supported 
 
 
 * Results
-In this section we investigate PtrHash construction and query throughput for
-different parameters, and compare PtrHash to competitors.
+We now evaluate PtrHash construction and query throughput for
+different parameters, and compare PtrHash to other minimal perfect hash functions.
 All experiments are run on an Intel Core i7-10750H CPU with 6 cores and
 hyper-threading disabled.
 The frequency is pinned to 2.6GHz.
@@ -658,27 +660,13 @@ Cache sizes are 32KiB L1 and 256KiB L2 per core, and 12MiB shared L3 cache. Main
 memory is 64GiB DDR4 at 3200MHz, split over two 32GiB banks.
 
 *Input data.*
-For construction, all  experiments use  $10^9$ keys, for which the pilots take
+For construction, all experiments use $10^9$ keys, for which the pilots take
 around 300MB and are much larger than L3 cache.
 For the query throughput experiments, we also test on
 20 million keys, for which the pilots take around
 6MB and easily fit in L3 cache.
 To avoid the time needed for hashing keys, and since our motivating application
 is indexing $k$-mers that fit in $64$ bits, we always use random $64$ bit integer keys, and hash them using FxHash.
-
-*Parameter overview.*
-The number of slots per part $S$ is fixed to $2^{20}$. Slightly smaller parts of
-$S=2^{18}$ slots results in up to $20\%$ faster construction times because of
-better cache locality. However, this turns out to be less reliable when the number of keys
-and parts is large, because the variance in number of keys per part is large
-enough to have parts with load factor too close to $1$ for construction to
-succeed, or even $>1$.
-
-The load factor $\alpha$ ranges from $0.98$, which is sufficiently small to
-allow fast construction, to $0.995$, which is about as large as possible to
-still allow buckets of size $1$ to find a pilot within $256 tries.
-
-Overall, we propose two sets of parameters, /simple/ and /compact/.
 
 ** Construction
 :PROPERTIES:
@@ -687,57 +675,67 @@ Overall, we propose two sets of parameters, /simple/ and /compact/.
 *** Bucket functions
 
 #+name: bucket-fn-plot
-#+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. On the left (first five plots), $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For all methods, placing buckets of size $1$ is fast due to the load factor $\alpha<1$, and the bottleneck is placing the last buckets of size $2$ and $3$. Cubic has the least amount of evictions, and hence is fastest to construct. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
+#+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. In the first five plots $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
 #+attr_html: :class full-width
 | [[file:plots/bucket_fn_stats_l35.svg]] | [[file:plots/bucket_fn_stats_l40.svg]] |
 
-- Linear is simple
-- Cubic is best for construction
-- In the remainder, we use linear for speed and simplicity (especially for small
-  datastructures), and cubic for space efficiency.
 
-*** Construction and size
+In [[bucket-fn-plot]], we compare the performance of different bucket assignment
+functions $\gamma$ in terms of the bucket size distribution and the number of
+evictions for each additionally placed bucket.
+We see that the linear $\gamma_1(x) = x$ has a lot of evictions for the last
+buckets of size $3$ and $2$, but like all methods it is fast for the last
+buckets of size $1$ due to the load factor $\alpha < 1$. The optimal
+distribution of PHOBIC performs only slightly better than the skewed one of FCH and
+PTHash, and can be seen to create more large buckets since the load factor
+increases fast for the first buckets.
+The cubic $\gamma_3$ is clearly much better than all other functions, and is
+also tested with larger buckets of average size $\lambda = 4$, where all other
+functions fail.
+
+In the remainder, we will test the linear $\gamma_1$ for simplicity and lookup
+speed, and the cubic $\gamma_3$ for space efficiency.
+
+*** Tuning parameters for construction
 #+name: construction
-#+caption: Construction size and time TODO: space with =Vec<u32>= alongside =CachelineEf=
+#+caption: This plot shows the construction time (blue and red, left axis) and datastructure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /small/ parameter configurations.
 #+attr_html: :class inset
 [[file:plots/size.svg]]
-- $n=10^9$
-- $\alpha \in \{0.98, 0.99, 0.995\}$
-  - Larger alpha such as $0.995$ are not reliable:
-    - too sparse for cacheline ef
-    - overly large parts for large n
-- bucket functions linear and cubic
-- lambda variable $\{3.0, ..., 4.5\}$
-- remap using CacheLineEF
-- time using 6 threads.
-- observations:
-  - construction time grows exponentially, until it fails
-  - fails usually because eviction chains become too long.
-  - cubic can handle much large $\lambda$, and makes smaller overall size
-  - $\alpha=0.98$ is faster, but around $0.1bit/key$ larger
-  - $\alpha=0.99$ fails before $\alpha=0.98$, partially because for large $n$,
-    there will be variance in slots per part, and some parts will have load
-    factor too close to $1$, or even larger than $1$.
-- $\alpha=0.999$ would
-*Slots per part.*
-- remark that $2^{18}$ is up to $20\%$ faster to construct, but has too large variance for
-  $n=10^{12}$ keys.
-*Construction time breakdown.*
-- What are these $20ns$ spent on?
-  - 1ns hashing
-  - 5ns radix sorting
-  - 12ns finding pilots
-  - 1ns remapping
-*Recommended parameters.*
-- two proposed configurations:
-  - Simple: Linear, $\lambda = 3.0$, $\alpha=0.99$, 2.79 bits/key
-    - when $n$ is small and memory doesn't matter too much
-  - Compact: Cubic, $\lambda = 4.0$, $\alpha=0.98$, 2.24 bits/key
-    (for large $\lambda$ we avoid $\alpha=0.99$ since it is less reliable)
 
-*** Remap
+In [[construction]] we compare the multi-threaded construction time and space usage of PtrHash on
+$n=10^9$ keys for
+various parameter $\gamma\in \{\gamma_1, \gamma_3\}$, $2.7\leq \lambda\leq 4.2$,
+$\alpha\in \{0.98, 0.99, 0.995, 0.998\}$, and plain remapping or CacheLineEF.
+We see that for fixed $\gamma$ and $\alpha$, the construction time appears to
+increase exponentially as $\lambda$ increases, until it times out due to a
+never-ending chain of evictions.
+Load factors $\alpha$ closer to $1$ (thinner lines) achieve smaller overall data
+structure size, but take longer to construct and time out at smaller $\lambda$.
+The cubic $\gamma_3$ is faster to construct than the identity $\gamma_1$ for
+small $\lambda \leq 3.5$. Unlike $\gamma_1$, it also scales to much larger
+$\lambda$ up to $4$, and thereby achieves significantly smaller overall size.
+
+We note that for small $\lambda$, construction time does converge to around $19ns/key$.
+A rough time breakdown is that for each key, $1ns$ is spent on hashing, $5ns$
+on sorting all the keys, $12ns$ to find pilots, and lastly $1ns$ on remapping
+to empty slots.
+
+*Recommended parameters.*
+Based on these results, we choose two sets of parameters for further
+evaluation, as indicated with blue and red dots in [[construction]]: [TODO: Update
+dots and redo experiments]
+- *Fast*: using the linear $\gamma_1$, $\lambda=3.0$, $\alpha=0.99$, and a plain
+  vector for remapping.
+  Construction takes only just over $20ns/key$, close to the apparent lower
+  bound, and space usage is $3bits/key$. This can be used when $n$ is small, or
+  more generally when memory usage is not a bottleneck.
+- *Compact*: using the cubic $\gamma_3$, $\lambda=4.0$, $\alpha=0.99$, and
+  CacheLineEF remapping. Construction now takes around $50ns/key$, but the data
+  structure only uses $2.1bits/key$.
+
+*** [Appendix?] Remap
 #+name: remap
-#+caption:
+#+caption: [TODO: Update numbers]
 | Parameters                                            | Pilots (bits/key) | q1_phf | q32_phf | remap_type  | remap | q1_mphf | q32_mphf |
 |-------------------------------------------------------+-------------------+--------+---------+-------------+-------+---------+----------|
 | simple: $\alpha=0.99$, $\lambda=3.0$, $\gamma$ linear |              2.67 |  14.01 |    8.57 | Vec < u32 > |  0.33 |   12.56 |     8.80 |
@@ -977,6 +975,9 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
     and annoying.
 - rattle kicking?
 - 4bit pilots with buckets of half the size -> doesn't work.
+
+* Appendix
+** TODO Choosing the part size
 
 
 #+print_bibliography:
