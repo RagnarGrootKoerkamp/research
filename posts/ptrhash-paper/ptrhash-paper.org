@@ -661,7 +661,8 @@ memory is 64GiB DDR4 at 3200MHz, split over two 32GiB banks.
 
 *Input data.*
 For construction, all experiments use $10^9$ keys, for which the pilots take
-around 300MB and are much larger than L3 cache.
+around 300MB and are much larger than L3 cache. Unless otherwise mentioned,
+construction is in parallel using 6 cores.
 For the query throughput experiments, we also test on
 20 million keys, for which the pilots take around
 6MB and easily fit in L3 cache.
@@ -757,33 +758,26 @@ Thus, we choose CacheLineEF when using compact parameters, but prefer the faster
 plain vector for fast parameters.
 
 *** Sharding
-- Use $2^{20} \approx 10^6$ slots per part, to avoid having parts with more keys
-  than slots (even for $\alpha=0.99$):
-  - Say there are $n=\alpha\cdot 10^{12}$ keys and $S=10^6$ slots per part, and
-    $P=n/S$ parts.
-  - keys per part distribution: $Binom(n, p=1/P)\sim N(np, np(1-p))$, so stddev
-    $\sqrt(np(1-p))\approx \sqrt(n/P) =1000$. With $\alpha=0.99$ and $990000$
-    keys/part expected with $10000$ buffer, that's $10\sigma$ space, which is
-    plenty for a reliable construction.
-- 5*10^10:
-  - 24 shards
-  - In-memory: 3314s
-  - Hybrid: 3996s
-  - pilots: ~82s/shard
-  - sorting buckets: ~15s/shard
-  - hybrid: ~45s/shard to hash/write/read keys
-    - 197s to hash + write *1/8
-    - 21s to read
-  - memory: ~65s/shard to re-hash all keys
-  - Around 50GB of RAM needed.
-    - 12.8GB pilots
-    - 6.3GB taken bitvec
-  - size:
-    - pilots: 2.05 bits/key
-    - remap: 0.12 bits/key
-    - total: 2.17 bits/key, 13.6GB
-  - 10^11 and larger would be possible with support for constructing the
-    datastructure itself on disk instead of in memory.
+We tested the in-memory and hybrid sharding by constructing PtrHash on $5\cdot
+10^{10}$ random integer keys on a laptop with only 64GB of memory, using 6 cores
+in parallel.
+All 64-bit hashes would take 400GB, so we use 24 shards of
+around $2^{31}$ keys, that each take 16GB.  We use the compact parameters, but
+with $\lambda=3.9$ instead of $\lambda=4.0$ for slightly faster construction.
+The final data structure takes 2.17 bits/key, or 13.6GB in total, and the
+peak memory usage is around 50GB.
+
+The in-memory strategy iterates through and hashes the integer keys 24 times, and takes
+3996 seconds in total or 166s per shard. Of this, 65s (39%) is spent on hashing
+the keys, 15s (9%) is spent sorting hashes into buckets, and 82s (49%) is spent
+searching for pilots.
+
+The hybrid strategy is allowed to use up to 128GB of disk space, and thus writes
+hashes to disk in 3 batches of 8 shards at a time. This brings the total time
+down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
+writing hashes to disk, and 21s is spent reading hashes from disk, which
+together is faster than the 65s that was previously spent on hashing all keys.
+
 ** Query throughput
 - Latency around 80ns
 - Max single-threaded throughput:
