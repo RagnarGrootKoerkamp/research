@@ -704,6 +704,10 @@ is indexing $k$-mers that fit in $64$ bits, we always use random $64$ bit intege
 :END:
 *** Bucket functions
 
+[TODO: Change 4.0 to 3.9 for more reliability.]
+
+[TODO: drop some of the right ticks.]
+
 #+name: bucket-fn-plot
 #+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. In the first five plots $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
 #+attr_html: :class full-width
@@ -803,7 +807,8 @@ We tested the in-memory and hybrid sharding by constructing PtrHash on $5\cdot
 in parallel.
 All 64-bit hashes would take 400GB, so we use 24 shards of
 around $2^{31}$ keys, that each take 16GB.  We use the compact parameters, but
-with $\lambda=3.9$ instead of $\lambda=4.0$ for slightly faster construction.
+with $\lambda=3.9$, as $\lambda=4.0$ turns out to be slightly too close to the limit for
+reliable construction when the number of parts is large.
 The final data structure takes 2.17 bits/key, or 13.6GB in total, and the
 peak memory usage is around 50GB.
 
@@ -997,6 +1002,40 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 
 * Appendix
 ** TODO Choosing the part size
+
+** Input types and hash functions
+
+#+name: hashes
+#+caption: MPHF query throughput of PtrHash with fast parameters for $n=10^8$ keys. (Not $10^9$ because this takes too much memory.)  Hashing plain ints with FxHash is fastest, followed by hashing Boxed ints. Xxhash is much slower, already when hashing ints. In fact, Xxhash is faster at hashing strings than integers! The string length does not have a very big impact, but variable-length strings are consistently slightly slower.
+| input     | loop |      |       | stream |      |       |
+|           |   fx | xx64 | xx128 |     fx | xx64 | xx128 |
+| u64       | 11.1 | 24.4 |  29.9 |    7.2 |  9.1 |  10.5 |
+| Box<u64>  | 12.7 | 30.1 |  31.2 |    8.7 | 11.1 |  12.4 |
+| &[u8; 10] | 19.4 | 27.7 |  32.9 |   10.1 | 12.5 |  14.2 |
+| &[u8; 50] | 34.1 | 28.6 |  32.8 |   16.5 | 12.7 |  14.1 |
+| &[u8]     | 39.2 | 37.0 |  50.9 |   27.2 | 17.8 |  23.1 |
+| Vec<u8>   | 40.2 | 40.6 |  52.7 |   28.3 | 20.2 |  25.3 |
+
+Setup:
+- TODO cite fx and xx.
+- xx64 calls =xxhash_rust::xxh3::xxh3_64_with_seed=
+- xx128 calls =xxhash_rust::xxh3::xxh3_128_with_seed=
+- String slices are all packed into a single large vector, so they are
+  effectively streaming and at predictable locations in memory.
+- Box<u64> and Vec<u8> are allocated in query order, so are likely somewhat
+  ordered in memory as well.
+
+Results:
+- xx64 always faster than xx128
+- Fx faster than xx64 for ints and short fixed-length strings.
+- xx64 wins for long and arbitrary-length strings, especially when streaming.
+- Packed string input is faster than separately allocated string input.
+- Looking at streaming xx64:
+  - 7ns lookup (fx)
+  - +2ns int hashing overhead (xx)
+  - +3.5ns for hashing fixed-length strings. Not much dependent on length 10 or 50.
+  - +5ns for variable-length strings, for the branch-miss.
+  - +3ns for indirection of arbitrary allocations.
 
 * Graveyard
 #+name: query-throughput-1

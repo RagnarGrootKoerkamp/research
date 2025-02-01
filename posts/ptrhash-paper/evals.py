@@ -366,26 +366,6 @@ def remap(f):
 
     print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".2f"))
 
-    # Two side by side plots
-    # fig, axs = plt.subplots(1, 2, figsize=(7, 4), layout="constrained")
-    # groups = df.groupby(["bucketfn"])
-    # for ax, (k, g) in zip(axs, groups):
-    #     # Bar plot, x = remap_typ
-    #     # y = total, q_mphf
-
-    #     ax.plot(g["remap_type"], g["q_phf"], label="Q-PHF", color="red")
-    #     ax.plot(g["remap_type"], g["q_mphf"], label="Q-MPHF", color="blue")
-    #     ax.set_ylim(0, 25)
-
-    #     ax2 = ax.twinx()
-    #     ax2.plot(g["remap_type"], g["total"], label="Total", color="black")
-    #     ax2.plot(g["remap_type"], g["pilots"], label="Pilots", color="black")
-
-    #     ax2.set_ylim(0, 3.5)
-
-    # plt.show()
-    # plt.close()
-
 
 def query_batching(f, out):
     with open(f) as f:
@@ -636,6 +616,29 @@ def query_throughput(f, out):
     plt.show()
 
 
+def string_queries(f):
+    with open(f) as f:
+        data = json.load(f)
+    # Convert json to dataframe
+    df = pd.DataFrame(data)
+
+    df = df[df.bucketfn == "Linear"]
+
+    df = df.pivot_table(
+        "q_mphf", ["hash", "input_type", "bucketfn"], "mode", sort=False
+    )
+    # df["loop"] = df[["loop_bb"]].min(axis=1)
+    df["loop"] = df[["loop", "loop_bb"]].min(axis=1)
+    df = df.reset_index()
+    df = df.pivot_table(["loop", "stream"], "input_type", "hash", sort=False)
+    # df = df.sort_index(axis=1, level=1)
+
+    print(df)
+    print()
+    df = df.reset_index()
+    print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".1f"))
+
+
 plt.close("all")
 
 # 3.4
@@ -652,7 +655,10 @@ plt.close("all")
 # remap("data/remap.json")
 
 # 4.2.1
-query_batching("data/query_batching.json", "plots/query_batching.svg")
+# query_batching("data/query_batching.json", "plots/query_batching.svg")
 
 # 4.2.2
 # query_throughput("data/query_throughput.json", "plots/query_throughput.svg")
+
+# appendix
+string_queries("data/string_queries.json")
