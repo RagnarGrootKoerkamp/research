@@ -27,28 +27,28 @@ development is [[../ptrhash][here]].
 :END:
 *Motivation.*
 Given a set $K$ of $n$ keys, a minimal perfect hash function (MPHF) is a
-collision-free bijective map $f$ from $K$ to $\{0, \dots,
-n-1\}$. These functions have uses in databases, search engines, and are used in
-bioinformatics indexing tools such as Pufferfish (using BBHash), and
-Piscem (both using PTHash).
-Our main motivating usage is that as in SSHash, where PTHash only takes $5\%$ of the
-total space.
-Thus, this work presents a (minimal) perfect hash function that first prioritizes query
-throughput, while also allowing efficient construction for $10^9$ or more elements
-using under $3$ bits of memory per key.
+collision-free bijective map $\mphf$ from $K$ to $\{0, \dots, n-1\}$. These
+functions have uses in databases, search engines, and are used in bioinformatics
+indexing tools such as Pufferfish (using BBHash), and Piscem (PTHash).  Our main
+motivating usage is that as in SSHash, where PTHash only takes $5\%$ of the
+total space.  Thus, this work presents a (minimal) perfect hash function that
+first prioritizes query throughput, while also allowing efficient construction
+for $10^9$ or more elements using up to 3.0 bits of memory per key.
 
 *Contributions.*
-PtrHash builds on
-PTHash by 1) partitioning the table for faster construction, and 2) using cuckoo
-hashing to find $8$ bit pilots, which 3) makes further compression redundant. We further
-speed up queries by 4) simplifying hash functions and modulo operations, and 5)
-streaming multiple queries in parallel and prefetching memory reads.
+PtrHash builds on PTHash by 1) using fixed-width (uncompressed) 8-bit pilots, 2) a construction
+algorithm similar to cuckoo-hashing to find suitable pilot values, 3) a /single/
+remap table covering all parts, encoded using per-cacheline EF, and 4) the use
+of prefetching to answer a stream of queries more efficiently than one-by-one processing.
 
 *Results.*
-(TODO: update numbers. TODO: add something about speed of memory) We implemented PtrHash in Rust and
-show that at $3$ bits/key memory usage it is $3\times$ faster to construct
-than PTHash while achieving $8$ns/key query throughput, $5\times$ faster than
-state-of-the-art methods.
+We test two parameter configurations of PtrHash, /fast/ and /compact/, that
+achieve 3.0 and 2.12 key. On 300 million string keys, they are as fast or faster
+to build than other MPHFs at a similar size, and at least $2.8\times$ faster to query. When
+streaming multiple queries, this improves to $5.4\times$ speedup over the
+fastest alternative. When using $10^9$ integer keys instead, query times are as
+low as 12ns/key when iterating in a for loop, or even down to 8ns/key when using
+the streaming approach, just short of the 7.4ns throughput of random memory accesses.
 
 *Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
 
@@ -104,9 +104,9 @@ Its main novelties are:
 
 *Results.*
 We propose two parameter configurations, /fast/ and /compact/.
-When using 300 million string keys, the fast configuration takes 3.0 bits/kmer and is nearly as fast to construct as the fastest
+When using 300 million string keys, the fast configuration takes 3.0 bits/key and is nearly as fast to construct as the fastest
 other methods. It provides $2.8\times$ faster queries when looping naively, or $5.4\times$ faster when streaming.
-Similarly, the compact configuration takes 2.12 bits/kmer, and is over $3\times$
+Similarly, the compact configuration takes 2.12 bits/key, and is over $3\times$
 faster to query (or $6\times$ when streaming) than other methods requiring
 similar space and construction time.
 
@@ -135,7 +135,7 @@ When $n$ is small, $e^n$ can be sufficiently small to allow a bruteforce search
 over $n$. RecSplit exploits this by first partitioning the input
 keys first into buckets, and then recursively splitting buckets until they have
 size at most $\ell \leq 16$. These /leafs/ can then be solved using brute-force, and the
-overall space usage can be as low as 1.56 bits/kmer. SIMDRecSplit significantly
+overall space usage can be as low as 1.56 bits/key. SIMDRecSplit significantly
 improves the construction time by using a meet-in-the-middle approach for the
 leafs, and generally speeds up the implementation.
 
@@ -162,7 +162,7 @@ $\gamma \geq 1$. Any slots that have exactly one element mapping to them are
 marked with a 1, and the remaining $n_1$ elements are processed recursively,
 mapping them to $[\gamma n_1]$. Lookups are then done using rank queries on this
 bitvector. FMPH [cite:@fmph] has a much faster implementation of the construction that goes
-down to 3.0 bits/kmer. FiPS [cite:@phf-thesis] is a variant that trades some
+down to 3.0 bits/key. FiPS [cite:@phf-thesis] is a variant that trades some
 space in the rank data structure for faster queries. FMPHGO [cite:@fmph] is
 variant that first splits keys into buckets, then uses a seeded hash function
 that has a low number of collisions, and only then recurses into colliding keys.
@@ -637,10 +637,11 @@ buckets, so that those $30\%$ are /large/ buckets while the remaining $70\%$
 is /small/ ([[bucket-fn]]). This is also the scheme used by PTHash.
 
 *The perfect bucket function.*
-PHOBIC [cite:@phobic] provides a more thorough analysis and uses the optimal[fn::Under the
-assumption that bucket sizes are continuous, and that the target load factor is
-$\alpha=1$.] function
-$\gamma_p(x) = x + (1-x)\ln (1-x)$. This function has derivative $0$ at $x=0$, so
+PHOBIC [cite:@phobic] provides a more thorough analysis and uses the optimal function
+$\gamma_p(x) = x + (1-x)\ln (1-x)$ when the target load factor is $\alpha=1$.
+A small modification is optimal for $\alpha<1$ [cite:@phobic-full Appendix B],
+but for simplicity we only consider the original $\gamma_p$.
+This function has derivative $0$ at $x=0$, so
 that many $x$ values map close to $0$.
 In practice, this causes the largest buckets to have size much larger than $\sqrt S$.
 Such buckets are hard to place, because by the birthday paradox they are likely
@@ -674,8 +675,9 @@ product $x\cdot x$.
 In practice in bioinformatics applications such as SSHash, we expect many
 independent queries to the MPHF. This means that queries can be answered in
 parallel, instead of one by one. Thus, we should optimize for query /throughput/
-(queries per second, but usually implicitly reported as /inverse throughput/ in amortized
-seconds per query) rather than individual query latency (seconds per query).
+rather than individual query latency. We report throughput as /inverse
+throughput/ in amortized nanoseconds per query, rather than the usual queries
+per second.
 
 *Out-of-order execution.*
 An MPHF on $10^9$ keys requires memory at least $1.5\mathrm{bits}/\mathrm{key} \cdot 10^9
@@ -1114,8 +1116,8 @@ can provide significant performance gains via prefetching.  For string input
 specifically, it is more efficient when the strings are consecutively packed in memory
 rather than separately allocated, and it might be more efficient to explicitly
 hash multiple strings in parallel.
-To end, applications could investigate whether they can be rewritten to take
-advantage of stream queries.
+More generally, applications should investigate whether they can be rewritten to take
+advantage of streaming queries.
 
 * Acknowledgements
 :PROPERTIES:
