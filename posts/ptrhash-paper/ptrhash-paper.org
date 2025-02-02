@@ -935,6 +935,9 @@ results were obtained using the excellent MPHF-Experiments library
 threads in parallel. By default, the framework queries
 one key at a time. For PtrHash with streaming queries, we modified this to query
 all keys at once.
+The input is 300 million random strings of random length between 10 and 50
+characters. This input size is such that the MPHF data structures take around
+75MB, which is much larger than the 12MB L3 cache.
 
 *PtrHash.* As expected, the space usage of PtrHash matches the numbers of [[remap]].
 In general, PtrHash can be slightly larger due to rounding in the number of
@@ -969,17 +972,61 @@ SIMDRecSplit and SicHash achieve smaller space of 1.81 and 2.08 bits/key in
 comparable time (63ns to 66ns), but again are over $3\times$ slower to query, or
 over $6\times$ compared to streaming queries.
 
-* Conclusion and future work
+* Conclusions and Future Work
+We have introduced PtrHash, a minimal perfect hash function that builds on
+PTHash and PHOBIC. Its main novelty is the used of fixed-width 8-bit pilots that
+simplify queries. To make this possible, we use /hash-and-evict/, similar to
+Cuckoo hashing: when there is no pilot that leads to a collision-free placement
+of the corresponding keys, some other pilots are /evicted/ and have to search
+for a new value.
+
+The result is an MPHF with twice faster queries (38ns/key) than any other method
+(at least 77ns/key) for datasets larger than L3 cache. Further,
+due to its simplicity, queries can be processed in /streaming/ fashion, giving
+another two times speedup (20ns/key). At this point, the hashing of string inputs becomes a
+bottleneck. For integer keys, such as $k$-mers, much higher throughput of up to
+8ns/key can be obtained, fully saturating the RAM throughput of each core or
+even of the main memory (2.5ns/key) when using multiple cores.
 
 *Future work.*
-- Faster than memory is possible, when most queries can be answered from a
-  smaller cache.
-- SIMD, although the widening multiplication complicates things
--  We suggest that future research on string inputs should focus on efficient parallel hashing rather than simply optimizing
+We see a few directions for future work. First, while it seems that query
+throughput is at the limit, it may be possible to increase it even further by
+using more skewed bucket size distributions. The larger buckets them cover a
+larger part of the keys, and thus more queries can be answered from cache.
+Possibly this could be done by allowing a small number of collisions between
+keys in a bucket, and separately fixing those.
+
+The size of the list of pilots could possibly be improved by further parameter
+tuning. In particular, we only tried 8-bit pilots, while slightly fewer or more
+bits may lead to smaller data structures. An experiment with 4-bit pilots
+was not promising, however.
+Further, we did not do a theoretical analysis of expected length of the eviction
+chains and the running time of the construction. Such an analysis could help to
+better understand the optimal bucket assignment function for this algorithm,
+like PHOBIC [cite:@phobic] did for the case without eviction.
+
+Lastly, to further improve the throughput, we suggest that more attention is
+given to the exact input format. As already seen, hashing all queries at once
+can provide significant performance gains via prefetching.  For string input
+specifically, it is more efficient when the strings are consecutive in memory
+rather than separately allocated. Attention could also be given to efficiently
+hashing many strings in parallel.
 
 * Acknowledgements
-- Giulio for ongoing discussions
-- Sebastiano for trying the 10^12 construction.
+:PROPERTIES:
+:UNNUMBERED:
+:END:
+First, I thank Giulio Ermanno Pibiri for his ongoing feedback in
+various stages of this project. Further, I thank Sebastiano Vigna for feedback
+from trying to construct PtrHash on $10^{12}$ keys and integrating
+$\varepsilon$-serde, and lastly I thank Hans-Peter Lehmann for feedback on an
+early version of this paper.
+
+* Funding
+:PROPERTIES:
+:UNNUMBERED:
+:END:
+This work was supported by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
 
 #+LaTeX: \appendix
 * Appendix
