@@ -1,4 +1,4 @@
-#+title: [WIP] PtrHash: perfect hashing at the speed of memory
+#+title: [WIP] PtrHash: Perfect Hashing at the Speed of Memory
 #+filetags: @paper mphf wip
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -185,7 +185,7 @@ We now go over some specific details.
 
 *Hash functions.*
 The 8-bit pilots $p_b$ are hashed into pseudo-random $64$ integers by
-using FxHash for $\hp$,
+using FxHash [cite:@fxhash] for $\hp$,
 which simply multiplies the pilot with a /mixing constant/ $\C$:
 \begin{equation}
 \hp(p) := \C \cdot p.
@@ -197,7 +197,7 @@ hence collision-free.
 For other types of keys, the hash function depends on the number of elements. When the
 number of elements is not too far above $10^9$, the probability of hash
 collisions with a $64$ bit hash function is sufficiently small, and we use
-the $64$ bit variant of xxHash[fn::[[https://xxhash.com][xxhash.com]]].
+the $64$ bit variant of xxHash [cite:@xxhash;@xxhash-rust].
 When the number of keys goes beyond $2^{32} \approx 4\cdot 10^9$, the
 probability of $64$ bit hash collisions increases. In this case, we use the
 $128$ bit variant of xxHash.
@@ -529,7 +529,7 @@ impl CacheLineEF {
 }
 #+end_src
 
-** Bucket assignment functions
+** Bucket Assignment Functions
 :PROPERTIES:
 :CUSTOM_ID: bucket-fn
 :END:
@@ -579,10 +579,10 @@ of $\gamma$ are $64$ bit unsigned integers representing a fraction of $2^{64}$,
 so that e.g. $x^2$ can be computed as the upper $64$ bits of the widening $64\times64\to 128$ bit
 product $x\cdot x$.
 
-[TODO: $\alpha$-adjusted perfect function.]
+# [TODO: $\alpha$-adjusted perfect function.]
 
 
-** Parallel queries
+** Parallel Queries
 *Throughput.*
 In practice in bioinformatics applications such as SSHash, we expect many
 independent queries to the MPHF. This means that queries can be answered in
@@ -702,9 +702,9 @@ is indexing $k$-mers that fit in $64$ bits, we always use random $64$ bit intege
 :PROPERTIES:
 :CUSTOM_ID: construction-eval
 :END:
-*** Bucket functions
+*** Bucket Functions
 
-[TODO: Change 4.0 to 3.9 for more reliability.]
+# [TODO: Change 4.0 to 3.9 for more reliability.]
 
 #+name: bucket-fn-plot
 #+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. In the first five plots $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
@@ -728,7 +728,7 @@ functions fail.
 In the remainder, we will test the linear $\gamma_1$ for simplicity and lookup
 speed, and the cubic $\gamma_3$ for space efficiency.
 
-*** Tuning parameters for construction
+*** Tuning Parameters for Construction
 
 #+name: construction
 #+caption: This plot shows the construction time (blue and red, left axis) and datastructure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /compact/ parameter configurations.
@@ -755,16 +755,15 @@ to empty slots.
 
 *Recommended parameters.*
 Based on these results, we choose two sets of parameters for further
-evaluation, as indicated with blue and red dots in [[construction]]: [TODO: Update
-dots and redo experiments]
+evaluation, as indicated with blue and red dots in [[construction]]:
 - *Fast*: using the linear $\gamma_1$, $\lambda=3.0$, $\alpha=0.99$, and a plain
   vector for remapping.
   Construction takes only just over $20ns/key$, close to the apparent lower
-  bound, and space usage is $3bits/key$. This can be used when $n$ is small, or
+  bound, and space usage is $3.00bits/key$. This can be used when $n$ is small, or
   more generally when memory usage is not a bottleneck.
 - *Compact*: using the cubic $\gamma_3$, $\lambda=4.0$, $\alpha=0.99$, and
   CacheLineEF remapping. Construction now takes around $50ns/key$, but the data
-  structure only uses $2.1bits/key$.
+  structure only uses $2.12bits/key$.
 
 *** [Appendix?] Remap
 #+name: remap
@@ -821,7 +820,7 @@ down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
 writing hashes to disk, and 21s is spent reading hashes from disk, which
 together is faster than the 65s that was previously spent on hashing all keys.
 
-** Query throughput
+** Query Throughput
 
 To our knowledge, all recent papers on (minimal) perfect hashing measure query
 speed by first creating a list of keys, and then querying all keys in the list,
@@ -847,7 +846,7 @@ querying them all at once.
 We now explore the effect of the batch size and number of parallel threads on
 query throughput.
 
-*** [Appendix?] Batching and streaming
+*** [Appendix?] Batching and Streaming
 #+name: batching
 #+caption: Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
 #+attr_html: :class inset
@@ -874,7 +873,7 @@ of 32 iterations.
 The final throughput of 8ns per query is very close to the optimal throughput of
 7.4ns per random memory read.
 
-*** [Appendix?] Multi-threaded throughput
+*** [Appendix?] Multi-threaded Throughput
 #+name: throughput
 #+caption: In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. On the right, the solid black line shows the maximum throughput based on 7.4ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6GB/s.
 #+attr_html: :class inset
@@ -894,7 +893,7 @@ slightly faster because of its more efficient use of the caches, and is even
 slightly better than the maximum throughput of random reads to RAM.
 Minimal perfect hashing is only slightly slower than perfect hashing.
 
-** Comparison to other methods
+** Comparison to Other Methods
 #+name: comparison
 #+caption: Performance comparison of PtrHash against other methods, on 300 million random string keys of uniform length between 10 and 50. Parameters are based on Table 1 of [cite:@phobic] and Table 3 of [cite:@fmph], with configurations that are slow to construct (notably, bipartite ShockHash-RS) omitted. Construction time is shown when using 6 threads, apart from CHD which does not support parallel construction. Near-optimal values in each column are shown in bold. The common parameters $\lambda$ (number of elements per bucket) and $\alpha$ (initial load factor) are shown separately.
 #+attr_html: :class small
@@ -948,7 +947,7 @@ The hashing of input strings has a much worse effect on query throughput. In
 configurations when looping, and as low as 8ns when streaming queries. With
 string inputs, these numbers more than double to 38ns resp. 42ns when looping,
 and 20ns when streaming. A similar effect can be seen when comparing Tables 3
-and 4 of [cite:@fmph].
+and 4 of [cite:@fmph]. [[#hashing]] further investigates this.
 
 *Speed.*
 We observe that PtrHash with fast parameters is the fastest to construct
@@ -982,8 +981,9 @@ over $6\times$ compared to streaming queries.
 - Giulio for ongoing discussions
 - Sebastiano for trying the 10^12 construction.
 
+#+LaTeX: \appendix
 * Appendix
-** Rust and assembly code for streaming
+** Rust and Assembly Code for Streaming
 [[streaming-code]] shows the Rust code for the streaming version of PtrHash, and
 [[streaming-asm]] shows the corresponding assembly code with =perf record= results.
 
@@ -1065,7 +1065,7 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 
 
 
-* DONE Failed ideas
+* DONE Failed Ideas
 - always compute remap to avoid branch:
   - Instead, an additional layer of prefetching helps a bit, but too complicated
     and annoying.
@@ -1073,12 +1073,15 @@ pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
 - 4bit pilots with buckets of half the size -> doesn't work.
 
 * Appendix
-** TODO Choosing the part size
+** TODO Choosing the Part Size
 
-** Input types and hash functions
+** Input Types and Hash Functions
+:PROPERTIES:
+:CUSTOM_ID: hashing
+:END:
 
 #+name: hashes
-#+caption: MPHF query throughput of PtrHash with fast parameters for $n=10^8$ keys. (Not $10^9$ because this takes too much memory.)  Hashing plain ints with FxHash is fastest, followed by hashing Boxed ints. Xxhash is much slower, already when hashing ints. In fact, Xxhash is faster at hashing strings than integers! The string length does not have a very big impact, but variable-length strings are consistently slightly slower.
+#+caption: MPHF query throughput of PtrHash with fast parameters for $n=10^8$ keys. (Not $10^9$ because this takes too much memory.)  Hashing plain ints with FxHash is fastest, followed by hashing Boxed ints. XxHash is much slower, already when hashing ints. In fact, xxHash is faster at hashing strings than integers! The string length does not have a very big impact, but variable-length strings are consistently slightly slower.
 | input     | loop |      |       | stream |      |       |
 |           |   fx | xx64 | xx128 |     fx | xx64 | xx128 |
 | u64       | 11.1 | 24.4 |  29.9 |    7.2 |  9.1 |  10.5 |
