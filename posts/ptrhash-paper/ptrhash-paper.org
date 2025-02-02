@@ -323,7 +323,7 @@ distribution, making it hard to compress them efficiently.
 /displace/ is the term used instead of /evict/ in e.g. the cuckoo  filter by [cite/t:@cuckoo-filter].
 Unfortunately, /hash and displace/ is also the name of another MPHF introduced
 by [cite/t:@hash-displace], that was then extended into /compressed
-hand-and-displace/ (CHD) by [cite/t:@hash-displace-compress]. There, the
+hand-and-displace/ (CHD) by [cite/t:@chd]. There, the
 to-be-inserted key (rather than the existing key) is /displaced/ by applying a linear shift
 to its initial position.].* In PtrHash, we instead use /fixed width/, single byte pilots. To achieve
 this, we use a technique resembling cuckoo hashing [cite:@cuckoo-hashing], as
@@ -897,39 +897,80 @@ slightly better than the maximum throughput of random reads to RAM.
 Minimal perfect hashing is only slightly slower than perfect hashing.
 
 ** Comparison to other methods
-- check out https://github.com/ByteHamster/MPHF-Experiments for evals
-
-
 #+name: comparison
-#+caption: Comparison [TODO] $n=3\cdot 10^8$
+#+caption: Performance comparison of PtrHash against other methods, on 300 million random string keys of uniform length between 10 and 50. Parameters are based on Table 1 of [cite:@phobic] and Table 3 of [cite:@fmph], with configurations that are slow to construct (notably, bipartite ShockHash-RS) omitted. Construction time is shown when using 6 threads, apart from CHD which does not support parallel construction. Near-optimal values in each column are shown in bold. The common parameters $\lambda$ (number of elements per bucket) and $\alpha$ (initial load factor) are shown separately.
 #+attr_html: :class small
-| Method                             | $\lambda$ | $\alpha$ | Space@@html:<br/>@@(bits/key) | Construction@@html:<br/>@@ (6t, ns/key) | Query @@html:<br/>@@(ns/key) |
-| CHD                                |       3.0 |          |                          2.27 |                                    1059* |                          542 |
-| FMPH $\gamma=2.0$                  |           |          |                          3.40 |                                      44 |                          168 |
-| FMPH $\gamma=1.0$                  |           |          |                          2.80 |                                      69 |                          236 |
-| FmphGo $s=4$, $b=16$, $\gamma=2.0$ |           |          |                          2.86 |                                     298 |                          160 |
-| FmphGo $s=4$, $b=16$, $\gamma=1.0$ |           |          |                          2.21 |                                     423 |                          212 |
-| SIMDRecSplit $n=5$ $b=5$           |           |          |                          2.96 |                                    *26* |                          310 |
-| SIMDRecSplit $n=8$ $b=100$         |           |          |                        *1.81* |                                      66 |                          258 |
-| SicHash $p_1=0.21$ $p_2=0.78$      |           |     0.90 |                          2.41 |                                      48 |                          149 |
-| SicHash $p_1=0.45$ $p_2=0.31$      |           |     0.97 |                          2.08 |                                      63 |                          141 |
-| PTHash C-C                         |       4.0 |     0.99 |                          3.19 |                                     403 |                           77 |
-| PTHash EF                          |       5.0 |     0.99 |                          2.17 |                                     765 |                          156 |
-| PTHash-HEM C-C                     |       4.0 |     0.99 |                          3.16 |                                     173 |                           77 |
-| PTHash-HEM EF                      |       5.0 |     0.99 |                          2.17 |                                     323 |                          156 |
-| PHOBIC IC-C                        |       3.9 |      1.0 |                          4.14 |                                      62 |                          116 |
-| PHOBIC IC-R                        |       4.5 |      1.0 |                          2.34 |                                      80 |                          179 |
-| PHOBIC IC-R                        |       6.5 |      1.0 |                        *1.94* |                                     215 |                          163 |
-| PHOBIC IC-R                        |       7.0 |      1.0 |                        *1.86* |                                     446 |                          157 |
-| PtrHash fast: Vec                  |       3.0 |     0.99 |                          2.99 |                                    *26* |                         *38* |
-| PtrHash compact:  CLEF             |       4.0 |     0.99 |                          2.12 |                                      62 |                         *42* |
-|                                    |           |          |                               |                                         |                              |
-| PtrHash fast: Vec, streaming       |       3.0 |     0.99 |                          2.99 |                                    *27* |                         *20* |
-| PtrHash compact: CLEF streaming    |       4.0 |     0.99 |                          2.12 |                                      62 |                         *23* |
-Remarks:
-- Compared PHOBIC results:
-  - ~2x slower queries, because 1y older CPU and pinned CPU frequency
-  - Omitted
+| Method                              | $\lambda$ | $\alpha$ | Space@@html:<br/>@@(bits/key) | Construction@@html:<br/>@@ (6t, ns/key) | Query @@html:<br/>@@(ns/key) |
+| CHD                                 |       3.0 |          |                          2.27 |                                   1059* |                          542 |
+| FMPH, $\gamma=2.0$                  |           |          |                          3.40 |                                      44 |                          168 |
+| FMPH, $\gamma=1.0$                  |           |          |                          2.80 |                                      69 |                          236 |
+| FMPHGO, $s=4$, $b=16$, $\gamma=2.0$ |           |          |                          2.86 |                                     298 |                          160 |
+| FMPHGO, $s=4$, $b=16$, $\gamma=1.0$ |           |          |                          2.21 |                                     423 |                          212 |
+| SIMDRecSplit, $n=5$, $b=5$          |           |          |                          2.96 |                                    *26* |                          310 |
+| SIMDRecSplit, $n=8$, $b=100$        |           |          |                        *1.81* |                                      66 |                          258 |
+| SicHash, $p_1=0.21$, $p_2=0.78$     |           |     0.90 |                          2.41 |                                      48 |                          149 |
+| SicHash, $p_1=0.45$, $p_2=0.31$     |           |     0.97 |                          2.08 |                                      63 |                          141 |
+| PTHash C-C                          |       4.0 |     0.99 |                          3.19 |                                     403 |                           77 |
+| + HEM                               |           |          |                               |                                     173 |                              |
+| PTHash EF                           |       5.0 |     0.99 |                          2.17 |                                     765 |                          156 |
+| + HEM                               |           |          |                               |                                     323 |                              |
+| PHOBIC IC-C                         |       3.9 |      1.0 |                          4.14 |                                      62 |                          116 |
+| PHOBIC IC-R                         |       4.5 |      1.0 |                          2.34 |                                      80 |                          179 |
+| PHOBIC IC-R                         |       6.5 |      1.0 |                        *1.94* |                                     215 |                          163 |
+| PHOBIC IC-R                         |       7.0 |      1.0 |                        *1.86* |                                     446 |                          157 |
+| PtrHash fast, Vec                   |       3.0 |     0.99 |                          2.99 |                                    *26* |                         *38* |
+| + streaming                         |           |          |                               |                                         |                         *20* |
+| PtrHash compact,  CLEF              |       4.0 |     0.99 |                          2.12 |                                      62 |                         *42* |
+| + streaming                         |           |          |                               |                                         |                         *23* |
+
+In [[comparison]] we compare the performance of PtrHash against other methods on
+short, random strings.
+In particular, we compare against methods that are reasonably fast to construct:
+CHD [cite:@chd], FMPH and FMPHGO [cite:@fmph], SIMDRecSplit
+[cite:@recsplit;@recsplit-gpu], SicHash [cite:@sichash], PTHash
+[cite:@pthash;@pthash-2], and PHOBIC [cite:@phobic].
+We omit Bipartite ShockHash-RS
+[cite:@shockhash;@bipartite-shockhash] and some other parameter configurations that yield smaller space but
+take significantly longer to construct.
+These
+results were obtained using the excellent MPHF-Experiments library
+[cite:@mphf-experiments] by Hans-Peter Lehmann. Constructing is done on 6
+threads in parallel. By default, the framework queries
+one key at a time. For PtrHash with streaming queries, we modified this to query
+all keys at once.
+
+*PtrHash.* As expected, the space usage of PtrHash matches the numbers of [[remap]].
+In general, PtrHash can be slightly larger due to rounding in the number of
+parts and slots per part, but for large inputs like here this effect is small.
+Construction times per key are slightly slower than as predicted by
+[[construction]], while we might expect slightly faster construction due to the
+lower number of keys. Likely, the slowdown is caused by hashing the input strings.
+The hashing of input strings has a much worse effect on query throughput. In
+[[batching]], we obtained query throughput of 12ns and 18ns for the fast and compact
+configurations when looping, and as low as 8ns when streaming queries. With
+string inputs, these numbers more than double to 38ns resp. 42ns when looping,
+and 20ns when streaming. A similar effect can be seen when comparing Tables 3
+and 4 of [cite:@fmph].
+
+*Speed.*
+We observe that PtrHash with fast parameters is the fastest to construct
+alongside SIMDRecSplit, in 26 ns/key, resulting in just below 3 bits/key for
+both. However, PtrHash is $8\times$ faster to query, going up to $15\times$ when
+streaming all queries at once.
+Compared to the next-fastest method to query, PTHash-CC (HEM), PtrHash is twice
+faster to query (or nearly $4\times$ when streaming), is $6.5\times$ faster to build, and
+even slightly smaller.
+
+*Space.*
+PtrHash With the fast parameters is larger (2.99 bits/key) than some other methods, but
+compensates by being significantly faster to construct and/or query.
+When space is of importance, the compact version can be used (2.12 bits/key).
+This takes $2.4\times$ longer to build at 62ns/key, and has only slightly slower queries.
+Compared to methods that are smaller,
+PtrHash is over $3\times$ faster to build than PHOBIC.
+SIMDRecSplit and SicHash achieve smaller space of 1.81 and 2.08 bits/key in
+comparable time (63ns to 66ns), but again are over $3\times$ slower to query, or
+over $6\times$ compared to streaming queries.
 
 * Conclusion and future work
 
@@ -937,6 +978,7 @@ Remarks:
 - Faster than memory is possible, when most queries can be answered from a
   smaller cache.
 - SIMD, although the widening multiplication complicates things
+-  We suggest that future research on string inputs should focus on efficient parallel hashing rather than simply optimizing
 
 * Acknowledgements
 - Giulio for ongoing discussions
