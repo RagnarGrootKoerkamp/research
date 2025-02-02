@@ -1,4 +1,4 @@
-#+title: [WIP] PtrHash: Perfect Hashing at the Speed of Memory
+#+title: [WIP] PtrHash: Minimal Perfect Hashing at the Speed of Memory
 #+filetags: @paper mphf wip
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -671,6 +671,9 @@ product $x\cdot x$.
 
 
 ** Parallel Queries
+:PROPERTIES:
+:CUSTOM_ID: parallel-queries
+:END:
 *Throughput.*
 In practice in bioinformatics applications such as SSHash, we expect many
 independent queries to the MPHF. This means that queries can be answered in
@@ -925,7 +928,7 @@ Hence, we argue that existing benchmarks measure (and optimize for)
 throughput and that they assume that the list of keys to query is known in advance.
 We make this assumption explicit by changing the API to benchmark all queries at
 once, as in =ptr_hash.query_all(keys)=. This way, we can explicitly process
-multiple queries in parallel as described in [[*Parallel queries]].
+multiple queries in parallel as described in [[#parallel-queries]].
 
 We also argue that properly optimizing for throughput is relevant for
 applications. SSHash, for example, queries all minimizers of a DNA sequence,
