@@ -560,7 +560,7 @@ Such buckets are hard to place, because by the birthday paradox they are likely
 to have multiple elements hashing to the same slot. To fix this, PHOBIC ensures the
 slope of $\gamma$ is at least $\varepsilon=1/(5 \sqrt S)$ by using
 $\gamma_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$ instead.
-We fix $varepsilon = 1/256$.
+We fix $\varepsilon = 1/256$.
 # Since this function is slow to compute in practice, a
 # $2048$-piecewise linear approximation is used instead, using a lookup table and linear interpolation.
 
@@ -896,8 +896,40 @@ slightly faster because of its more efficient use of the caches, and is even
 slightly better than the maximum throughput of random reads to RAM.
 Minimal perfect hashing is only slightly slower than perfect hashing.
 
-** Comparison with competitors
+** Comparison to other methods
 - check out https://github.com/ByteHamster/MPHF-Experiments for evals
+
+
+#+name: comparison
+#+caption: Comparison [TODO] $n=3\cdot 10^8$
+#+attr_html: :class small
+| Method                             | $\lambda$ | $\alpha$ | Space@@html:<br/>@@(bits/key) | Construction@@html:<br/>@@ (6t, ns/key) | Query @@html:<br/>@@(ns/key) |
+| CHD                                |       3.0 |          |                          2.27 |                                    1059* |                          542 |
+| FMPH $\gamma=2.0$                  |           |          |                          3.40 |                                      44 |                          168 |
+| FMPH $\gamma=1.0$                  |           |          |                          2.80 |                                      69 |                          236 |
+| FmphGo $s=4$, $b=16$, $\gamma=2.0$ |           |          |                          2.86 |                                     298 |                          160 |
+| FmphGo $s=4$, $b=16$, $\gamma=1.0$ |           |          |                          2.21 |                                     423 |                          212 |
+| SIMDRecSplit $n=5$ $b=5$           |           |          |                          2.96 |                                    *26* |                          310 |
+| SIMDRecSplit $n=8$ $b=100$         |           |          |                        *1.81* |                                      66 |                          258 |
+| SicHash $p_1=0.21$ $p_2=0.78$      |           |     0.90 |                          2.41 |                                      48 |                          149 |
+| SicHash $p_1=0.45$ $p_2=0.31$      |           |     0.97 |                          2.08 |                                      63 |                          141 |
+| PTHash C-C                         |       4.0 |     0.99 |                          3.19 |                                     403 |                           77 |
+| PTHash EF                          |       5.0 |     0.99 |                          2.17 |                                     765 |                          156 |
+| PTHash-HEM C-C                     |       4.0 |     0.99 |                          3.16 |                                     173 |                           77 |
+| PTHash-HEM EF                      |       5.0 |     0.99 |                          2.17 |                                     323 |                          156 |
+| PHOBIC IC-C                        |       3.9 |      1.0 |                          4.14 |                                      62 |                          116 |
+| PHOBIC IC-R                        |       4.5 |      1.0 |                          2.34 |                                      80 |                          179 |
+| PHOBIC IC-R                        |       6.5 |      1.0 |                        *1.94* |                                     215 |                          163 |
+| PHOBIC IC-R                        |       7.0 |      1.0 |                        *1.86* |                                     446 |                          157 |
+| PtrHash fast: Vec                  |       3.0 |     0.99 |                          2.99 |                                    *26* |                         *38* |
+| PtrHash compact:  CLEF             |       4.0 |     0.99 |                          2.12 |                                      62 |                         *42* |
+|                                    |           |          |                               |                                         |                              |
+| PtrHash fast: Vec, streaming       |       3.0 |     0.99 |                          2.99 |                                    *27* |                         *20* |
+| PtrHash compact: CLEF streaming    |       4.0 |     0.99 |                          2.12 |                                      62 |                         *23* |
+Remarks:
+- Compared PHOBIC results:
+  - ~2x slower queries, because 1y older CPU and pinned CPU frequency
+  - Omitted
 
 * Conclusion and future work
 

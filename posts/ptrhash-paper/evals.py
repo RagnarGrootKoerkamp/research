@@ -639,6 +639,56 @@ def string_queries(f):
     print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".1f"))
 
 
+def comparison(f):
+    with open(f) as f:
+        text = f.read()
+    # Get all lines starting with 'RESULT'
+    prefix = "RESULT "
+    lines = [line for line in text.splitlines() if line.startswith(prefix)]
+    # Remove 'RESULT ' from the start of each line
+    lines = [line[len(prefix) :] for line in lines]
+
+    # Split by space, then split by = to build a dictionary.
+    def mapline(line):
+        x = line.find("bitsPerElement")
+        head = line[len("name=") : x - 1]
+        d = dict([x.split("=") for x in line[x:].split()])
+        d["name"] = head
+        return d
+
+    data = [mapline(line) for line in lines]
+    # Convert to dataframe
+    df = pd.DataFrame(data)
+
+    assert df.loadFactor.unique() == ["1"]
+    assert df.queryThreads.unique() == ["1"]
+    assert df.N.nunique() == 1
+    n = int(df.N.unique()[0])
+    # convert to float
+    df["build"] = df["constructionTimeMilliseconds"].astype(float) * 1000000 / n
+
+    assert df.numQueriesTotal.nunique() == 1
+    m = int(df.numQueriesTotal.unique()[0])
+    df["query"] = df["queryTimeMilliseconds"].astype(float) * 1000000 / m
+    df["size"] = df["bitsPerElement"].astype(float)
+
+    # 'threads'
+    df = df[["name", "size", "build", "query"]]
+    df["prod"] = df["build"] * df["query"] * df["size"]
+    # sort by size
+    # df = df.sort_values("prod")
+
+    print(df)
+    print(
+        tabulate.tabulate(
+            df,
+            headers=df.columns,
+            tablefmt="orgtbl",
+            floatfmt=[None, None, ".2f", ".0f", ".0f", ".0f"],
+        )
+    )
+
+
 plt.close("all")
 
 # 3.4
@@ -661,4 +711,7 @@ plt.close("all")
 # query_throughput("data/query_throughput.json", "plots/query_throughput.svg")
 
 # appendix
-string_queries("data/string_queries.json")
+# string_queries("data/string_queries.json")
+
+# 4.3
+comparison("data/comparison_3e8.txt")
