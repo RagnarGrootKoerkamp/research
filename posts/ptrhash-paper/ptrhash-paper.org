@@ -371,7 +371,7 @@ fn pilots_for_part(&self, buckets: Vec<&[Hash]>) -> Vec<u8> {
 
 [APPENDIX] *Optimizations.* In order to speed up the code to search for pilots, a number of
 optimizations are made to the conceptual idea of [[construction-code]].
-1. *=taken= bit mask.* Instead of determining whether a slot is free by
+1. *=taken= bit mask.* Like PTHash and PHOBIC, Instead of determining whether a slot is free by
    checking the =slots= array for the optional index of the bucket mapping
    there, we keep a separate bit mask =taken= that takes only $1$ bit instead
    of $32$ bits per element. This allows for better caching and hence faster access.
@@ -894,47 +894,61 @@ slightly better than the maximum throughput of random reads to RAM.
 Minimal perfect hashing is only slightly slower than perfect hashing.
 
 ** Comparison to Other Methods
+
 #+name: comparison
-#+caption: Performance comparison of PtrHash against other methods, on 300 million random string keys of uniform length between 10 and 50. Parameters are based on Table 1 of [cite:@phobic] and Table 3 of [cite:@fmph], with configurations that are slow to construct (notably, bipartite ShockHash-RS) omitted. Construction time is shown when using 6 threads, apart from CHD which does not support parallel construction. Near-optimal values in each column are shown in bold. The common parameters $\lambda$ (number of elements per bucket) and $\alpha$ (initial load factor) are shown separately.
+#+caption: Performance comparison of PtrHash against other methods, on 300 million random string keys of uniform length between 10 and 50. Construction time is shown when using 6 threads. Times marked with a * are single threaded and show the optimistic 6-fold faster time in parentheses. Near-optimal values in each column are shown in bold. The common parameters $\lambda$ (number of elements per bucket) and $\alpha$ (initial load factor) are shown separately.
 #+attr_html: :class small
-| Method                              | $\lambda$ | $\alpha$ | Space@@html:<br/>@@(bits/key) | Construction@@html:<br/>@@ (6t, ns/key) | Query @@html:<br/>@@(ns/key) |
-| CHD                                 |       3.0 |          |                          2.27 |                                   1059* |                          542 |
-| FMPH, $\gamma=2.0$                  |           |          |                          3.40 |                                      44 |                          168 |
-| FMPH, $\gamma=1.0$                  |           |          |                          2.80 |                                      69 |                          236 |
-| FMPHGO, $s=4$, $b=16$, $\gamma=2.0$ |           |          |                          2.86 |                                     298 |                          160 |
-| FMPHGO, $s=4$, $b=16$, $\gamma=1.0$ |           |          |                          2.21 |                                     423 |                          212 |
-| SIMDRecSplit, $n=5$, $b=5$          |           |          |                          2.96 |                                    *26* |                          310 |
-| SIMDRecSplit, $n=8$, $b=100$        |           |          |                        *1.81* |                                      66 |                          258 |
-| SicHash, $p_1=0.21$, $p_2=0.78$     |           |     0.90 |                          2.41 |                                      48 |                          149 |
-| SicHash, $p_1=0.45$, $p_2=0.31$     |           |     0.97 |                          2.08 |                                      63 |                          141 |
-| PTHash C-C                          |       4.0 |     0.99 |                          3.19 |                                     403 |                           77 |
-| + HEM                               |           |          |                               |                                     173 |                              |
-| PTHash EF                           |       5.0 |     0.99 |                          2.17 |                                     765 |                          156 |
-| + HEM                               |           |          |                               |                                     323 |                              |
-| PHOBIC IC-C                         |       3.9 |      1.0 |                          4.14 |                                      62 |                          116 |
-| PHOBIC IC-R                         |       4.5 |      1.0 |                          2.34 |                                      80 |                          179 |
-| PHOBIC IC-R                         |       6.5 |      1.0 |                        *1.94* |                                     215 |                          163 |
-| PHOBIC IC-R                         |       7.0 |      1.0 |                        *1.86* |                                     446 |                          157 |
-| PtrHash fast, Vec                   |       3.0 |     0.99 |                          2.99 |                                    *26* |                         *38* |
-| + streaming                         |           |          |                               |                                         |                         *20* |
-| PtrHash compact,  CLEF              |       4.0 |     0.99 |                          2.12 |                                      62 |                         *42* |
-| + streaming                         |           |          |                               |                                         |                         *23* |
+| Approach            | Configuration                               | Space@@html:<br/>@@bits/key | Construction@@html:<br/>@@ 6t, ns/key | Query @@html:<br/>@@ns/query |
+| Brute-force         |                                             |                             |                                       |                              |
+| SIMDRecSplit        | $n{=}5$, $b{=}5$                            |                        2.96 |                                  *26* |                          310 |
+| SIMDRecSplit        | $n{=}8$, $b{=}100$                          |                      *1.81* |                                    66 |                          258 |
+| Bip. ShockHash-Flat | $n{=}64$                                    |                      *1.62* |                           2140* (357) |                          201 |
+|                     |                                             |                             |                                       |                              |
+| Fingerprinting      |                                             |                             |                                       |                              |
+| FMPH                | $\gamma{=}2.0$                              |                        3.40 |                                    44 |                          168 |
+| FMPH                | $\gamma{=}1.0$                              |                        2.80 |                                    69 |                          236 |
+| FMPHGO              | $s{=}4$, $b{=}16$, $\gamma{=}2.0$           |                        2.86 |                                   298 |                          160 |
+| FMPHGO              | $s{=}4$, $b{=}16$, $\gamma{=}1.0$           |                        2.21 |                                   423 |                          212 |
+| FiPS                | $\gamma{=}2.0$                              |                        3.52 |                            93* (*16*) |                          109 |
+| FiPS                | $\gamma{=}1.5$                              |                        3.12 |                           109* (*18*) |                          124 |
+|                     |                                             |                             |                                       |                              |
+| Graphs              |                                             |                             |                                       |                              |
+| SicHash             | $p_1{=}0.21$, $p_2{=}0.78$, $\alpha{=}0.90$ |                        2.41 |                                    48 |                          149 |
+| SicHash             | $p_1{=}0.45$, $p_2{=}0.31$, $\alpha{=}0.97$ |                        2.08 |                                    63 |                          141 |
+|                     |                                             |                             |                                       |                              |
+| Bucket placement    |                                             |                             |                                       |                              |
+| CHD                 | $\lambda{=}3.0$                             |                        2.27 |                           1059* (177) |                          542 |
+| PTHash              | $\lambda{=}4.0$, $\alpha{=}0.99$, C-C       |                        3.19 |                                   403 |                           77 |
+| + HEM               |                                             |                             |                                   173 |                              |
+| PTHash              | $\lambda{=}5.0$, $\alpha{=}0.99$, EF        |                        2.17 |                                   765 |                          156 |
+| + HEM               |                                             |                             |                                   323 |                              |
+| PHOBIC              | $\lambda{=}3.9$, $\alpha{=}1.0$, IC-C       |                        4.14 |                                    62 |                          116 |
+| PHOBIC              | $\lambda{=}4.5$, $\alpha{=}1.0$, IC-R       |                        2.34 |                                    80 |                          179 |
+| PHOBIC              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-R       |                      *1.94* |                                   215 |                          163 |
+| Phobic              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-C       |                        2.44 |                                   220 |                          108 |
+| PHOBIC              | $\lambda{=}7.0$, $\alpha{=}1.0$, IC-R       |                      *1.86* |                                   446 |                          157 |
+| PtrHash, fast       | $\lambda{=}3.0$, $\alpha{=}0.99$, Vec       |                        2.99 |                                  *26* |                         *38* |
+| + streaming         |                                             |                             |                                       |                         *20* |
+| PtrHash, compact    | $\lambda{=}4.0$, $\alpha{=}0.99$, CLEF      |                        2.12 |                                    62 |                         *42* |
+| + streaming         |                                             |                             |                                       |                         *23* |
 
 In [[comparison]] we compare the performance of PtrHash against other methods on
 short, random strings.
 In particular, we compare against methods that are reasonably fast to construct:
-CHD [cite:@chd], FMPH and FMPHGO [cite:@fmph], SIMDRecSplit
+CHD [cite:@chd], FMPH and FMPHGO [cite:@fmph], FiPS [cite:@phf-thesis], SIMDRecSplit
 [cite:@recsplit;@recsplit-gpu], SicHash [cite:@sichash], PTHash
 [cite:@pthash;@pthash-2], and PHOBIC [cite:@phobic].
-We omit Bipartite ShockHash-RS
-[cite:@shockhash;@bipartite-shockhash] and some other parameter configurations that yield smaller space but
-take significantly longer to construct.
-These
-results were obtained using the excellent MPHF-Experiments library
-[cite:@mphf-experiments] by Hans-Peter Lehmann. Constructing is done on 6
+We also include Bipartite ShockHash-Flat [cite:@shockhash;@bipartite-shockhash],
+which is able to use relatively little space with fast construction time.
+The specific parameters are based on Table 1 of [cite:@phobic], Table 8.1 of
+[cite:@phf-thesis], and Table 3 of [cite:@fmph], with some configurations that are slow to construct omitted.
+These results were obtained using the excellent MPHF-Experiments library
+[cite:@mphf-experiments] by Hans-Peter Lehmann. Construction is done on 6
 threads in parallel. By default, the framework queries
 one key at a time. For PtrHash with streaming queries, we modified this to query
 all keys at once.
+
+*Input.*
 The input is 300 million random strings of random length between 10 and 50
 characters. This input size is such that the MPHF data structures take around
 75MB, which is much larger than the 12MB L3 cache.
@@ -954,9 +968,11 @@ and 4 of [cite:@fmph]. [[#hashing]] further investigates this.
 
 *Speed.*
 We observe that PtrHash with fast parameters is the fastest to construct
-alongside SIMDRecSplit, in 26 ns/key, resulting in just below 3 bits/key for
-both. However, PtrHash is $8\times$ faster to query, going up to $15\times$ when
-streaming all queries at once.
+alongside SIMDRecSplit (26 ns/key) and FiPS (16ns/key, assuming optimal scaling to
+6 threads),  resulting in around 3bits/key for all three methods.
+However, query throughput of PtrHash is $8\times$ (SIMDRecSplit) resp.
+$2.8\times$ (FiPS) faster, going up to $15\times$ resp.
+$5\times$ faster when streaming all queries at once.
 Compared to the next-fastest method to query, PTHash-CC (HEM), PtrHash is twice
 faster to query (or nearly $4\times$ when streaming), is $6.5\times$ faster to build, and
 even slightly smaller.
@@ -970,7 +986,8 @@ Compared to methods that are smaller,
 PtrHash is over $3\times$ faster to build than PHOBIC.
 SIMDRecSplit and SicHash achieve smaller space of 1.81 and 2.08 bits/key in
 comparable time (63ns to 66ns), but again are over $3\times$ slower to query, or
-over $6\times$ compared to streaming queries.
+over $6\times$ compared to streaming queries. Bipartite ShockHash-Flat is even
+smaller at 1.62bits/key, but also over $5\times$ slower to build and query.
 
 * Conclusions and Future Work
 We have introduced PtrHash, a minimal perfect hash function that builds on
