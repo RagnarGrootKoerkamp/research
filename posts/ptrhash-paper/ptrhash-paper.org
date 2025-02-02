@@ -59,7 +59,6 @@ When a hash is injective (collision-free), it is also called /perfect/.
 When additionally it is surjective onto $[n]$, it is /minimal/.
 Thus, a /minimal perfect hash function/ (MPHF) bijectively maps a set of $n$ keys onto $[n]$.
 
-
 *Metrics.*
 Various aspects of MPHF data structures can be optimized.
 First, one could minimize its space usage and try to
@@ -69,8 +68,8 @@ ShockHash-RS, which gets below 1.5 bits/key [cite:@shockhash;@bipartite-shockhas
 
 In this paper, we focus primarily on optimizing for query throughput and
 secondary on construction speed, while relaxing space usage up to 3 bits/key.
-This continues the line of work started by PTHash [cite:@pthash;@pthash-2] and
-continued by PHOBIC [cite:@phobic], that both provide relatively fast queries.
+This continues the line of work of FCH [cite:@fch], PTHash [cite:@pthash;@pthash-2], and
+PHOBIC [cite:@phobic], that all provide relatively fast queries.
 
 *Problem statement.*
 Construct a /minimal perfect hash function/
@@ -116,34 +115,88 @@ When using $10^9$ integer keys instead, PtrHash can achieve a throughput of up t
 maximum throughput of random memory accesses of a single thread. In a
 multi-threaded setting, PtrHash can fully saturate the DDR4 memory bandwidth.
 
-* Background
+* Related work
+There is a vast amount of literature on (minimal) perfect hashing. Here we only
+give a highlight of recent approaches, and refer the reader to Section 2 of
+[cite:@pthash-2] and Sections 4 and 8 of the thesis of Hans-Peter Lehmann
+[cite:@phf-thesis], which is the basis for this section.
 
-*Background.*
-- To next section?
-- Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
-, and one ca. Many recent
-works have focused on constructing minimal perfect hash functions that use
-space close to this lower bound, going as low as 1.5 bits/key [TODO cite]. These
-methods tend to be relatively complex and hence slow to query.
-Instead, here we focus on construction speed and query speed.
-This continues the line of work started by FCH [cite:@fch], PTHash
-[cite:@pthash;@pthash-2], and PHOBIC [cite:@phobic].
-- GB vs GiB
-** Single large seed.
-** Other work
-- sichash [cite:@sichash]
-- shockhash [cite:@shockhash]
-- bipartite shockhash [cite:@bipartite-shockhash]
-** Recsplit?
-** FCH
-** PTHash
-** PTHash-HEM
-** PHOBIC
-** EF coding
-*** Uniform Partitioned EF
-** Cachelines
+*Space lower bound.*
+Given $n$ keys and a random hash function to $[n]$, the probability that this is
+a MPHF is $n!/n^n$. From this, it follows that at least
+$\log_2(n^n/n!)\approx n\log_2(e)$ bits of information are needed to `steer' the hash
+function in the right direction [cite:@mehlhorn82_mphf_size].
+Now, a naive approach is to use a seeded hash function, and try
+$O(e^n)$ seeds until a perfect hash function is found. Clearly, that is not
+feasible in practice.
 
+*Brute-force.*
+When $n$ is small, $e^n$ can be sufficiently small to allow a bruteforce search
+over $n$. RecSplit exploits this by first partitioning the input
+keys first into buckets, and then recursively splitting buckets until they have
+size at most $\ell \leq 16$. These /leafs/ can then be solved using brute-force, and the
+overall space usage can be as low as 1.56 bits/kmer. SIMDRecSplit significantly
+improves the construction time by using a meet-in-the-middle approach for the
+leafs, and generally speeds up the implementation.
 
+*Graphs.*
+SicHash [cite:@sichash] and its predecessor BPZ [cite:@bpz] are based on
+/hypergraph peeling/: nodes are the $n$ hash values, and each key
+corresponds to a size-$r$ hyper-edge. Then keys can be assigned a value
+one-by-one as long as each set of $k$ keys covers at least $k+1$ values. This
+is also alike cuckoo hashing, where each key has $r=2$ target locations.
+ShockHash [cite:@shockhash] then takes the RecSplit framework and uses an $r=2$
+cuckoo table for the base case. It then tries $O((e/2)^n)$ seeds until one is
+found that allows building the cuckoo hash table.
+Bipartite ShockHash-RS [cite:@bipartite-shockhash]
+further improves this by using meet-in-the-middle on the seeds, improving the
+construction time to $O((\sqrt{e/2})^n) = O(1.166^n)$. This is currently the
+most space efficient approach. Bipartite ShockHash-Flat is a variant that trades
+space for more efficient queries.
+
+*Fingerprinting.*
+A completely different technique was introduced by
+[cite:@chapman_2011;@muller_2014], and used in BBHash [cite:@bbhash]. Here, the
+idea is to start with any hash function mapping into $[\gamma n]$ for some
+$\gamma \geq 1$. Any slots that have exactly one element mapping to them are
+marked with a 1, and the remaining $n_1$ elements are processed recursively,
+mapping them to $[\gamma n_1]$. Lookups are then done using rank queries on this
+bitvector. FMPH [cite:@fmph] has a much faster implementation of the construction that goes
+down to 3.0 bits/kmer. FiPS [cite:@phf-thesis] is a variant that trades some
+space in the rank data structure for faster queries. FMPHGO [cite:@fmph] is
+variant that first splits keys into buckets, then uses a seeded hash function
+that has a low number of collisions, and only then recurses into colliding keys.
+This reduces the space usage and number of recursion steps, leading to faster
+queries, but takes longer to construct.
+
+*Bucket placement.*
+Lastly, we cover the line of work this paper builds on.
+These methods first group the keys into
+buckets of a few keys. Then, keys in the buckets are assigned their hash value
+one bucket at a time, such that newly assigned values do not collide with
+previously taken values. All methods iterate different possible key assignments
+for each bucket until a collision-free one is found, but differ in the way
+hash values are determined. To speed up the search for keys, large buckets are
+placed before small buckets.
+
+FCH [cite:@fch] uses a fixed number of bits to encode the seed for each bucket and
+uses a /skew/ distribution of bucket sizes. The seed stored in each bucket
+determines how far the keys are /displaced/ (shifted) to the right from their
+initially hashed position, and a fallback hash can be used if needed, and
+construction can fail if that also doesn't work. CHF [cite:@chd] uses uniform
+bucket sizes, but uses a variable-width encoding for the seeds.
+PTHash [cite:@pthash] combines these two ideas and introduces a number of
+compression schemes for the seeds values, that are called /pilots/. Instead of
+directly generating an MPHF, it first generates a PHF to $[n']$ for
+$n'=n/\alpha \approx n/0.99$, and values mapping to $\geq n$ are /remapped/ to
+the skipped values in $[n]$. PTHash-HEM [cite:@pthash-2] first partitions the keys, and uses this
+to build multiple parts in parallel. This also enables external-memory construction.
+Lastly, PHOBIC [cite:@phobic] improves from the simple /skew/ distribution of
+FCH to an /optimal bucket assignment function/, which speeds up construction and
+enables smaller space usage. Secondly, it partitions the input into parts of size
+$2500$ and uses the same number of buckets for each part. Then, it uses that the
+pilot values of the $i$'th bucket of each part follow the same distribution, and
+encodes them together. Together, this saves 0.17 bits/key over PTHash.
 
 * PtrHash
 
@@ -268,7 +321,7 @@ small and 'greedily' assigns them the smallest pilot value that maps the keys in
 the bucket to slots that are still free.
 Unlike other methods though, PtrHash only allows pilots up to $255$. When no
 suitable pilot is found, we use a method similar to (blocked) cuckoo hashing
-[cite:@cuckoo-hashing]: a pilot with a minimal number of collisions is chosen,
+[cite:@cuckoo-hashing;@dary-cuckoo-hashing]: a pilot with a minimal number of collisions is chosen,
 and the colliding buckets are 'evicted' and will have to search for a new pilot.
 
 *Parameter values.*
@@ -630,12 +683,12 @@ An MPHF on $10^9$ keys requires memory at least $1.5\mathrm{bits}/\mathrm{key} \
 $16MB$. Thus, most queries require reading a pilot from main memory (RAM), which usually
 has a latency around $80ns$.
 Nevertheless, existing MPHFs such as FCH [cite:@fch] achieve an inverse throughput as
-low as $35ns/query$ on such a dataset [cite:@pthash].
+low as 35ns/query on such a dataset [cite:@pthash].
 This is achieved by /pipelining/ and the /reorder buffer/.
-For example, Intel Skylake CPUs can execute over $200$ instructions ahead while waiting for memory
+For example, Intel Skylake CPUs can execute over 200 instructions ahead while waiting for memory
 to become available [cite:@measuring-rob;@measuring-rob-skylake]. This allows the CPU to already start processing 'future'
 queries and fetch the required cache lines from RAM while waiting for the
-current query. Thus, when each iteration requires less than $100$ instructions
+current query. Thus, when each iteration requires less than 100 instructions
 and there are no branch-misses, this effectively makes up to two reads in
 parallel. A large part of speeding up queries is then to reduce the length of
 each iteration so that out-of-order execution can fetch memory more iterations ahead.
@@ -646,12 +699,12 @@ explicitly /prefetch/[fn::There are typically multiple types of prefetching
 instructions that prefetch into a different level of the cache hierarchy. We
 prefetch into all levels of cache using =prefetcht0=.] cache lines from our code.
 Each prefetch requires a /line fill buffer/ to store the result before it is
-copied into the L1 cache. Skylake has $12$ line fill buffers
-[cite:@line-fill-buffer-skylake], and hence can support up to $12$ parallel
+copied into the L1 cache. Skylake has 12 line fill buffers
+[cite:@line-fill-buffer-skylake], and hence can support up to 12 parallel
 reads from memory.
-In theory, this gives a maximal random memory throughput around $80ns/12 = 6.67 ns$ per read
-from memory, but in practice experiments show that the limit is $7.4 ns$ per read.
-Thus, our goal is to achieve a query throughput of $7.4 ns$.
+In theory, this gives a maximal random memory throughput around $80/12 = 6.67$ns per read
+from memory, but in practice experiments show that the limit is 7.4ns per read.
+Thus, our goal is to achieve a query throughput of 7.4ns.
 
 We consider two models to implement prefetching: batching and streaming.
 
@@ -782,9 +835,9 @@ The cubic $\gamma_3$ is faster to construct than the identity $\gamma_1$ for
 small $\lambda \leq 3.5$. Unlike $\gamma_1$, it also scales to much larger
 $\lambda$ up to $4$, and thereby achieves significantly smaller overall size.
 
-We note that for small $\lambda$, construction time does converge to around $19ns/key$.
-A rough time breakdown is that for each key, $1ns$ is spent on hashing, $5ns$
-on sorting all the keys, $12ns$ to find pilots, and lastly $1ns$ on remapping
+We note that for small $\lambda$, construction time does converge to around 19ns/key.
+A rough time breakdown is that for each key, 1ns is spent on hashing, 5ns
+on sorting all the keys, 12ns to find pilots, and lastly 1ns on remapping
 to empty slots.
 
 *Recommended parameters.*
@@ -792,12 +845,12 @@ Based on these results, we choose two sets of parameters for further
 evaluation, as indicated with blue and red dots in [[construction]]:
 - *Fast*: using the linear $\gamma_1$, $\lambda=3.0$, $\alpha=0.99$, and a plain
   vector for remapping.
-  Construction takes only just over $20ns/key$, close to the apparent lower
-  bound, and space usage is $3.00bits/key$. This can be used when $n$ is small, or
+  Construction takes only just over 20ns/key, close to the apparent lower
+  bound, and space usage is 3.00bits/key. This can be used when $n$ is small, or
   more generally when memory usage is not a bottleneck.
 - *Compact*: using the cubic $\gamma_3$, $\lambda=4.0$, $\alpha=0.99$, and
-  CacheLineEF remapping. Construction now takes around $50ns/key$, but the data
-  structure only uses $2.12bits/key$.
+  CacheLineEF remapping. Construction now takes around 50ns/key, but the data
+  structure only uses 2.12bits/key.
 
 *** [Appendix?] Remap
 #+name: remap
@@ -1040,30 +1093,29 @@ bottleneck. For integer keys, such as $k$-mers, much higher throughput of up to
 even of the main memory (2.5ns/key) when using multiple cores.
 
 *Future work.*
-We see a few directions for future work. First, while it seems that query
-throughput is at the limit, it may be possible to increase it even further by
-using more skewed bucket size distributions. The larger buckets them cover a
-larger part of the keys, and thus more queries can be answered from cache.
-Possibly this could be done by allowing a small number of collisions between
-keys in a bucket, and separately fixing those.
+We see a few directions for future work.
 
-The size of the list of pilots could possibly be improved by further parameter
-tuning. In particular, we only tried 8-bit pilots, while slightly fewer or more
+First of all, a theoretical analysis of our method is currently missing. While
+the hash-evict strategy generalizing ($d$-ary) cuckoo hashing works well in
+practice, we currently have no relation between the bucket size $\lambda$, load
+factor $\alpha$, and the number of evicts arising during construction.
+Such an analysis could help to better understand the optimal bucket assignment
+function, like PHOBIC [cite:@phobic] did for the case without
+eviction.
+
+Second, the size of pilots could possibly be improved by further parameter
+tuning. In particular we use 8-bit pilots, while slightly fewer or more
 bits may lead to smaller data structures. An experiment with 4-bit pilots
 was not promising, however.
-Further, we did not do a theoretical analysis of expected length of the eviction
-chains and the running time of the construction. Such an analysis could help to
-better understand the optimal bucket assignment function for this algorithm,
-like PHOBIC [cite:@phobic] did for the case without eviction.
 
 Lastly, to further improve the throughput, we suggest that more attention is
 given to the exact input format. As already seen, hashing all queries at once
 can provide significant performance gains via prefetching.  For string input
-specifically, it is more efficient when the strings are consecutive in memory
+specifically, it is more efficient when the strings are consecutively packed in memory
 rather than separately allocated, and it might be more efficient to explicitly
 hash multiple strings in parallel.
-To end, applications could investigate whether they can be rewritten to
-stream queries.
+To end, applications could investigate whether they can be rewritten to take
+advantage of stream queries.
 
 * Acknowledgements
 :PROPERTIES:
