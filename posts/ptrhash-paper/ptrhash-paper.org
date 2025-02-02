@@ -53,47 +53,81 @@ state-of-the-art methods.
 *Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
 
 * Introduction
-*Problem statement.*
-Given a set of $n$ keys $\{k_0, \dots, k_{n-1}\}$, construct a /minimal perfect hash function/
-data structure $\mphf$ that injectively maps the keys to $[n] =
-\{0, \dots, n-1\}$.
+Given a set of $n$ keys $\{k_0, \dots, k_{n-1}\}$,
+a /hash function/ maps them to some co-domain $[m] := \{0, \dots, m-1\}$.
+When a hash is injective (collision-free), it is also called /perfect/.
+When additionally it is surjective onto $[n]$, it is /minimal/.
+Thus, a /minimal perfect hash function/ (MPHF) bijectively maps a set of $n$ keys onto $[n]$.
 
-Such a hash function is called /perfect/ because it is /collision free/ when no
-two keys map to the same element. It is called /minimal/ because the co-domain has
-size $n$, and thus the function is surjective and leaves no gaps in its image.
-Non-minimal perfect hash functions are also of interest, and usually have
-codomain $[n'] = \{0, \dots, n'-1\}$ for some $n'$ slightly larger than $n$.
 
 *Metrics.*
-There are several aspects to this problem. First, for random input keys, there
-is a space lower bound on the size of $\mphf$ of $\log_2(e)=1.44$ bits per key [TODO cite]. Many recent
+Various aspects of MPHF data structures can be optimized.
+First, one could minimize its space usage and try to
+approach the $\log_2(e)=1.44$ bits/key lower bound [cite:@mehlhorn82_mphf_size].
+Indeed, there are many recent works in this direction, such as Bipartite
+ShockHash-RS, which gets below 1.5 bits/key [cite:@shockhash;@bipartite-shockhash;@phf-thesis].
+
+In this paper, we focus primarily on optimizing for query throughput and
+secondary on construction speed, while relaxing space usage up to 3 bits/key.
+This continues the line of work started by PTHash [cite:@pthash;@pthash-2] and
+continued by PHOBIC [cite:@phobic], that both provide relatively fast queries.
+
+*Problem statement.*
+Construct a /minimal perfect hash function/
+data structure $\mphf$ that is fast to query, ideally in a single memory access,
+and fast to construct, while staying below 3 bits/key of space.
+
+*Motivation.*
+Our main motivating application is to optimize the use of PTHash in SSHash
+[cite:@sshash], a data structure to index a set of $k$-mers (sequences
+of $k$ DNA bases).
+There, the MPHF only takes around $5\%$ of the total space. Thus, a slightly
+increased space usage of the MPHF has little effect on the total space, while
+faster lookups could significantly improve the overall query speed. In this application,
+$k$-mers are typically encoded as 64-bit integers, and thus we will focus our
+attention on integer keys.
+
+Further applications can be found in domains such as networking [cite:@Lu_2006],
+databases [cite:@Chang_2005], and
+full-text indexing [cite:@Belazzougui_2014], where one could imagine hashing IP addresses,
+URLs, or (compact) suffix-trie edge labels.
+
+*Contributions.*
+We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
+query throughput and construction speed, at the cost of slightly more memory usage.
+Its main novelties are:
+1. the use of fixed-width 8-bit pilots, leading to very simple lookups;
+2. a pilot search based on cuckoo-hashing;
+3. a /remap table/ based on a per-cacheline Elias-Fano encoding, CacheLineEF;
+4. construction in parts, while only using a single remap table, again
+   simplifying lookups;
+5. the use of /prefetching/ to /stream/ multiple queries in parallel.
+
+*Results.*
+We propose two parameter configurations, /fast/ and /compact/.
+When using 300 million string keys, the fast configuration takes 3.0 bits/kmer and is nearly as fast to construct as the fastest
+other methods. It provides $2.8\times$ faster queries when looping naively, or $5.4\times$ faster when streaming.
+Similarly, the compact configuration takes 2.12 bits/kmer, and is over $3\times$
+faster to query (or $6\times$ when streaming) than other methods requiring
+similar space and construction time.
+
+When using $10^9$ integer keys instead, PtrHash can achieve a throughput of up to
+12ns/key when looping over queries, or even 8ns/key when streaming, close to matching the
+maximum throughput of random memory accesses of a single thread. In a
+multi-threaded setting, PtrHash can fully saturate the DDR4 memory bandwidth.
+
+* Background
+
+*Background.*
+- To next section?
+- Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
+, and one ca. Many recent
 works have focused on constructing minimal perfect hash functions that use
 space close to this lower bound, going as low as 1.5 bits/key [TODO cite]. These
 methods tend to be relatively complex and hence slow to query.
 Instead, here we focus on construction speed and query speed.
 This continues the line of work started by FCH [cite:@fch], PTHash
 [cite:@pthash;@pthash-2], and PHOBIC [cite:@phobic].
-
-*Goal.*
-In this paper, our aim is to construct an mphf that is fast to build and only needs a single access
-to main memory for each query, while using not more than 3 bits per key.
-
-*Motivation.*
-- Application in bioinformatics SSHash, throughput first
-
-*Background.*
-- Instead of one $n \log_2(e)$  bit number, search for many 8-bit numbers
-
-*Contributions.*
-We introduce PtrHash, a minimal perfect hash function that is primarily optimized for
-query throughput and construction speed, at the cost of some more memory usage.
-Its main novelties are:
-1. the use of fixed-width $8$ bit pilots, leading to very simple lookups;
-2. cuckoo-hashing-like based construction
-3. construction in parts, with a single /remap/ table, leading to fast construction;
-
-*Results.*
-* Background
 - GB vs GiB
 ** Single large seed.
 ** Other work
@@ -978,7 +1012,7 @@ faster to query (or nearly $4\times$ when streaming), is $6.5\times$ faster to b
 even slightly smaller.
 
 *Space.*
-PtrHash With the fast parameters is larger (2.99 bits/key) than some other methods, but
+PtrHash with the fast parameters is larger (2.99 bits/key) than some other methods, but
 compensates by being significantly faster to construct and/or query.
 When space is of importance, the compact version can be used (2.12 bits/key).
 This takes $2.4\times$ longer to build at 62ns/key, and has only slightly slower queries.
@@ -1026,8 +1060,10 @@ Lastly, to further improve the throughput, we suggest that more attention is
 given to the exact input format. As already seen, hashing all queries at once
 can provide significant performance gains via prefetching.  For string input
 specifically, it is more efficient when the strings are consecutive in memory
-rather than separately allocated. Attention could also be given to efficiently
-hashing many strings in parallel.
+rather than separately allocated, and it might be more efficient to explicitly
+hash multiple strings in parallel.
+To end, applications could investigate whether they can be rewritten to
+stream queries.
 
 * Acknowledgements
 :PROPERTIES:
