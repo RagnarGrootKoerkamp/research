@@ -303,8 +303,10 @@ def space(f, out):
     ax.set_ylim(0, 140)
     ax2.set_ylim(0, 3.5)
     ax2.grid(axis="y", lw=0.5)
+    ax.grid(axis="y", lw=0.5)
     ax.grid(axis="x", lw=0.5)
     ax.xaxis.set_minor_locator(MultipleLocator(0.1))
+    ax2.set_yticks([0, 2.0, 2.5, 3.0], minor=False)
     ax2.set_yticks([2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8, 2.9], minor=True)
     ax2.grid(axis="y", lw=0.5, which="minor", alpha=0.4)
 
@@ -568,7 +570,6 @@ def query_throughput(f, out):
         ax.spines["left"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    axs[1].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
     axs[1].axhline(y=2.5, color="black", lw=1, ls="dotted", zorder=-1)
     axs[1].plot(
         xs,
