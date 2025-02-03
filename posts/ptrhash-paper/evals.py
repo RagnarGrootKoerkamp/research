@@ -59,7 +59,7 @@ def bucket_fn_plots():
     ## PLOT 1
 
     # Set plot size
-    plt.figure(figsize=(4.5, 3))
+    plt.figure(figsize=(4.1, 2.7))
     # Plot the functions from 0 to 1
     plt.plot(xs, [linear(x) for x in xs], label="Linear  $\\,x$")
     plt.plot(xs, [skew(x) for x in xs], label="Skewed $0.6\\mapsto0.3$")
@@ -85,7 +85,7 @@ def bucket_fn_plots():
     ## PLOT 2
 
     # Set plot size
-    plt.figure(figsize=(4.5, 3))
+    plt.figure(figsize=(4.1, 2.7))
     plt.plot(xs, [bucket_sz(linear, x) for x in xs], label="Linear   $\\,x$")
     plt.plot(xs, [bucket_sz(skew, x) for x in xs], label="Skewed $0.6\\mapsto0.3$")
     plt.plot(
@@ -115,28 +115,42 @@ def bucket_fn_plots():
     plt.close()
 
 
-def build_stats(f, out, l):
+def build_stats():
+    out = "plots/bucket_fn_stats.svg"
+    f1 = "data/bucket_fn_stats_l35.json"
+    f2 = "data/bucket_fn_stats_l40.json"
+
     alpha = 0.99
 
-    with open(f) as f:
-        all_data = json.load(f)
+    with open(f1) as f:
+        data1 = json.load(f)
+    with open(f2) as f:
+        data2 = json.load(f)
 
-    cols = len(all_data)
+    rows = 2
+    cols = 3
 
     pcts = range(100)
     xs = [x / 100 for x in range(0, 101)]
 
     # Figure with 3 subplots
     fig, axs = plt.subplots(
-        1, cols, figsize=(cols * 3 + 0.75, 2.5), layout="constrained"
+        rows, cols, figsize=(cols * 2.7 + 0.75, rows * 2.2), layout="constrained"
     )
     if cols == 1:
         axs = [axs]
-    keys = ["linear", "skewed", "optimal", "square", "cubic"]
-    keys = [k for k in keys if k in all_data]
 
-    for ax1, name in zip(axs, keys):
-        data = all_data[name]["by_pct"]
+    keys = ["linear", "skewed", "optimal", "square", "cubic"]
+    all_keys = [(k, 3.5) for k in keys] + [("cubic", 4.0)]
+
+    flat_ax = [ax for row in axs for ax in row]
+
+    for i, (ax1, (name, l)) in enumerate(zip(flat_ax, all_keys)):
+        if l == 3.5:
+            data = data1[name]["by_pct"]
+        else:
+            data = data2[name]["by_pct"]
+
         elem = 0
         elems = [0]
         for pct in pcts:
@@ -153,9 +167,10 @@ def build_stats(f, out, l):
         ax3.set_ylim(0, 1)
         ax2.set_ylim(0, 10)
 
-        ax1.set_title(name.capitalize() + f" ($\\lambda = {l}$)")
+        ax1.set_title(name.capitalize() + f", $\\lambda = {l}$")
 
-        ax1.set_xlabel("Normalized bucket index")
+        if i >= 3:
+            ax1.set_xlabel("Normalized bucket index")
         ax1.set_ylabel("Evictions per bucket")
         ax2.set_ylabel("Bucket size")
         ax2.yaxis.label.set_color("red")
@@ -205,19 +220,19 @@ def build_stats(f, out, l):
 
         # Keep only leftmost and rightmost y-axis
         # First
-        if name == keys[0]:
+        if i % 3 == 0:
             ax1.yaxis.set_visible(True)
         else:
             ax1.set_yticklabels([])
             ax1.yaxis.set_ticks_position("none")
             ax1.set_ylabel(None)
         # Last
-        if name == keys[-1]:
+        if i % 3 == 2:
             ax2.yaxis.set_visible(True)
-            if len(keys) > 1:
-                ax1.legend(handles=p1 + p2 + p3, loc="best")
         else:
             ax2.yaxis.set_visible(False)
+        if i == 2:
+            ax1.legend(handles=p1 + p2 + p3, loc="best")
 
     plt.savefig(out, bbox_inches="tight")
     plt.show()
@@ -234,7 +249,7 @@ def space(f, out):
 
     # A plot with lambda on the x-axis, and two y-axes with build time and size.
     # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
-    fig, ax = plt.subplots(1, 1, figsize=(9, 5), layout="constrained")
+    fig, ax = plt.subplots(1, 1, figsize=(8.6, 5), layout="constrained")
     ax2 = ax.twinx()
 
     ax.set_xlabel("$\\lambda$")
@@ -414,6 +429,10 @@ def query_batching(f, out):
             # Min over loop and loop_bb
             assert len(g) == 2
             ax.axhline(y=g["q_phf"].values.min(), color=color, lw=lw, ls=ls)
+        if n == 10**9:
+            ax.set_title(f"$n = 10^9$")
+        if n == 20 * 10**6:
+            ax.set_title(f"$n = 20$ million")
 
     for ax in axs:
         ax.set_xscale("log")
@@ -544,6 +563,10 @@ def query_throughput(f, out):
 
         ax.plot(g["threads"], g["q_phf"], ls=ls, color=c1, lw=2, alpha=aa)
         ax.plot(g["threads"], g["q_mphf"], ls=ls, color=c1, lw=1.5, alpha=1.0)
+        if n == 10**9:
+            ax.set_title(f"$n = 10^9$")
+        if n == 20 * 10**6:
+            ax.set_title(f"$n = 20$ million")
 
     xs = [1, 2, 3, 4, 5, 6, 7]
     for n, ax in zip(sorted(df.n.unique()), axs):
@@ -693,11 +716,10 @@ def comparison(f):
 plt.close("all")
 
 # 3.4
-# bucket_fn_plots()
+bucket_fn_plots()
 
 # 4.1.1
-# build_stats("data/bucket_fn_stats_l35.json", "plots/bucket_fn_stats_l35.svg", 3.5)
-# build_stats("data/bucket_fn_stats_l40.json", "plots/bucket_fn_stats_l40.svg", 4.0)
+# build_stats()
 
 # 4.1.2
 # space("data/size.json", "plots/size.svg")
@@ -715,4 +737,4 @@ plt.close("all")
 # string_queries("data/string_queries.json")
 
 # 4.3
-comparison("data/comparison_3e8.txt")
+# comparison("data/comparison_3e8.txt")

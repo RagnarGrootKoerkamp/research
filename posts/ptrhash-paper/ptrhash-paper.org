@@ -1,9 +1,9 @@
-#+title: [WIP] PtrHash: Minimal Perfect Hashing at the Speed of Memory
-#+filetags: @paper mphf wip
+#+title: PtrHash: Minimal Perfect Hashing at RAM Throughput
+#+filetags: @paper highlight mphf 
 #+OPTIONS: ^:{} num:t
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+date: <2024-11-20 Wed>
+#+date: <2025-02-03 Mon>
 
 $$
 \newcommand{\part}{\mathsf{part}}
@@ -36,7 +36,7 @@ first prioritizes query throughput, while also allowing efficient construction
 for $10^9$ or more elements using up to 3.0 bits of memory per key.
 
 *Contributions.*
-PtrHash builds on PTHash by 1) using fixed-width (uncompressed) 8-bit pilots, 2) a construction
+PtrHash builds on PTHash and PHOBIC by 1) using fixed-width (uncompressed) 8-bit pilots, 2) a construction
 algorithm similar to cuckoo-hashing to find suitable pilot values, 3) a /single/
 remap table covering all parts, encoded using per-cacheline EF, and 4) the use
 of prefetching to answer a stream of queries more efficiently than one-by-one processing.
@@ -326,8 +326,8 @@ and the colliding buckets are 'evicted' and will have to search for a new pilot.
 
 *Parameter values.*
 In practice, we usually use $\alpha=0.99$.
-Similar to PHOBIC, the number of buckets per part is set to $B = (\alpha\cdot
-S)/\lambda$, where $\lambda$ is the expected size of each bucket and is around
+Similar to PHOBIC, the number of buckets per part is set to $B = \lceil(\alpha\cdot
+S)/\lambda\rceil$, where $\lambda$ is the expected size of each bucket and is around
 $3$ to $4$.
 The number of parts is $P=\lceil n/(\alpha S)\rceil$.
 Smaller parts fit better in cache and hence are faster to construct, while too
@@ -416,7 +416,7 @@ to its initial position.].* In PtrHash, we instead use /fixed width/, single byt
 this, we use a technique resembling cuckoo hashing [cite:@cuckoo-hashing], as
 shown in [[construction-code]].
 As before, buckets are greedily /inserted/ from large to small. For some buckets,
-there may be no pilot in $[255]$ such that all its keys map to empty slots. When
+there may be no pilot in $[256]$ such that all its keys map to empty slots. When
 this happens, a pilot is found with the lowest weighted number of /collisions/.
 The weight of a collision with an element of a bucket of size $s$ is $s^2$, to prevent
 /evicting/ large buckets, as those are harder to place.
@@ -646,7 +646,7 @@ that many $x$ values map close to $0$.
 In practice, this causes the largest buckets to have size much larger than $\sqrt S$.
 Such buckets are hard to place, because by the birthday paradox they are likely
 to have multiple elements hashing to the same slot. To fix this, PHOBIC ensures the
-slope of $\gamma$ is at least $\varepsilon=1/(5 \sqrt S)$ by using
+slope of $\gamma$ is at least $\varepsilon=1/\big(5 \sqrt S\big)$ by using
 $\gamma_\varepsilon(x) = x + (1-\varepsilon)(1-x)\ln(1-x)$ instead.
 We fix $\varepsilon = 1/256$.
 # Since this function is slow to compute in practice, a
@@ -796,12 +796,13 @@ is indexing $k$-mers that fit in $64$ bits, we always use random $64$ bit intege
 :END:
 *** Bucket Functions
 
-# [TODO: Change 4.0 to 3.9 for more reliability.]
+# [TODO: Change 4.0 to 3.9 for more reliability?]
+# [TODO: Change to CacheLineEF for fast version also?]
 
 #+name: bucket-fn-plot
 #+caption: Bucket size distribution (red) and average number of evictions (black) per additionally placed bucket during construction of the pilot table, for different bucket assignment functions. Parameters are $n=10^9$ keys, $S=2^{18}$ slots per part, and $\alpha=0.98$, and the red shaded load factor ranges from $0$ to $\alpha$. In the first five plots $\lambda=3.5$ so that the pilots take $2.29$ bits/key. For $\lambda=4.0$ (rightmost plot), the linear, skewed, and optimal bucket assignment functions cause endless evictions, and construction fails. The cubic function does work, resulting in $2.0$ bits/key for the pilots.
-#+attr_html: :class full-width
-| [[file:plots/bucket_fn_stats_l35.svg]] | [[file:plots/bucket_fn_stats_l40.svg]] |
+#+attr_html: :class inset
+[[file:plots/bucket_fn_stats.svg]]
 
 
 In [[bucket-fn-plot]], we compare the performance of different bucket assignment
@@ -829,7 +830,7 @@ speed, and the cubic $\gamma_3$ for space efficiency.
 
 In [[construction]] we compare the multi-threaded construction time and space usage of PtrHash on
 $n=10^9$ keys for
-various parameter $\gamma\in \{\gamma_1, \gamma_3\}$, $2.7\leq \lambda\leq 4.2$,
+various parameters $\gamma\in \{\gamma_1, \gamma_3\}$, $2.7\leq \lambda\leq 4.2$,
 $\alpha\in \{0.98, 0.99, 0.995, 0.998\}$, and plain remapping or CacheLineEF.
 We see that for fixed $\gamma$ and $\alpha$, the construction time appears to
 increase exponentially as $\lambda$ increases, until it times out due to a
@@ -1017,7 +1018,7 @@ Minimal perfect hashing is only slightly slower than perfect hashing.
 | PHOBIC              | $\lambda{=}3.9$, $\alpha{=}1.0$, IC-C       |                        4.14 |                                    62 |                          116 |
 | PHOBIC              | $\lambda{=}4.5$, $\alpha{=}1.0$, IC-R       |                        2.34 |                                    80 |                          179 |
 | PHOBIC              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-R       |                      *1.94* |                                   215 |                          163 |
-| Phobic              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-C       |                        2.44 |                                   220 |                          108 |
+| PHOBIC              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-C       |                        2.44 |                                   220 |                          108 |
 | PHOBIC              | $\lambda{=}7.0$, $\alpha{=}1.0$, IC-R       |                      *1.86* |                                   446 |                          157 |
 | PtrHash, fast       | $\lambda{=}3.0$, $\alpha{=}0.99$, Vec       |                        2.99 |                                  *26* |                         *38* |
 | + streaming         |                                             |                             |                                       |                         *20* |
