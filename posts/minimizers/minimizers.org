@@ -15,6 +15,8 @@ $$
 \DeclareMathOperator*{\argmin}{argmin}
 \DeclareMathOperator*{\poly}{poly}
 \DeclareMathOperator*{\rc}{rc}
+\newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
+\newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
 $$
 
 #+attr_shortcode: summary
@@ -85,6 +87,7 @@ TODO:
 - Briefly introduce what a sampling scheme does.
 - Mention global scheme, and why we care about local
 - Mention minimizers vs winnowing vs sampling schemes terminology.
+- Define context, cite [cite:@small-uhs] more.
 - Define charged
 
 
@@ -404,19 +407,76 @@ The full and more precise version is as follows [cite:Theorem 1 @sampling-lower-
 
 #+begin_theorem Near-tight lower bound (improved)
 Let $M_\sigma(p)$ count the number of aperiodic necklaces of length $p$ over an
-alphabet of size $\sigma$. Then, the density of any forward sampling scheme is
+alphabet of size $\sigma$. Then, the density of any forward sampling scheme $f$ is
 at least
 
 $$
-d(f) \geq \frac{1}{\sigma^{w+k}} \sum_{p | (w+k)} M_\sigma(p) \left\lceil \frac
+d(f) \geq g_\sigma(w,k) :=  \frac{1}{\sigma^{w+k}} \sum_{p | (w+k)} M_\sigma(p) \left\lceil \frac
 pw\right\rceil \geq \frac{\left\lceil\frac{w+k}{w}\right\rceil}{w+k} \geq \frac 1w,
 $$
 
 where the middle inequality is strict when $w>1$.
 #+end_theorem
 #+begin_proof_sketch
+The core of this result is to refine the proof given above.
+While indeed we know that each cycle will have at least $\ceil{(w+k)/w}$
+sampled k-mers, that lower bound may not be tight. For example, if the cycle
+consists of only zeros, each window samples position $i + f(000\dots 000)$, so that
+in the end every position is sampled.
 
+We say that a cycle has /period/ $p$ when it consists of $(w+k)/p$
+copies of some pattern $P$ of length $p$, and $p$ is the maximum number for which this holds.
+In this case, we can consider the cyclic string of $P$, on which we must sample
+at least $\ceil{p/w}$ k-mers. Thus, at least $\frac{w+k}{p}\ceil{\frac pw}$
+k-mers are sampled in total, corresponding to a particular density of at least $\frac{1}{p}\ceil{\frac pw}$.
+
+Since $p$ is maximal, the pattern $P$ itself must be /aperiodic/. When
+$M_\sigma(p)$ counts the number of aperiodic cyclic strings of length $p$,
+the probability that a uniform random cycle has period $p$ is $p\cdot M_\sigma(p) /
+\sigma^{w+k}$, where the multiplication by $p$ accounts for the fact that each pattern
+$P$ gives rise to $p$ equivalent cycles that are simply rotations of each other.
+Thus, the overall density is simply the sum over all $p\mid (w+k)$:
+
+$$
+d(f)
+\geq \sum_{p | (w+k)} \frac{p\cdot M_\sigma(p)}{\sigma^{w+k}}\cdot \frac{1}{p} \left\lceil \frac pw\right\rceil
+=\frac 1{\sigma^{w+k}} \sum_{p | (w+k)} M_\sigma(p)  \left\lceil \frac pw\right\rceil.
+$$
+
+The remaining inequalities follow by simple arithmetic.
 #+end_proof_sketch
+
+TODO: Describe ILP and plot
+
+As can be seen in TODO PLOT, this lower bound jumps up at values $1 \pmod w$.
+In practice, if some density $d$ can be achieved for parameters $(w,k)$, it can
+also be achieved for any larger $k'\geq k$, by simply ignoring the last $k'-k$
+characters of each window. Thus, we can ''smoothen'' the plot via the following
+corollary.
+
+#+begin_theorem Near-tight lower bound (smooth)
+Any forward scheme $f$ has density at least
+
+$$
+d(f)
+\geq g'_\sigma(w,k) := \max\big(g_\sigma(w,k), g_\sigma(w,k')\big)
+\geq \max\left(\frac 1{w+k}\ceil{\frac{w+k}w}, \frac1{w+k'}\ceil{\frac{w+k'}w}\right),
+$$
+
+where $k'$ is the smallest integer $\geq k$ such that $k' \equiv 1 \pmod w$.
+#+end_theorem
+
+*Local schemes.* The lower bounds above can also be extended to local
+schemes by replacing $c=w+k$ by $c=2w+k-2$. Sadly, this does not lead to a good
+bound. In practice, the best local schemes appear to be only marginally better than
+the best forward schemes, while the currently established theory requires us to
+increase the context size significantly, thereby making all inequalities
+much more loose. Specifically, the tightness of the bound is mostly due to the
+rounding up in
+$\frac{1}{c}\ceil{\frac{c}{k}}=\frac{1}{w+k}\ceil{\frac{w+k}{k}}$, and the more
+we increase $c$, the smaller the effect of the rounding will be.
+
+*TODO: Contextualization. Where are we now?*
 
 * Sampling schemes
 ** Previous work
