@@ -751,6 +751,18 @@ article div p:nth-child(2) mjx-container[display="true"] {
     padding: 0.1rem 0.1rem;
   }
   overflow: initial;
+
+  $fg-color-notice-default-icon: #ffb300 !default;
+  $bg-color-notice-default-title: #ffc1071a !default;
+  $bg-color-notice-default-content: #ffca281a !default;
+  // Default style
+  background-color: $bg-color-notice-default-content;
+  .notice-title {
+    background-color: $bg-color-notice-default-title;
+    i {
+      color: $fg-color-notice-default-icon;
+    }
+  }
 }
 
 details {
@@ -760,6 +772,86 @@ details {
   }
 }
 
-mjx-container[jax="CHTML"][display="true"] mjx-math {
-  padding: 1px 0 !important;
+mjx-container[jax="CHTML"][display="true"] {
+  margin: 0 !important;
+  mjx-math {
+    padding: 1px 0 !important;
+  }
+}
+
+.special-block {
+  border-left: 1px solid $highlight;
+  // border-width: 1px 0;
+  // border-radius: 0.6rem;
+  padding: 0rem 1rem;
+  margin: 1rem 3rem;
+
+  &.newtheorem {
+    border: 1px solid $highlight;
+    border-radius: 0.6rem;
+    background: white;
+    padding: 1rem 2rem;
+    margin: 1rem 2rem;
+  }
+
+  .special-block-title {
+    margin-right: 2rem;
+    display: inline-block;
+    font-weight: initial;
+    .special-block-number {
+      display: none;
+    }
+    .special-block-name {
+      font-weight: bolder;
+    }
+  }
+
+  // next element is also inline-block
+  .special-block-title + p {
+    display: inline;
+  }
+
+  // last p has no bottom margin
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  // // Insert a right-aligned left-pointing triangle.
+  // &::before {
+  //   content: "▶";
+  //   margin-right: 1rem;
+  //   font-size: 1rem;
+  //   font-weight: initial;
+  // }
+
+  // &::after {
+  //   content: "◀";
+  //   float: right;
+  //   margin-left: 1rem;
+  //   font-size: 1rem;
+  // }
+}
+
+.proof_sketch {
+  &::before {
+    content: "Proof (sketch).";
+    margin-right: 1rem;
+    font-weight: bold;
+  }
+
+  p:first-child {
+    display: inline;
+  }
+}
+
+.proof {
+  &::before {
+    content: "Proof.";
+    margin-right: 1rem;
+    font-weight: bold;
+  }
+
+  p:first-child {
+    display: inline;
+  }
 }

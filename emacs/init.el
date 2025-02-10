@@ -75,6 +75,79 @@
 (setq user-full-name "Ragnar Groot Koerkamp")
 
 ;;;
+;;; org-special-blocks-extra
+;;;
+(use-package org-special-block-extras
+  :ensure t
+  :hook (org-mode . org-special-block-extras-mode)
+  )
+
+(org-mode)
+
+(defmacro special-block-labels-push (name label)
+  (let ((labels (format "special-block-%s-labels" name))
+        (labels-cdr (format "special-block-%s-labels-cdr" name)))
+    `(let ((label (list (format "%s" ,label))))
+       (setq ,(intern labels-cdr)
+             (if ,(intern labels-cdr)
+                 (setcdr ,(intern labels-cdr) label)
+               (setq ,(intern labels) label))))))
+
+
+
+(defmacro defspeciallink (name prefix)
+  `(progn
+     (defvar ,(intern (format "special-block-%s-labels" name)) '()) ; to store this theroem labels
+     (defvar ,(intern (format "special-block-%s-labels-cdr" name)) nil)
+
+     (org-defblock ,prefix (ref nil) ()
+                   ,(format "Reference a %s special block." name)
+                   (format
+                    (cond
+                     ((org-export-derived-backend-p org-export-current-backend 'latex)
+                      ,(format "\\ref{%s:%%s}" prefix)) ; use standard ref in LateX
+                     ((org-export-derived-backend-p org-export-current-backend 'html)
+                      ,(format "<a href=\"#%s:%%s\">%%d</a>" prefix))) ; in HTML the number has to be print manually, finding the position of the label in the list
+                    ref (1+ (cl-position (format "%s" ref) ,(intern (format "special-block-%s-labels" name)) :test 'equal)))))) ; sum one because lists are zero based
+
+(defmacro deftheorem (name display-name prefix &optional tcb)
+  "Defines a new theorem type called NAME (rendered as DISPLAY-NAME in HTML) which labels start with PREFIX. If TCB is not nil, in LaTeX the tcbtheorem syntax is used.
+Usage:
+,#+BEGIN_name Title :label lbl
+....
+,#+END_name
+As can be seen in [[prefix:lbl]]
+                "
+  `(progn
+     (defspeciallink ,name ,prefix)
+
+     (org-defblock ,name (title "TITLE" label nil unnumbered nil)
+                   ,(format "Define %s special block." name)
+                   (unless unnumbered (special-block-labels-push ,name label)) ; add label to list
+                   (cond
+                    ((org-export-derived-backend-p org-export-current-backend 'latex)
+                     (format
+                      (concat ,(format "\\begin{%s" name) (when unnumbered "*") "}"
+                              ,(if tcb "{%s}{%s}" (format "[%%s]\\label{%s:%%s}" prefix)) ; tcbtheorem or standard
+                              "\n%s"
+                              ,(format "\\end{%s" name) (when unnumbered "*") "}")
+                      (or title "") (or label "") contents))
+                    ((org-export-derived-backend-p org-export-current-backend 'html)
+                     (format
+                      (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\">%s" prefix name display-name)
+                              (unless unnumbered (format " %d" (length ,(intern (format "special-block-%s-labels" name)))))
+                              (when title " <span class=\"special-block-name\">") "%s" (when title "</span>") ".</span>"
+                              ,(format "%%s</div>"))
+                      (or label "") (or title "") contents))
+                    )
+                   )))
+
+(deftheorem definition "Definition" dfn)
+(deftheorem theorem "Theorem" thm)
+(deftheorem newtheorem "Theorem" thm)
+
+
+;;;
 ;;; Public functions
 ;;;
 
