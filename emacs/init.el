@@ -134,8 +134,8 @@ As can be seen in [[prefix:lbl]]
                       (or title "") (or label "") contents))
                     ((org-export-derived-backend-p org-export-current-backend 'html)
                      (format
-                      (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\">%s" prefix name display-name)
-                              (unless unnumbered (format " %d" (length ,(intern (format "special-block-%s-labels" name)))))
+                      (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\"><span class=\"special-block-number\">%s" prefix name display-name)
+                              (unless unnumbered (format " %d</span>" (length ,(intern (format "special-block-%s-labels" name)))))
                               (when title " <span class=\"special-block-name\">") "%s" (when title "</span>") ".</span>"
                               ,(format "%%s</div>"))
                       (or label "") (or title "") contents))
