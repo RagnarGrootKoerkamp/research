@@ -1,7 +1,12 @@
-+++ title = "[WIP] Binary search variants and the effects of batching"
-authors = ["František Kmječ", "Ragnar Groot Koerkamp"] date =
-2024-10-01T00:00:00+00:00 tags = ["binary-search", "wip", "batching"]
-categories = ["lablog"] draft = false +++
+#+title: [WIP]  Binary search variants and the effects of batching
+#+filetags: @walkthrough binary-search wip
+#+OPTIONS: ^:{} num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+author: František Kmječ
+#+author: Ragnar Groot Koerkamp
+#+date: <2025-02-12 Wed>
 
 * References
 :PROPERTIES:
@@ -95,6 +100,7 @@ experiments.
 So, how does it perform? Let's compare to the Rust standard library
 version:
 
+#+attr_html: :class inset
 [[file:plots/binsearch-std-vs-binsearch.svg]]
 
 We can see that our naive version is slower, except for large array sizes. Checking out the
@@ -149,6 +155,7 @@ out that it is still plenty slower than the =select_unpredictable=
 function that is used in =binary_search_by=, so I followed the approach
 that the standard library has.
 
+#+attr_html: :class inset
 [[file:plots/binsearch-std-vs-branchless.svg]]
 
 We can see that we now match the performance of the library version, even surpassing it. We
@@ -179,6 +186,7 @@ prefetch_index(&self.vals, (base + half / 2 - 1) as usize);
 prefetch_index(&self.vals, (base + half + half / 2 - 1) as usize);
 #+end_src
 
+#+attr_html: :class inset
 [[file:plots/binsearch-std-vs-branchless-prefetch.svg]]
 
 The prefetching does its part, giving us a nice small ~10-15% speedup.
@@ -217,14 +225,17 @@ was going to be accessed at the next interval size was also helpful. We
 therefore add it as well; we'll compare versions with and without
 prefetching. TODO this graph needs to show more detail
 
+#+attr_html: :class inset
 [[file:plots/binsearch-branchless-prefetched-batched.svg]]
 
 and
 
+#+attr_html: :class inset
 [[file:plots/binsearch-branchless-batched.svg]]
 
 We compare the two best variants to see their differences:
 
+#+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch.svg]]
 
 We see that the prefetching is helping a bit at large batch sizes, so
@@ -271,6 +282,7 @@ descendant is at position \(2i\) and the right one is at position
 \(2i + 1\). An illustration for an Eytzinger layout is shown below:
 
 #+caption: A picture of the Eytzinger layout stolen from Algorithmica
+#+attr_html: :class inset
 [[file:plots/eytzinger-layout-picture.svg]]
 
 As for how to build the layout, there is a simple recursive algorithm
@@ -336,6 +348,7 @@ idx >> (idx.trailing_ones() + 1)
 
 Okay, let us see how it performs! TODO fix plot colors!
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-vs-binsearches.svg]]
 
 Okay, so we see the layout is a bit slower at the smaller sizes and not too great at the large
@@ -369,6 +382,7 @@ pub fn search_prefetch<const L: usize>(&self, q: u32) -> u32 {
 
 As for the performance, it gets a lot better at large sizes:
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-prefetching.svg]]
 
 And we can see that prefetching 4 iterations ahead is really best. ## Branchless Eytzinger
@@ -405,6 +419,7 @@ Where the =get_next_index_branchless= uses an explicit =cmov= from the
 =cmov= crate. It was surprisingly difficult to get the compiler to
 accept this optimization.
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-branchless-prefetching.svg]]
 
 On the performance plot, we see that this helps remove the bumps and also slightly helps
@@ -445,6 +460,7 @@ pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P
 }
 #+end_src
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison.svg]] ###
 
 Non-prefetched
@@ -468,18 +484,21 @@ pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 }
 #+end_src
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-batched-comparison.svg]]
 
 We compare the two
 graphs and compare the two best options, one from prefetched and
 non-prefetched:
 
+#+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison.svg]]
 
 We see that the prefetched version is a few percent faster on large input sizes.
 Therefore, we select it as our best eytzinger. # Eytzinger or BinSearch?
 Now, to compare batched Eytzinger to batched binary search:
 
+#+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion.svg]]
 
 We see that the two approaches are pretty much equal all things considered, with standard
@@ -487,8 +506,8 @@ binary search coming out a bit better by a couple of nanoseconds, but
 also being a bit more spiky at values around powers of two due to cache
 set collisions.
 
-TODO: what is the bottleneck? # Memory efficiency -- parallel search and
-comparison to B-trees
+TODO: what is the bottleneck?
 
+* Memory efficiency -- parallel search and comparison to B-trees
 * Interpolation search
 * Comparing everything on the human genome
