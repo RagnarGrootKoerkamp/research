@@ -1,0 +1,512 @@
++++ title = "[WIP] Binary search variants and the effects of batching"
+authors = ["František Kmječ", "Ragnar Groot Koerkamp"] date =
+2024-10-01T00:00:00+00:00 tags = ["binary-search", "wip", "batching"]
+categories = ["lablog"] draft = false +++
+
+* References
+:PROPERTIES:
+:CUSTOM_ID: references
+:END:
+http://pvk.ca/Blog/2012/07/30/binary-search-is-a-pathological-case-for-caches/
+https://en.algorithmica.org/hpc/data-structures/binary-search
+https://arxiv.org/pdf/1509.05053
+
+* Optimizing Binary Search And Interpolation Search
+:PROPERTIES:
+:CUSTOM_ID: optimizing-binary-search-and-interpolation-search
+:END:
+This blogpost is a preliminary of the
+[[https://curiouscoding.nl/posts/static-search-tree/][post on static
+search trees]]. We will be looking into binary search and how it can be
+optimized using different memory layouts (Eytzinger), branchless
+techniques and careful use of prefetching. In addition, we will explore
+batching and different implementations of it, some of them using vector
+instructions. Our language of choice will be Rust.
+
+The goal of this text is mainly educational, as we'll mostly be
+replicating research that was done already. We however add some novelty
+with the use of batching.
+
+** Problem statement
+:PROPERTIES:
+:CUSTOM_ID: problem-statement
+:END:
+*Input*: we take a sorted array of /n/ unsigned 32-bit integers.
+
+*Output*: for a query q, find the smallest element >= =q= or =u32::MAX=
+if no such element exists.
+
+*Metric*: we optimize throughput. In plots, we usually report amortized
+time per query, i.e. the not queries/time, but time/query.
+
+Optimizing for throughput is relevant because for many use-cases,
+e.g. in bioninformatics, the queries are often independent and the
+latency of one is not critical. It also allows for the usage of
+batching, which allows us to hide memory latency.
+
+** Inspiration and background
+:PROPERTIES:
+:CUSTOM_ID: inspiration-and-background
+:END:
+This article is inspired by a post in
+[[https://en.algorithmica.org/hpc/data-structures/binary-search/][Algorithmica
+on binary search]]. We start by reimplementing the experiments and
+expand upon it by not optimizing for latency, but throughput. We also
+took inspiration from the notable paper
+[[https://arxiv.org/pdf/1509.05053][Array Layouts For Comparison-Based
+Searching]] by Paul-Virak Khuong and Pat Morin, which goes in-depth on
+more-or-less successful array layouts.
+
+** Benchmarking setup
+:PROPERTIES:
+:CUSTOM_ID: benchmarking-setup
+:END:
+The benchmarking was done using =rustc 1.85.0-nightly=. The CPU is anAMD
+Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
+was locked at 1.7GHz and turbo boost was disabled.
+
+All measurements are done 5 times. The line follows the median, and we
+show the spread of the 2nd to 4th value (i.e., after discarding the
+minimum and maximum). The measurements are done at \(1.17^k\) as done by
+Algorithmica. This mitigates some artifacts of limited cache set
+associativity which we describe this a later section. These effects go
+away with the Eytzinger layout, so we will not be spending much time on
+it. # Baseline We start with a textbook binary search implementation,
+and we see if we can replicate the results from Algorithmica. Here's the
+code:
+
+#+begin_src rust
+pub fn binary_search(&self, q: u32) -> u32 {
+    let mut l = 0;
+    let mut r = self.vals.len();
+    while l < r {
+        let m = (l + r) / 2;
+        if self.get(m) < q {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+    self.get(l)
+}
+#+end_src
+
+We note that by default, Rust wraps all accesses to vectors with bounds
+checks. Since we are comparing against C++ implementations and there is
+no risk of accessing unallocated memory, we implement the =get=
+function, which performs a Rust unsafe =get_unchecked= to get rid of the
+bounds checks. This will also be the case for all the further
+experiments.
+
+So, how does it perform? Let's compare to the Rust standard library
+version:
+
+[[file:plots/binsearch-std-vs-binsearch.svg]]
+
+We can see that our naive version is slower, except for large array sizes. Checking out the
+standard library source code, we can see that the implementation already
+has some optimizations in place. In the =binary_search_by= function, we
+see the following:
+
+#+begin_src rust
+// Binary search interacts poorly with branch prediction, so force
+// the compiler to use conditional moves if supported by the target
+// architecture.
+base = select_unpredictable(cmp == Greater, base, mid);
+#+end_src
+
+and
+
+#+begin_src rust
+// This is fine though: we gain more performance by keeping the
+// loop iteration count invariant (and thus predictable) than we
+// lose from considering one additional element.
+size -= half;
+#+end_src
+
+So they do a constant number of iterations instead of early stopping
+when the value is found and they try to use the =cmov= instruction if it
+is available. Both these optimizations are done so that the branch
+predictor has an easier time and does not mispredict. The =cmov=
+instruction is notably useful when the result of the comparison can't be
+reliably predicted (which here it really can't). They are also both
+recommended by the original Algorithmica post, and make the code
+effectively "branchless".
+
+So let us implement these optimizations as well and see how we do then.
+Here's the code:
+
+#+begin_src rust
+let mut base: u64 = 0;
+let mut len: u64 = self.vals.len() as u64;
+while len > 1 {
+    let half = len / 2;
+    let cmp = self.get((base + half - 1) as usize) < q;
+    base = select_unpredictable(cmp, base + half, base);
+    len = len - half;
+}
+self.get(base as usize)
+#+end_src
+
+When first implementing this, me, being a Rust newbie, immediately went
+for the =cmov= crate, because I was unable to make the compiler generate
+the =cmov= on its own just with an if expression. Trying this, I found
+out that it is still plenty slower than the =select_unpredictable=
+function that is used in =binary_search_by=, so I followed the approach
+that the standard library has.
+
+[[file:plots/binsearch-std-vs-branchless.svg]]
+
+We can see that we now match the performance of the library version, even surpassing it. We
+assume this is due to our function being specialized and not having an
+error condition at the end, leading to it being better by a small
+fraction.
+
+Algorithmica notes that for them, a branchless version is slower for
+large array sizes than a branchy one, which they say is due to the CPU's
+inability to speculatively prefetch new values. To counteract this, the
+post recommends explicit prefetching. We do not see this effect so
+clearly on our plots, but let us try adding prefetching anyway and we
+will see what happens. We use the following construction for prefetching
+in Rust:
+
+#+begin_src rust
+pub fn prefetch_index<T>(s: &[T], index: usize) {
+    let ptr = unsafe { s.as_ptr().add(index) as *const u64 };
+    prefetch_ptr(ptr);
+}
+#+end_src
+
+And using this function, we explicitly prefetch both the locations where
+the binary search could lead us from a given iteration:
+
+#+begin_src rust
+prefetch_index(&self.vals, (base + half / 2 - 1) as usize);
+prefetch_index(&self.vals, (base + half + half / 2 - 1) as usize);
+#+end_src
+
+[[file:plots/binsearch-std-vs-branchless-prefetch.svg]]
+
+The prefetching does its part, giving us a nice small ~10-15% speedup.
+
+So far we have been replicating the work Algorithmica has done, just in
+Rust. Now it is time to use the fact that we only care about throughput,
+and talk about batching.
+
+In this context, batching is just what it sounds like: we will take
+several requests at once, and we will handle them concurrently within a
+single function. In every loop iteration, we do a comparison for each of
+the queries, and we move the =base= index for it accordingly. The
+branchless version can be seen below; the =P= is a generic parameter.
+
+#+begin_src rust
+let mut bases = [0u64; P];
+let mut len = self.vals.len() as u64;
+while len > 1 {
+    let half = len / 2;
+    for i in 0..P {
+        let cmp = self.get((bases[i] + half - 1) as usize) < qb[i];
+        bases[i] = select_unpredictable(cmp, bases[i] + half, bases[i]);
+        prefetch_index(&self.vals, (bases[i] + half / 2) as usize);
+    }
+    len = len - half;
+}
+
+bases.map(|x| self.get(x as usize))
+#+end_src
+
+The reason this improves performance is that it allows us to "amortize"
+memory latency; while comparing and computing the next relevant address
+for the search, we can already query the memory for the next value. In
+the S+-tree post, Ragnar found that explicitly prefetching memory that
+was going to be accessed at the next interval size was also helpful. We
+therefore add it as well; we'll compare versions with and without
+prefetching. TODO this graph needs to show more detail
+
+[[file:plots/binsearch-branchless-prefetched-batched.svg]]
+
+and
+
+[[file:plots/binsearch-branchless-batched.svg]]
+
+We compare the two best variants to see their differences:
+
+[[file:plots/binsearch-batched-vs-batched-prefetch.svg]]
+
+We see that the prefetching is helping a bit at large batch sizes, so
+we'll keep it We see that batching provides speedups until batch size of
+32 and then it levels out. We therefore utilize a batch size of 128.
+
+** A note on power-of-two array sizes
+:PROPERTIES:
+:CUSTOM_ID: a-note-on-power-of-two-array-sizes
+:END:
+In the bechmarking setup section, we wrote about not doing the
+benchmarks on power-of two-sized arrays. Now is the time to talk about
+why. Let us repeat the previous experiment with multiple batch sizes
+with arrays of size \(2^k\), \(5/4 \cdot 2^k\) , \(3/2 \cdot 2^k\) and
+\(7/4 \cdot 2^k\).
+
+[[file:plots/binsearch-branchless-batched-comparison-pow2.svg]]
+
+Notice the sawtooth pattern. We see that when the size of the searched
+array is a power of two, the time per query jumps higher. This effect
+also gets more pronounced with more batching. Why is this?
+
+After consulting the array layouts paper and the Algorithmica post, we
+find that the answer is poor cache utilization. The CPU cache sets have
+limited associativity, and when our memory accesses are regularly spaced
+(a multiple of cache size apart from each other), they will tend to kick
+each other out of the cache, leading to more loading from main memory.
+The article
+[[http://pvk.ca/Blog/2012/07/30/binary-search-is-a-pathological-case-for-caches/][Binary
+Search is a Pathological Case for Caches]] goes more in-depth on this,
+if you are interested. I personally was puzzled by this at first and had
+to think hard about why the program is faster for batch size of 4 at
+large sizes, only to find it actually is not.
+
+* Alternative memory layout
+:PROPERTIES:
+:CUSTOM_ID: alternative-memory-layout
+:END:
+An issue with the standard array layout is that caches are not optimally
+exploited. We will try to fix that with the Eytzinger layout.
+
+When I first encountered the layout, I had no idea it actually had this
+name. It was for a university programming homework and the task was to
+code a binary heap. To not have to deal with pointers, the heap layout
+was specified by indices in arrays. When at position \(i\), the left
+descendant is at position \(2i\) and the right one is at position
+\(2i + 1\). An illustration for an Eytzinger layout is shown below:
+
+#+caption: A picture of the Eytzinger layout stolen from Algorithmica
+[[file:plots/eytzinger-layout-picture.svg]]
+
+As for how to build the layout, there is a simple recursive algorithm
+which is well described in Algorithmica, so we will not waste space here
+and will refer the reader there if interested. In our implementation,
+the process was not in-place
+
+Eytzinger should give us better cache utilization by grouping together
+commonly accessed elements on the top of the tree. This is very helpful
+for small array sizes and speeds up the searching versus vanilla binary
+search. It is however worse at the bottom of the tree, where values are
+very far apart and have poor spatial locality.
+
+** Naive implementation
+:PROPERTIES:
+:CUSTOM_ID: naive-implementation
+:END:
+The API stays the same as for normal binary search; we get a query and
+we return the lower bound or =u32::MAX= when the lower bound does not
+exist.
+
+Notice that indexing starts from one. This makes the layout a bit easier
+to implement, is a bit more pleasant to caches, and allows us to easily
+handle the case
+
+#+begin_src rust
+let mut idx = 1;
+while idx < self.vals.len() {
+    idx = 2 * idx + (q > self.get(idx)) as usize;
+}
+idx = search_result_to_index(idx);
+self.get(idx)
+#+end_src
+
+The first while loop looks through the array, but the index it generates
+in the end will be out of bounds. How do we get the index of the lower
+bound?
+
+I needed some time to grok this from the Algorithmica post, so I will
+write it here in my own words. Essentially, each iteration of the
+=while= loop resembles either going to the left or to the right in the
+binary tree represented by the layout. By the end of the loop, the index
+will resemble our trajectory through the tree in a bitwise format; each
+bit will represent whether we went right (1) or left (0) in the tree,
+with the most significant bit representing the decision on the top of
+the tree.
+
+Now, let's think about how the trajectory finding the lower bound will
+look. Either we will not find it, so the trajectory will be all ones,
+since=q= was always greater than each element of the array. Then we want
+to return the default value, which we have stored at index 0 of the
+=self.vals= array.
+
+In the case the lower bound was found, we infer that we compared =q=
+against it once in the trajectory, went left and then only went right
+afterwards (because it is the smallest value >= =q=, all values smaller
+than it are smaller than q). Therefore, we have to strip all the right
+turns (ones) at the end of the trajectory and then one bit.
+
+Putting this together, what we want to do is this (hiden in the function
+=search_result_to_index=):
+
+#+begin_src rust
+idx >> (idx.trailing_ones() + 1)
+#+end_src
+
+Okay, let us see how it performs! TODO fix plot colors!
+
+[[file:plots/eytzinger-vs-binsearches.svg]]
+
+Okay, so we see the layout is a bit slower at the smaller sizes and not too great at the large
+array sizes. ## Prefetching The great thing about Eytzinger is that
+prefetching can be super effective. This is due to the fact that if we
+are at index \(i\), the next index is going to be at \(2i\) or
+\(2i + 1\). That means that if we prefetch, we can actually prefetch
+both of the possible options within the same cacheline!
+
+We can abuse this effect up to the effective cache line size. A usual CL
+length is 64 bytes, meaning that the cache line can fit 16 =u32= values.
+If we prefetch 4 Eytzinger iterations ahead, e.g. to position \(16i\),
+we can get all the possible options at that search level in a single
+cache line! So, let's implement this:
+
+#+begin_src rust
+/// L: number of levels ahead to prefetch.
+pub fn search_prefetch<const L: usize>(&self, q: u32) -> u32 {
+    let mut idx = 1;
+    while (1 << L) * idx < self.vals.len() {
+        idx = 2 * idx + (q > self.get(idx)) as usize;
+        prefetch_index(&self.vals, (1 << L) * idx);
+    }
+    while idx < self.vals.len() {
+        idx = 2 * idx + (q > self.get(idx)) as usize;
+    }
+    idx = search_result_to_index(idx);
+    self.get(idx)
+}
+#+end_src
+
+As for the performance, it gets a lot better at large sizes:
+
+[[file:plots/eytzinger-prefetching.svg]]
+
+And we can see that prefetching 4 iterations ahead is really best. ## Branchless Eytzinger
+Now, we go on to fixing the bumpiness in the Eytzinger graph. This is
+caused by branch mispredictions on when to end the loop; if the array
+size is close to a power of two, the ending is easy to predict, but
+otherwise, it is difficult for the CPU. We proceed as Algorithmica
+suggests, doing a fixed number of iterations and then doing one
+conditional move if still needed. We also still do prefetching:
+
+#+begin_src rust
+pub fn search_branchless_prefetch<const L: usize>(&self, q: u32) -> u32 {
+    let mut idx = 1;
+    let prefetch_until = self.num_iters as isize - L as isize;
+    for _ in 0..prefetch_until {
+        let jump_to = (q > self.get(idx)) as usize;
+        idx = 2 * idx + jump_to;
+        // the extra prefetch is apparently very slow here; why?
+        prefetch_index(&self.vals, (1 << L) * idx);
+    }
+
+    for _ in prefetch_until..(self.num_iters as isize) {
+        let jump_to = (q > self.get(idx)) as usize;
+        idx = 2 * idx + jump_to;
+    }
+
+    idx = self.get_next_index_branchless(idx, q);
+    idx = search_result_to_index(idx);
+    self.get(idx)
+}
+#+end_src
+
+Where the =get_next_index_branchless= uses an explicit =cmov= from the
+=cmov= crate. It was surprisingly difficult to get the compiler to
+accept this optimization.
+
+[[file:plots/eytzinger-branchless-prefetching.svg]]
+
+On the performance plot, we see that this helps remove the bumps and also slightly helps
+the performance when the array size is big. ## Batched Eytzinger Now,
+let us do batching the same way we did with binary search. We will
+consider two variants, prefetched and not prefetched. The reason for
+this is that technically, the prefetching shouldn't be needed; the
+batching should properly overlay memory requests anyway. But we saw with
+the binary search that explicit prefetching helped a bit, so we'll go
+for it. See the source code below. ### Prefetched
+
+#+begin_src rust
+pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P]) -> [u32; P] {
+    let mut k = [1; P]; // current indices
+    let prefetch_until = self.num_iters as isize - L as isize;
+
+    for _ in 0..prefetch_until {
+        for i in 0..P {
+            let jump_to = (self.get(k[i]) < qb[i]) as usize;
+            k[i] = 2 * k[i] + jump_to;
+            prefetch_index(&self.vals, (1 << L) * k[i]);
+        }
+    }
+
+    for _ in prefetch_until..(self.num_iters as isize) {
+        for i in 0..P {
+            let jump_to = (self.get(k[i]) < qb[i]) as usize;
+            k[i] = 2 * k[i] + jump_to;
+        }
+    }
+
+    for i in 0..P {
+        k[i] = self.get_next_index_branchless(k[i], qb[i]);
+        k[i] = search_result_to_index(k[i]);
+    }
+    // println!("{:?}", k);
+    k.map(|x| self.get(x))
+}
+#+end_src
+
+[[file:plots/eytzinger-batched-prefetched-comparison.svg]] ###
+
+Non-prefetched
+
+#+begin_src rust
+pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
+    let mut k = [1; P]; // current indices
+
+    for _ in 0..self.num_iters {
+        for i in 0..P {
+            let jump_to = (self.get(k[i]) < qb[i]) as usize;
+            k[i] = 2 * k[i] + jump_to;
+        }
+    }
+    for i in 0..P {
+        k[i] = self.get_next_index_branchless(k[i], qb[i]);
+        k[i] = search_result_to_index(k[i]);
+    }
+
+    k.map(|x| self.get(x))
+}
+#+end_src
+
+[[file:plots/eytzinger-batched-comparison.svg]]
+
+We compare the two
+graphs and compare the two best options, one from prefetched and
+non-prefetched:
+
+[[file:plots/eytzinger-best-batching-comparison.svg]]
+
+We see that the prefetched version is a few percent faster on large input sizes.
+Therefore, we select it as our best eytzinger. # Eytzinger or BinSearch?
+Now, to compare batched Eytzinger to batched binary search:
+
+[[file:plots/binsearch-eytzinger-conclusion.svg]]
+
+We see that the two approaches are pretty much equal all things considered, with standard
+binary search coming out a bit better by a couple of nanoseconds, but
+also being a bit more spiky at values around powers of two due to cache
+set collisions.
+
+TODO: what is the bottleneck? # Memory efficiency -- parallel search and
+comparison to B-trees
+
+* Interpolation search
+:PROPERTIES:
+:CUSTOM_ID: interpolation-search
+:END:
+* Comparing everything on the human genome
+:PROPERTIES:
+:CUSTOM_ID: comparing-everything-on-the-human-genome
+:END:
