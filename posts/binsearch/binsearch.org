@@ -45,9 +45,6 @@ latency of one is not critical. It also allows for the usage of
 batching, which allows us to hide memory latency.
 
 ** Inspiration and background
-:PROPERTIES:
-:CUSTOM_ID: inspiration-and-background
-:END:
 This article is inspired by a post in
 [[https://en.algorithmica.org/hpc/data-structures/binary-search/][Algorithmica
 on binary search]]. We start by reimplementing the experiments and
@@ -58,9 +55,6 @@ Searching]] by Paul-Virak Khuong and Pat Morin, which goes in-depth on
 more-or-less successful array layouts.
 
 ** Benchmarking setup
-:PROPERTIES:
-:CUSTOM_ID: benchmarking-setup
-:END:
 The benchmarking was done using =rustc 1.85.0-nightly=. The CPU is anAMD
 Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
 was locked at 1.7GHz and turbo boost was disabled.
@@ -238,9 +232,6 @@ we'll keep it We see that batching provides speedups until batch size of
 32 and then it levels out. We therefore utilize a batch size of 128.
 
 ** A note on power-of-two array sizes
-:PROPERTIES:
-:CUSTOM_ID: a-note-on-power-of-two-array-sizes
-:END:
 In the bechmarking setup section, we wrote about not doing the
 benchmarks on power-of two-sized arrays. Now is the time to talk about
 why. Let us repeat the previous experiment with multiple batch sizes
@@ -294,9 +285,6 @@ search. It is however worse at the bottom of the tree, where values are
 very far apart and have poor spatial locality.
 
 ** Naive implementation
-:PROPERTIES:
-:CUSTOM_ID: naive-implementation
-:END:
 The API stays the same as for normal binary search; we get a query and
 we return the lower bound or =u32::MAX= when the lower bound does not
 exist.
@@ -503,10 +491,4 @@ TODO: what is the bottleneck? # Memory efficiency -- parallel search and
 comparison to B-trees
 
 * Interpolation search
-:PROPERTIES:
-:CUSTOM_ID: interpolation-search
-:END:
 * Comparing everything on the human genome
-:PROPERTIES:
-:CUSTOM_ID: comparing-everything-on-the-human-genome
-:END:
