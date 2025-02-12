@@ -146,6 +146,8 @@ As can be seen in [[prefix:lbl]]
 (deftheorem newdefinition "Definition" dfn)
 (deftheorem theorem "Theorem" thm)
 (deftheorem newtheorem "Theorem" thm)
+(deftheorem problem "Problem" prob)
+(deftheorem openproblem "Open problem" prob)
 
 
 ;;;
