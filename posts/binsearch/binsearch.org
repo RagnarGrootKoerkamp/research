@@ -38,14 +38,14 @@ with the use of batching.
 :END:
 *Input*: we take a sorted array of /n/ unsigned 32-bit integers.
 
-*Output*: for a query q, find the smallest element >= =q= or =u32::MAX=
+*Output*: for a query q, find the smallest element ~>= q~ or =u32::MAX=
 if no such element exists.
 
 *Metric*: we optimize throughput. In plots, we usually report amortized
 time per query, i.e. the not queries/time, but time/query.
 
 Optimizing for throughput is relevant because for many use-cases,
-e.g. in bioninformatics, the queries are often independent and the
+e.g. in bioinformatics, the queries are often independent and the
 latency of one is not critical. It also allows for the usage of
 batching, which allows us to hide memory latency.
 
@@ -60,17 +60,21 @@ Searching]] by Paul-Virak Khuong and Pat Morin, which goes in-depth on
 more-or-less successful array layouts.
 
 ** Benchmarking setup
-The benchmarking was done using =rustc 1.85.0-nightly=. The CPU is anAMD
+The benchmarking was done using =rustc 1.85.0-nightly=. The CPU is an AMD
 Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
 was locked at 1.7GHz and turbo boost was disabled.
 
 All measurements are done 5 times. The line follows the median, and we
 show the spread of the 2nd to 4th value (i.e., after discarding the
 minimum and maximum). The measurements are done at \(1.17^k\) as done by
-Algorithmica. This mitigates some artifacts of limited cache set
+Algorithmica. This mitigates some artefacts of limited cache set
 associativity which we describe this a later section. These effects go
 away with the Eytzinger layout, so we will not be spending much time on
-it. # Baseline We start with a textbook binary search implementation,
+it.
+
+* Baseline
+
+We start with a textbook binary search implementation,
 and we see if we can replicate the results from Algorithmica. Here's the
 code:
 
@@ -329,30 +333,32 @@ the tree.
 
 Now, let's think about how the trajectory finding the lower bound will
 look. Either we will not find it, so the trajectory will be all ones,
-since=q= was always greater than each element of the array. Then we want
+since =q= was always greater than each element of the array. Then we want
 to return the default value, which we have stored at index 0 of the
 =self.vals= array.
 
 In the case the lower bound was found, we infer that we compared =q=
 against it once in the trajectory, went left and then only went right
-afterwards (because it is the smallest value >= =q=, all values smaller
+afterwards (because it is the smallest value ~>= q~, all values smaller
 than it are smaller than q). Therefore, we have to strip all the right
 turns (ones) at the end of the trajectory and then one bit.
 
-Putting this together, what we want to do is this (hiden in the function
+Putting this together, what we want to do is this (hidden in the function
 =search_result_to_index=):
 
 #+begin_src rust
 idx >> (idx.trailing_ones() + 1)
 #+end_src
 
-Okay, let us see how it performs! TODO fix plot colors!
+Okay, let us see how it performs! TODO fix plot colours!
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-vs-binsearches.svg]]
 
 Okay, so we see the layout is a bit slower at the smaller sizes and not too great at the large
-array sizes. ## Prefetching The great thing about Eytzinger is that
+array sizes.
+** Prefetching
+The great thing about Eytzinger is that
 prefetching can be super effective. This is due to the fact that if we
 are at index \(i\), the next index is going to be at \(2i\) or
 \(2i + 1\). That means that if we prefetch, we can actually prefetch
@@ -385,7 +391,8 @@ As for the performance, it gets a lot better at large sizes:
 #+attr_html: :class inset
 [[file:plots/eytzinger-prefetching.svg]]
 
-And we can see that prefetching 4 iterations ahead is really best. ## Branchless Eytzinger
+And we can see that prefetching 4 iterations ahead is really best.
+** Branchless Eytzinger
 Now, we go on to fixing the bumpiness in the Eytzinger graph. This is
 caused by branch mispredictions on when to end the loop; if the array
 size is close to a power of two, the ending is easy to predict, but
@@ -423,13 +430,16 @@ accept this optimization.
 [[file:plots/eytzinger-branchless-prefetching.svg]]
 
 On the performance plot, we see that this helps remove the bumps and also slightly helps
-the performance when the array size is big. ## Batched Eytzinger Now,
+the performance when the array size is big.
+** Batched Eytzinger
+Now,
 let us do batching the same way we did with binary search. We will
 consider two variants, prefetched and not prefetched. The reason for
 this is that technically, the prefetching shouldn't be needed; the
 batching should properly overlay memory requests anyway. But we saw with
 the binary search that explicit prefetching helped a bit, so we'll go
-for it. See the source code below. ### Prefetched
+for it. See the source code below.
+*** Prefetched
 
 #+begin_src rust
 pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P]) -> [u32; P] {
@@ -461,9 +471,9 @@ pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P
 #+end_src
 
 #+attr_html: :class inset
-[[file:plots/eytzinger-batched-prefetched-comparison.svg]] ###
+[[file:plots/eytzinger-batched-prefetched-comparison.svg]]
 
-Non-prefetched
+*** Non-prefetched
 
 #+begin_src rust
 pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
@@ -495,7 +505,8 @@ non-prefetched:
 [[file:plots/eytzinger-best-batching-comparison.svg]]
 
 We see that the prefetched version is a few percent faster on large input sizes.
-Therefore, we select it as our best eytzinger. # Eytzinger or BinSearch?
+Therefore, we select it as our best eytzinger.
+* Eytzinger or BinSearch?
 Now, to compare batched Eytzinger to batched binary search:
 
 #+attr_html: :class inset
