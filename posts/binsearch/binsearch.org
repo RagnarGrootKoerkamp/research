@@ -170,7 +170,7 @@ where
 
 So they do a constant number of iterations instead of early stopping
 when the value is found and they try to use the =cmov= instruction if it
-is available. Both these optimizations are done so that the branch
+is available in the [[https://doc.rust-lang.org/std/intrinsics/fn.select_unpredictable.html][=select_unpredictable=]] function. Both these optimizations are done so that the branch
 predictor has an easier time and does not mispredict. The =cmov=
 instruction is notably useful when the result of the comparison can't be
 reliably predicted (which here it really can't). They are also both
@@ -270,12 +270,12 @@ therefore add it as well; we'll compare versions with and without
 prefetching. TODO this graph needs to show more detail
 
 #+attr_html: :class inset
-[[file:plots/binsearch-branchless-prefetched-batched.svg]]
+[[file:plots/binsearch-branchless-batched.svg]]
 
 and
 
 #+attr_html: :class inset
-[[file:plots/binsearch-branchless-batched.svg]]
+[[file:plots/binsearch-branchless-prefetched-batched.svg]]
 
 We compare the two best variants to see their differences:
 
@@ -284,7 +284,7 @@ We compare the two best variants to see their differences:
 
 We see that the prefetching is helping a bit at large batch sizes, so
 we'll keep it We see that batching provides speedups until batch size of
-32 and then it levels out. We therefore utilize a batch size of 128.
+32 and then it levels out.
 
 ** A note on power-of-two array sizes
 In the bechmarking setup section, we wrote about not doing the
@@ -293,6 +293,7 @@ why. Let us repeat the previous experiment with multiple batch sizes
 with arrays of size \(2^k\), \(5/4 \cdot 2^k\) , \(3/2 \cdot 2^k\) and
 \(7/4 \cdot 2^k\).
 
+TODO this graph is missing, regenerate
 [[file:plots/binsearch-branchless-batched-comparison-pow2.svg]]
 
 Notice the sawtooth pattern. We see that when the size of the searched
@@ -347,7 +348,8 @@ exist.
 
 Notice that indexing starts from one. This makes the layout a bit easier
 to implement, is a bit more pleasant to caches, and allows us to easily
-handle the case
+handle the case where the lower bound does not exist, as the way we calculate
+the final index will result in zero.
 
 #+begin_src rust
 let mut idx = 1;
@@ -479,6 +481,31 @@ this is that technically, the prefetching shouldn't be needed; the
 batching should properly overlay memory requests anyway. But we saw with
 the binary search that explicit prefetching helped a bit, so we'll go
 for it. See the source code below.
+
+*** Non-prefetched
+
+#+begin_src rust
+pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
+    let mut k = [1; P]; // current indices
+
+    for _ in 0..self.num_iters {
+        for i in 0..P {
+            let jump_to = (self.get(k[i]) < qb[i]) as usize;
+            k[i] = 2 * k[i] + jump_to;
+        }
+    }
+    for i in 0..P {
+        k[i] = self.get_next_index_branchless(k[i], qb[i]);
+        k[i] = search_result_to_index(k[i]);
+    }
+
+    k.map(|x| self.get(x))
+}
+#+end_src
+
+#+attr_html: :class inset
+[[file:plots/eytzinger-batched-comparison.svg]]
+
 *** Prefetched
 
 #+begin_src rust
@@ -513,29 +540,6 @@ pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison.svg]]
 
-*** Non-prefetched
-
-#+begin_src rust
-pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
-    let mut k = [1; P]; // current indices
-
-    for _ in 0..self.num_iters {
-        for i in 0..P {
-            let jump_to = (self.get(k[i]) < qb[i]) as usize;
-            k[i] = 2 * k[i] + jump_to;
-        }
-    }
-    for i in 0..P {
-        k[i] = self.get_next_index_branchless(k[i], qb[i]);
-        k[i] = search_result_to_index(k[i]);
-    }
-
-    k.map(|x| self.get(x))
-}
-#+end_src
-
-#+attr_html: :class inset
-[[file:plots/eytzinger-batched-comparison.svg]]
 
 We compare the two
 graphs and compare the two best options, one from prefetched and
