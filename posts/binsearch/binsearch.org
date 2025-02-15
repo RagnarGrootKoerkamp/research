@@ -8,14 +8,6 @@
 #+author: Ragnar Groot Koerkamp
 #+date: <2025-02-12 Wed>
 
-* References
-:PROPERTIES:
-:CUSTOM_ID: references
-:END:
-http://pvk.ca/Blog/2012/07/30/binary-search-is-a-pathological-case-for-caches/
-https://en.algorithmica.org/hpc/data-structures/binary-search
-https://arxiv.org/pdf/1509.05053
-
 * Optimizing Binary Search And Interpolation Search
 :PROPERTIES:
 :CUSTOM_ID: optimizing-binary-search-and-interpolation-search
@@ -113,19 +105,67 @@ has some optimizations in place. In the =binary_search_by= function, we
 see the following:
 
 #+begin_src rust
-// Binary search interacts poorly with branch prediction, so force
-// the compiler to use conditional moves if supported by the target
-// architecture.
-base = select_unpredictable(cmp == Greater, base, mid);
-#+end_src
+#[stable(feature = "rust1", since = "1.0.0")]
+pub fn binary_search(&self, x: &T) -> Result<usize, usize>
+where
+    T: Ord,
+{
+    self.binary_search_by(|p| p.cmp(x))
+}
 
-and
+pub fn binary_search_by<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
+where
+    F: FnMut(&'a T) -> Ordering,
+{
+    let mut size = self.len();
+    if size == 0 {
+        return Err(0);
+    }
+    let mut base = 0usize;
 
-#+begin_src rust
-// This is fine though: we gain more performance by keeping the
-// loop iteration count invariant (and thus predictable) than we
-// lose from considering one additional element.
-size -= half;
+    // This loop intentionally doesn't have an early exit if the comparison
+    // returns Equal. We want the number of loop iterations to depend *only*
+    // on the size of the input slice so that the CPU can reliably predict
+    // the loop count.
+    while size > 1 {
+        let half = size / 2;
+        let mid = base + half;
+
+        // SAFETY: the call is made safe by the following inconstants:
+        // - `mid >= 0`: by definition
+        // - `mid < size`: `mid = size / 2 + size / 4 + size / 8 ...`
+        let cmp = f(unsafe { self.get_unchecked(mid) });
+
+        // Binary search interacts poorly with branch prediction, so force
+        // the compiler to use conditional moves if supported by the target
+        // architecture.
+        base = select_unpredictable(cmp == Greater, base, mid);
+
+        // This is imprecise in the case where `size` is odd and the
+        // comparison returns Greater: the mid element still gets included
+        // by `size` even though it's known to be larger than the element
+        // being searched for.
+        //
+        // This is fine though: we gain more performance by keeping the
+        // loop iteration count invariant (and thus predictable) than we
+        // lose from considering one additional element.
+        size -= half;
+    }
+
+    // SAFETY: base is always in [0, size) because base <= mid.
+    let cmp = f(unsafe { self.get_unchecked(base) });
+    if cmp == Equal {
+        // SAFETY: same as the `get_unchecked` above.
+        unsafe { hint::assert_unchecked(base < self.len()) };
+        Ok(base)
+    } else {
+        let result = base + (cmp == Less) as usize;
+        // SAFETY: same as the `get_unchecked` above.
+        // Note that this is `<=`, unlike the assume in the `Ok` path.
+        unsafe { hint::assert_unchecked(result <= self.len()) };
+        Err(result)
+    }
+}
 #+end_src
 
 So they do a constant number of iterations instead of early stopping
