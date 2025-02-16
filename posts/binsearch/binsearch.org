@@ -569,30 +569,177 @@ set collisions.
 Now let us push memory to its limits and compare the layouts when we are allowed to use multiple threads to query.
 For this test, I have turned off hyperthreading and locked the CPU to 8 cores.
 The first interesting aspect of this is whether prefetching will help now. Let's first look at binary search:
+
+#+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch-multithreaded.svg]]
+
 We see that as the prefetching increases pressure on memory, it is mostly counterproductive in the multithreaded setting.
 In the next plot we see that batching is helpful up to roughly size 32, and then it levels out.
+
+#+attr_html: :class inset
 [[file:plots/binsearch-branchless-batched-multithreaded.svg]]
+
 We will use batch size 32 as a reference.
 
 As far as Eytzinger goes:
+
+#+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison-multithreaded.svg]]
 Here we see that the prefetching does not necessarily hurt, but it is not really helpful either. We keep it for the comparison.
+
+#+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison-multithreaded.svg]]
 
 We use batch size 16 as a reference for Eytzinger, as it nicely combines speedup at small and large sizes.
 So for the final comparison:
+
+#+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion-multithreaded.svg]]
+
 We see that Eytzinger is a bit faster, likely due to better memory efficiency with respect to caches.
 TODO analysis for why they are so similar
 
 * Interpolation search
 In the static search tree post, Ragnar suggests looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
-We will implement it here as well to check out how it performs.
+For completeness, we will implement it here as well to check out how it performs.
 
 The idea behind interpolation search based on the fact if data is drawn from a random uniform distribution, then when we sort it
 and plot the indices on the x-axis and values on the y-axis, we should roughly get a straight line. Using that, when we have the query,
 we can efficiently interpolate ("guess") where values corresponding to the query should be.
 
+TODO visualization/explanation
 
-* Comparing everything on the human genome
+When the input data is nicely evenly distributed, the complexity is $O(\lg \lg n)$ iterations, rather than $O(\lg n)$ for binary search.
+When the data is not well distributed, the worst case complexity is $O(n)$, which is illustrated by the following example. Imagine we're searching for
+2 in the following array of 10000 elements:
+
+
+#+begin_src rust
+1111111111111111111111112 9999
+*.  --------------------     *
+ *.                          *
+  *                          *
+   *                         *
+                        *    *
+#+end_src
+
+Every time we do the interpolation, we suspect that the 2 is on the second position of the array. It is therefore very easy to construct pathological
+examples for interpolation search. Even in non-adversarial settings, like with the human genome, we could get into trouble with non-uniform distribution
+of input data. But let's try it out anyway and see how it goes.
+
+
+#+begin_src rust
+pub fn interpolation_search(&self, q: u32) -> u32 {
+    let mut l: usize = 0;
+    let mut r: usize = self.vals.len() - 1;
+    let mut l_val: usize = self.get(l).try_into().unwrap();
+    let mut r_val: usize = self.get(r).try_into().unwrap();
+    let q_val = q.try_into().unwrap();
+    if q_val <= l_val {
+        return self.get(l);
+    }
+    assert!(
+        r_val.checked_mul(r).is_some(),
+        "Too large K causes integer overflow."
+    );
+    while l < r {
+        // The +1 and +2 ensure l<m<r.
+        let mut m: usize = l + (r - l) * (q_val - l_val + 1) / (r_val - l_val + 2);
+        let low = l + (r - l) / 16;
+        let high = l + 15 * (r - l) / 16;
+        m = m.clamp(low, high);
+        let m_val: usize = self.get(m).try_into().unwrap();
+        if m_val < q_val {
+            l = m + 1;
+            l_val = m_val;
+        } else {
+            r = m;
+            r_val = m_val;
+        }
+    }
+    self.get(l)
+}
+#+end_src
+
+
+#+attr_html: :class inset
+[[file:plots/interp-vs-binsearch.svg]]
+
+We see that the performance is mostly terrible, multiple times slower than even binary search. Looking at `perf` outputs,
+we see that the issue is two-fold. Firstly, there is a data hazard on the if condition in each iteration. But secondly, integer division
+is just very slow.
+
+We try if batching can hide some of this, as it did before:
+
+#+begin_src rust
+    pub fn interp_search_batched<const P: usize>(&self, qs: &[u32; P]) -> [u32; P] {
+        let mut ls = [0usize; P];
+        let mut rs = [self.vals.len() - 1; P];
+        let mut l_vals: [usize; P] = ls.map(|i| self.get(i).try_into().unwrap());
+        let mut r_vals: [usize; P] = rs.map(|i| self.get(i).try_into().unwrap());
+        let mut retvals = [0u32; P];
+        let mut done = [false; P];
+        let mut done_count = 0;
+
+        // trick to avoid negative values
+        for i in 0..P {
+            let q_val: usize = qs[i].try_into().unwrap();
+            if q_val <= l_vals[i] {
+                retvals[i] = self.get(ls[i]);
+                done_count += 1;
+                done[i] = true;
+            }
+        }
+
+        // this loop should not be difficult to make a fixed number of iterations, or just not have to check
+        // the condition every time
+        while done_count < P {
+            for i in 0..P {
+                // this might be a hard-to-predict branch
+                if done[i] {
+                    continue;
+                }
+
+                let q_val = qs[i].try_into().unwrap();
+                let l = ls[i];
+                let r = rs[i];
+                let l_val = l_vals[i];
+                let r_val = r_vals[i];
+
+                if l >= r {
+                    retvals[i] = self.get(l);
+                    done_count += 1;
+                    done[i] = true;
+                    continue;
+                }
+
+                let mut m: usize = l + (r - l) * (q_val - l_val + 1) / (r_val - l_val + 2);
+                let low = l + (r - l) / 16;
+                let high = l + 15 * (r - l) / 16;
+                m = m.clamp(low, high);
+                let m_val = self.get(m).try_into().unwrap();
+                if m_val < q_val {
+                    ls[i] = m + 1;
+                    l_vals[i] = m_val;
+                } else {
+                    rs[i] = m;
+                    r_vals[i] = m_val;
+                }
+            }
+        }
+
+        retvals
+    }
+#+end_src
+
+#+attr_html: :class inset
+[[file:plots/interp-vs-binsearch-batched.svg]]
+The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
+The division is a real bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
+instructions don't really exist either, and the performance gains are minimal.
+
+Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
+ideas; if you have them, send me a message!
+
+* Comparing implementations on the human genome
+* Conclusion
