@@ -13,6 +13,8 @@ $$
 \newcommand{\Ot}{\mathcal O_t}
 \newcommand{\Os}{\mathcal O_s}
 \newcommand{\S}{\Sigma}
+\newcommand{\Dk}{\mathcal D_k}
+\newcommand{\Dtk}{\tilde{\mathcal D}_k}
 \newcommand{\P}{\mathbb P}
 \DeclareMathOperator*{\argmin}{argmin}
 \DeclareMathOperator*{\poly}{poly}
@@ -21,6 +23,8 @@ $$
 \newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
 \newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
 \newcommand{\c}{\mathrm{c}}
+\newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
+\newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
 $$
 
 #+attr_shortcode: summary
@@ -66,6 +70,39 @@ We split content into three topics
 - Lower bounds
 - Selection
 
+*Applications.*
+- Locality sensitive hashing
+- Similarity estimation [cite:@minimizer-biased;@minhash;@minmers]
+- DeBruin graph partitioning/glueing [cite:@compacting-dbg]
+
+#+begin_quote
+[At RECOMB 2022, discussing DeepMinimizer]
+
+Why would we even care about better minimizer? We have this simple and fast
+random minimizer that's only at most $2\times$ away from optimal. Why would
+anyone invest time in optimizing this by maybe $25\%$?
+There are so much bigger gains possible elsewhere.
+#+end_quote
+
+** Introduction
+
+- Lots of DNA data
+- Most algorithms deal with k-mers.
+- k-mers overlap, and hence considering all of them is redundant.
+- Thus: sample a subset of the kmers.
+- Must be 'locally consistent' and deterministic to be useful.
+- Enter random minimizers.
+- Parameter $w$: guarantee that at least one k-mer is sampled out of every
+  window of $w$ k-mers.
+- Density $d$: (expected) overall fraction of sampled k-mers.
+- Obviously, $d\geq 1/w$
+- For random mini, $d=2/(w+1)$.
+- Lower density => fewer k-mers, smaller indices, faster algorithms.
+- *Question:* How small density can we get for given $k$ and $w$?
+
+*** Previous reviews
+- [cite/t:@minimizer-sketches]
+- [cite/t:@minimizer-review-2]
 
 ** Copied:
 Minimizers can be used for various purposes, such as:
@@ -89,8 +126,23 @@ similarity, but there are some differences:
   De Bruijn graph into 'blobs' covering many variants.
 
 * Theory of sampling schemes
--TODO: Cite winnowing and minimizers papers.
+The theory of minimizer schemes started with two independent papers proposing
+roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite/t:@minimizers] in 2004.
+At the core, the presented ideas are very similar: to deterministically select a k-mer out of each
+window of w consecutive k-mers by choosing the ''smallest'' one, according to
+either a random of lexicographic order.
+The /window guarantee/ is a core property of minimizers: it guarantees that
+consecutive minimizers are never too far away from each other.
+Further, these
+schemes are /local/: whether a k-mer is sampled as a minimizer only depends on a
+small surrounding context of $w-1$ characters, and not on any external context.
+This enables the use of minimizers for locality sensitive hashing
+[cite:@lphash;@sshash], since the minimizer is a deterministic key (hash) that
+is often shared between adjacent windows.
 
+While the winnowing paper was published first, the 'minimizer' terminology is the one
+that appears to be used most these days. Apart from terminology, also notations
+tend to differ between different papers. Here we fix things as follows.
 
 *Notation.*
 Throughout this chapter, we use the following notation.
@@ -110,13 +162,9 @@ We will later also use /contexts/, which are sequences containing two windows
 and thus of length $w+k$.
 
 ** Types of sampling schemes
-TODO:
-- Briefly introduce what a sampling scheme does.
-- Mention global scheme, and why we care about local
-- Mention minimizers vs winnowing vs sampling schemes terminology.
-
 #+begin_definition Window
-Given parameters $w$ and $k$, a /window/ is a string of length $\ell = w+k-1$.
+Given parameters $w$ and $k$, a /window/ is a string containing exactly $w$
+k-mers, i.e., of length $\ell = w+k-1$.
 #+end_definition
 
 #+begin_definition Local sampling scheme
@@ -212,15 +260,28 @@ because $(w+1)\cdot \frac 1w = 1+1/w > 1$.
 
 Now that we have defined the density, the natural question to ask is:
 #+begin_problem Optimal density
-What is the optimal density that can be achieved by a minimizer, forward, or
+What is the lowest density that can be achieved by a minimizer, forward, or
 local scheme?
 #+end_problem
 Since the classes of forward and local schemes are larger, they can
-possibly achieve lower densities, but by how much? And what happens when $w\to
+possibly achieve lower densities, but by how much?
+The ideal is to answer some of these questions by proving a lower bound and
+providing a scheme that has density equal to this lower bound, ideally for all
+parameters, but otherwise for a subset.
+We can also ask what happens when $w\to
 \infty$ (for $k$ fixed), or when $k\to\infty$ (for $w$ fixed)?
 And can how does this depend on the alphabet size?
+Or maybe we can not quite make schemes that /exactly/ match the lower bound, but we /can/ make schemes
+that are within $1\%$ of the lower bound, or that are asymptotically a factor
+$1+o(1)$ away.
 
-And if we can find optimal schemes, that match a provable lower bound, we would
+There are also different parameter regimes to consider: small $k=1$ or
+$k<\log_\sigma(w)$, slightly larger $k\leq 10$, and more practical $k$ up to
+$\approx 30$, or even larger $k$ in theory. Similarly, we can consider small $w\leq 10$,
+but also $w\approx 1000$ is used in practice. The alphabet size will usually be
+$\sigma=4$, but also this can vary and can be $\sigma=256$ for ASCII input.
+
+If we do find (near) optimal schemes, we would
 like these to be /pure/ in some way: ideally we can provide a simple analysis of
 their density, as opposed to only being able to compute it without any
 additional understanding. This somewhat rules out solutions found by brute force
@@ -250,7 +311,7 @@ For forward schemes, a /context/ is a string of length $c = w+k$, consisting of
 two overlapping windows.
 
 For a sampling scheme $f$, a context $C$ is /charged/ when two different positions
-are sampled from the first and second window, i.e., $f(C[0..w+k-1)) != 1+f(C[1..w+k))$.
+are sampled from the first and second window, i.e., $f(C[0..w+k-1)) \neq 1+f(C[1..w+k))$.
 #+end_definition
 
 For a /local/ scheme, a context has length $2w+k-1$ instead [cite:Section 3.1
@@ -436,9 +497,12 @@ Some of these results will be covered more in-depth later.
 
 TODO: Use more precise lower bound for $k\to\infty$: $\ceil{(w+k)/w}/(w+k)$?
 
-When $k\to\infty$, the ''rot-minimizer'' [cite:@asymptotic-optimal-minimizers]
-(see section [[*UHS-based schemes]])
-and the new mod-minimizer (section [[*NEW: Mod-minimizer]]) both achieve optimal density $1/w$.
+When $k\to\infty$, both the rot-minimizer [cite:@asymptotic-optimal-minimizers]
+and the new mod-minimizer (section [[*NEW: Mod-minimizer]]) achieve optimal density $1/w$.
+
+Slightly simplified, the *rot-minimizer* ranks k-mers by the sum of the
+characters in positions $0\pmod w$, so that for $w=2$, it would sum every other
+character of the k-mer. Then, it selects the k-mer for which this sum is maximal.
 
 When $w\to\infty$, minimizer schemes have a big limitation. Since they only
 consider the k-mers, when $w\gg \sigma^k$, almost every window will contain the
@@ -500,7 +564,8 @@ While it may seem from [[asymptotics]] that local schemes are not better than fo
 schemes, there /are/ parameters for which local schemes achieve strictly better
 density [cite:@asymptotic-optimal-minimizers;@sampling-lower-bound].
 Unfortunately, there currently is not good theory of local schemes, and these
-improved schemes were found by solving an integer linear program (ILP).
+improved schemes were found by solving an integer linear program (ILP) for small
+parameters.
 Lower bounds on local scheme density for small $k$ and $w$ are also not nearly
 as tight as for forward schemes.
 
@@ -508,6 +573,11 @@ as tight as for forward schemes.
 
 There are several variations on sampling schemes that generalize in different
 ways.
+
+/Global/ schemes drop the requirement that whether a k-mer is sampled only
+depends on a local context. Examples are minhash [cite:@minhash] and more general
+FracMinHash [cite:@fracminhash], both sampling the smallest k-mers of an entire
+string.
 
 On strings with many repeated characters, all k-mers have the same hash, and
 hence all k-mers are sampled. /Robust winnowing/ [cite:@winnowing] prevents
@@ -517,6 +587,9 @@ the previous window has the same hash, in which case that one is ''reused''.
 /Min-mers/ [cite:@minmers] are a second variant, where instead of choosing a
 single k-mer from a window, $s$ k-mers are chosen instead, typically from a
 window that is $s$ times longer.
+
+/Finimizers/ [cite:@finimizers] are /variable length/ minimizers that ensure
+that the frequency of the minimizers is below some threshold.
 
 For DNA, it is often not know to which strand a give sequence belongs.
 Thus, any analysis should be invariant under taking the reverse complement.
@@ -529,7 +602,15 @@ $$f(\rc(W)) = w-1-f(W).$$
 #+end_definition
 
 One way to turn any minimizer scheme into a canonical minimizer scheme is by
-using the order $\Ok^{\rc}(x) = \min(\Ok(x), \Ok(\rc(x)))$ [cite:@minimizers].
+using the order $\Ok^{\rc}(x) = \min(\Ok(x), \Ok(\rc(x)))$
+[cite:@minimizers;@nthash] or $\Ok^{\rc}(x) = \Ok(x) + \Ok(\rc(x))$ [cite:@nthash2;@simd-minimizers-preprint].
+Still, this leaves the problem of whether to select the leftmost or rightmost
+occurrence of a kmer in case of ties. This can be solved using the technique of
+the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers-preprint]: ensure that $w+k-1$ is odd,
+and pick the strand with the highest count of =GT= bases.
+A way to encode canonical k-mers that saves one bit is presented in [cite/t:@encoding-canonical-kmers].
+Lastly, [cite/t:@knonical-reverse-complements] provides a way to turn
+context-free methods into a canonical version.
 
 Lastly, [cite/t:@syncmers] introduces the /conservation/ of a scheme
 as the expected fraction of bases covered by sampled k-mers.
@@ -823,6 +904,7 @@ already:
   done before by Mykkeltveit [cite:@mykkeltveit].
 
 * Sampling schemes
+NOTE: The classification into groups of schemes is somewhat arbitrary.
 ** TODO Variants of lexicographic minimizers
 The lexicographic minimizer is known to have relatively bad density because it
 is prone to sampling multiple consecutive k-mers when there is a run of =A= characters.
@@ -839,11 +921,30 @@ Another way to prevent over-sampling consecutive k-mers is to order k-mers by
 their frequency in the input data,
 favouring rare k-mers over more common ones [cite:@debruijngraph-representation].
 
-** TODO UHS-based schemes
+** UHS-inspired schemes
+
+*Minimum decycling set.*
+Where a universal hitting set is a set of k-mers such that every length $w+k-1$
+window contains a k-mer in the UHS, a /minimum decycling set/ (MDS) is a smallest set of k-mers
+that hits every infinitely long string. Equivalently, if we take the complete De
+Bruijn graph of order $k$ and remove all nodes in the MDS from it, this leaves a
+graph without cycles. It can be seen that the number of /pure cycles/ in the De
+Bruijn graph is a lower bound on the size of an MDS, and indeed this lower bound
+can be reached, for example by the Mykkeltveit MDS $\Dk$ [cite:@mykkeltveit].
+
+To construct $\Dk$, k-mers are first embedded into the complex plane via a
+character-weighted sum of the $k$ $k$'th roots of unity $\omega_w$: a k-mer $X$ is mapped
+to $x=\sum_i X_i\cdot\omega_w^i$.
+This way,
+shifting a k-mer by one position corresponds to a rotation, followed by the
+addition or subtraction of a real number.
+Based on this, $\Dk$ consists of those k-mers whose embedding
+$x$ corresponds to the first clockwise rotation with positive imaginary part, i.e.,
+such that $\pi-2\pi/k\leq \arg(x)<\pi$.
 
 *DOCKS.* In [cite/t:@docks-wabi;@docks], the authors introduce an algorithm to generate
-small universal hitting sets. It works in two steps. First, it finds a
-/decycling set/ (explained in more detail later) such that every infinitely long
+small universal hitting sets. It works in two steps.
+It starts by using Mykkeltveit's MDS such that every infinitely long
 string contains a k-mer from the decycling set. Then, it repeatedly adds the
 k-mer to the UHS that is contained in the largest number of length $\ell=w+k-1$
 windows that does not yet contain a k-mer in the UHS.
@@ -851,51 +952,70 @@ In practice, the exponential runtime in $k$ and $\ell$ is a bottleneck. A first
 speedup is to consider the k-mer contained in the largest number of paths of
 /any/ length. A second method for larger $k' > k$, called /naive extension/, is to simply ignore
 the last $k'-k$ characters of each k-mer and then use an UHS for $k$.
-DOCKS can generate UHSes up to around $k=11$, and for $k=10$ and $w=10$, it has
-density $1.737/(w+1)$ [cite:@improved-minimizers], thereby being the first
+DOCKS can generate UHSes up to around $k=13$, and for $k=10$ and $w=10$, it has
+density down to $1.737/(w+1)$ [cite:@improved-minimizers], thereby being the first
 scheme that breaks the conjectured $2/(w+1)$ lower bound.
 
-*Improved minimizers*
+*$\boldremuval$* [cite:@practical-uhs] is a method that build on DOCKS.
+Given a UHS $U$ for some $(w, k-1)$, starting with a UHS generated by DOCKS, it
+first uses naive extension to get a $(w, k)$ UHS $U'$. Then, it tries to reduce the
+size of this new UHS by removing some k-mers. In particular, if a k-mer only
+ever occurs in windows together with another k-mer of $U'$, then this k-mer may
+be removed from $U'$. Instead of greedily dropping k-mers, and ILP is built to
+determine an optimal set of k-mers to drop. This process is repeated until the
+target $k$ is reached, which can be up to at least $200$, as long as $w\leq 21$ is
+sufficiently small.
 
-*Practical UHSes* (ReMuVal)
+*PASHA* [cite:@pasha] also builds on DOCKS and focuses on improving the
+construction speed. It does this by parallellizing the search for k-mers to
+add to the UHS, and by adding multiple k-mers at once (each with some
+probability) rather than only the one with the highest count of un-covered
+windows containing it. These optimizations enable PASHA to generate schemes up
+to $k=16$, while having density comparable to DOCKS.
 
-*Rot-minimizer.* $k\to\infty$ and density $1/w$
+*Decycling-based minimizer.* An improvement to the brute force constructions of
+DOCKS, $\remuval$, and PASHA came with a minimizer scheme based directly on
+minimum decycling sets [cite:@minimum-decycling-set]:
+In any window, prefer choosing a k-mer in $\Dk$, if
+there is one, and break ties using a random order. They also introduce
+the /double decycling/ scheme. This uses the /symmetric/ MDS $\Dtk$ consisting
+of those k-mers for which $-2\pi/k\leq \arg(x)<0$. It then first prefers
+k-mers in $\Dk$, followed by k-mers in $\Dtk$, followed by k-mers that are in neither.
 
+It is easy to detect whether a k-mer is in the MDS or not without any memory, so
+that this method scales to large $k$.
+Surprisingly, not only is this scheme conceptually simpler, but it also
+has significantly lower density than DOCKS, PASHA, and miniception. Apparently, the simple greedy
+approach of preferring smaller k-mers works better than the earlier brute force
+searches for small universal hitting sets. Especially for $k$ just below $w$,
+its density is much better than any other scheme.
 
-  - Construction of asymptotic in $k\to\infty$ scheme is complex, but comes down
-    to roughly: for each $i\in [w]$, sum the characters in positions $i\pmod w$.
-    Take the k-mer the position $i$ for which the sum is maximal. (In the paper
-    it's slightly different, in that a context-free version is defined where a
-    k-mer is 'good' if the sum of it's $0\pmod w$ characters is larger than the
-    sums for the other equivalence classes, and then there is an argument that
-    good kmers close to a UHS, and turning them into a real UHS only requires
-    'few' extra kmers.)
+*GreedyMini.*
+Unlike the previous UHS schemes, GreedyMini [cite:@greedymini-preprint] directly
+constructs a low-density minimizer scheme using a brute force approach.
+As we saw, the density of a minimizer scheme equals the probability that the
+smallest k-mer in a $w+k$ long context is at the start or end. Thus, the
+greedymini finds the k-mer that occurs relatively the least at the start or end
+of a context and chooses that as the smallest k-mer. It then discards all
+contexts this k-mer appears in and repeats the process until a minimizer has
+been determined for all contexts. To improve the final density, slightly
+submoptimal choices are also allowed, and a local search and random restarts are
+used.
+To keep the running time manageable, the schemes are only built for a $\sigma=2$
+binary alphabet and up to $k\leq 20$. This is extended to larger $k$ using naive
+extension and to larger alphabets by simply ignoring some of the input bits.
 
-*PASHA* (TODO)
-PASHA [cite:@pasha] is another minimizer selection algorithm based on a
-universal hitting set. It works as follows:
-1. Start with a complete De Bruijn graph of order $k$, i.e., containing all
-   $4^k$ kmers.
-2. Remove from this a minimal set of $k$-mers $U_1$ that make the graph acyclic.
-3. Then remove additional $k$-mers to remove all paths of length $\geq \ell$.
-   - This is done using the DOCKS heuristic [cite:@docks], which greedily
-     removes the vertex containing the most (length $\ell$) paths.
-PASHAs main contribution is a considerable speedup over DOCKS. It still remains
-slow and has to process the full $4^k$ graph, limiting it to $k\leq 16$, but has
-the lower density.
-
-*Small-UHS*
-
-*Decycling*
-
-[cite:@pasha] construct a small UHS greedily
-adding the ''best'' k-mer to it, according to some heuristic.
-
-[cite:@pasha;@small-uhs;@practical-uhs;@improved-minimizers].
-
-- GreedyMini
+The resulting schemes achieve very low density, especially when $k$ is around
+$w$. In these regions, the greedymini has lower density than all other schemes,
+and it is able to find optimal schemes for some small cases when $k\equiv 1\pmod
+w$. This raises the question whether it is also optimal for other $k$, where the
+lower bound may not be tight yet.
+A drawback is that this scheme is not pure: it must explicitly store the chosen
+order of k-mers.
 
 ** Syncmer-based schemes
+TODO: Merge with section above; sort chronologically.
+
 As we saw, universal hitting sets belong to a more general class of context-free
 schemes that only look at individual k-mers to decide whether or not to sample
 them.
@@ -938,6 +1058,10 @@ a closed syncmer when $w\geq k-s$. When $k$ is sufficiently larger than $w$ and
 $s = k-w+1$,
 it is shown that miniception has density bounded by $1.67/w + o(1/w)$. In
 practice, we usually use $s = k-w$ when $k$ is large enough.
+Unlike UHS-based schemes, miniception does not require large memory, and it is
+the first scheme that is proved to break the $2/(w+1)$ hypothesis when $k\approx
+w$.
+
 
 
 ** NEW: Open-closed minimizer
@@ -1033,7 +1157,7 @@ $$
 When $w$ is fixed and $k\to\infty$, this density tends to $1/w$.
 #+end_newtheorem
 
-#+begin_newtheorem Mod-minimizer is optimal
+#+begin_newtheorem Mod-minimizer is sometimes optimal
 The random mod-minimizer has optimal density when $w$ is fixed, $r=t=1$, and $k\equiv 1\pmod
 w$, and $\sigma\to\infty$.
 #+end_newtheorem
@@ -1050,15 +1174,18 @@ $$
 $$
 #+end_proof
 
-*** Commentary
+- TODO: Oc-mod-mini results and commentary
+  - simply & efficient
+  - good density
+  - 'pure', unlike greedymini
 
 * NEW: Selection schemes
 ** Bd-anchors
 *Bidirectional anchors* (bd-anchors) are a variant on minimizers that take the minimal
-lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors;@anchors-are-all-you-need].
+lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors-esa;@bdanchors;@anchors-are-all-you-need].
 I wrote above them before in [[file:../bd-anchors/bd-anchors.org::*Paper overview][this post]].
 
-*Reduced bd-anchors* restrict this rotation to not start in the last
+*Reduced bd-anchors* restrict this rotation to not start in the 'unstable' last
 $r=4\log_\sigma(\ell)$ positions.
 
 *Density:* Reduced bd-anchors have a density of $2/(\ell+1-r)$ for large
@@ -1089,61 +1216,71 @@ This makes things slightly sparser.
 ** Maximal non-overlapping string sets
 
 - Papers on maximal non-overlapping string sets (see below).
+
+
+- [cite/t:@max-non-overlapping-codes]
+  - Shows a bound on max number of non-overlapping words of
+    $$\frac 1k \left(\frac{k-1}{k}\right)^{k-1} \sigma^k$$
+- [cite/t:@non-overlapping-codes]
+  - divide alphabet into two parts. Then patterns =abbbb= and e.g. =aab?b?b?b=
+    are non-overlapping. (=b=: any non-=a= character)
+  - For DNA, optimal solution (max number of pairwise non-overlapping words) for $k=2$ is =[AG][CT]=, while for
+    $k\in\{3,4,5,6\}$, an optimal solution is given by =A[CTG]+=.
+  - Re-prove upper bound on number of non-overlapping words $\sigma^k/(2k-1)$.
+  - Re-prove upper bound of Levenshtein above.
+  - Show existing scheme with size
+    $$\frac{\sigma-1}{e\sigma} \frac{\sigma^k}{k}$$
+  - New scheme: not $0$ and ${>}0$, but arbitrary partition. And prefix is in
+    some set $S$, while suffix is $S$-free.
+    - When $k$ divides $\sigma$, choose $|I| = \sigma/k$ and $|J| =
+      \sigma-\sigma/k$, and consider strings =IIIIIIJ=. These are optimal.
+    - The set $S$ is needed to avoid rounding errors when $\sigma$ is small.
+    - Conjecture: a suffix of =JJ= or longer is never optimal.
+- [cite/t:@minimally-overlapping-words]
+  - /minimally overlapping words/ are anti-clustered, hence good for sensitivity.
+  - =cg=-order: alternate small and large characters, as [cite:@minimizers]
+  - =abb=-order: compare first character normal, the rest by ~t=g=c<a~.
+- [cite/t:@searching-max-non-overlapping-codes]
+  - ILP to solve the problem for more $(k, \sigma)$ pairs.
+- [cite/t:@optimal-sampling-frith]
+  - Test various word-sets for their sparsity and specificity.
+- [cite/t:@unavoidable-sets]
+
 ** NEW: SUS-anchors
+
+TODO: Show density of $(2+o(1))/w$ as $w\to\infty$?
 
 *** Commentary
 - Ideally, prove density $O(1/w)$, and answer the question of [cite:@small-uhs]
   that yes, perfect selection schemes exist. Then also update the asymptotic table.
 
-* Summary
+* Evaluation and discussion
+
+** Open questions
+- How much are local schemes better than forward schemes?
+- How much are forward schemes better than minimizer schemes? Only for small $k$?
+- How close to optimal is greedy minimizer?
 
 
-* OLD
-
-** Introduction
-
-- Lots of DNA data
-- Most algorithms deal with k-mers.
-- k-mers overlap, and hence considering all of them is redundant.
-- Thus: sample a subset of the kmers.
-- Must be 'locally consistent' and deterministic to be useful.
-- Enter random minimizers.
-- Parameter $w$: guarantee that at least one k-mer is sampled out of every
-  window of $w$ k-mers.
-- Density $d$: (expected) overall fraction of sampled k-mers.
-- Obviously, $d\geq 1/w$
-- For random mini, $d=2/(w+1)$.
-- Lower density => fewer k-mers, smaller indices, faster algorithms.
-- *Question:* How small density can we get for given $k$ and $w$?
-
-*** Previous reviews
-- [cite/t:@minimizer-sketches]
-- [cite/t:@minimizer-review-2]
+# * OLD
 
 
-*** Overview
 
-#+caption: An overview of the papers this post discusses, showing authors and categories of each paper.
-#+attr_html: :class inset large
-[[file:papers.svg]]
+# *** Overview
 
-** Theory of sampling schemes
-#+begin_quote
-[At RECOMB 2022, discussing DeepMinimizer]
+# #+caption: An overview of the papers this post discusses, showing authors and categories of each paper.
+# #+attr_html: :class inset large
+# [[file:papers.svg]]
 
-Why would we even care about better minimizer? We have this simple and fast
-random minimizer that's only at most $2\times$ away from optimal. Why would
-anyone invest time in optimizing this by maybe $25\%$?
-There are so much bigger gains possible elsewhere.
-#+end_quote
+# ** Theory of sampling schemes
 
-- [cite/t:@minhash]
-  - Take the $s$ kmers with smallest $s$ hashes, then estimate jaccard
-    similarity based on this.
-- [cite/t:@winnowing]
-  - $k$: /noise threshold/
-  - $\ell$: /guarantee threshold/
-  - /winnowing/: Definition 1: Select minimum hash in each window.
+# - [cite/t:@minhash]
+#   - Take the $s$ kmers with smallest $s$ hashes, then estimate jaccard
+#     similarity based on this.
+# - [cite/t:@winnowing]
+#   - $k$: /noise threshold/
+#   - $\ell$: /guarantee threshold/
+#   - /winnowing/: Definition 1: Select minimum hash in each window.
   # - Charged contexts to prove a $2/(w+1)$ density, assuming no duplicate hashes
     # (and $k$-mers)
   # - /local algorithm/: Function on k-mer hashes, rather than on window itself:
@@ -1154,16 +1291,16 @@ There are so much bigger gains possible elsewhere.
     # tie if possible, otherwise rightmost.
   # - 'threshold' $t=w+k-1$
   # - order via hash
-- [cite/t:@minimizers]
+# - [cite/t:@minimizers]
   # - /interior minimizers/: Length $w+k-1$ in common, then share minimizer
   # - Same heuristic argument for $2/(w+1)$ density, assuming distinct kmers.
-  - $w\leq k$ guarantees no gaps (uncovered characters) between minimizers
+  # - $w\leq k$ guarantees no gaps (uncovered characters) between minimizers
   # - /end minimizers/: minimizers of a prefix/suffix of the string of length $<\ell$.
   # - lexicographic ordering is bad on consecutive zeros.
   # - 'Alternating' order: even positions have reversed order.
   # - Increase chance of 'rare' k-mers being minimizers.
   # - Reverse complement-stable minimizers: $ord(kmer) = min(kmer, rev-kmer)$.
-  - Some heuristic argument that sensitivity goes as $k+w/2$.
+  # - Some heuristic argument that sensitivity goes as $k+w/2$.
   # - $k<\log_\sigma(N)$ may have bad sensitivity.
 # - [cite/t:@improved-minimizers]
   # - Main goal is to disprove the $2/(w+1)$ conjectured lower bound.
@@ -1225,34 +1362,8 @@ There are so much bigger gains possible elsewhere.
 #     /subset/ of kmers.
 #   - /word-based method/: a 'context free' method where for each k-mer it is
 #     decided independently whether it is sampled or not.
-- [cite/t:@minimizer-biased]
-  - The jaccard similarity based on random minimizers is biased.
-- [cite/t:@max-non-overlapping-codes]
-  - Shows a bound on max number of non-overlapping words of
-    $$\frac 1k \left(\frac{k-1}{k}\right)^{k-1} \sigma^k$$
-- [cite/t:@non-overlapping-codes]
-  - divide alphabet into two parts. Then patterns =abbbb= and e.g. =aab?b?b?b=
-    are non-overlapping. (=b=: any non-=a= character)
-  - For DNA, optimal solution (max number of pairwise non-overlapping words) for $k=2$ is =[AG][CT]=, while for
-    $k\in\{3,4,5,6\}$, an optimal solution is given by =A[CTG]+=.
-  - Re-prove upper bound on number of non-overlapping words $\sigma^k/(2k-1)$.
-  - Re-prove upper bound of Levenshtein above.
-  - Show existing scheme with size
-    $$\frac{\sigma-1}{e\sigma} \frac{\sigma^k}{k}$$
-  - New scheme: not $0$ and ${>}0$, but arbitrary partition. And prefix is in
-    some set $S$, while suffix is $S$-free.
-    - When $k$ divides $\sigma$, choose $|I| = \sigma/k$ and $|J| =
-      \sigma-\sigma/k$, and consider strings =IIIIIIJ=. These are optimal.
-    - The set $S$ is needed to avoid rounding errors when $\sigma$ is small.
-    - Conjecture: a suffix of =JJ= or longer is never optimal.
-- [cite/t:@minimally-overlapping-words]
-  - /minimally overlapping words/ are anti-clustered, hence good for sensitivity.
-  - =cg=-order: alternate small and large characters, as [cite:@minimizers]
-  - =abb=-order: compare first character normal, the rest by ~t=g=c<a~.
-- [cite/t:@searching-max-non-overlapping-codes]
-  - ILP to solve the problem for more $(k, \sigma)$ pairs.
-- [cite/t:@optimal-sampling-frith]
-  - Test various word-sets for their sparsity and specificity.
+# - [cite/t:@minimizer-biased]
+#   - The jaccard similarity based on random minimizers is biased.
 # - [cite/t:@random-mini-density]
   # - The random minimizer has density just below $2/(w+1)$ when $k>w$ and $w$ is
   #   sufficiently large.
@@ -1298,48 +1409,47 @@ There are so much bigger gains possible elsewhere.
 # - [cite:@debruijngraph-representation]
   # - Order k-mers by their frequency in the dataset.
 
-*** Questions
-*Main question:* What is the lowest possible density for given $(k, w)$?
+# *** Questions
+# *Main question:* What is the lowest possible density for given $(k, w)$?
 
-The first questions:
-- What is a scheme
-
-This question is then approached from two sides:
-- Lower bounds on density for $(k,w,\sigma)$?
-- Tight lower bounds for /some/ parameters?
-- Tight lower bounds, asymptotic in parameters (e.g., $\sigma\to\infty$)?
-- Can we make tight lower bounds for all practical parameters?
-- If not, can we understand why the best schemes found (using ILP) do not reach
-  know bounds?
-
-And:
-- What is the empirical density of existing schemes?
-- Can we model existing schemes and compute their density exactly?
-- Can we make near-optimal schemes (say, within $1\%$ from optimal) for
-  practical parameters?
-- Can we make exactly optimal schemes, for asymptotic parameters?
-- Can we make optimal schemes for practical parameters?
-- Can we make 'pure' optimal schemes, that do not require exponential memory?
-- If we can not make pure optimal schemes, can we bruteforce search for them instead?
-*** Types of schemes
-scope:
-- global (frac-sampling, mod-sampling [cite:@debruijngraph-representation;@compacting-dbg]
-  (TODO, TODO),
-  minhash, sampling every $n$-th kmer)
-# - local
-# - forward
-# - minimizer
+# The first questions:
+# - What is a scheme
 
 # type:
 # - sampling scheme: sample k-mer
 # - selection scheme: sample position ($k=1$)
 
-*** Parameter regimes
-- small $k$: $k < \log_\sigma(w)$
-- large $k$: $k\gg w$ or $k\to \infty$.
-- 'practical': $4\leq k \leq 2w$ with $w\leq 20$ or so; depends on the application.
-- binary/DNA alphabet $\sigma\in\{2,4\}$.
-- large/infinite alphabet, $\sigma=256$ or $\sigma\to\infty$.
+# This question is then approached from two sides:
+# - Lower bounds on density for $(k,w,\sigma)$?
+# - Tight lower bounds for /some/ parameters?
+# - Tight lower bounds, asymptotic in parameters (e.g., $\sigma\to\infty$)?
+# - Can we make tight lower bounds for all practical parameters?
+# - If not, can we understand why the best schemes found (using ILP) do not reach
+#   know bounds?
+
+# And:
+# - What is the empirical density of existing schemes?
+# - Can we model existing schemes and compute their density exactly?
+# - Can we make near-optimal schemes (say, within $1\%$ from optimal) for
+#   practical parameters?
+# - Can we make exactly optimal schemes, for asymptotic parameters?
+# - Can we make optimal schemes for practical parameters?
+# - Can we make 'pure' optimal schemes, that do not require exponential memory?
+# - If we can not make pure optimal schemes, can we bruteforce search for them instead?
+# *** Types of schemes
+# scope:
+# - global (frac-sampling, mod-sampling
+   # sampling every $n$-th kmer)
+# - local
+# - forward
+# - minimizer
+
+# *** Parameter regimes
+# - small $k$: $k < \log_\sigma(w)$
+# - large $k$: $k\gg w$ or $k\to \infty$.
+# - 'practical': $4\leq k \leq 2w$ with $w\leq 20$ or so; depends on the application.
+# - binary/DNA alphabet $\sigma\in\{2,4\}$.
+# - large/infinite alphabet, $\sigma=256$ or $\sigma\to\infty$.
 
 # *** Different perspectives
 # - charged contexts of length $w+1$.
@@ -1352,9 +1462,9 @@ scope:
 # *** (Asymptotic) bounds
 # *** Lower bounds
 
-** Minimizer schemes
-*** Orders
-*** UHS-based and search-based schemes
+# ** Minimizer schemes
+# *** Orders
+# *** UHS-based and search-based schemes
 # - [cite/t:@docks-wabi;@docks]
   # - Introduces UHS
   # - DOCKS finds a UHS
@@ -1374,130 +1484,125 @@ scope:
   # - DOCKS selects far fewer distinct kmers compared to random minimizers, and
     # has slightly lower density.
   # - Does **not** use a compatible minimizer order.
-- [cite/t:@practical-uhs]
-  - Extends UHS generated by DOCKS
-  - larger $k$ up to $200$, but $L\leq 21$.
-  - Merges UHS with random minimizer tiebreaking.
-  - Mentions sparsity
-  - Starts with UHS for small $k$ and grows one-by-one to larger $k$. Full
-    process is called =reMuval=.
-    - First, naive extension
-    - Second, an ILP to reduce the size of the new UHS and
-      increase the number of /singletons/: windows containing exactly one kmer.
-      (Since density directly correlates with sparsity.)
-  - Naive extension can decrease density
-  - Remove kmers from the UHS that always co-occur with another k-mer in every window.
-  - ILP is on whether each kmer is retained in the UHS or not, such that every
-    window preserves at least one element of the UHS.
-  - Also does sequence-specific minimizers
-- [cite/t:@pasha]
-  - Improves DOCKS using randomized parallel algorithm for set-cover.
-  - Faster computation of hitting numbers.
-  - Scales to $k\leq 16$.
-- [cite/t:@deepminimizer]
-  - Learns a total order, instead of a UHS.
-  - Continuous objective, rather than discrete.
-  - UHSes are 'underspecified' since the order withing each component is not
-    given. Determining the permutation directly is more powerful.
-  - Around $5\%$ better than PASHA.
-- [cite/t:@greedymini-preprint]
-  - Unlike UHS-based methods that optimize UHS size, this directly optimizes
-    minimizer density by minimizing the number of charged context:
-    - Repeatedly pick the next kmer as smallest that is in the smallest fraction
-      of charged contexts.
-    - Then do some noise (slightly submoptimal choices), and local search with
-      random restarts on top.
-  - Builds scheme for alphabet size $\sigma'=2$ and $k'\leq 20$ which is extended to $\sigma=2$
-    and to larger $k$ if $k>20$.
-  - Achieves very low density. Open question how close to optimal.
-  - Not 'pure': requires the memory to store the order of kmers.
-- [cite/t:@polar-set-minimizers]
-  - Polar set intersects each $w$-mer /at most/ once.
-  - Two kmers in a polar set are at least $(w+1)/2$ apart.
-  - Lemma 4: Formula for probability that a window is charged, in terms of
-    number of unique kmers.
-  - Progressively add 'layers' to the polar set to fill gaps.
-  - Heuristic: greedily try to pick kmers that are exactly $w$ apart, by
-    choosing a random offset $o\in [w]$, and adding all those kmers as long as
-    they aren't too close to already chosen kmers.
-    - Up to 7 rounds in practice.
-  - Filter too frequent kmers.
-  - Significantly improved density over other methods.
-  - Requires explicitly storing an order.
-- [cite/t:@unavoidable-sets]
+# - [cite/t:@practical-uhs]
+#   - Extends UHS generated by DOCKS
+#   - larger $k$ up to $200$, but $L\leq 21$.
+#   - Merges UHS with random minimizer tiebreaking.
+#   - Mentions sparsity
+#   - Starts with UHS for small $k$ and grows one-by-one to larger $k$. Full
+#     process is called =reMuval=.
+#     - First, naive extension
+#     - Second, an ILP to reduce the size of the new UHS and
+#       increase the number of /singletons/: windows containing exactly one kmer.
+#       (Since density directly correlates with sparsity.)
+#   - Naive extension can decrease density
+#   - Remove kmers from the UHS that always co-occur with another k-mer in every window.
+#   - ILP is on whether each kmer is retained in the UHS or not, such that every
+#     window preserves at least one element of the UHS.
+#   - Also does sequence-specific minimizers
+# - [cite/t:@pasha]
+#   - Improves DOCKS using randomized parallel algorithm for set-cover.
+#   - Faster computation of hitting numbers.
+#   - Scales to $k\leq 16$.
+# - [cite/t:@deepminimizer]
+#   - Learns a total order, instead of a UHS.
+#   - Continuous objective, rather than discrete.
+#   - UHSes are 'underspecified' since the order withing each component is not
+#     given. Determining the permutation directly is more powerful.
+#   - Around $5\%$ better than PASHA.
+# - [cite/t:@greedymini-preprint]
+#   - Unlike UHS-based methods that optimize UHS size, this directly optimizes
+#     minimizer density by minimizing the number of charged context:
+#     - Repeatedly pick the next kmer as smallest that is in the smallest fraction
+#       of charged contexts.
+#     - Then do some noise (slightly submoptimal choices), and local search with
+#       random restarts on top.
+#   - Builds scheme for alphabet size $\sigma'=2$ and $k'\leq 20$ which is extended to $\sigma=2$
+#     and to larger $k$ if $k>20$.
+#   - Achieves very low density. Open question how close to optimal.
+#   - Not 'pure': requires the memory to store the order of kmers.
+# - [cite/t:@polar-set-minimizers]
+#   - Polar set intersects each $w$-mer /at most/ once.
+#   - Two kmers in a polar set are at least $(w+1)/2$ apart.
+#   - Lemma 4: Formula for probability that a window is charged, in terms of
+#     number of unique kmers.
+#   - Progressively add 'layers' to the polar set to fill gaps.
+#   - Heuristic: greedily try to pick kmers that are exactly $w$ apart, by
+#     choosing a random offset $o\in [w]$, and adding all those kmers as long as
+#     they aren't too close to already chosen kmers.
+#     - Up to 7 rounds in practice.
+#   - Filter too frequent kmers.
+#   - Significantly improved density over other methods.
+#   - Requires explicitly storing an order.
 
-*** Pure schemes
-- [cite/t:@miniception]
-  - Considers all closed syncmers in a window. Picks the smallest one.
-  - Parameter $k_0$ (we call it $s$): the length of the hashed 'inner' slices.
-  - For $k > w + O(\log_\sigma(w))$, has density below $1.67/w + o(1/w)$.
-    - This requires a long proof.
-  - First scheme with guaranteed density $<2/(w+1)$ when $k\approx w$ (instead
-    $k\gg w$).
-  - Does not require expensive heuristics for precomputation; no internal storage.
-  - Charged contexts or a $(w_0, k_0)$ minimizer are the UHS of the $(w,
-    k=w_0+k_0)$ minimizer, as long as $w\geq w_0$.
-- [cite/t:@minimum-decycling-set]
-  - MDS: a set of k-mers that hits every cycle in the DBg.
-  - Mykkeltveit embedding: map each k-mer to a complex number. Take those k-mers
-    with argument (angle) between $0$ and $2\pi/k$ as context-free hitting set.
-  - Take a compatible minimizer.
-  - Even better: prefer argument in $[0, 2\pi/k)$, and otherwise prefer argument
-    $[\pi, \pi+2\pi/k)$.
-  - Great density for $k$ just below $w$.
-  - MDS orders outperform DOCKS and PASHA.
-  - Scales to larger $k$
-- [cite/t:@modmini]
-  - For $k > w$, look at $t=k\bmod w$-mers instead. If the smallest $t$-mer is
-    at position $x$, sample the $k$-mer at position $x\bmod w$.
-  - Asymptotic optimal density as $w\to\infty$.
-  - Close to optimal for large alphabet when $k\equiv 1\pmod w$.
-- [cite/t:@oc-modmini-preprint]
-  - Extend miniception to open syncmers, and open followed by closed syncmers.
-  - Extend modmini to wrap any other sampling scheme.
-  - Simple and very efficient scheme, for any $k$.
-  - Greedymini has lower density, but is more complex.
+# *** Pure schemes
+# - [cite/t:@miniception]
+#   - Considers all closed syncmers in a window. Picks the smallest one.
+#   - Parameter $k_0$ (we call it $s$): the length of the hashed 'inner' slices.
+#   - For $k > w + O(\log_\sigma(w))$, has density below $1.67/w + o(1/w)$.
+#     - This requires a long proof.
+#   - First scheme with guaranteed density $<2/(w+1)$ when $k\approx w$ (instead
+#     $k\gg w$).
+#   - Does not require expensive heuristics for precomputation; no internal storage.
+#   - Charged contexts or a $(w_0, k_0)$ minimizer are the UHS of the $(w,
+#     k=w_0+k_0)$ minimizer, as long as $w\geq w_0$.
+# - [cite/t:@minimum-decycling-set]
+  # - MDS: a set of k-mers that hits every cycle in the DBg.
+  # - Mykkeltveit embedding: map each k-mer to a complex number. Take those k-mers
+    # with argument (angle) between $0$ and $2\pi/k$ as context-free hitting set.
+  # - Take a compatible minimizer.
+  # - Even better: prefer argument in $[0, 2\pi/k)$, and otherwise prefer argument
+    # $[\pi, \pi+2\pi/k)$.
+  # - Great density for $k$ just below $w$.
+  # - MDS orders outperform DOCKS and PASHA.
+  # - Scales to larger $k$
+# - [cite/t:@modmini]
+#   - For $k > w$, look at $t=k\bmod w$-mers instead. If the smallest $t$-mer is
+#     at position $x$, sample the $k$-mer at position $x\bmod w$.
+  # - Asymptotic optimal density as $w\to\infty$.
+  # - Close to optimal for large alphabet when $k\equiv 1\pmod w$.
+# - [cite/t:@oc-modmini-preprint]
+  # - Extend miniception to open syncmers, and open followed by closed syncmers.
+  # - Extend modmini to wrap any other sampling scheme.
+  # - Simple and very efficient scheme, for any $k$.
+  # - Greedymini has lower density, but is more complex.
 
-*** Other variants
+# *** Other variants
 # - [cite/t:@minmers]
 #   - Sample the smallest $s$ k-mers from each $s\cdot w$ consecutive k-mers.
-- [cite/t:@fracminhash]
-  - Sample all kmers with hash below $max\cdot f$.
+# - [cite/t:@fracminhash]
+  # - Sample all kmers with hash below $max\cdot f$.
 # - [cite:@debruijngraph-representation]
 #   - Frequency aware minimizers TODO
-- [cite/t:@finimizers]
-  - /frequency bounded minimizers/, with frequency below $t$
-  - Prefers rare kmers as minimizers
-  - variable length scheme.
-  - /Shortest unique finimizers/
-  - Uses SBWT to work around 'non-local' property.
-  - Useful for SSHash-like indices.
-  - Defines DSPSS: Disjoint spectrum preserving string set.
-  - For each kmer, find the shortest contained substring that occurs at most $t$
-    times in the DBg of the input.
-  - (TODO: I'm getting a bit lost on the technicalities with the SBWT.)
+# - [cite/t:@finimizers]
+#   - /frequency bounded minimizers/, with frequency below $t$
+#   - Prefers rare kmers as minimizers
+#   - variable length scheme.
+#   - /Shortest unique finimizers/
+#   - Uses SBWT to work around 'non-local' property.
+#   - Useful for SSHash-like indices.
+#   - Defines DSPSS: Disjoint spectrum preserving string set.
+#   - For each kmer, find the shortest contained substring that occurs at most $t$
+#     times in the DBg of the input.
+#   - (TODO: I'm getting a bit lost on the technicalities with the SBWT.)
 
-**** Selection schemes
-These have $k=1$
-- [cite/t:@bdanchors-esa;@bdanchors]
-  - In each window, sample the position that starts the lexicographically
-    smallest rotation.
-  - Avoid sampling the last $r\approx \log_\sigma(w)$ positions, as they cause
-    'unstable' anchors.
-**** Canonical minimizers
-- [cite/t:@refined-minimizer]
-  - Choose the strandedness via higher CG-content.
-- [cite/t:@encoding-canonical-kmers]
-  - TODO
-- [cite/t:@knonical-reverse-complements]
-  - TODO
+# **** Selection schemes
+# These have $k=1$
+# - [cite/t:@bdanchors-esa;@bdanchors]
+#   - In each window, sample the position that starts the lexicographically
+#     smallest rotation.
+#   - Avoid sampling the last $r\approx \log_\sigma(w)$ positions, as they cause
+#     'unstable' anchors.
+# **** Canonical minimizers
+# - [cite/t:@refined-minimizer]
+#   - Choose the strandedness via higher CG-content.
+# - [cite/t:@encoding-canonical-kmers]
+#   - TODO
+# - [cite/t:@knonical-reverse-complements]
+#   - TODO
 
-** Open questions
-- How much are local schemes better than forward schemes?
-- How much are forward schemes better than minimizer schemes? Only for small $k$?
-- How close to optimal is greedy minimizer?
 
-** Checks
+* Checks
 - select -> samples
 - Marcais -> proper spelling
 - symbol vs character
