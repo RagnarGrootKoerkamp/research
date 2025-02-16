@@ -207,6 +207,7 @@ assume this is due to our function being specialized and not having an
 error condition at the end, leading to it being better by a small
 fraction.
 
+TODO comment here with non-power two sizes
 Algorithmica notes that for them, a branchless version is slower for
 large array sizes than a branchy one, which they say is due to the CPU's
 inability to speculatively prefetch new values. To counteract this, the
@@ -246,19 +247,25 @@ the queries, and we move the =base= index for it accordingly. The
 branchless version can be seen below; the =P= is a generic parameter.
 
 #+begin_src rust
-let mut bases = [0u64; P];
-let mut len = self.vals.len() as u64;
-while len > 1 {
-    let half = len / 2;
-    for i in 0..P {
-        let cmp = self.get((bases[i] + half - 1) as usize) < qb[i];
-        bases[i] = select_unpredictable(cmp, bases[i] + half, bases[i]);
-        prefetch_index(&self.vals, (bases[i] + half / 2) as usize);
+pub fn batch_impl_binary_search_branchless_prefetch<const P: usize>(
+    &self,
+    qb: &[u32; P],
+) -> [u32; P] {
+    let mut bases = [0u64; P];
+    let mut len = self.vals.len() as u64;
+    while len > 1 {
+        let half = len / 2;
+        len = len - half;
+        for i in 0..P {
+            let cmp = self.get((bases[i] + half - 1) as usize) < qb[i];
+            bases[i] = select_unpredictable(cmp, bases[i] + half, bases[i]);
+            prefetch_index(&self.vals, (bases[i] + half / 2 - 1) as usize);
+            prefetch_index(&self.vals, (bases[i] + half + half / 2 - 1) as usize);
+        }
     }
-    len = len - half;
-}
 
-bases.map(|x| self.get(x as usize))
+    bases.map(|x| self.get(x as usize))
+}
 #+end_src
 
 The reason this improves performance is that it allows us to "amortize"
