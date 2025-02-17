@@ -76,7 +76,8 @@ We split content into three topics
 - Locality sensitive hashing
 - Similarity estimation [cite:@minimizer-biased;@minhash;@minmers]
 - DeBruin graph partitioning/glueing [cite:@compacting-dbg]
-- Bd-anchors: very thin compression
+- Bd-anchors: very thin compression [cite:@bdanchors;@anchors-are-all-you-need]
+  - TODO: lc-covers of all-you-need (1.3)
 
 #+begin_quote
 [At RECOMB 2022, discussing DeepMinimizer]
@@ -296,10 +297,6 @@ A sampling scheme is /pure/ when it can be implemented in $O(\poly(w+k))$ time
 and space.
 #+end_definition
 
-There is also the problem to minimize the particular density on a given input
-string. We do not discuss this here, but some works in this direction are
-[cite/t:@deepminimizer] and [cite/t:@polar-set-minimizers].
-
 ** Computing the density
 The density of a sampling scheme is defined as the expected particular density
 on an infinitely long string. In practice, we can approximate it closely by
@@ -499,8 +496,8 @@ can be reached.
 *Mykkeltveit MDS.*
 One construction of an MDS is by Mykkeltveit [cite:@mykkeltveit].
 To construct this set $\Dk$, k-mers are first embedded into the complex plane via a
-character-weighted sum of the $k$ $k$'th roots of unity $\omega_k$: a k-mer $X$ is mapped
-to $x=\sum_i X_i\cdot\omega_k^i$.
+character-weighted sum of the $k$ $k$'th roots of unity $\omega_k$: a k-mer $K$ is mapped
+to $x=\sum_i K_i\cdot\omega_k^i$.
 This way,
 shifting a k-mer by one position corresponds to a rotation, followed by the
 addition or subtraction of a real number.
@@ -517,8 +514,8 @@ Some of these results will be covered more in-depth later.
 #+caption: Summary of asymptotic density results.
 | Class     | $k\to\infty$                | $w\to\infty$ lower bound           | $w\to\infty$ best |
 | Minimizer | $1/w$, rot-mini, *mod-mini* | $1/\sigma^k$                       | $1/\sigma^k$      |
-| Forward   | $1/w$, rot-mini, *mod-mini* | $2/(w+k)$  (was $1/w$)             | $(2+o(1))/w$ (was $O(\ln(w)/w)$) |
-| Local     | $1/w$, rot-mini, *mod-mini* | $1.5/(w+\max(k-2, 1))$ (was $1/w$) | $(2+o(1))/w$ (was $O(1/w)$) |
+| Forward   | $1/w$, rot-mini, *mod-mini* | $2/(w+k)$  (was $1/w$)             | $(2+o(1))/(w+1)$ (was $O(\ln(w)/w)$) |
+| Local     | $1/w$, rot-mini, *mod-mini* | $1.5/(w+\max(k-2, 1))$ (was $1/w$) | $(2+o(1))/(w+1)$ (was $2/(w+1-4\log_\sigma(w)) + o(1/w)$) |
 
 TODO: Use more precise lower bound for $k\to\infty$: $\ceil{(w+k)/w}/(w+k)$?
 
@@ -577,9 +574,9 @@ bounded by $O(\ln(k')/k') = O(\ln(w)/w)$.
 #+end_proof_sketch
 
 But this is still not optimal: reduced bd-anchors [cite:Lemma 6 @bdanchors] (see section
-[[*Bd-anchors]]) are a local scheme with $k=1$ and density $O(1/w)$.
+[[#bd-anchors]]) are a local scheme with $k=1$ and density $O(1/w)$.
 
-We further improve on this using SUS-anchors (section [[*NEW: SUS-anchors]]), which
+We further improve on this using SUS-anchors (section [[#sus-anchors]]), which
 is a forward scheme with density $(2+o(1))/w$ as $w\to\infty$.
 TODO: Prove this.
 TODO: What about $k$?
@@ -636,8 +633,8 @@ A way to encode canonical k-mers that saves one bit is presented in [cite/t:@enc
 Lastly, [cite/t:@knonical-reverse-complements] provides a way to turn
 context-free methods into a canonical version.
 
-Lastly, [cite/t:@syncmers] introduces the /conservation/ of a scheme
-as the expected fraction of bases covered by sampled k-mers.
+The /conservation/ of a scheme
+is the expected fraction of bases covered by sampled k-mers [cite/t:@syncmers].
 In [cite/t:@local-kmer-selection],
 sampling schemes are generalized to /k-mer selection methods/ that are allowed to sample /any
 subset/ of k-mers from the input string, and /local selection methods/ that
@@ -645,6 +642,15 @@ return any /subset/ of k-mers from a window.
 Both these papers focus on context-free schemes, as such k-mers are
 better preserved.
 
+There is also the problem to minimize the particular density on a given input
+string.
+For example, some works change the order of the =ACGT= DNA alphabet to make =C= the
+smallest character, as it is often occurs less frequently in DNA sequences
+[cite:@minimizers].
+Other works in this direction are
+[cite/t:@deepminimizer], [cite/t:@polar-set-minimizers], and
+[cite:@debruijngraph-representation], the last of which presents a minimizer
+scheme that orders k-mers such that rare k-mers are preferred over more common ones.
 
 * Lower bounds
 The starting point for this section is the trivial lower bound:
@@ -1044,20 +1050,36 @@ is prone to sampling multiple consecutive k-mers when there is a run of =A= char
 Nevertheless, they achieve density $O(1/w)$ as $k=\floor{\log_\sigma(w/2)}-2$
 and $w\to\infty$ [cite:@miniception].
 
-This can be fixed by using an /alternating/ order [cite:@minimizers]:
-we can use lexicographic order for character in /even/ positions, including the first, and /reverse/
-lexicographic order for all /odd/ positions, including the second. Thus, the
-smallest string would be =AZAZAZ...=. This way, long runs of equal characters
-are usually avoided, unless the entire window consists only of a single character.
+This can be fixed by using an slightly modified order [cite:@minimizers]:
+#+begin_definition Alternating order
+The /alternating order/ compares k-mers by by using lexicographic order for
+characters in /even/ positions, including the first, and /reverse/
+lexicographic order for all /odd/ positions. Thus, the
+smallest string is be =AZAZAZ...=.
+#+end_definition
+This scheme typically avoids sampling long runs of equal characters,
+unless the entire window consists only of a single character.
 
-A second variant is the /abb/-order [cite:@minimally-overlapping-words]. This
-compares the first character lexicographically, and then uses order
-~B = C = ... = Z < A~ from the second position onward, so that the smallest string is =ABBBB=,
+A second variant is the /ABB/-order [cite:@minimally-overlapping-words].
+#+begin_definition ABB-order
+The /ABB-order/ compares the first character lexicographically, and then uses order
+~B = C = ... = Z < A~ from the second position onward, so that the smallest string is =ABBBB...=,
 where the number of non-=A= characters following the first =A= is maximized.
+#+end_definition
+This scheme has the property that distinct occurrences of the =ABB...=
+pattern are necessarily disjoint, leading to good spacing of the minimizers.
+This was already observed before in the context of generating non-overlapping
+codes [cite:@non-overlapping-codes].
 
-Another way to prevent over-sampling consecutive k-mers is to order k-mers by
-their frequency in the input data,
-favouring rare k-mers over more common ones [cite:@debruijngraph-representation].
+We newly introduce a small variation on these two schemes.
+#+begin_newdefinition Anti-lexicographic order
+The /anti-lexicographic order/ sorts k-mers by comparing the first character
+lexicographically, and comparing all remaining characters reverse lexicographically.
+#+end_newdefinition
+In this order, the smallest string is =AZZZZ...=.
+
+
+*** TODO Discussion / evals
 
 ** UHS-inspired schemes
 
@@ -1224,11 +1246,10 @@ infinity.
 The rot-minimizer [cite:@asymptotic-optimal-minimizers] /does/ converge to
 density $1/w$, but in its original form it only does so very slowly.
 
-Here we present the /mod-minimizer/ [cite:@modmini], which turns out to converge
+Here we present the /mod-minimizer/ [cite:@modmini;@oc-modmini-preprint], which turns out to converge
 to $1/w$ nearly as fast as the lower bound TODO REF.
 
 We start with a slightly more general definition.
-To avoid breaking the flow, proofs are in Section [[#modmini-proofs]].
 
 #+begin_newdefinition Mod-sampling
 Let $W$ be a window of $w+k-1$ characters, let $1\leq t\leq k$ be a parameter,
@@ -1243,6 +1264,29 @@ As it turns out, this scheme is only forward for some choices of $t$ [cite:Lemma
 Mod-sampling is forward if and only if $t\equiv k\pmod w$ or $t\equiv k+1\pmod w$.
 #+end_newtheorem
 
+#+begin_proof
+Consider two consecutive windows $W$ and $W'$.
+Let $x$ be the position of the smallest t-mer in window $W$
+and $x'$ that of the smallest t-mer in $W'$.
+mod-sampling is forward when
+$(x \bmod w) - 1 \leq (x' \bmod w)$ holds for all $x$ and $x'$.
+Given that the two windows are consecutive, this trivially holds when $x=0$ and
+when $x' = x-1$.
+Thus, the only position $x'$ that could violate the forwardness condition is
+when $W'$ introduces a new smallest t-mer at position
+$x'=w+k-t-1$. In this case, we have $x' \bmod w = (w+k-t-1) \bmod w = (k-t-1) \bmod w$.
+The rightmost possible position of the sampled k-mer in $W$ is $x\bmod w = w-1$.
+Hence, if the scheme is forward, then it must hold that $(w-1)-1=w-2\leq(k-t-1) \bmod w$.
+Vice versa, if $w-2\leq(k-t-1) \bmod w$ always
+holds true, then the scheme is forward. % since $x \bmod w \leq w-1$.
+
+Now, note that $(k-t-1) \bmod w \geq w-2
+\iff qw-2 \leq k-t-1 < qw
+\iff k-qw \leq t \leq k-qw+1$ for some $0 \leq q \leq \lfloor k/w \rfloor$.
+In conclusion, the scheme is forward if and only if
+$t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w$.
+#+end_proof
+
 It turns out that mod-sampling has local minima in density when $t\equiv k\pmod
 w$ [cite:Figure 4 and Lemma 12 @modmini], thus, we restrict our attention to this case only.
 TODO copy fig.
@@ -1253,6 +1297,47 @@ forward, but also a minimizer scheme [cite:Lemma 13 @modmini]:
 #+begin_newtheorem Minimizer
 Mod-sampling is a minimizer scheme when $t\equiv k\pmod w$.
 #+end_newtheorem
+
+#+begin_proof
+Our proof strategy explicitly defines an order $\order_k$
+and shows that mod-sampling with $t \equiv k \pmod w$
+corresponds to a minimizer scheme using $\order_k$, i.e.,
+the k-mer sampled by mod-sampling is the leftmost smallest
+k-mer according to $\order_k$.
+
+Let $\order_t$ be the order on t-mers used by mod-sampling
+Define the order $\order_k(K)$ of the k-mer $K$
+as the order of its smallest t-mer, chosen among the t-mers
+occurring in positions that are a multiple of $w$:
+$$
+\order_k(K) = \min_{i \in \{0,w, 2w,\dots, k-t\}} \order_t(K[i..i+t))
+$$
+where $k-t$ is indeed a multiple of $w$ since $t\equiv k\pmod w$.
+Now consider a window $W$ of consecutive k-mers $K_0,\ldots,K_{w-1}$.
+Since each k-mer starts at a different position in $W$,
+$\order_k(K_i)$ considers different sets of positions relative to $W$ than
+$\order_k(K_j)$ for all $i \neq j$.
+However, t-mers starting at different positions in $W$ could be identical, i.e.,
+the smallest t-mer of $K_i$ could be identical to that of $K_j$.
+In case of ties,
+$\order_k$ considers the k-mer containing the leftmost occurrence
+of the t-mer to be smaller.
+
+Suppose the leftmost smallest t-mer is at position $x \in [w+k-t]$.
+Then mod-sampling samples the k-mer $K_p$ at position $p = x \bmod w$.
+We want to show that $K_p$ is the leftmost smallest k-mer according to $\order_k$.
+If $\order_t(W[x..x+t))=o$, then % also $\order_k(K_i)=o$.
+\begin{align*}
+\order_k(K_p) = \order_k(W[p..p+k)) &= \min_{j\in \{0,w, 2w,\dots,
+k-t\}} \order_t(W[p+j..p+j+t)) \\
+&= \min_{j\in \{x-p\}} \order_t(W[p+j..p+j+t))
+= o.
+\end{align*}
+Since $o$ is minimal, any other k-mer $K_j$ must have order $\geq o$.
+Also, since $o$ is the order of the leftmost occurrence of the smallest t-mer,
+$K_p$ is the leftmost smallest k-mer according to $\order_k$.
+#+end_proof
+
 
 This now allows us to define the mod-minimizer.
 
@@ -1285,6 +1370,38 @@ let $f$ be a /minimizer/ scheme on t-mers with order $\Ot$.
 Then, the density of the extended mod-minimizer is given by the probability that,
 in a context of length $w+k$, the smallest t-mer is at a position $0\pmod w$.
 #+end_newtheorem
+
+#+begin_proof
+Consider two consecutive windows $W$ and $W'$ of length $w+k-1$ of a
+uniform random string.
+Let $x$ and $x'$ be the position of the smallest t-mer in $W$ and $W'$
+respectively, and let $p=x\bmod w$ and $p'=x'\bmod w$ be the positions of the
+sampled k-mers
+Let $y\in\{x, x'+1\}$ be the absolute position of the smallest t-mer in the
+two windows.
+
+Since $A$ is a forward scheme, we can compute its density as the probability
+that a different k-mer is sampled from $W$ and $W'$.
+First note that the two consecutive windows contain a total of $w+k-t+1$ t-mers,
+and thus, $0\leq y\leq w+k-t$, where $w+k-t$ is divisible by $w$ since
+$t\equiv k\pmod w$.
+
+When $y\not\equiv 0\pmod w$, this implies $0<y<w+k-t$, and thus, the two
+windows share their smallest t-mer. Thus, $p=x\bmod w = y\bmod w$ and
+$p'+1=x'\bmod w+1=(y-1)\bmod w+1$. Since $y\not\equiv 0\pmod w$, this gives
+$p'+1=y\bmod w$, and thus, the two windows sample the same k-mer.
+
+When $y\equiv 0\pmod w$, there are two cases.
+When $y=x$ (and thus $y<w+k-t$), we have $p=x\bmod w=y\bmod w=0$, and since the k-mer starting at
+position $0$ is not part of $W'$, the second window must necessarily sample a
+new k-mer.
+Otherwise, we must have $y=(x'+1)\equiv 0\pmod w$, which implies $p'=x'\bmod w=(y-1)\bmod w=w-1$, and since the k-mer starting at
+position $w-1$ in $W'$ is not part of $W$, again the second window must necessarily sample a
+new k-mer.
+
+To conclude, the two windows sample distinct k-mer if and only if the smallest t-mer
+occurs in a position $y\equiv 0\pmod w$.
+#+end_proof
 
 Before we compute the density of the mod-minimizer, we first re-state Lemma 9 of
 [cite:@modmini], which is a slightly
@@ -1342,152 +1459,141 @@ $$
   - good density
   - 'pure', unlike greedymini
 
-*** Proofs
-:PROPERTIES:
-:CUSTOM_ID: modmini-proofs
-:END:
-We now cover the proofs for the theorems above. These are taken from
-[cite/t:@modmini] and [cite/t:@oc-modmini-preprint].
-
-TODO: backrefs to thms.
-
-FORWARD:
-
-#+begin_proof
-Consider two consecutive windows $W$ and $W'$.
-Let $x$ be the position of the smallest t-mer in window $W$
-and $x'$ that of the smallest t-mer in $W'$.
-mod-sampling is forward when
-$(x \bmod w) - 1 \leq (x' \bmod w)$ holds for all $x$ and $x'$.
-Given that the two windows are consecutive, this trivially holds when $x=0$ and
-when $x' = x-1$.
-Thus, the only position $x'$ that could violate the forwardness condition is
-when $W'$ introduces a new smallest t-mer at position
-$x'=w+k-t-1$. In this case, we have $x' \bmod w = (w+k-t-1) \bmod w = (k-t-1) \bmod w$.
-The rightmost possible position of the sampled k-mer in $W$ is $x\bmod w = w-1$.
-Hence, if the scheme is forward, then it must hold that $(w-1)-1=w-2\leq(k-t-1) \bmod w$.
-Vice versa, if $w-2\leq(k-t-1) \bmod w$ always
-holds true, then the scheme is forward. % since $x \bmod w \leq w-1$.
-
-Now, note that $(k-t-1) \bmod w \geq w-2
-\iff qw-2 \leq k-t-1 < qw
-\iff k-qw \leq t \leq k-qw+1$ for some $0 \leq q \leq \lfloor k/w \rfloor$.
-In conclusion, the scheme is forward if and only if
-$t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w$.
-#+end_proof
-
-MINIMIZER:
-
-#+begin_proof
-Our proof strategy explicitly defines an order $\order_k$
-and shows that mod-sampling with $t \equiv k \pmod w$
-corresponds to a minimizer scheme using $\order_k$, i.e.,
-the k-mer sampled by mod-sampling is the leftmost smallest
-k-mer according to $\order_k$.
-
-Let $\order_t$ be the order on t-mers used by mod-sampling
-Define the order $\order_k(X)$ of the k-mer $X$
-as the order of its smallest t-mer, chosen among the t-mers
-occurring in positions that are a multiple of $w$:
-$$
-\order_k(X) = \min_{i \in \{0,w, 2w,\dots, k-t\}} \order_t(X[i..i+t))
-$$
-where $k-t$ is indeed a multiple of $w$ since $t\equiv k\pmod w$.
-Now consider a window $W$ of consecutive k-mers $X_0,\ldots,X_{w-1}$.
-Since each k-mer starts at a different position in $W$,
-$\order_k(X_i)$ considers different sets of positions relative to $W$ than
-$\order_k(X_j)$ for all $i \neq j$.
-However, t-mers starting at different positions in $W$ could be identical, i.e.,
-the smallest t-mer of $X_i$ could be identical to that of $X_j$.
-In case of ties,
-$\order_k$ considers the k-mer containing the leftmost occurrence
-of the t-mer to be smaller.
-
-Suppose the leftmost smallest t-mer is at position $x \in [w+k-t]$.
-Then mod-sampling samples the k-mer $X_p$ at position $p = x \bmod w$.
-We want to show that $X_p$ is the leftmost smallest k-mer according to $\order_k$.
-If $\order_t(W[x..x+t))=o$, then % also $\order_k(X_i)=o$.
-\begin{align*}
-\order_k(X_p) = \order_k(W[p..p+k)) &= \min_{j\in \{0,w, 2w,\dots,
-k-t\}} \order_t(W[p+j..p+j+t)) \\
-&= \min_{j\in \{x-p\}} \order_t(W[p+j..p+j+t))
-= o.
-\end{align*}
-Since $o$ is minimal, any other k-mer $X_j$ must have order $\geq o$.
-Also, since $o$ is the order of the leftmost occurrence of the smallest t-mer,
-$X_p$ is the leftmost smallest k-mer according to $\order_k$.
-#+end_proof
-
-EXTENDED MOD-MINI DENSITY
-
-#+begin_proof
-Consider two consecutive windows $W$ and $W'$ of length $w+k-1$ of a
-uniform random string.
-Let $x$ and $x'$ be the position of the smallest t-mer in $W$ and $W'$
-respectively, and let $p=x\bmod w$ and $p'=x'\bmod w$ be the positions of the
-sampled k-mers
-Let $y\in\{x, x'+1\}$ be the absolute position of the smallest t-mer in the
-two windows.
-
-Since $A$ is a forward scheme, we can compute its density as the probability
-that a different k-mer is sampled from $W$ and $W'$.
-First note that the two consecutive windows contain a total of $w+k-t+1$ t-mers,
-and thus, $0\leq y\leq w+k-t$, where $w+k-t$ is divisible by $w$ since
-$t\equiv k\pmod w$.
-
-When $y\not\equiv 0\pmod w$, this implies $0<y<w+k-t$, and thus, the two
-windows share their smallest t-mer. Thus, $p=x\bmod w = y\bmod w$ and
-$p'+1=x'\bmod w+1=(y-1)\bmod w+1$. Since $y\not\equiv 0\pmod w$, this gives
-$p'+1=y\bmod w$, and thus, the two windows sample the same k-mer.
-
-When $y\equiv 0\pmod w$, there are two cases.
-When $y=x$ (and thus $y<w+k-t$), we have $p=x\bmod w=y\bmod w=0$, and since the k-mer starting at
-position $0$ is not part of $W'$, the second window must necessarily sample a
-new k-mer.
-Otherwise, we must have $y=(x'+1)\equiv 0\pmod w$, which implies $p'=x'\bmod w=(y-1)\bmod w=w-1$, and since the k-mer starting at
-position $w-1$ in $W'$ is not part of $W$, again the second window must necessarily sample a
-new k-mer.
-
-To conclude, the two windows sample distinct k-mer if and only if the smallest t-mer
-occurs in a position $y\equiv 0\pmod w$.
-#+end_proof
 
 * TODO Selection schemes
 This section is complete TODO. I should probably prove some results on SUS-anchors before
 this is worth including.
-** Bd-anchors
-*Bidirectional anchors* (bd-anchors) are a variant on minimizers that take the minimal
-lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors-esa;@bdanchors;@anchors-are-all-you-need].
-I wrote above them before in [[file:../bd-anchors/bd-anchors.org::*Paper overview][this post]].
+- recall that $k=1$, so $\ell=w+k-1=w$ is the window lenght.
+- First cover bd-anchors
+- Remainder is new, unpublished work
+** Bidirectional anchors
+:PROPERTIES:
+:CUSTOM_ID: bd-anchors
+:END:
+Bidirectional anchors (bd-anchors) are a variant on minimizers that take the minimal
+lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors-esa]:
 
-*Reduced bd-anchors* restrict this rotation to not start in the 'unstable' last
-$r=4\log_\sigma(\ell)$ positions.
+#+begin_definition Bidirectional anchor
+Given a window $W$ of length $w$, the /bidirectional anchor/ is the
+lexicographical minimal rotation of the window, starting at position $i\in
+[w]$, so that $W[i, w)W[0, i) \leq W[j, w)W[0, j)$ for all $j$. In case of ties,
+the leftmost minimal rotation is chosen.
+#+end_definition
 
-*Density:* Reduced bd-anchors have a density of $2/(\ell+1-r)$ for large
-alphabet, and somewhat larger for small $\sigma$.
+It turns out that bd-anchors are somewhat brittle because the are not forward:
+for example, take the window
+=ZABAAC=, that has minimal rotation starting with =AAC...=. If we then shift the
+window by one, we may get =ABAACA=, of which the smallest rotation =AAB...=
+starts at the end. Shifting again to e.g. =BAACAY=, the smallest rotation again
+starts with =AAC...=. Thus, in the middle step, the final =A= was only sampled
+because the string happened to start with an =A= as well at that single step.
+Reduced bd-anchors solve this, although they are still not forward [cite:Definition 2 @bdanchors].
 
-Bd-anchors have a slightly different purpose than minimizers, in that they are keyed by their
-position in the text, rather than by the corresponding string itself. Thus, a
-suffix array is built on suffixes and reverse-prefixes starting/ending there.
+#+begin_definition Reduced bidirectional anchor
+Given a parameter $0\leq r< w$, the /reduced bidirectional anchor/ of a window
+$W$ of length $w$ is the lexicographic smallest rotation starting at a position
+$i\in [w-r]$.
+#+end_definition
 
-For random strings, reduced bd-anchors are a dense subset of the $k=r+1$ minimizers.
+Now, the following theorem can be proven [cite:Lemma 6 @bdanchors].
+#+begin_theorem
+When $r=\ceil{4\log_\sigma w}$, the reduced bd-anchor has density at most $2/(w+1-r) + o(1/w)$.
+#+end_theorem
 
-Given the bd-anchors, two suffix arrays are built. One of suffixes starting at
-anchors, and one on reverse prefixes ending at anchors.
+#+begin_proof_sketch
+Because of the choice of $r$, the probability that the smallest $r$-mer is
+not unique is small, and thus, we can simply find the smallest $r$-mer.
+Then, the probability that two consecutive windows have a different smallest
+$r$-mer is $2/(w+1-r)$, similar to the random minimizer.
+#+end_proof_sketch
 
-*Note:* bd-anchors are not a so-called /forward/ scheme. That is, it is possible
-for the window to shift right, but the selected position to jump backwards.
-[[file:../bd-anchors/bd-anchors.org::*Paper overview][Example here]].
+This parameter $r$ is slightly unfortunate: while plain bd-anchors are
+parameter-free, the $r$ acts very similar to $k-1$ for minimizer schemes.
+And since $r$ is $4\log_\sigma(2)$, in practice, the reduced bd-anchors usually
+just sample a length-$r$ lexicographic minimizer. This still has the drawbacks
+of lexicographic sorting, while not providing the benefit of an actual parameter
+free scheme.
 
-*Optimization:*
-When querying an $\ell$-mer, in practice only the longer of the
-prefix and suffix is actually looked up in the corresponding suffix array. Thus,
-we don't need to two suffix arrays over /all/ bd-anchors:
-- The forward SA over suffixes only needs to contains bd-anchors occurring in
-  the left half of some $\ell$-mer.
-- The reverse SA over suffixes only needs to contains bd-anchors occurring in
-  the right half of some $\ell$-mer.
-This makes things slightly sparser.
+** SUS-anchors
+:PROPERTIES:
+:CUSTOM_ID: sus-anchors
+:END:
+
+To avoid the instability of bd-anchors caused by comparing rotations,
+we can simply only look for the smallest /suffix/ instead.
+A plain version of that would still be unstable, since in e.g. =XABA=, the trailing
+=A= would compare less than =ABA=, even though it might be followed by a =Z=
+once the window slides along. To fix this, we prefer longer suffixes over
+shorter suffixes in case one is a prefix of the other. This leads to the
+following definition.
+
+#+begin_newdefinition Smallest-unique-substring
+Given a window $W$ of length $w$, the /smallest unique substring/ anchor
+(sus-anchor) samples the start position $i\in [w]$ of the lexicographic smallest suffix
+$W[i, w)$ that does not occur elsewhere in $W$.
+
+The smallest unique /substring/ is the prefix of the smallest unique /suffix/
+that does not repeat in $W$.
+#+end_newdefinition
+
+With this new definition and input window =XABA=, we would sample the suffix
+=ABA=, since the trailing =A= suffix occurs elsewhere. The smallest unique
+substring is then =AB=, since it only occurs in =XABA= once and is smaller than
+=XA= and =BA=.
+
+TODO: Plot and commentary
+
+*Anti-lexicographic order.*
+One drawback of taking the lexicographic smallest substring is that suffixes of
+small substrings are also small. In particular, when a window starts with
+=AAABB...=, both the smallest rotation and the smallest unique suffix are the
+entire string =AAABB...=, at position $0$. After shifting the window one position, we get
+=AABB...=, and still the bd-anchor and sus-anchor are =AABB...=. If no other =A=
+occurs at all, after shifting again to =ABB...= again both anchors sample
+position $0$. Thus, neither of these anchors solves the issues associated with
+lexicographic sorting.
+
+To fix this, we consider two variants of SUS-anchors: with anti-lexicographic
+sorting (where =AZZZZ...= is minimal) and with =ABB= sorting, where the smallest
+string is an =A= followed by any non-=A= characters.
+
+Both these orders avoid the issue of sampling consecutive positions in runs of
+~A~s, specifically by preferring a /transition/ from =A= to some other character.
+Further, patterns of =A= followed by non-=A= characters are pairwise disjoint,
+so that consecutively sampled minimizers are pushed apart from each other.
+
+TODO: plot with BOTH orders for SUS.
+
+One of the reasons that this scheme can perform so well for $k=1$ is that it is
+not a /minimizer scheme/, and thus not bound by the $1/\sigma^k$ density lower
+bound. SUS-anchors /are/ always forward though, regardless of the sort order for
+each character.
+#+begin_newtheorem SUS-anchors forward
+SUS-anchors are forward when the sort-order is character-by-character.
+#+end_newtheorem
+#+begin_proof
+Suppose that we have a context $C$ of $w+1$ characters, with two windows $W$ and
+$W'$.
+Let $p$ and $1+p'$ be the positions in $C$ of the samples SUS-anchors.
+If $p=0$ or $1+p'=w$, we have $p \leq 1+p'$ and we are done.
+If $p = 1+p'$, the windows sample the same position and we are also done.
+
+TODO
+#+end_proof
+
+#+begin_newtheorem SUS-anchor density
+SUS-anchors with anti-lexicographic sort order have density $(2+o(1))/(w+1)$.
+#+end_newtheorem
+
+#+begin_proof
+TODO TODO TODO
+#+end_proof
+
+
+** Threshold
+
+** Towards perfectly optimal schemes
+
 ** Maximal non-overlapping string sets
 
 - Papers on maximal non-overlapping string sets (see below).
@@ -1521,13 +1627,10 @@ This makes things slightly sparser.
   - Test various word-sets for their sparsity and specificity.
 - [cite/t:@unavoidable-sets]
 
-** NEW: SUS-anchors
-
-TODO: Show density of $(2+o(1))/w$ as $w\to\infty$?
-
-*** Commentary
+** Commentary
 - Ideally, prove density $O(1/w)$, and answer the question of [cite:@small-uhs]
   that yes, perfect selection schemes exist. Then also update the asymptotic table.
+
 
 * Evaluation and discussion
 
@@ -1546,5 +1649,7 @@ TODO: Show density of $(2+o(1))/w$ as $w\to\infty$?
 - Attribute copied proofs
 - Attribute used papers in the beginning
 - Attribute individual figures & tables in captions
+- consistent uppercase characters ABC..Z.
+- theorem / lemma / prop / ...
 
 #+print_bibliography:
