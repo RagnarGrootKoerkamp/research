@@ -17,6 +17,7 @@ $$
 \newcommand{\Dk}{\mathcal D_k}
 \newcommand{\Dtk}{\tilde{\mathcal D}_k}
 \newcommand{\P}{\mathbb P}
+\newcommand{\pr}{\mathbb P}
 \DeclareMathOperator*{\argmin}{argmin}
 \DeclareMathOperator*{\poly}{poly}
 \DeclareMathOperator*{\rc}{rc}
@@ -75,6 +76,7 @@ We split content into three topics
 - Locality sensitive hashing
 - Similarity estimation [cite:@minimizer-biased;@minhash;@minmers]
 - DeBruin graph partitioning/glueing [cite:@compacting-dbg]
+- Bd-anchors: very thin compression
 
 #+begin_quote
 [At RECOMB 2022, discussing DeepMinimizer]
@@ -342,7 +344,7 @@ We have the following theorem, again by [cite:Lemma 4 @improved-minimizers]:
 #+begin_theorem Computing density (De Bruijn sequence)
 The density of any forward scheme equals its particular density on an order
 $c=w+k$ De Bruijn sequence.
-For /local/ schemes, the order $c=2w+k-2$ De Bruijn graph must be used instead.
+For /local/ schemes, the order $c=2w+k-2$ De Bruijn sequence must be used instead.
 #+end_theorem
 
 Another approach, that follows from the first, is by considering cycles of
@@ -489,7 +491,8 @@ Where a universal hitting set is a set of k-mers such that every length $w+k-1$
 window contains a k-mer in the UHS, a /minimum decycling set/ (MDS) is a smallest set of k-mers
 that hits every /infinitely long/ string. Equivalently, if we take the complete De
 Bruijn graph of order $k$ and remove all nodes in the MDS from it, this should leave a
-graph without cycles. It can be seen that the number of /pure cycles/ in the De
+graph without cycles. It can be seen that the number of /pure cycles/
+(corresponding to the rotations of some string of length $k$) in the De
 Bruijn graph is a lower bound on the size of an MDS, and indeed this lower bound
 can be reached.
 
@@ -755,37 +758,91 @@ $$
 d(f) \geq \frac{1.5}{w+k-0.5}.
 $$
 #+end_newtheorem
+
+# #+name: lowerbound
+# #+caption: The lower bound setting from \cref{thm:newbound}. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled k-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
+# \includegraphics[width=0.7\linewidth]{imgs/lowerbound_setting.pdf}
+
+
 #+begin_proof
-TODO: Copy over full proof?
+We assume the input is an infinitely long random string $S$ over $\Sigma$.
+The proof makes use of the setting illustrated in TODO CREF [lowerbound],
+which is as follows.
+We partition the windows of $S$ in consecutive groups of $2\ell+1$ windows.
+Let one such group of windows start at position $i$, and
+consider windows $W$ and $W'$ starting at positions $i$ and $i':= i+\ell$
+respectively.
+Also let $W''$ be the window that is the exclusive end of the group,
+thus starting at position $i'' =i+2\ell+1 = i'+\ell+1$.
+Note that there is no gap between the end of window $W$ and the
+beginning of window $W'$, whereas there is a gap of a single character between the end of $W'$ and
+the beginning of $W''$ (shown as the gray shaded area in [lowerbound]).
+These three windows are disjoint and hence the random variables $X$, $X'$, and $X''$
+indicating $f(W)$, $f(W')$, and $f(W'')$ respectively are
+independent and identically distributed. (But note that we do not assume they
+are uniformly distributed, as that depends on the choice of the sampling function $f$.)
+In [lowerbound], we have $X=1$ and $X'=X''=2$.
+
+Since the three windows $W$, $W'$, and $W''$ are disjoint, they sample
+k-mers at distinct positions (indicated by the red boxes in [lowerbound]).
+The proof consists in computing a lower bound on the
+expected number of sampled k-mers in the range $[i+X, i''+X'')$.
+Note that for non-forward schemes, it is possible that windows before
+$W$ or after $W''$ sample a k-mer inside this range.
+For our lower bound, we will simply ignore such sampled k-mers.
+
+When $X<X'$, the window starting at $i+X+1$ ends at $i+X+\ell = i'+X < i'+X'$,
+thus at least one additional k-mer must be sampled in the windows between
+$W$ and $W'$.
+Similarly, when $X' \leq X''$, the window starting at $i'+X'+1$ ends at
+$i' + X' + \ell = i''+X'-1 < i''+X''$, so that at least another k-mer must be
+sampled in the windows between $W'$ and $W''$.
+
+Thus, the number of sampled k-mers from position $i+X$ (inclusive) to $i''+X''$ (exclusive)
+is at least
+${1+\pr[X < X'] + 1 + \pr[X'\leq X'']}$.
+Since $X$, $X'$, and $X''$ are i.i.d., we have that
+$\pr[X'\leq X''] = \pr[X'\leq X] = 1 - \pr[X < X']$,
+and hence
+
+$$ 1+\pr[X < X'] + 1 + \pr[X'\leq X''] = 3. $$
+
+Since there are $2\ell+1$ windows in each group, by linearity
+of expectation, we obtain density at least
+
+$$
+\frac{3}{2\ell+1} = \frac{1.5}{w+k-0.5}.
+$$
 #+end_proof
-#+begin_proof_sketch
-Again, we highlight here the differences compared to the previous proof.
-The full proof is replicated in Appendix TODO.
 
-First, the $+\left\lfloor\frac{k-w}{w}\right\rfloor$ term only contributes
-anything when $k\geq w$. It turns out that for $k> (w+1)/2$, the lower bound is
-provably less than the trivial bound of $1/w$. Thus, we may as well drop this term.
+# #+begin_proof_sketch
+# Again, we highlight here the differences compared to the previous proof.
+# The full proof is replicated in Appendix TODO.
 
-Second, we can slightly improve the analysis of $\P[X\leq X']$.
-Instead of considering a single interval of two consecutive windows $w+k$ apart,
-we can instead consider /three/ disjoint windows at positions $i$, $i+w+k-1$, and
-$i+2w+2k-1$. Let $X$, $X'$, and $X''$ be the positions of the sampled k-mers.
-Then we sample at least the k-mers at positions $s_1=i+X$ and $s_2=i+w+k-1+X'$.
-When $X<X'$, the number of bases between $s_1$ and $s_2$ is at least $s_2-s_1-1
-= w+k-2+(X'-X) \geq w+k-1$. Thus, an additional k-mer must be sampled from this
-window with probability $\P[X<X']$. Similarly, an additional k-mer must be
-sampled between $s_2$ and $s_3=i+2w+2k-1+X''$ with probability $\P[X'\leq X'']$. Since $X\sim X' \sim
-X''$ and since the three distributions are fully independent, we have $\P[X'\leq
-X''] = \P[X'\leq X] = 1 - \P[X < X']$. Thus, in expectation we need to sample at least one
-additional k-mer. We then get a lower bound of
+# First, the $+\left\lfloor\frac{k-w}{w}\right\rfloor$ term only contributes
+# anything when $k\geq w$. It turns out that for $k> (w+1)/2$, the lower bound is
+# provably less than the trivial bound of $1/w$. Thus, we may as well drop this term.
 
-$$
-\frac{1 + \P[X < X'] + 1 + \P[X'\leq X'']}{2w+2k-1} = \frac{3}{2w+2k-1} = \frac{1.5}{w+k-0.5}.
-$$
+# Second, we can slightly improve the analysis of $\P[X\leq X']$.
+# Instead of considering a single interval of two consecutive windows $w+k$ apart,
+# we can instead consider /three/ disjoint windows at positions $i$, $i+w+k-1$, and
+# $i+2w+2k-1$. Let $X$, $X'$, and $X''$ be the positions of the sampled k-mers.
+# Then we sample at least the k-mers at positions $s_1=i+X$ and $s_2=i+w+k-1+X'$.
+# When $X<X'$, the number of bases between $s_1$ and $s_2$ is at least $s_2-s_1-1
+# = w+k-2+(X'-X) \geq w+k-1$. Thus, an additional k-mer must be sampled from this
+# window with probability $\P[X<X']$. Similarly, an additional k-mer must be
+# sampled between $s_2$ and $s_3=i+2w+2k-1+X''$ with probability $\P[X'\leq X'']$. Since $X\sim X' \sim
+# X''$ and since the three distributions are fully independent, we have $\P[X'\leq
+# X''] = \P[X'\leq X] = 1 - \P[X < X']$. Thus, in expectation we need to sample at least one
+# additional k-mer. We then get a lower bound of
 
-Lastly, we note that this lower bound does not use the fact that $f$ is forward,
-and thus, it holds for local schemes as well.
-#+end_proof_sketch
+# $$
+# \frac{1 + \P[X < X'] + 1 + \P[X'\leq X'']}{2w+2k-1} = \frac{3}{2w+2k-1} = \frac{1.5}{w+k-0.5}.
+# $$
+
+# Lastly, we note that this lower bound does not use the fact that $f$ is forward,
+# and thus, it holds for local schemes as well.
+# #+end_proof_sketch
 
 In TODO PLOT we can see that this new version indeed provides a small
 improvement over the previous lower bound. Nevertheless, a big gap remains
@@ -1197,8 +1254,6 @@ forward, but also a minimizer scheme [cite:Lemma 13 @modmini]:
 Mod-sampling is a minimizer scheme when $t\equiv k\pmod w$.
 #+end_newtheorem
 
-TODO PROOF
-
 This now allows us to define the mod-minimizer.
 
 #+begin_newdefinition Random mod-minimizer
@@ -1219,7 +1274,7 @@ samples position $f(W)\bmod w$.
 Naturally, the extended mod-minimizer can be applied to the open-closed
 minimizer, to obtain the oc-mod-mini.
 
-*Density.*
+*** Density
 
 When we restrict $f$ to be a /minimizer/ scheme specifically, we can compute the
 density of the extended mod-minimizer [cite:Theorem 1 @oc-modmini-preprint].
@@ -1488,5 +1543,8 @@ TODO: Show density of $(2+o(1))/w$ as $w\to\infty$?
 - Marcais -> proper spelling
 - symbol vs character
 - Fix $k$-mer and $t$-mer and $s$-mer and plurals
+- Attribute copied proofs
+- Attribute used papers in the beginning
+- Attribute individual figures & tables in captions
 
 #+print_bibliography:
