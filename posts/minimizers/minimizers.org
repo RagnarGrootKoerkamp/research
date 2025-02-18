@@ -684,6 +684,9 @@ $\ceil{(w+k)/k}$ minimizers must be sampled on such a cycle.
 They also prove a slightly improved version that is the first lower bound to be
 /exactly/ tight for a subset of parameters.
 
+We end this section with a comparison of the lower bounds to each other, and to
+optimal schemes found using integer linear programming [[#lower-bound-eval]].
+
 
 ** Schleimer et al.'s bound
 The first improvement over the trivial lower bound was already given in the
@@ -765,6 +768,7 @@ d(f) \geq \frac{1.5}{w+k-0.5}.
 $$
 #+end_newtheorem
 
+# FIXME TODO
 # #+name: lowerbound
 # #+caption: The lower bound setting from \cref{thm:newbound}. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled k-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
 # \includegraphics[width=0.7\linewidth]{imgs/lowerbound_setting.pdf}
@@ -821,38 +825,14 @@ $$
 $$
 #+end_proof
 
-# #+begin_proof_sketch
-# Again, we highlight here the differences compared to the previous proof.
-# The full proof is replicated in Appendix TODO.
-
-# First, the $+\left\lfloor\frac{k-w}{w}\right\rfloor$ term only contributes
-# anything when $k\geq w$. It turns out that for $k> (w+1)/2$, the lower bound is
-# provably less than the trivial bound of $1/w$. Thus, we may as well drop this term.
-
-# Second, we can slightly improve the analysis of $\P[X\leq X']$.
-# Instead of considering a single interval of two consecutive windows $w+k$ apart,
-# we can instead consider /three/ disjoint windows at positions $i$, $i+w+k-1$, and
-# $i+2w+2k-1$. Let $X$, $X'$, and $X''$ be the positions of the sampled k-mers.
-# Then we sample at least the k-mers at positions $s_1=i+X$ and $s_2=i+w+k-1+X'$.
-# When $X<X'$, the number of bases between $s_1$ and $s_2$ is at least $s_2-s_1-1
-# = w+k-2+(X'-X) \geq w+k-1$. Thus, an additional k-mer must be sampled from this
-# window with probability $\P[X<X']$. Similarly, an additional k-mer must be
-# sampled between $s_2$ and $s_3=i+2w+2k-1+X''$ with probability $\P[X'\leq X'']$. Since $X\sim X' \sim
-# X''$ and since the three distributions are fully independent, we have $\P[X'\leq
-# X''] = \P[X'\leq X] = 1 - \P[X < X']$. Thus, in expectation we need to sample at least one
-# additional k-mer. We then get a lower bound of
-
-# $$
-# \frac{1 + \P[X < X'] + 1 + \P[X'\leq X'']}{2w+2k-1} = \frac{3}{2w+2k-1} = \frac{1.5}{w+k-0.5}.
-# $$
-
-# Lastly, we note that this lower bound does not use the fact that $f$ is forward,
-# and thus, it holds for local schemes as well.
-# #+end_proof_sketch
+This new version does not include the $\max\left(0,
+\floor{\frac{k-w}{w}}\right)$ term, because it turns out that when $k\geq w$,
+the full bound is anyway less than $1/w$.
 
 In TODO PLOT we can see that this new version indeed provides a small
-improvement over the previous lower bound. Nevertheless, a big gap remains
-between the lower bound and, say, the density of the random minimizer.
+improvement over the previous lower bound when $k < (w+1)/2$.
+Nevertheless, a big gap remains between the lower bound and, say, the density of
+the random minimizer.
 
 It is also clear that this proof is far from tight. It uses that an additional
 k-mer must be sampled when a full window of $w+k-1$ characters fits between $s_1$ and $s_2$, while in
@@ -954,9 +934,19 @@ where $k'$ is the smallest integer $\geq k$ such that $k' \equiv 1 \pmod w$.
 #+end_theorem
 
 At this point, one might assume that a smooth ''continuation'' of this bound
-(that exactly goes through the ''peaks'') also holds
-(TODO REF FIG), but this turns out to not be the case, as for example
-decycling-based minimizers break it [cite:@minimum-decycling-set].
+(that exactly goes through the ''peaks'') also holds,
+but this turns out to not be the case, as for example for $\sigma=w=2$, the
+optimal scheme exactly follows the lower bound.
+
+*Local schemes.* The lower bounds discussed so far can also be extended to local
+schemes by replacing $c=w+k$ by $c=2w+k-2$. Sadly, this does not lead to a good
+bound. In practice, the best local schemes appear to be only marginally better than
+the best forward schemes, while the currently established theory requires us to
+increase the context size significantly, thereby making all inequalities
+much more loose. Specifically, the tightness of the bound is mostly due to the
+rounding up in
+$\frac{1}{c}\ceil{\frac{c}{k}}=\frac{1}{w+k}\ceil{\frac{w+k}{k}}$, and the more
+we increase $c$, the smaller the effect of the rounding will be.
 
 *Searching optimal schemes.*
 For small parameters $\sigma$, $w$, and $k$, we can search for optimal schemes
@@ -976,22 +966,46 @@ which case it turns out that the ILP /always/ finds a forward scheme matching
 the lower bound, and hence can finish quickly. In other cases,
 we can also use length $w+k'$ cycles instead, with $k$ as in TODO ref.
 
-*** TODO Discussion
-- Small params
-  - Minimum is reached whenever $k\equiv 1\pmod w$, in particular whenever $k=1$.
-  - minimum is also reached for $w=\sigma=2$ and any $k$.
-  - For $\sigma=2$ and $1<k<w$,
 
+** Discussion
+:PROPERTIES:
+:CUSTOM_ID: lower-bound-eval
+:END:
 
-*Local schemes.* The lower bounds discussed so far can also be extended to local
-schemes by replacing $c=w+k$ by $c=2w+k-2$. Sadly, this does not lead to a good
-bound. In practice, the best local schemes appear to be only marginally better than
-the best forward schemes, while the currently established theory requires us to
-increase the context size significantly, thereby making all inequalities
-much more loose. Specifically, the tightness of the bound is mostly due to the
-rounding up in
-$\frac{1}{c}\ceil{\frac{c}{k}}=\frac{1}{w+k}\ceil{\frac{w+k}{k}}$, and the more
-we increase $c$, the smaller the effect of the rounding will be.
+#+name: lower-bounds
+#+caption: Comparison of forward scheme lower bounds and optimal densities for small $w$, $k$, and $\sigma$. Optimal densities were obtained via ILP and are shown as black circles that are solid when their density matches the lower bound $g'_\sigma$, and hollow otherwise. Each column corresponds to a parameter being fixed ot the lowest non-trivial value, i.e., $\sigma=2$ in the first column, $w=2$ in the second column, and $k=1$ in the third columns. Note that the x-axis in the third column corresponds to $w$, not $k$. This figure appeared before in [cite/t:@sampling-lower-bound] and was made in collaboration with Bryce Kille.
+#+attr_html: :class inset large
+[[file:figs/lower-bound.svg][file:figs/lower-bound.svg]]
+
+In [[lower-bounds]] we compare the lower bounds to optimal schemes for small parameters.
+First, note that the bound of Marcais et al. (grey) is only better than $1/w$ for small
+$k<(w+1)/2$. In this regime, the improved version (green) indeed gives a slight improvement.
+The simple version of the near-tight bound (blue) is significantly better, and
+closely approximates the best ILP solutions when at least one of the parameters
+is large enough. When all parameters are small, the improved version $g_\sigma$ (purple) is
+somewhat better though. As discussed, the density can only decrease in $k$, and
+indeed the monotone version $g'_\sigma$ (red) is much better.
+
+We see that the bound exactly matches the best forward scheme when $k=1$ and the
+ILP succeeded to find a solution (third column), and
+more generally when $k\equiv 1\pmod w$. Furthermore, for $\sigma=w=2$, the lower
+bound is also optimal for all even $k$.
+Thus, we have the following open problem.
+
+#+begin_openproblem Tight lower bound
+Prove that the $g'_\sigma$ lower bound on forward scheme density is tight when $k\equiv
+1\pmod w$, and additionally when $\sigma=w=2$.
+#+end_openproblem
+
+For the remaining $k$, specifically $1<k<w$, there is a gap between the lower
+bound and the optimal schemes.
+
+#+begin_openproblem Improved lower bound
+Can we find a ''clean'' proof of a lower bound on forward scheme density that
+matches the optimal schemes for $1<k<w$?
+#+end_openproblem
+
+And lastly, a lot is still unknown about local schemes.
 
 #+begin_openproblem Local scheme density
 In practice, local schemes are only slightly better than forward schemes, while
@@ -1000,8 +1014,8 @@ lower bound that is close to that of forward schemes?
 Or can we bound the improvement that local schemes can make over forward schemes?
 #+end_openproblem
 
-*** TODO Commentary
-Bryce Kille and myself independently discovered the basis of this theorem during
+*Commentary.*
+Bryce Kille and myself independently discovered the basis of this theorem TODO REF during
 the summer of 2024. In hindsight, I am very surprised it took this long (over 20
 years!) for this theorem to be found. Minimizers were originally defined in
 2003-2004, and only in 2018 the first improvement (or fix, rather) of Schleimer
@@ -1651,5 +1665,6 @@ TODO TODO TODO
 - Attribute individual figures & tables in captions
 - consistent uppercase characters ABC..Z.
 - theorem / lemma / prop / ...
+- ''quotes''
 
 #+print_bibliography:
