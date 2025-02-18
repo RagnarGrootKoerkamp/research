@@ -61,11 +61,11 @@ The sus-anchor is my own work, and currently unpublished.
 #+attr_shortcode: summary
 #+begin_notice
 In this chapter, we explore /minimizers/, and more general /sampling schemes/.
-These are methods to sample a subset of k-mers from a text in a deterministic
-way, such that at least one k-mer is sampled from every string of length
+These are methods to sample a subset of $k$-mers from a text in a deterministic
+way, such that at least one $k$-mer is sampled from every string of length
 $k+w-1$, for some /window guarantee/ $w$.
 
-A key property of such schemes is their /density/: how few k-mers can be sampled
+A key property of such schemes is their /density/: how few $k$-mers can be sampled
 while still respecting the window guarantee. Applications benefit from a lower
 density, since this usually means indices on the text are smaller.
 
@@ -82,7 +82,7 @@ very close to the lower bound for alphabet size $\sigma=4$.
 #+end_notice
 
 *Motivation.*
-- k-mers
+- $k$-mers
 - compression
 - faster analysis
 - locally consistent
@@ -120,17 +120,17 @@ There are so much bigger gains possible elsewhere.
 ** Introduction
 
 - Lots of DNA data
-- Most algorithms deal with k-mers.
-- k-mers overlap, and hence considering all of them is redundant.
+- Most algorithms deal with $k$-mers.
+- $k$-mers overlap, and hence considering all of them is redundant.
 - Thus: sample a subset of the kmers.
 - Must be 'locally consistent' and deterministic to be useful.
 - Enter random minimizers.
-- Parameter $w$: guarantee that at least one k-mer is sampled out of every
-  window of $w$ k-mers.
-- Density $d$: (expected) overall fraction of sampled k-mers.
+- Parameter $w$: guarantee that at least one $k$-mer is sampled out of every
+  window of $w$ $k$-mers.
+- Density $d$: (expected) overall fraction of sampled $k$-mers.
 - Obviously, $d\geq 1/w$
 - For random mini, $d=2/(w+1)$.
-- Lower density => fewer k-mers, smaller indices, faster algorithms.
+- Lower density => fewer $k$-mers, smaller indices, faster algorithms.
 - *Question:* How small density can we get for given $k$ and $w$?
 
 *Previous reviews*
@@ -163,13 +163,13 @@ similarity, but there are some differences:
 * Theory of sampling schemes
 The theory of minimizer schemes started with two independent papers proposing
 roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite/t:@minimizers] in 2004.
-At the core, the presented ideas are very similar: to deterministically sample a k-mer out of each
-window of w consecutive k-mers by choosing the ''smallest'' one, according to
+At the core, the presented ideas are very similar: to deterministically sample a $k$-mer out of each
+window of w consecutive $k$-mers by choosing the ''smallest'' one, according to
 either a random of lexicographic order.
 The /window guarantee/ is a core property of minimizers: it guarantees that
 consecutive minimizers are never too far away from each other.
 Further, these
-schemes are /local/: whether a k-mer is sampled as a minimizer only depends on a
+schemes are /local/: whether a $k$-mer is sampled as a minimizer only depends on a
 small surrounding context of $w-1$ characters, and not on any external context.
 This enables the use of minimizers for locality sensitive hashing
 [cite:@lphash;@sshash], since the minimizer is a deterministic key (hash) that
@@ -189,11 +189,11 @@ the plain =ABC..XYZ= alphabet.
 Given a string $S\in \S^*$, we write $S[i..j)$ for the sub-string starting at
 the $i$'th character, up to (and not including) the $j$'th character, where both
 $i$ and $j$ are $0$-based indices.
-A k-mer is any (sub)string of length $k$.
+A $k$-mer is any (sub)string of length $k$.
 
 In the context of minimizer schemes, we have a /window guarantee/ $w$ indicating
-that at least one every $w$ k-mers must be sampled.
-A /window/ is a string containing exactly $w$ k-mers, and hence consists of
+that at least one every $w$ $k$-mers must be sampled.
+A /window/ is a string containing exactly $w$ $k$-mers, and hence consists of
 $\ell:=w+k-1$ characters.
 We will later also use /contexts/, which are sequences containing two windows
 and thus of length $w+k$.
@@ -201,18 +201,18 @@ and thus of length $w+k$.
 ** Types of sampling schemes
 #+begin_definition Window
 Given parameters $w$ and $k$, a /window/ is a string containing exactly $w$
-k-mers, i.e., of length $\ell = w+k-1$.
+$k$-mers, i.e., of length $\ell = w+k-1$.
 #+end_definition
 
 #+begin_definition Local sampling scheme
 For $w\geq 1$ and $k\geq 0$, a /local scheme/ is a function $f: \S^\ell \to [w]$.
-Given a window $W$, it /samples/ the k-mer $W[f(W)..f(W)+k)$.
+Given a window $W$, it /samples/ the $k$-mer $W[f(W)..f(W)+k)$.
 #+end_definition
 
 In practice, we usually require $w\geq 2$ and $k\geq 1$, as some theorems break
 down at either $w=1$ or $k=0$.
 When $k \geq w$, such a scheme ensures that every single character in the input
-is covered by at least one sampled k-mer.
+is covered by at least one sampled $k$-mer.
 
 #+begin_definition Forward sampling scheme
 A local scheme is /forward/ when for any /context/ $C$ of length $\ell+1$
@@ -220,16 +220,16 @@ containing windows $W=C[0..\ell)$ and $W'=C[1..\ell+1)$, it holds that $f(W) \le
 #+end_definition
 
 Forward scheme have the property that as the window $W$ slides through an input
-string $S$, the position in $S$ of the sampled k-mer never decreases.
+string $S$, the position in $S$ of the sampled $k$-mer never decreases.
 
 #+begin_definition Order
-An order $\Ok$ on k-mers is a function $\Ok : \S^k \to \mathbb R$, such
+An order $\Ok$ on $k$-mers is a function $\Ok : \S^k \to \mathbb R$, such
 that for $x,y\in \S^k$, $x\leq _{\Ok} y$ if and only if $\Ok(x) \leq \Ok(y)$.
 #+end_definition
 
 #+begin_definition Minimizer scheme
-A /minimizer scheme/ is defined by a total order $\Ok$ on k-mer and samples the
-leftmost minimal k-mer in a window $W$, which is called the /minimizer/:
+A /minimizer scheme/ is defined by a total order $\Ok$ on $k$-mer and samples the
+leftmost minimal $k$-mer in a window $W$, which is called the /minimizer/:
 
 $$
 f(W) := \argmin_{i\in [w]} \Ok(W[i..i+k)).
@@ -247,7 +247,7 @@ There are two particularly common minimizer schemes, the /lexicographic/
 minimizer [cite:@minimizers] and the /random/ minimizer [cite:@winnowing].
 
 #+begin_definition Lexicographic minimizer
-The /lexicographic minimizer/ is the minimizer scheme that sorts all k-mers lexicographically.
+The /lexicographic minimizer/ is the minimizer scheme that sorts all $k$-mers lexicographically.
 #+end_definition
 
 #+begin_definition Random minimizer
@@ -272,9 +272,9 @@ smallest character can not have density below $1/\sigma$.
 
 #+begin_definition Particular density
 Given a string $S$ of length $n$, let $W_i := S[i..i+\ell)$ for $i\in [n-\ell+1]$.
-A sampling scheme $f$ then samples the k-mers starting at positions $M:=\{i+f(W_i)
+A sampling scheme $f$ then samples the $k$-mers starting at positions $M:=\{i+f(W_i)
 \mid i\in [n-\ell+1]\}$. The /particular density/ of $f$ on $S$ is the fraction
-of sampled k-mers: $|M|/(n-k+1)$.
+of sampled $k$-mers: $|M|/(n-k+1)$.
 #+end_definition
 
 #+begin_definition Density
@@ -283,7 +283,7 @@ a string $S$ consisting of i.i.d. random characters of $\Sigma$ in the limit
 where $n\to\infty$.
 #+end_definition
 
-Since all our schemes must sample at least one k-mer from every $w$ consecutive
+Since all our schemes must sample at least one $k$-mer from every $w$ consecutive
 positions, they naturally have a lower bound on density of $1/w$.
 
 As we will see, for sufficiently large $k$ the density of the random minimizer is $2/(w+1) + o(1/w)$.
@@ -349,16 +349,16 @@ are sampled from the first and second window, i.e., $f(C[0..w+k-1)) \neq 1+f(C[1
 
 For a /local/ scheme, a context has length $2w+k-1$ instead [cite:Section 3.1
 @small-uhs;Section 3.2 @sampling-lower-bound], and is charged when
-the last window samples a k-mer not sampled by /any/ of the previous contained
+the last window samples a $k$-mer not sampled by /any/ of the previous contained
 windows. This larger context is necessary because a local scheme can jump
 backwards. In practice, this
 
 As a small variant on this, in [cite/t:@winnowing], a /window/ is charged when it
-is the first window to sample a k-mer.
+is the first window to sample a $k$-mer.
 
 #+begin_theorem Computing density (context)
 The density of a forward scheme equals the probability that,
-in a uniform random context of length $c=w+k$, two different k-mers are sampled
+in a uniform random context of length $c=w+k$, two different $k$-mers are sampled
 from the two windows.
 
 Thus, the density can be computed exactly by iterating over all $\sigma^{w+k}$ contexts.
@@ -391,37 +391,37 @@ We mostly follow the presentation of [cite/t:@miniception].
 We start by analysing when a context is charged [cite:Lemma 1 @miniception].
 
 #+begin_theorem Charged contexts of minimizers
-For a minimizer scheme, a context is charged if and only if the smallest k-mer
+For a minimizer scheme, a context is charged if and only if the smallest $k$-mer
 in the context is either the very first, at position $0$, or the very last, at
 position $w$.
 #+end_theorem
 
 #+begin_proof
-The context contains $w+1$ k-mers, the first $w$ of which are in the first
+The context contains $w+1$ $k$-mers, the first $w$ of which are in the first
 window, say $W$, and the last $w$ of which are in the second window, say $W'$.
 
-When the (leftmost) overall smallest k-mer is either the very first or very last
-k-mer, the
-window containing it chooses that k-mer, and the other window must necessarily
-sample a different k-mer.
-On the other hand, when the smallest k-mer is not the very first or very last,
+When the (leftmost) overall smallest $k$-mer is either the very first or very last
+$k$-mer, the
+window containing it chooses that $k$-mer, and the other window must necessarily
+sample a different $k$-mer.
+On the other hand, when the smallest $k$-mer is not the very first or very last,
 it is contained in both windows, and both windows will sample it.
 #+end_proof
 
 Before computing the actual density, we need to bound the probability that a
-window contains two identical k-mers [cite:Lemma 9 @miniception].
+window contains two identical $k$-mers [cite:Lemma 9 @miniception].
 
-#+begin_theorem Duplicate k-mers
+#+begin_theorem Duplicate $k$-mers
 For any $\varepsilon > 0$, if $k > (3+\varepsilon) \log_\sigma (c)$, the
-probability that a random context of $c$ k-mers contains two identical k-mers is $o(1/c)$.
+probability that a random context of $c$ $k$-mers contains two identical $k$-mers is $o(1/c)$.
 #+end_theorem
 #+begin_proof_sketch
-For any two non-overlapping k-mers in the window, the probability that they are
+For any two non-overlapping $k$-mers in the window, the probability that they are
 equal is $\sigma^{-k} \leq 1/c^{3+\varepsilon} = o(1/c^3)$.
-It can be seen that the same holds when two k-mers overlap by $d>0$ characters.
+It can be seen that the same holds when two $k$-mers overlap by $d>0$ characters.
 
-There are $c^2$ pairs of k-mers, so by the union bound, the probability that any
-two k-mers are equal is $o(1/c)$.
+There are $c^2$ pairs of $k$-mers, so by the union bound, the probability that any
+two $k$-mers are equal is $o(1/c)$.
 #+end_proof_sketch
 
 In practice, $k > (2+\varepsilon) \log_\sigma(c)$ seems to be
@@ -440,9 +440,9 @@ $$
 $$
 #+end_theorem
 #+begin_proof
-Consider a uniform random context $C$ of $w+k$ characters and $w+1$ k-mers.
-When all these k-mers are distinct, the smallest one is the first or last with
-probability $2 / (w+1)$. When the k-mers are not all distinct, this happens with
+Consider a uniform random context $C$ of $w+k$ characters and $w+1$ $k$-mers.
+When all these $k$-mers are distinct, the smallest one is the first or last with
+probability $2 / (w+1)$. When the $k$-mers are not all distinct, this happens with
 probability $o(1/w)$, so that the overall density is bounded by $2/(w+1) + o(1/w)$.
 #+end_proof
 
@@ -463,15 +463,15 @@ than as defined here.)
 Universal hitting sets are an alternative way to generate minimizer schemes.
 They were first introduced by [cite:@docks-wabi;@docks].
 #+begin_definition Universal hitting set
-A /Universal hitting set/ (UHS) $U$ is an ''unavoidable'' set of k-mers, so
-that every window of length $\ell=k+w-1$ contains at least one k-mer from the set.
+A /Universal hitting set/ (UHS) $U$ is an ''unavoidable'' set of $k$-mers, so
+that every window of length $\ell=k+w-1$ contains at least one $k$-mer from the set.
 #+end_definition
 
 Universal hitting sets are an example of a /context-free/ scheme
-[cite:@syncmers], where each k-mer is sampled only if it is part of the UHS:
+[cite:@syncmers], where each $k$-mer is sampled only if it is part of the UHS:
 
 #+begin_definition Context free scheme
-A /context-free/ scheme decides for each k-mer independently (without
+A /context-free/ scheme decides for each $k$-mer independently (without
 surrounding context) whether to sample it or not.
 #+end_definition
 
@@ -479,7 +479,7 @@ There is a tight correspondence between universal hitting
 sets and minimizer schemes [cite:Section 3.3 @improved-minimizers; Section 2.1.5 @asymptotic-optimal-minimizers;@small-uhs]:
 
 #+begin_definition Compatible minimizer scheme
-Given a universal hitting set $U$ on k-mers, a /compatible/ minimizer scheme
+Given a universal hitting set $U$ on $k$-mers, a /compatible/ minimizer scheme
 uses an order $\Ok$ that orders all elements of $U$ before all elements not
 in $U$.
 #+end_definition
@@ -497,11 +497,11 @@ $$
 #+begin_proof_sketch
 Consider a De Bruijn sequence of order $c=w+k$. This contains each $c$-mer
 exactly once, and each $k$-mer exactly $\sigma^w$ times.
-Thus, the number of k-mers in $U$ in the De Bruijn sequence is $|U| \cdot \sigma^w$.
+Thus, the number of $k$-mers in $U$ in the De Bruijn sequence is $|U| \cdot \sigma^w$.
 
-Suppose the minimizer scheme samples $s$ distinct k-mers in the De Bruijn sequence. Since $U$ is
+Suppose the minimizer scheme samples $s$ distinct $k$-mers in the De Bruijn sequence. Since $U$ is
 an UHS, $s \leq |U| \cdot \sigma^w$. The density of $f$ is the fraction of
-sampled k-mers,
+sampled $k$-mers,
 
 $$
 d(f) = s / \sigma^c \leq |U| \cdot \sigma^w / \sigma^{w+k} = |U| / \sigma^k.
@@ -513,12 +513,12 @@ leads to better minimizer schemes.
 
 Lastly, [cite/t:@improved-minimizers] introduces the /sparsity/ of a universal
 hitting set $U$ as the fraction of contexts of $w+k$ characters that contain exactly
-one k-mer from $U$. Then, the density of a corresponding minimizer scheme can be
+one $k$-mer from $U$. Then, the density of a corresponding minimizer scheme can be
 computed as $(1-\sp(U))\cdot \frac{2}{w+1}$.
 
 *Minimum decycling set.*
-Where a universal hitting set is a set of k-mers such that every length $w+k-1$
-window contains a k-mer in the UHS, a /minimum decycling set/ (MDS) is a smallest set of k-mers
+Where a universal hitting set is a set of $k$-mers such that every length $w+k-1$
+window contains a $k$-mer in the UHS, a /minimum decycling set/ (MDS) is a smallest set of $k$-mers
 that hits every /infinitely long/ string. Equivalently, if we take the complete De
 Bruijn graph of order $k$ and remove all nodes in the MDS from it, this should leave a
 graph without cycles. It can be seen that the number of /pure cycles/
@@ -528,13 +528,13 @@ can be reached.
 
 *Mykkeltveit MDS.*
 One construction of an MDS is by Mykkeltveit [cite:@mykkeltveit].
-To construct this set $\Dk$, k-mers are first embedded into the complex plane via a
-character-weighted sum of the $k$ $k$'th roots of unity $\omega_k$: a k-mer $K$ is mapped
+To construct this set $\Dk$, $k$-mers are first embedded into the complex plane via a
+character-weighted sum of the $k$ $k$'th roots of unity $\omega_k$: a $k$-mer $K$ is mapped
 to $x=\sum_i K_i\cdot\omega_k^i$.
 This way,
-shifting a k-mer by one position corresponds to a rotation, followed by the
+shifting a $k$-mer by one position corresponds to a rotation, followed by the
 addition or subtraction of a real number.
-Based on this, $\Dk$ consists of those k-mers whose embedding
+Based on this, $\Dk$ consists of those $k$-mers whose embedding
 $x$ corresponds to the first clockwise rotation with positive imaginary part, i.e.,
 such that $\pi-2\pi/k\leq \arg(x)<\pi$.
 
@@ -555,13 +555,13 @@ TODO: Use more precise lower bound for $k\to\infty$: $\ceil{(w+k)/w}/(w+k)$?
 When $k\to\infty$, both the rot-minimizer [cite:@asymptotic-optimal-minimizers]
 and the new mod-minimizer (section [[#modmini]]) achieve optimal density $1/w$.
 
-Slightly simplified, the *rot-minimizer* ranks k-mers by the sum of the
+Slightly simplified, the *rot-minimizer* ranks $k$-mers by the sum of the
 characters in positions $0\pmod w$, so that for $w=2$, it would sum every other
-character of the k-mer. Then, it samples the k-mer for which this sum is maximal.
+character of the $k$-mer. Then, it samples the $k$-mer for which this sum is maximal.
 
 When $w\to\infty$, minimizer schemes have a big limitation. Since they only
-consider the k-mers, when $w\gg \sigma^k$, almost every window will contain the
-smallest k-mer. Thus, we obtain [cite/t:theorem 2 @asymptotic-optimal-minimizers]:
+consider the $k$-mers, when $w\gg \sigma^k$, almost every window will contain the
+smallest $k$-mer. Thus, we obtain [cite/t:theorem 2 @asymptotic-optimal-minimizers]:
 
 #+begin_theorem Large-$w$ minimizer scheme
 For any /minimizer/ scheme $f$, the density is at least $1/\sigma^k$, and
@@ -626,18 +626,18 @@ as tight as for forward schemes.
 There are several variations on sampling schemes that generalize in different
 ways.
 
-/Global/ schemes drop the requirement that whether a k-mer is sampled only
+/Global/ schemes drop the requirement that whether a $k$-mer is sampled only
 depends on a local context. Examples are minhash [cite:@minhash] and more general
-FracMinHash [cite:@fracminhash], both sampling the smallest k-mers of an entire
+FracMinHash [cite:@fracminhash], both sampling the smallest $k$-mers of an entire
 string.
 
-On strings with many repeated characters, all k-mers have the same hash, and
-hence all k-mers are sampled. /Robust winnowing/ [cite:@winnowing] prevents
-this by sampling the rightmost minimal k-mer by default, unless the minimizer of
+On strings with many repeated characters, all $k$-mers have the same hash, and
+hence all $k$-mers are sampled. /Robust winnowing/ [cite:@winnowing] prevents
+this by sampling the rightmost minimal $k$-mer by default, unless the minimizer of
 the previous window has the same hash, in which case that one is ''reused''.
 
 /Min-mers/ [cite:@minmers] are a second variant, where instead of choosing a
-single k-mer from a window, $s$ k-mers are chosen instead, typically from a
+single $k$-mer from a window, $s$ $k$-mers are chosen instead, typically from a
 window that is $s$ times longer.
 
 /Finimizers/ [cite:@finimizers] are /variable length/ minimizers that ensure
@@ -657,20 +657,20 @@ One way to turn any minimizer scheme into a canonical minimizer scheme is by
 using the order $\Ok^{\rc}(x) = \min(\Ok(x), \Ok(\rc(x)))$
 [cite:@minimizers;@nthash] or $\Ok^{\rc}(x) = \Ok(x) + \Ok(\rc(x))$ [cite:@nthash2;@simd-minimizers-preprint].
 Still, this leaves the problem of whether to sample the leftmost or rightmost
-occurrence of a kmer in case of ties. This can be solved using the technique of
+occurrence of a $k$-mer in case of ties. This can be solved using the technique of
 the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers-preprint]: ensure that $w+k-1$ is odd,
 and pick the strand with the highest count of =GT= bases.
-A way to encode canonical k-mers that saves one bit is presented in [cite/t:@encoding-canonical-kmers].
+A way to encode canonical $k$-mers that saves one bit is presented in [cite/t:@encoding-canonical-kmers].
 Lastly, [cite/t:@knonical-reverse-complements] provides a way to turn
 context-free methods into a canonical version.
 
 The /conservation/ of a scheme
-is the expected fraction of bases covered by sampled k-mers [cite/t:@syncmers].
+is the expected fraction of bases covered by sampled $k$-mers [cite/t:@syncmers].
 In [cite/t:@local-kmer-selection],
-sampling schemes are generalized to /k-mer selection methods/ that are allowed to sample /any
-subset/ of k-mers from the input string, and /local selection methods/ that
-return any /subset/ of k-mers from a window.
-Both these papers focus on context-free schemes, as such k-mers are
+sampling schemes are generalized to /$k$-mer selection methods/ that are allowed to sample /any
+subset/ of $k$-mers from the input string, and /local selection methods/ that
+return any /subset/ of $k$-mers from a window.
+Both these papers focus on context-free schemes, as such $k$-mers are
 better preserved.
 
 There is also the problem to minimize the particular density on a given input
@@ -681,7 +681,7 @@ smallest character, as it is often occurs less frequently in DNA sequences
 Other works in this direction are
 [cite/t:@deepminimizer], [cite/t:@polar-set-minimizers], and
 [cite:@debruijngraph-representation], the last of which presents a minimizer
-scheme that orders k-mers such that rare k-mers are preferred over more common ones.
+scheme that orders $k$-mers such that rare $k$-mers are preferred over more common ones.
 
 * Lower bounds
 The starting point for this section is the trivial lower bound:
@@ -689,19 +689,19 @@ The starting point for this section is the trivial lower bound:
 For any local, forward, or minimizer scheme $f$, the density is at least $1/w$.
 #+end_theorem
 Naturally, all proofs of tighter lower bounds use the fact that at least one
-k-mer must be sampled every $w$ positions. All theorems apply it in a slightly
+$k$-mer must be sampled every $w$ positions. All theorems apply it in a slightly
 different context though.
 
 This was first improved by Schleimer et al. [cite:@winnowing] to approximately $1.5/(w+1)$, although using assumptions that are too strong in
 practice (Section
 [[*Schleimer et al.'s bound]]).
-Marcais et al. [cite:@asymptotic-optimal-minimizers] give a weaker version that
+Marçais et al. [cite:@asymptotic-optimal-minimizers] give a weaker version that
 /does/ hold for all forward schemes, of just above $1.5/(w+k)$ (Section [[*Marcais
 et al.'s bound]]). At the core, it considers two windows spaced apart by $w+k$
 positions. The first window than has a minimizer, and with probability $1/2$, a
 second additional minimizer is needed to 'bridge the gap' to the second window.
 In the appendix of [cite/t:@modmini], Groot Koerkamp and Pibiri improve this
-further to $1.5/(w+k-0.5)$ by using a slightly more precise analysis (Section [[*Improving and extending Marcais et al.'s bound]]). Because of the similarity of these three proofs, we
+further to $1.5/(w+k-0.5)$ by using a slightly more precise analysis (Section [[*Improving and extending Marçais et al.'s bound]]). Because of the similarity of these three proofs, we
 only provide sketches of the first two, followed by a full proof of the strongest
 version.
 
@@ -723,9 +723,9 @@ optimal schemes found using integer linear programming (Section [[#lower-bound-e
 The first improvement over the trivial lower bound was already given in the
 paper that first introduced minimizers [cite:theorem 1 @winnowing ]:
 
-#+begin_theorem Lower bound when hashing k-mers
-Consider a $w$-tuple of uniform random independent hashes of the k-mers in a tuple.
-Now let $S$ be any function that samples a k-mer based on these $w$ hashes.
+#+begin_theorem Lower bound when hashing $k$-mers
+Consider a $w$-tuple of uniform random independent hashes of the $k$-mers in a tuple.
+Now let $S$ be any function that samples a $k$-mer based on these $w$ hashes.
 Then, $S$ has density at least
 
 $$
@@ -734,22 +734,22 @@ $$
 #+end_theorem
 
 #+begin_proof_sketch
-Let $W_i$ and $W_{i+w+1}$ be the windows of $w$ k-mers starting at positions $i$
+Let $W_i$ and $W_{i+w+1}$ be the windows of $w$ $k$-mers starting at positions $i$
 and $i+w+1$ in a long uniform random string.
-Since $W_i$ and $W_{i+w+1}$ do not share any k-mers, the hashes of the k-mers in
-$W_i$ are independent of the hashes of the k-mers in $W_{i+w+1}$.
+Since $W_i$ and $W_{i+w+1}$ do not share any $k$-mers, the hashes of the $k$-mers in
+$W_i$ are independent of the hashes of the $k$-mers in $W_{i+w+1}$.
 Now, we can look at the probability distributions $X$ and $X'$ of the sampled
 position in the two windows. Since the hashes are independent, these
 distributions are simply the same, $X \sim X'$.
-There are $(i+w+1+X') - (i+X) - 1 = w+(X'-X)$ ''skipped'' k-mers between the two
-sampled k-mers. When $X\leq X'$, this is $\geq w$, which means that at least one
-additional k-mer must be sampled in this gap. It is easy to see that $\P[X\leq
+There are $(i+w+1+X') - (i+X) - 1 = w+(X'-X)$ ''skipped'' $k$-mers between the two
+sampled $k$-mers. When $X\leq X'$, this is $\geq w$, which means that at least one
+additional $k$-mer must be sampled in this gap. It is easy to see that $\P[X\leq
 X'] \geq 1/2$, and using Cauchy-Schwartz this can be improved to $\P[X\leq X']\geq
-1/2 + 1/(2w)$. Thus, out of the expected $w+1$ k-mers from position $i+X$ to $i+w+1+X'$
+1/2 + 1/(2w)$. Thus, out of the expected $w+1$ $k$-mers from position $i+X$ to $i+w+1+X'$
 (exclusive), we sample at least $1 + 1/2 + 1/(2w)$ in expectation, giving the result.
 #+end_proof_sketch
 
-Unfortunately, this lower-bound assumes that k-mers are hashed before being processed
+Unfortunately, this lower-bound assumes that $k$-mers are hashed before being processed
 them further using a potentially ''smart'' algorithm $S$. This class of schemes
 was introduced as /local algorithms/, and thus caused some confusion (see e.g. [cite/t:@improved-minimizers]) in that it
 was also believed to be a lower bound on the more general /local schemes/ as we
@@ -758,7 +758,7 @@ defined them. This inconsistency was first noticed in
 the theorem.
 
 
-** Marcais et al.'s bound
+** Marçais et al.'s bound
 In [cite/t:@asymptotic-optimal-minimizers], the authors give a weaker variant of
 the theorem of [cite/t:@winnowing] that /does/ hold for all forward schemes:
 #+begin_theorem Lower bound for forward schemes
@@ -774,20 +774,20 @@ The proof is very comparable to the one of [cite/t:@winnowing].
 Again, we consider two windows in a long uniform random string.
 This time, however, we put them $w+k+1$ positions
 apart, instead of just $w+1$. This way, the windows do not share any characters (rather
-than not sharing any k-mers) and thus, the probability distributions $X$ and $X'$
-of the position of the k-mers sampled from $W_i$ and $W_{i+w+k+1}$ are
+than not sharing any $k$-mers) and thus, the probability distributions $X$ and $X'$
+of the position of the $k$-mers sampled from $W_i$ and $W_{i+w+k+1}$ are
 independent again.
 
 They again consider the positions $s_1=i+X$ and $s_2=i+w+k+1+X'$, and lower bound
-the expected number of sampled k-mers in this range.
+the expected number of sampled $k$-mers in this range.
 The length of the range is $w+k$, leading to the denominator, and the
 $1.5+1/(2w)$ term arises as before. The additional $\left\lfloor
 \frac{k-w}{w}\right\rfloor$ term arises from the fact that when $k$ is large,
-just sampling one additional k-mer in between $s_1$ and $s_2$ is not sufficient
+just sampling one additional $k$-mer in between $s_1$ and $s_2$ is not sufficient
 to ensure a sample every $w$ positions.
 #+end_proof_sketch
 
-** Improving and extending Marcais et al.'s bound
+** Improving and extending Marçais et al.'s bound
 It turns out that the theorem TODO REF is slightly inefficient. In
 [cite/t:@modmini], we improve it. Also note that the existing proof already
 works for any /local/ scheme.
@@ -802,7 +802,7 @@ $$
 
 # FIXME TODO
 # #+name: lowerbound
-# #+caption: The lower bound setting from \cref{thm:newbound}. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled k-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
+# #+caption: The lower bound setting from \cref{thm:newbound}. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled $k$-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
 # \includegraphics[width=0.7\linewidth]{imgs/lowerbound_setting.pdf}
 
 
@@ -826,21 +826,21 @@ are uniformly distributed, as that depends on the choice of the sampling functio
 In [lowerbound], we have $X=1$ and $X'=X''=2$.
 
 Since the three windows $W$, $W'$, and $W''$ are disjoint, they sample
-k-mers at distinct positions (indicated by the red boxes in [lowerbound]).
+$k$-mers at distinct positions (indicated by the red boxes in [lowerbound]).
 The proof consists in computing a lower bound on the
-expected number of sampled k-mers in the range $[i+X, i''+X'')$.
+expected number of sampled $k$-mers in the range $[i+X, i''+X'')$.
 Note that for non-forward schemes, it is possible that windows before
-$W$ or after $W''$ sample a k-mer inside this range.
-For our lower bound, we will simply ignore such sampled k-mers.
+$W$ or after $W''$ sample a $k$-mer inside this range.
+For our lower bound, we will simply ignore such sampled $k$-mers.
 
 When $X<X'$, the window starting at $i+X+1$ ends at $i+X+\ell = i'+X < i'+X'$,
-thus at least one additional k-mer must be sampled in the windows between
+thus at least one additional $k$-mer must be sampled in the windows between
 $W$ and $W'$.
 Similarly, when $X' \leq X''$, the window starting at $i'+X'+1$ ends at
-$i' + X' + \ell = i''+X'-1 < i''+X''$, so that at least another k-mer must be
+$i' + X' + \ell = i''+X'-1 < i''+X''$, so that at least another $k$-mer must be
 sampled in the windows between $W'$ and $W''$.
 
-Thus, the number of sampled k-mers from position $i+X$ (inclusive) to $i''+X''$ (exclusive)
+Thus, the number of sampled $k$-mers from position $i+X$ (inclusive) to $i''+X''$ (exclusive)
 is at least
 ${1+\pr[X < X'] + 1 + \pr[X'\leq X'']}$.
 Since $X$, $X'$, and $X''$ are i.i.d., we have that
@@ -867,8 +867,8 @@ Nevertheless, a big gap remains between the lower bound and, say, the density of
 the random minimizer.
 
 It is also clear that this proof is far from tight. It uses that an additional
-k-mer must be sampled when a full window of $w+k-1$ characters fits between $s_1$ and $s_2$, while in
-practice an additional k-mer is already needed when the distance between them is
+$k$-mer must be sampled when a full window of $w+k-1$ characters fits between $s_1$ and $s_2$, while in
+practice an additional $k$-mer is already needed when the distance between them is
 larger than $w$. However, exploiting this turns out to be difficult: we
 can not assume that the sampled positions in overlapping windows are
 independent, nor is it easy to analyse a probability such as $\P[X \leq X''-k]$.
@@ -891,14 +891,14 @@ $$
 #+begin_proof
 The density of a forward scheme can be computed as
 the probability that two consecutive windows in a random length $w+k$ context
-sample different k-mers [cite:Lemma 4 @improved-minimizers].  From this, it follows that we can also
+sample different $k$-mers [cite:Lemma 4 @improved-minimizers].  From this, it follows that we can also
 consider /cyclic strings/ (cycles) of length $w+k$, and compute the expected
-number of sampled k-mers along the cycle. The density is then this count divided
+number of sampled $k$-mers along the cycle. The density is then this count divided
 by $w+k$.
 
-Because of the window guarantee, at least one out of every $w$ k-mers along the
-length $w+k$ cycle must be sampled. Thus, at least $\lceil (w+k)/w\rceil$ k-mers
-must be sampled in each cycle. After dividing by the number of k-mers in the
+Because of the window guarantee, at least one out of every $w$ $k$-mers along the
+length $w+k$ cycle must be sampled. Thus, at least $\lceil (w+k)/w\rceil$ $k$-mers
+must be sampled in each cycle. After dividing by the number of $k$-mers in the
 cycle, we get the result.
 #+end_proof
 
@@ -919,15 +919,15 @@ where the middle inequality is strict when $w>1$.
 #+begin_proof_sketch
 The core of this result is to refine the proof given above.
 While indeed we know that each cycle will have at least $\ceil{(w+k)/w}$
-sampled k-mers, that lower bound may not be tight. For example, if the cycle
+sampled $k$-mers, that lower bound may not be tight. For example, if the cycle
 consists of only zeros, each window samples position $i + f(000\dots 000)$, so that
 in the end every position is sampled.
 
 We say that a cycle has /period/ $p$ when it consists of $(w+k)/p$
 copies of some pattern $P$ of length $p$, and $p$ is the maximum number for which this holds.
 In this case, we can consider the cyclic string of $P$, on which we must sample
-at least $\ceil{p/w}$ k-mers. Thus, at least $\frac{w+k}{p}\ceil{\frac pw}$
-k-mers are sampled in total, corresponding to a particular density along the
+at least $\ceil{p/w}$ $k$-mers. Thus, at least $\frac{w+k}{p}\ceil{\frac pw}$
+$k$-mers are sampled in total, corresponding to a particular density along the
 cycle of at least $\frac{1}{p}\ceil{\frac pw}$.
 
 Since $p$ is maximal, the pattern $P$ itself must be /aperiodic/. When
@@ -983,7 +983,7 @@ we increase $c$, the smaller the effect of the rounding will be.
 For small parameters $\sigma$, $w$, and $k$, we can search for optimal schemes
 using an integer linear program (ILP) [cite:@sampling-lower-bound]. In short,
 we define an integer variable $x_W=f(W) \in [w]$ for every window $W \in
-\sigma^{w+k-1}$, that indicates the position of the k-mer sampled from this
+\sigma^{w+k-1}$, that indicates the position of the $k$-mer sampled from this
 window.
 For each context containing consecutive windows $W$ and $W'$, we add a boolean
 variable $y_{(W, W')}$ that indicates whether this context is charged.
@@ -1007,7 +1007,7 @@ the lower bound, and hence can finish quickly.
 [[file:figs/lower-bound.svg][file:figs/lower-bound.svg]]
 
 In [[lower-bounds]] we compare the lower bounds to optimal schemes for small parameters.
-First, note that the bound of Marcais et al. (grey) is only better than $1/w$ for small
+First, note that the bound of Marçais et al. (grey) is only better than $1/w$ for small
 $k<(w+1)/2$. In this regime, the improved version (green) indeed gives a slight improvement.
 The simple version of the near-tight bound (blue) is significantly better, and
 closely approximates the best ILP solutions when at least one of the parameters
@@ -1053,7 +1053,7 @@ et al.'s original bound was found in [cite/t:@asymptotic-optimal-minimizers].
 Specifically, all ingredients for the proof have been around for quite some time
 already:
 - The density of the random minimizer is $2/(w+1)$, which
-  ''clearly'' states: out of every $w+1$ consecutive k-mers, at least $2$ must
+  ''clearly'' states: out of every $w+1$ consecutive $k$-mers, at least $2$ must
   be sampled. We just have to put those characters into a cycle.
 - The density of any forward scheme can be computed using an order $w+k$ De
   Bruijn sequence, so again, it is only natural that looking at strings of length at
@@ -1076,7 +1076,7 @@ syncmers.
 We end with two new schemes.
 First, the /open-closed minimizer/ [cite:@oc-modmini-preprint] (Section [[*Open-closed minimizer]]), which extends
 the miniception by first preferring the smallest open syncmer, falling back to
-the smallest closed syncmer, and then falling back to the smallest k-mer
+the smallest closed syncmer, and then falling back to the smallest $k$-mer
 overall. This simple scheme achieves near-best density for $k\leq w$.
 
 Second, we introduce the /(extended) mod-minimizer/ and the /open-closed
@@ -1090,13 +1090,13 @@ $k\to\infty$. Additionally, we show that they have optimal density when $k\equiv
 :CUSTOM_ID: lexmin
 :END:
 The lexicographic minimizer is known to have relatively bad density because it
-is prone to sampling multiple consecutive k-mers when there is a run of =A= characters.
+is prone to sampling multiple consecutive $k$-mers when there is a run of =A= characters.
 Nevertheless, they achieve density $O(1/w)$ as $k=\floor{\log_\sigma(w/2)}-2$
 and $w\to\infty$ [cite:@miniception].
 
 They can be improved by using an slightly modified order [cite:@minimizers]:
 #+begin_definition Alternating order
-The /alternating order/ compares k-mers by by using lexicographic order for
+The /alternating order/ compares $k$-mers by by using lexicographic order for
 characters in /even/ positions (starting at position $0$), and /reverse/
 lexicographic order for all /odd/ positions. Thus, the
 smallest string is be =AZAZAZ...=.
@@ -1117,12 +1117,12 @@ codes [cite:@non-overlapping-codes].
 
 A drawback of the ABB order is that it throws away some information: for example
 =AB= and =AC= are considered equal, which is usually not idea. Thus, we also
-consider a version with tiebreaking, /ABB+/, that first compares k-mers via ABB order,
+consider a version with tiebreaking, /ABB+/, that first compares $k$-mers via ABB order,
 and in case of ties compares them using the plain lexicographic order.
 
 We newly introduce a small variation on these two schemes.
 #+begin_newdefinition Anti-lexicographic order
-The /anti-lexicographic order/ sorts k-mers by comparing the first character
+The /anti-lexicographic order/ sorts $k$-mers by comparing the first character
 lexicographically, and comparing all remaining characters reverse lexicographically.
 #+end_newdefinition
 In this order, the smallest string is =AZZZZ...=.
@@ -1131,12 +1131,12 @@ TODO: Threshold?
 
 # When the alphabet is large, say $\sigma=256$, lexicographic minimizers somewhat
 # loose their power, as just the first character is sufficient to determine the
-# smallest k-mer. This then reduces the effect that small k-mers do not occur
+# smallest $k$-mer. This then reduces the effect that small $k$-mers do not occur
 # close to each other. The following order reduces this problem.
 # #+begin_newdefinition Threshold-ABB order
 # The /threshold-abb order/ splits the alphabet $\Sigma$ into a set of /small/
 # characters of size $\frac 14 \sigma$, and a set of /large/ characters of size $\frac 34
-# \Sigma$. It then sorts k-mers by comparing the first character, preferring small over large, and comparing all
+# \Sigma$. It then sorts $k$-mers by comparing the first character, preferring small over large, and comparing all
 # remaining characters in reverse, preferring large over small.
 
 # As with the ABB-order, we can break ties using plain lexicographic order.
@@ -1152,7 +1152,7 @@ TODO: Threshold?
 
 In [[lex]], we compare the aforementioned variants of lexicographic minimizers.
 First, note that all schemes perform bad for $k\in \{1,2\}$, since
-$k^\sigma\leq 2^4=16 < 24=w$, and thus there will always be duplicate k-mers.
+$k^\sigma\leq 2^4=16 < 24=w$, and thus there will always be duplicate $k$-mers.
 As expected, the random minimizer (yellow) has density $0.08 = 2/(24+1)$.
 The lexicographic order (dim blue) is significantly worse at 0.89.
 The alternating order (orange, 0.78) is slightly better, and the anti-lex order
@@ -1175,13 +1175,13 @@ large $k$.
 *DOCKS.* In [cite/t:@docks-wabi;@docks], the authors introduce an algorithm to generate
 small universal hitting sets. It works in two steps.
 It starts by using Mykkeltveit's minimum decycling set [cite:@mykkeltveit] such that every infinitely long
-string contains a k-mer from the decycling set. Then, it repeatedly adds the
-k-mer to the UHS that is contained in the largest number of length $\ell=w+k-1$
-windows that does not yet contain a k-mer in the UHS.
+string contains a $k$-mer from the decycling set. Then, it repeatedly adds the
+$k$-mer to the UHS that is contained in the largest number of length $\ell=w+k-1$
+windows that does not yet contain a $k$-mer in the UHS.
 In practice, the exponential runtime in $k$ and $w$ is a bottleneck. A first
-speedup is to consider the k-mer contained in the largest number of paths of
+speedup is to consider the $k$-mer contained in the largest number of paths of
 /any/ length. A second method for larger $k' > k$, called /naive extension/, is to simply ignore
-the last $k'-k$ characters of each k-mer and then use a UHS for $k$-mers.
+the last $k'-k$ characters of each $k$-mer and then use a UHS for $k$-mers.
 DOCKS can generate UHSes up to around $k=13$, and for $k=10$ and $w=10$, it has
 density down to $1.737/(w+1)$ [cite:@improved-minimizers], thereby being the first
 scheme that breaks the conjectured $2/(w+1)$ lower bound.
@@ -1189,16 +1189,16 @@ scheme that breaks the conjectured $2/(w+1)$ lower bound.
 *$\boldremuval$* [cite:@practical-uhs] is a method that builds on DOCKS.
 Starting with some $(w,k-1)$ UHS generated by DOCKS,
 first uses naive extension to get a $(w, k)$ UHS $U'$. Then, it tries to reduce the
-size of this new UHS by removing some k-mers. In particular, if a k-mer only
-ever occurs in windows together with another k-mer of $U'$, then this k-mer may
-be removed from $U'$. Instead of greedily dropping k-mers, and ILP is built to
-determine an optimal set of k-mers to drop. This process is repeated until the
+size of this new UHS by removing some $k$-mers. In particular, if a $k$-mer only
+ever occurs in windows together with another $k$-mer of $U'$, then this $k$-mer may
+be removed from $U'$. Instead of greedily dropping $k$-mers, and ILP is built to
+determine an optimal set of $k$-mers to drop. This process is repeated until the
 target $k$ is reached, which can be up to at least $200$, as long as $w\leq 21$ is
 sufficiently small.
 
 *PASHA* [cite:@pasha] also builds on DOCKS and focuses on improving the
-construction speed. It does this by parallellizing the search for k-mers to
-add to the UHS, and by adding multiple k-mers at once (each with some
+construction speed. It does this by parallellizing the search for $k$-mers to
+add to the UHS, and by adding multiple $k$-mers at once (each with some
 probability) rather than only the one with the highest count of un-covered
 windows containing it. These optimizations enable PASHA to generate schemes up
 to $k=16$, while having density comparable to DOCKS.
@@ -1206,17 +1206,17 @@ to $k=16$, while having density comparable to DOCKS.
 *Decycling-based minimizer.* An improvement to the brute force constructions of
 DOCKS, $\remuval$, and PASHA came with a minimizer scheme based directly on
 minimum decycling sets [cite:@minimum-decycling-set]:
-In any window, prefer choosing a k-mer in $\Dk$, if
+In any window, prefer choosing a $k$-mer in $\Dk$, if
 there is one, and break ties using a random order. They also introduce
 the /double decycling/ scheme. This uses the /symmetric/ MDS $\Dtk$ consisting
-of those k-mers for which $-2\pi/k\leq \arg(x)<0$. It then first prefers
-k-mers in $\Dk$, followed by k-mers in $\Dtk$, followed by k-mers that are in neither.
+of those $k$-mers for which $-2\pi/k\leq \arg(x)<0$. It then first prefers
+$k$-mers in $\Dk$, followed by $k$-mers in $\Dtk$, followed by $k$-mers that are in neither.
 
-It is easy to detect whether a k-mer is in the MDS or not without any memory, so
+It is easy to detect whether a $k$-mer is in the MDS or not without any memory, so
 that this method scales to large $k$.
 Surprisingly, not only is this scheme conceptually simpler, but it also
 has significantly lower density than DOCKS, PASHA, and miniception. Apparently, the simple greedy
-approach of preferring smaller k-mers works better than the earlier brute force
+approach of preferring smaller $k$-mers works better than the earlier brute force
 searches for small universal hitting sets. Especially for $k$ just below $w$,
 its density is much better than any other scheme.
 
@@ -1224,13 +1224,13 @@ its density is much better than any other scheme.
 Unlike the previous UHS schemes, GreedyMini [cite:@greedymini-preprint] directly
 constructs a low-density minimizer scheme using a brute force approach.
 As we saw, the density of a minimizer scheme equals the probability that the
-smallest k-mer in a $w+k$ long context is at the start or end.
+smallest $k$-mer in a $w+k$ long context is at the start or end.
 The GreedyMini builds a minimizer scheme by one-by-one selecting the
-next-smallest k-mer.
-It starts with the set of all $w+k$ contexts, and finds the k-mer for which the
-number of times it appears as the first or last k-mer in a context, as a fraction
+next-smallest $k$-mer.
+It starts with the set of all $w+k$ contexts, and finds the $k$-mer for which the
+number of times it appears as the first or last $k$-mer in a context, as a fraction
 of its total number of appearances, is lowest.
-It then discards all contexts this k-mer appears in,
+It then discards all contexts this $k$-mer appears in,
 and repeats the process until a minimizer has been determined for all contexts.
 To improve the final density, slightly
 submoptimal choices are also tried occasionally, and a local search and random restarts are
@@ -1245,31 +1245,31 @@ and it is able to find optimal schemes for some small cases when $k\equiv 1\pmod
 w$. This raises the question whether it is also optimal for other $k$, where the
 lower bound may not be tight yet.
 A drawback is that this scheme is not pure: it must explicitly store the chosen
-order of k-mers.
+order of $k$-mers.
 
 ** Syncmer-based schemes
 As we saw, universal hitting sets belong to a more general class of context-free
-schemes that only look at individual k-mers to decide whether or not to sample
+schemes that only look at individual $k$-mers to decide whether or not to sample
 them.
 A well-known category of context-free schemes are /syncmers/ [cite:@syncmers].
-In general, syncmer variants consider the position of the smallest s-mer inside
-a k-mer, for some $1\leq s\leq k$ and according to some order $\Os$. Here we
+In general, syncmer variants consider the position of the smallest $s$-mer inside
+a $k$-mer, for some $1\leq s\leq k$ and according to some order $\Os$. Here we
 consider two well-known variants: /closed/ and /open/ syncmers.
 
 #+begin_definition Closed syncmer
-A k-mer is a /closed syncmer/ when the (leftmost) smallest contained s-mer, according to
-some order $\Os$, is either the first s-mer at position $0$ or the last s-mer at position $k-s$.
+A $k$-mer is a /closed syncmer/ when the (leftmost) smallest contained $s$-mer, according to
+some order $\Os$, is either the first $s$-mer at position $0$ or the last $s$-mer at position $k-s$.
 #+end_definition
 
 Closed syncmers satisfy a window guarantee of $k-s$, meaning that there is at
-least one closed syncmer in any window of $w\geq k-s$ consecutive k-mers.
+least one closed syncmer in any window of $w\geq k-s$ consecutive $k$-mers.
 When the order $\Os$ is random, closed syncmers have a density of $2/(k-s+1)$,
 which is the same as that of a random minimizer when $k>w$ and $s=k-w$. Indeed,
 syncmers were designed to improve the /conservation/ metric rather than the
 density. See [cite/t:@syncmers] for details.
 
 #+begin_definition Open syncmer
-A k-mer is an /open syncmer/ whe the smallest contained s-mer (according to
+A $k$-mer is an /open syncmer/ whe the smallest contained $s$-mer (according to
 $\Os$) is at a specific offset $v\in [k-s+1]$. In practice, we always use $v = \floor{(k-s)/2}$.
 #+end_definition
 The choice of $v$ to be in the middle was shown to be optimal for conservation
@@ -1282,8 +1282,8 @@ The name stands for ''minimizer inception'', in that it first uses an order
 $\Os$ and then an order $\Ok$.
 #+begin_definition Miniception
 Let $w$, $k$, and $s$ be given parameters and $\Ok$ and $\Os$ be orders.
-Given a window $W$ of $w$ k-mers, /miniception/ samples the smallest closed
-syncmer if there is one. Otherwise, it samples the smallest k-mer.
+Given a window $W$ of $w$ $k$-mers, /miniception/ samples the smallest closed
+syncmer if there is one. Otherwise, it samples the smallest $k$-mer.
 #+end_definition
 Because of the window guarantee of closed syncmers, miniception /always/ samples
 a closed syncmer when $w\geq k-s$. When $k$ is sufficiently larger than $w$ and
@@ -1297,17 +1297,17 @@ w$.
 
 
 ** Open-closed minimizer
-As we saw, Miniception samples the smallest k-mer that is a closed syncmer.
+As we saw, Miniception samples the smallest $k$-mer that is a closed syncmer.
 The open-closed minimizer is a natural extension of this
 [cite:@oc-modmini-preprint]:
 
 
 #+begin_newdefinition Open-closed minimizer
 Given parameters $w$, $k$, and $1\leq s\leq k$, and orders $\Ok$ and $\Os$,
-the open-closed minimizer samples the smallest (by $\Ok$) k-mer in a window that is an open
-syncmer (by $\Os$), if there is one. Otherwise, it samples the smallest k-mer
+the open-closed minimizer samples the smallest (by $\Ok$) $k$-mer in a window that is an open
+syncmer (by $\Os$), if there is one. Otherwise, it samples the smallest $k$-mer
 that is a closed syncmer. If also no closed syncmer is present, the overall
-smallest k-mer is sampled.
+smallest $k$-mer is sampled.
 #+end_newdefinition
 
 The rationale behind this method is that open syncmers have a distance /lower/
@@ -1320,9 +1320,9 @@ syncmers (C=miniception, green).
 
 In [cite/t:@oc-modmini-preprint], we give a polynomial algorithm to compute the
 exact density of the open-closed minimizer scheme, assuming that no duplicate
-k-mers occur. At a high level, this works by considering the
+$k$-mers occur. At a high level, this works by considering the
 position of the smallest $s$-mer in the window, and then recursing on the
-prefix or suffix before/after it, until an s-mer is found that is sufficiently
+prefix or suffix before/after it, until an $s$-mer is found that is sufficiently
 far from the boundaries to induce an open syncmer.
 
 
@@ -1364,9 +1364,9 @@ We start with a slightly more general definition.
 
 #+begin_newdefinition Mod-sampling
 Let $W$ be a window of $w+k-1$ characters, let $1\leq t\leq k$ be a parameter,
-and let $\Ot$ be a total order on t-mers.
-Let $x$ be the position of the smallest t-mer in the window according to $\Ot$.
-Then, /mod-sampling/ samples the k-mer at position $x \bmod w$.
+and let $\Ot$ be a total order on $t$-mers.
+Let $x$ be the position of the smallest $t$-mer in the window according to $\Ot$.
+Then, /mod-sampling/ samples the $k$-mer at position $x \bmod w$.
 #+end_newdefinition
 
 As it turns out, this scheme is only forward for some choices of $t$ [cite:Lemma 8 @modmini].
@@ -1377,16 +1377,16 @@ Mod-sampling is forward if and only if $t\equiv k\pmod w$ or $t\equiv k+1\pmod w
 
 #+begin_proof
 Consider two consecutive windows $W$ and $W'$.
-Let $x$ be the position of the smallest t-mer in window $W$
-and $x'$ that of the smallest t-mer in $W'$.
+Let $x$ be the position of the smallest $t$-mer in window $W$
+and $x'$ that of the smallest $t$-mer in $W'$.
 mod-sampling is forward when
 $(x \bmod w) - 1 \leq (x' \bmod w)$ holds for all $x$ and $x'$.
 Given that the two windows are consecutive, this trivially holds when $x=0$ and
 when $x' = x-1$.
 Thus, the only position $x'$ that could violate the forwardness condition is
-when $W'$ introduces a new smallest t-mer at position
+when $W'$ introduces a new smallest $t$-mer at position
 $x'=w+k-t-1$. In this case, we have $x' \bmod w = (w+k-t-1) \bmod w = (k-t-1) \bmod w$.
-The rightmost possible position of the sampled k-mer in $W$ is $x\bmod w = w-1$.
+The rightmost possible position of the sampled $k$-mer in $W$ is $x\bmod w = w-1$.
 Hence, if the scheme is forward, then it must hold that $(w-1)-1=w-2\leq(k-t-1) \bmod w$.
 Vice versa, if $w-2\leq(k-t-1) \bmod w$ always
 holds true, then the scheme is forward. % since $x \bmod w \leq w-1$.
@@ -1399,7 +1399,7 @@ $t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w
 #+end_proof
 
 #+name: mod-t
-#+caption: The density of the random minimizer and random mod-minimizer for varying $t$, for $w=24$ and $k=60$. The random mod-minimizer has local minima in the density at $t=12$ and $t=36$, where $t\equiv k\equiv 12\pmod w$. There is also a local minimum at $t=3$, which is the first $t$ that is large enough to avoid duplicate k-mers. Based on this, we choose $t$ to be the least number at least some lower bound $r$ that satisfies $t\equiv k\pmod w$. This figure is based on Figure 4 of [cite/t:@modmini] which was made by Giulio Ermanno Pibiri.
+#+caption: The density of the random minimizer and random mod-minimizer for varying $t$, for $w=24$ and $k=60$. The random mod-minimizer has local minima in the density at $t=12$ and $t=36$, where $t\equiv k\equiv 12\pmod w$. There is also a local minimum at $t=3$, which is the first $t$ that is large enough to avoid duplicate $k$-mers. Based on this, we choose $t$ to be the least number at least some lower bound $r$ that satisfies $t\equiv k\pmod w$. This figure is based on Figure 4 of [cite/t:@modmini] which was made by Giulio Ermanno Pibiri.
 #+attr_html: :class inset
 [[file:figs/0-mod-t.svg][file:figs/0-mod-t.svg]]
 
@@ -1417,30 +1417,30 @@ Mod-sampling is a minimizer scheme when $t\equiv k\pmod w$.
 Our proof strategy explicitly defines an order $\order_k$
 and shows that mod-sampling with $t \equiv k \pmod w$
 corresponds to a minimizer scheme using $\order_k$, i.e.,
-the k-mer sampled by mod-sampling is the leftmost smallest
-k-mer according to $\order_k$.
+the $k$-mer sampled by mod-sampling is the leftmost smallest
+$k$-mer according to $\order_k$.
 
-Let $\order_t$ be the order on t-mers used by mod-sampling
-Define the order $\order_k(K)$ of the k-mer $K$
-as the order of its smallest t-mer, chosen among the t-mers
+Let $\order_t$ be the order on $t$-mers used by mod-sampling
+Define the order $\order_k(K)$ of the $k$-mer $K$
+as the order of its smallest $t$-mer, chosen among the $t$-mers
 occurring in positions that are a multiple of $w$:
 $$
 \order_k(K) = \min_{i \in \{0,w, 2w,\dots, k-t\}} \order_t(K[i..i+t))
 $$
 where $k-t$ is indeed a multiple of $w$ since $t\equiv k\pmod w$.
-Now consider a window $W$ of consecutive k-mers $K_0,\ldots,K_{w-1}$.
-Since each k-mer starts at a different position in $W$,
+Now consider a window $W$ of consecutive $k$-mers $K_0,\ldots,K_{w-1}$.
+Since each $k$-mer starts at a different position in $W$,
 $\order_k(K_i)$ considers different sets of positions relative to $W$ than
 $\order_k(K_j)$ for all $i \neq j$.
-However, t-mers starting at different positions in $W$ could be identical, i.e.,
-the smallest t-mer of $K_i$ could be identical to that of $K_j$.
+However, $t$-mers starting at different positions in $W$ could be identical, i.e.,
+the smallest $t$-mer of $K_i$ could be identical to that of $K_j$.
 In case of ties,
-$\order_k$ considers the k-mer containing the leftmost occurrence
-of the t-mer to be smaller.
+$\order_k$ considers the $k$-mer containing the leftmost occurrence
+of the $t$-mer to be smaller.
 
-Suppose the leftmost smallest t-mer is at position $x \in [w+k-t]$.
-Then mod-sampling samples the k-mer $K_p$ at position $p = x \bmod w$.
-We want to show that $K_p$ is the leftmost smallest k-mer according to $\order_k$.
+Suppose the leftmost smallest $t$-mer is at position $x \in [w+k-t]$.
+Then mod-sampling samples the $k$-mer $K_p$ at position $p = x \bmod w$.
+We want to show that $K_p$ is the leftmost smallest $k$-mer according to $\order_k$.
 If $\order_t(W[x..x+t))=o$, then % also $\order_k(K_i)=o$.
 \begin{align*}
 \order_k(K_p) = \order_k(W[p..p+k)) &= \min_{j\in \{0,w, 2w,\dots,
@@ -1448,9 +1448,9 @@ k-t\}} \order_t(W[p+j..p+j+t)) \\
 &= \min_{j\in \{x-p\}} \order_t(W[p+j..p+j+t))
 = o.
 \end{align*}
-Since $o$ is minimal, any other k-mer $K_j$ must have order $\geq o$.
-Also, since $o$ is the order of the leftmost occurrence of the smallest t-mer,
-$K_p$ is the leftmost smallest k-mer according to $\order_k$.
+Since $o$ is minimal, any other $k$-mer $K_j$ must have order $\geq o$.
+Also, since $o$ is the order of the leftmost occurrence of the smallest $t$-mer,
+$K_p$ is the leftmost smallest $k$-mer according to $\order_k$.
 #+end_proof
 
 
@@ -1481,40 +1481,40 @@ density of the extended mod-minimizer [cite:Theorem 1 @oc-modmini-preprint].
 
 #+begin_newtheorem Extended mod-minimizer density
 Let $w$, $k$, and $t\equiv k\pmod w$ be given parameters, and
-let $f$ be a /minimizer/ scheme on t-mers with order $\Ot$.
+let $f$ be a /minimizer/ scheme on $t$-mers with order $\Ot$.
 Then, the density of the extended mod-minimizer is given by the probability that,
-in a context of length $w+k$, the smallest t-mer is at a position $0\pmod w$.
+in a context of length $w+k$, the smallest $t$-mer is at a position $0\pmod w$.
 #+end_newtheorem
 
 #+begin_proof
 Consider two consecutive windows $W$ and $W'$ of length $w+k-1$ of a
 uniform random string.
-Let $x$ and $x'$ be the position of the smallest t-mer in $W$ and $W'$
+Let $x$ and $x'$ be the position of the smallest $t$-mer in $W$ and $W'$
 respectively, and let $p=x\bmod w$ and $p'=x'\bmod w$ be the positions of the
-sampled k-mers
-Let $y\in\{x, x'+1\}$ be the absolute position of the smallest t-mer in the
+sampled $k$-mers
+Let $y\in\{x, x'+1\}$ be the absolute position of the smallest $t$-mer in the
 two windows.
 
 Since $A$ is a forward scheme, we can compute its density as the probability
-that a different k-mer is sampled from $W$ and $W'$.
-First note that the two consecutive windows contain a total of $w+k-t+1$ t-mers,
+that a different $k$-mer is sampled from $W$ and $W'$.
+First note that the two consecutive windows contain a total of $w+k-t+1$ $t$-mers,
 and thus, $0\leq y\leq w+k-t$, where $w+k-t$ is divisible by $w$ since
 $t\equiv k\pmod w$.
 
 When $y\not\equiv 0\pmod w$, this implies $0<y<w+k-t$, and thus, the two
-windows share their smallest t-mer. Thus, $p=x\bmod w = y\bmod w$ and
+windows share their smallest $t$-mer. Thus, $p=x\bmod w = y\bmod w$ and
 $p'+1=x'\bmod w+1=(y-1)\bmod w+1$. Since $y\not\equiv 0\pmod w$, this gives
-$p'+1=y\bmod w$, and thus, the two windows sample the same k-mer.
+$p'+1=y\bmod w$, and thus, the two windows sample the same $k$-mer.
 
 When $y\equiv 0\pmod w$, there are two cases.
-When $y=x$ (and thus $y<w+k-t$), we have $p=x\bmod w=y\bmod w=0$, and since the k-mer starting at
+When $y=x$ (and thus $y<w+k-t$), we have $p=x\bmod w=y\bmod w=0$, and since the $k$-mer starting at
 position $0$ is not part of $W'$, the second window must necessarily sample a
-new k-mer.
-Otherwise, we must have $y=(x'+1)\equiv 0\pmod w$, which implies $p'=x'\bmod w=(y-1)\bmod w=w-1$, and since the k-mer starting at
+new $k$-mer.
+Otherwise, we must have $y=(x'+1)\equiv 0\pmod w$, which implies $p'=x'\bmod w=(y-1)\bmod w=w-1$, and since the $k$-mer starting at
 position $w-1$ in $W'$ is not part of $W$, again the second window must necessarily sample a
-new k-mer.
+new $k$-mer.
 
-To conclude, the two windows sample distinct k-mer if and only if the smallest t-mer
+To conclude, the two windows sample distinct $k$-mer if and only if the smallest $t$-mer
 occurs in a position $y\equiv 0\pmod w$.
 #+end_proof
 
@@ -1524,10 +1524,10 @@ modified version of Lemma 9 of [cite:@miniception] that we saw earlier in
 Section [[*The density of random minimizers]]. The proof is nearly
 identical.
 
-#+begin_newtheorem Duplicate k-mers
+#+begin_newtheorem Duplicate $k$-mers
 For any $\varepsilon > 0$, if $t > (3+\varepsilon) \log_\sigma(\ell)$, the
-probability that a random window of $\ell-t+1$ t-mers contains two identical
-t-mers is $o(1/\ell)$. Given that $\ell = w+k-1$, $o(1/\ell) \to 0$ for $k\to\infty$.
+probability that a random window of $\ell-t+1$ $t$-mers contains two identical
+$t$-mers is $o(1/\ell)$. Given that $\ell = w+k-1$, $o(1/\ell) \to 0$ for $k\to\infty$.
 #+end_newtheorem
 
 From the above two results, we obtain the density of the random mod-minimizer
@@ -1546,10 +1546,10 @@ When $w$ is fixed and $k\to\infty$, this density tends to $1/w$.
 #+end_newtheorem
 
 #+begin_proof
-Given the bound on $t$, the probability that a context of $w+k$ characters contains duplicate t-mers
-is $o(1/\ell) = o(1/(w+k-1))$. Otherwise, the context contains $w+k-t+1$ t-mers,
+Given the bound on $t$, the probability that a context of $w+k$ characters contains duplicate $t$-mers
+is $o(1/\ell) = o(1/(w+k-1))$. Otherwise, the context contains $w+k-t+1$ $t$-mers,
 of which the ones at positions $\{0, w, 2w, \dots, w+k-t\}$ cause the context to
-be charged, which is a fraction of $\frac{2+\frac{k-t}{w}}{w+k-t+1}$ of all t-mers.
+be charged, which is a fraction of $\frac{2+\frac{k-t}{w}}{w+k-t+1}$ of all $t$-mers.
 #+end_proof
 
 #+begin_newtheorem Optimality of the mod-minimizer
@@ -1557,7 +1557,7 @@ The random mod-minimizer has optimal density when $w$ is fixed, $r=t=1$, $k\equi
 w$, and $\sigma\to\infty$.
 #+end_newtheorem
 #+begin_proof
-First note that the probability of duplicate k-mers in a window goes to $0$ as
+First note that the probability of duplicate $k$-mers in a window goes to $0$ as
 $\sigma\to\infty$, and hence the error term in the density computed above
 disappears.
 Substituting variables, we get
@@ -1586,7 +1586,7 @@ $k$ is small (up to around $w/2$), and hence also when $t$ is small (again up to
 around $w/2$). For larger $k$ and $t$, we see that double decycling has minimal density.
 
 Like the OC-minimizer, the mod-minimizer requires $t\geq 4$ to avoid duplicate
-k-mers. This causes the graphs to jump down at $k=w+4$, rather than at $k=w+1$.
+$k$-mers. This causes the graphs to jump down at $k=w+4$, rather than at $k=w+1$.
 When the alphabet is large, $t=1$ suffices, and the graphs of the mod-minimizer
 touch lower bound when $k\equiv 1\pmod w$.
 
@@ -1623,7 +1623,7 @@ unpublished work of myself.
 :CUSTOM_ID: bd-anchors
 :END:
 Bidirectional anchors (bd-anchors) are a variant on minimizers that take the minimal
-lexicographic /rotation/ instead of the minimal k-mer substring [cite:@bdanchors-esa]:
+lexicographic /rotation/ instead of the minimal $k$-mer substring [cite:@bdanchors-esa]:
 
 #+begin_definition Bidirectional anchor
 Given a window $W$ of length $w$, the /bidirectional anchor/ is the
@@ -1853,15 +1853,15 @@ schemes as good as forward schemes, given that $k$ is sufficiently large?
 
 
 * Checks
-- select -> samples
-- Marcais -> proper spelling
-- symbol -> character
-- Fix $k$-mer and $t$-mer and $s$-mer and plurals
-- Attribute copied proofs
-- Attribute used papers in the beginning
-- Attribute individual figures & tables in captions
-- consistent uppercase characters ABC..Z.
-- theorem / lemma / prop / ...
-- ''quotes''
+# - select -> samples
+# - Marcais -> Marçais
+# - symbol -> character
+# - Fix $k$-mer and $t$-mer and $s$-mer and plurals
+# - Attribute copied proofs
+# - Attribute used papers in the beginning
+# - Attribute individual figures & tables in captions
+# - consistent uppercase characters ABC..Z.
+# - theorem / lemma / prop / ...
+# - ''quotes''
 
 #+print_bibliography:
