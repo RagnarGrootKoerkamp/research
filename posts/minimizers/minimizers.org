@@ -1,33 +1,11 @@
-#+title: [WIP] Minimizers
-#+filetags: @thesis minimizers wip
+#+title: Minimizers and more
+#+filetags: @thesis @survey minimizers highlight
 #+HUGO_LEVEL_OFFSET: 0
 #+OPTIONS: ^:{} num:2 H:4
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_paired_shortcodes: %notice
-#+date: <2024-11-05 Tue>
-
-$$
-\newcommand{\O}{\mathcal O}
-\newcommand{\order}{\mathcal O}
-\newcommand{\Ok}{\mathcal O_k}
-\newcommand{\Ot}{\mathcal O_t}
-\newcommand{\Os}{\mathcal O_s}
-\newcommand{\S}{\Sigma}
-\newcommand{\Dk}{\mathcal D_k}
-\newcommand{\Dtk}{\tilde{\mathcal D}_k}
-\newcommand{\P}{\mathbb P}
-\newcommand{\pr}{\mathbb P}
-\DeclareMathOperator*{\argmin}{argmin}
-\DeclareMathOperator*{\poly}{poly}
-\DeclareMathOperator*{\rc}{rc}
-\DeclareMathOperator*{\sp}{sparsity}
-\newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
-\newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
-\newcommand{\c}{\mathrm{c}}
-\newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
-\newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
-$$
+#+date: <2025-02-18 Tue>
 
 #+attr_shortcode: attribution
 #+begin_notice
@@ -51,12 +29,8 @@ were independently discovered by Bryce Kille and myself.
 The sus-anchor is my own work, and currently unpublished.
 #+end_notice
 
-# Also, the following blog posts
-# - bd anchors: [[../bd-anchors/bd-anchors.org]]
-# - mod-mini: [[../mod-minimizers/mod-minimizers.org]]
-# - lower bound: [[../minimizer-lower-bound/minimizer-lower-bound.org]]
-# - simd minimizers: [[../fast-minimizers/fast-minimizers.org]]
-# - practical minimizers: [[../practical-minimizers/practical-minimizers.org]]
+
+
 
 #+attr_shortcode: summary
 #+begin_notice
@@ -81,84 +55,194 @@ We end with a look into the specific case where $k=1$, which are also called
 very close to the lower bound for alphabet size $\sigma=4$.
 #+end_notice
 
-*Motivation.*
-- $k$-mers
-- compression
-- faster analysis
-- locally consistent
-- Jaccard similarity
 
-*Brief definition.*
-- w, k, density
+
+
+$$
+\newcommand{\O}{\mathcal O}
+\newcommand{\order}{\mathcal O}
+\newcommand{\Ok}{\mathcal O_k}
+\newcommand{\Ot}{\mathcal O_t}
+\newcommand{\Os}{\mathcal O_s}
+\newcommand{\S}{\Sigma}
+\newcommand{\Dk}{\mathcal D_k}
+\newcommand{\Dtk}{\tilde{\mathcal D}_k}
+\newcommand{\P}{\mathbb P}
+\newcommand{\pr}{\mathbb P}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\poly}{poly}
+\DeclareMathOperator*{\rc}{rc}
+\DeclareMathOperator*{\sp}{sparsity}
+\newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
+\newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
+\newcommand{\c}{\mathrm{c}}
+\newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
+\newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
+$$
+
+* Introduction
+
+As does nearly every paper in bioinformatics, we will start here with the remark
+that the amount of biological data has been and still is increasing rapidly over
+time.
+Thus, both faster and more space efficient algorithms are needed to
+analyse this data.
+One popular method for sequence analysis is to consider a sequence as its
+set of /$k$-mers/, i.e., the set of substrings of length $k$, which often has
+a value up to $31$. Then, two sequences can be compared by comparing
+these sets, rather than by doing a costly alignment between them.
+For example, when comparing two human genomes, there will likely
+be relocations and inversions of long segments of DNA, so that a global
+alignment is not the best way forward. By instead only considering $k$-mers, we
+only consider the local structure, so that the changes in global structure do
+not affect the analysis. Then one could estimate the similarity of these sets
+using min-hash [cite:@minhash;@minmers]. Or one could seed an alignment by finding
+$k$-mer matches between the two sequences, as done by minimap [cite:@minimap].
+
+A drawback of considering the full set of $k$-mers is that consecutive
+$k$-mers overlap, and thus that there is a lot of redundancy.
+To compress the set of $k$-mers,
+it would be preferable to only sample every $k$'th $k$-mer, so that each
+base is covered only exactly once. That, however, doesn't work:
+if we are given two sequences, but one is shifted by one due to an inserted base
+at the very start, no common $k$-mers will be sampled.
+To fix this, we would like a /locally consistent/ sampling method, that decides
+whether or not to sample a $k$-mer only based on the $k$-mer and some
+surrounding context. One option is to use all $k$-mers that start with an =A=,
+or to use all $k$-mers whose (lexicographic or hashed) value is sufficiently small.
+Indeed, this approach is sufficient for some applications.
+
+A drawback of the methods so far is that there could be long stretches of input
+without any sampled $k$-mers. This can cause long gaps when seeding alignments.
+Also when building text indices, such as a sparse suffix array
+[cite:@sampling-sa-minimizers;@anchors-are-all-you-need] or a minimizer-space De
+Bruijn graph [cite:@mdbg], we usually need a guarantee that at least one
+k-mer is sampled every, say, $w$ positions.
+
+*Sampling scheme.*
+This brings us to /local sampling schemes/ that satisfy a /window guarantee/:
+given a window of $w$ $k$-mers, consisting of
+$w+k-1$ characters, a sampling scheme
+returns one of the $k$-mers as the one to be sampled.
+If we now slide this window along the input, we collect the set of sampled
+$k$-mers. Ideally the scheme ensures that the same $k$-mer is sampled from adjacent
+windows, so that this set is much smaller than the total number of $k$-mers.
+
+Given such a sampling scheme, we can build a /locality sensitive hash/:
+given a string of length $w+k-1$, we can hash it to its sampled $k$-mer. This
+way, adjacent strings are likely to have the same hash, allowing for efficient
+indices such as LPHash and SSHash [cite:@lphash;@sshash].
 
 *Problem statement.*
-- Mention random minimizer
-- low density
+The goal now is to find $k$-mer sampling schemes that satisfy the $w$ window
+guarantee, while overall sampling as few $k$-mers as possible.
 
-*Overview.*
-We split content into three topics
-- General theory
-- Lower bounds
-- Selection
+This is formalized in the /density/: the expected fraction of $k$-mers sampled
+by a scheme. The window guarantee imposes a trivial lower bound of $1/w$, since at least
+every $w$'th $k$-mer must be sampled.
 
-*Applications.*
-- Locality sensitive hashing
-- Similarity estimation [cite:@minimizer-biased;@minhash;@minmers]
-- DeBruin graph partitioning/glueing [cite:@compacting-dbg]
-- Bd-anchors: very thin compression [cite:@bdanchors;@anchors-are-all-you-need]
-  - TODO: lc-covers of all-you-need (1.3)
+The most common practical scheme is the /random minimizer/
+[cite:@minimizers;@winnowing], which hashes all $k$-mers in the window, and
+chooses the smallest one. This has a density of $2/(w+1)$, roughly twice as
+large as the trivial lower bound.
 
-#+begin_quote
-[At RECOMB 2022, discussing DeepMinimizer]
+Now, you may ask whether it's worth the effort to /at best/ save a factor two of
+memory and speed. And worse, in practice, most schemes do not give more than a
+$20\%$ saving in density on top of the very simple random minimizer.
 
-Why would we even care about better minimizer? We have this simple and fast
-random minimizer that's only at most $2\times$ away from optimal. Why would
-anyone invest time in optimizing this by maybe $25\%$?
-There are so much bigger gains possible elsewhere.
-#+end_quote
+As we will prove in Section [[*Lower bounds]], when $k\leq w+1$, we can never expect
+more than around $25\%$ lower
+density than the random minimizer, and thus, existing schemes are already
+relatively close to optimal from a practical point of view.
+Given this new lower bound, maybe the answer is that, indeed, we should stop searching for further
+schemes.
 
-** Introduction
+Nevertheless, there is a lot of pretty maths to be found, both in the lower
+bounds, and in the many sampling schemes we will review and develop ourselves.
 
-- Lots of DNA data
-- Most algorithms deal with $k$-mers.
-- $k$-mers overlap, and hence considering all of them is redundant.
-- Thus: sample a subset of the kmers.
-- Must be 'locally consistent' and deterministic to be useful.
-- Enter random minimizers.
-- Parameter $w$: guarantee that at least one $k$-mer is sampled out of every
-  window of $w$ $k$-mers.
-- Density $d$: (expected) overall fraction of sampled $k$-mers.
-- Obviously, $d\geq 1/w$
-- For random mini, $d=2/(w+1)$.
-- Lower density => fewer $k$-mers, smaller indices, faster algorithms.
-- *Question:* How small density can we get for given $k$ and $w$?
+** Overview
+The remainder of this chapter is split into three parts.
 
-*Previous reviews*
-- [cite/t:@minimizer-sketches]
-- [cite/t:@minimizer-review-2]
+First, in Section [[*Theory of sampling schemes]], we review the existing theory of
+sampling schemes. This covers, for example, /local/, /forward/, and /minimizer/
+schemes, the density of the random minimizer, and a number of theoretical
+results on the optimal asymptotic density of schemes as $k\to\infty$ or $w\to\infty$.
 
-*Copied*
-Minimizers can be used for various purposes, such as:
-- Compressing sequences, such as in minimizer-space De Bruijn graphs [cite:@mdbg].
-- Similarity estimation,
-- /Locality preserving hashing/ of kmers for different types of /clustering/.
-  1. [cite:@sshash;@lphash].
-     - Here a large $k \geq \log_\sigma N$ is used so that minimizers are unique keys.
-     - The objective is to have as few minimizers as possible in any sequence, to
-       reduce the number of cache-misses due to non-locality.
-  2. Similarity estimation [cite:@minimap].
-     - Here the goal is to cluster similar reads. Ideally reads with a few small
-       mutations have the same minimizer.
+In Section [[*Lower bounds]], we go over existing lower bounds. We start at the
+original one of [cite/t:@winnowing], that turns out to make overly strong
+assumptions, and end with a new nearly tight lower bound.
 
-Locality preserving hashing and similarity estimation both cluster kmers on
-similarity, but there are some differences:
-- In LPH, we want /consecutive/ kmers to share a minimizer. I.e. we want to
-  partition the De Bruijn graph into long paths.
-- In similarity estimation, we want /similar/ kmers to share a minimizer, where
-  /similar/ explicitly includes small mutations. I.e. we want to partition the
-  De Bruijn graph into 'blobs' covering many variants.
+Then, in Section [[*Sampling schemes]], we summarize and compare existing sampling
+schemes, and introduce two new sampling schemes: the /open-closed/
+minimizer and the general /mod-minimizer/. The most important result is that the
+mod-minimizer achieves density $1/w$ in the limit where $k\to\infty$, and that
+the convergence is close to optimal.
+
+Lastly, in Section [[*Selection schemes]], we consider the special case where $k=1$.
+Here, we first introduce the /bd-anchor/ [cite:@bdanchors-esa], and then improve
+this into the sus-anchor with anti-lexicographic sorting. This has density very
+close to optimal for alphabet size $\sigma=4$, and raises the question whether
+perfectly optimal selection schemes can be constructed.
+
+Many of the existing papers on sampling schemes touch more than one of these
+topics, as they both develop some new theory and introduce a new sampling
+scheme. These results are thus split over the applicable sections.
+
+*Previous reviews.*
+This chapter is written from a relatively theoretical perspective, and focuses
+on the design of low-density sampling schemes.
+The review [cite/t:@minimizer-sketches] takes a more practical approach and
+compares applications, implementations, and metrics other than just the density.
+It limits itself to /minimizers/, rather than more general local or forward schemes.
+A second review, [cite/t:@minimizer-review-2], focuses specifically on
+applications, and details how minimizers are used in various tools and domains
+of bioinformatics.
+
+# Locality preserving hashing and similarity estimation both cluster kmers on
+# similarity, but there are some differences:
+# - In LPH, we want /consecutive/ kmers to share a minimizer. I.e. we want to
+#   partition the De Bruijn graph into long paths.
+# - In similarity estimation, we want /similar/ kmers to share a minimizer, where
+#   /similar/ explicitly includes small mutations. I.e. we want to partition the
+#   De Bruijn graph into 'blobs' covering many variants.
 
 
+# #+begin_quote
+# [At RECOMB 2022, discussing DeepMinimizer]
+
+# Why would we even care about better minimizer? We have this simple and fast
+# random minimizer that's only at most $2\times$ away from optimal. Why would
+# anyone invest time in optimizing this by maybe $25\%$?
+# There are so much bigger gains possible elsewhere.
+# #+end_quote
+
+# ** Introduction
+
+# *Copied*
+# Minimizers can be used for various purposes, such as:
+# - Compressing sequences, such as in minimizer-space De Bruijn graphs [cite:@mdbg].
+# - Similarity estimation,
+# - /Locality preserving hashing/ of kmers for different types of /clustering/.
+  # 1. [cite:@sshash;@lphash].
+  #    - Here a large $k \geq \log_\sigma N$ is used so that minimizers are unique keys.
+  #    - The objective is to have as few minimizers as possible in any sequence, to
+  #      reduce the number of cache-misses due to non-locality.
+  # 2. Similarity estimation [cite:@minimap].
+  #    - Here the goal is to cluster similar reads. Ideally reads with a few small
+  #      mutations have the same minimizer.
+
+
+# - Lots of DNA data
+# - Most algorithms deal with $k$-mers.
+# - $k$-mers overlap, and hence considering all of them is redundant.
+# - Thus: sample a subset of the kmers.
+# - Must be 'locally consistent' and deterministic to be useful.
+# - Enter random minimizers.
+# - Parameter $w$: guarantee that at least one $k$-mer is sampled out of every
+#   window of $w$ $k$-mers.
+# *Applications.*
+# - DeBruin graph partitioning/glueing [cite:@compacting-dbg]
+# - TODO: lc-covers of all-you-need (1.3)
 
 * Theory of sampling schemes
 The theory of minimizer schemes started with two independent papers proposing
@@ -696,7 +780,7 @@ This was first improved by Schleimer et al. [cite:@winnowing] to approximately $
 practice (Section
 [[*Schleimer et al.'s bound]]).
 Marçais et al. [cite:@asymptotic-optimal-minimizers] give a weaker version that
-/does/ hold for all forward schemes, of just above $1.5/(w+k)$ (Section [[*Marcais
+/does/ hold for all forward schemes, of just above $1.5/(w+k)$ (Section [[*Marçais
 et al.'s bound]]). At the core, it considers two windows spaced apart by $w+k$
 positions. The first window than has a minimizer, and with probability $1/2$, a
 second additional minimizer is needed to 'bridge the gap' to the second window.
@@ -1117,10 +1201,13 @@ codes [cite:@non-overlapping-codes].
 
 A drawback of the ABB order is that it throws away some information: for example
 =AB= and =AC= are considered equal, which is usually not idea. Thus, we also
-consider a version with tiebreaking, /ABB+/, that first compares $k$-mers via ABB order,
-and in case of ties compares them using the plain lexicographic order.
+consider a version with tiebreaking, /ABB+/:
+#+begin_newdefinition ABB+ order
+The /ABB+/ order first compares two $k$-mers via the ABB order, and in case of
+a tie, compares them via the plain lexicographic order.
+#+end_newdefinition
 
-We newly introduce a small variation on these two schemes.
+We also introduce a small variation on these schemes.
 #+begin_newdefinition Anti-lexicographic order
 The /anti-lexicographic order/ sorts $k$-mers by comparing the first character
 lexicographically, and comparing all remaining characters reverse lexicographically.
@@ -1738,6 +1825,7 @@ TODO TODO TODO
 #+end_proof
 
 
+- Remark on sampling exactly two every cycle.
 - Ideally, prove density $O(1/w)$, and answer the question of [cite:@small-uhs]
   that yes, perfect selection schemes exist. Then also update the asymptotic table.
 
@@ -1781,40 +1869,43 @@ lower bound $g'$?
 #+end_openproblem
 
 
-** TODO Towards Optimal schemes?
+# ** TODO Towards Optimal schemes?
+# I have a bunch of attempts and ideas for improving the anti-lex sus-anchor
+# further into a perfectly optimal scheme, but this is not yet working so far...
+# Unless I manage to prove something, this should just be skipped.
 
-*Maximal non-overlapping string sets*
+# *Maximal non-overlapping string sets*
 
-- Papers on maximal non-overlapping string sets (see below).
+# - Papers on maximal non-overlapping string sets (see below).
 
 
-- [cite/t:@max-non-overlapping-codes]
-  - Shows a bound on max number of non-overlapping words of
-    $$\frac 1k \left(\frac{k-1}{k}\right)^{k-1} \sigma^k$$
-- [cite/t:@non-overlapping-codes]
-  - divide alphabet into two parts. Then patterns =abbbb= and e.g. =aab?b?b?b=
-    are non-overlapping. (=b=: any non-=a= character)
-  - For DNA, optimal solution (max number of pairwise non-overlapping words) for $k=2$ is =[AG][CT]=, while for
-    $k\in\{3,4,5,6\}$, an optimal solution is given by =A[CTG]+=.
-  - Re-prove upper bound on number of non-overlapping words $\sigma^k/(2k-1)$.
-  - Re-prove upper bound of Levenshtein above.
-  - Show existing scheme with size
-    $$\frac{\sigma-1}{e\sigma} \frac{\sigma^k}{k}$$
-  - New scheme: not $0$ and ${>}0$, but arbitrary partition. And prefix is in
-    some set $S$, while suffix is $S$-free.
-    - When $k$ divides $\sigma$, choose $|I| = \sigma/k$ and $|J| =
-      \sigma-\sigma/k$, and consider strings =IIIIIIJ=. These are optimal.
-    - The set $S$ is needed to avoid rounding errors when $\sigma$ is small.
-    - Conjecture: a suffix of =JJ= or longer is never optimal.
-- [cite/t:@minimally-overlapping-words]
-  - /minimally overlapping words/ are anti-clustered, hence good for sensitivity.
-  - =cg=-order: alternate small and large characters, as [cite:@minimizers]
-  - =abb=-order: compare first character normal, the rest by ~t=g=c<a~.
-- [cite/t:@searching-max-non-overlapping-codes]
-  - ILP to solve the problem for more $(k, \sigma)$ pairs.
-- [cite/t:@optimal-sampling-frith]
-  - Test various word-sets for their sparsity and specificity.
-- [cite/t:@unavoidable-sets]
+# - [cite/t:@max-non-overlapping-codes]
+#   - Shows a bound on max number of non-overlapping words of
+#     $$\frac 1k \left(\frac{k-1}{k}\right)^{k-1} \sigma^k$$
+# - [cite/t:@non-overlapping-codes]
+#   - divide alphabet into two parts. Then patterns =abbbb= and e.g. =aab?b?b?b=
+#     are non-overlapping. (=b=: any non-=a= character)
+#   - For DNA, optimal solution (max number of pairwise non-overlapping words) for $k=2$ is =[AG][CT]=, while for
+#     $k\in\{3,4,5,6\}$, an optimal solution is given by =A[CTG]+=.
+#   - Re-prove upper bound on number of non-overlapping words $\sigma^k/(2k-1)$.
+#   - Re-prove upper bound of Levenshtein above.
+#   - Show existing scheme with size
+#     $$\frac{\sigma-1}{e\sigma} \frac{\sigma^k}{k}$$
+#   - New scheme: not $0$ and ${>}0$, but arbitrary partition. And prefix is in
+#     some set $S$, while suffix is $S$-free.
+#     - When $k$ divides $\sigma$, choose $|I| = \sigma/k$ and $|J| =
+#       \sigma-\sigma/k$, and consider strings =IIIIIIJ=. These are optimal.
+#     - The set $S$ is needed to avoid rounding errors when $\sigma$ is small.
+#     - Conjecture: a suffix of =JJ= or longer is never optimal.
+# - [cite/t:@minimally-overlapping-words]
+#   - /minimally overlapping words/ are anti-clustered, hence good for sensitivity.
+#   - =cg=-order: alternate small and large characters, as [cite:@minimizers]
+#   - =abb=-order: compare first character normal, the rest by ~t=g=c<a~.
+# - [cite/t:@searching-max-non-overlapping-codes]
+#   - ILP to solve the problem for more $(k, \sigma)$ pairs.
+# - [cite/t:@optimal-sampling-frith]
+#   - Test various word-sets for their sparsity and specificity.
+# - [cite/t:@unavoidable-sets]
 
 * Discussion
 #+name: summary
@@ -1822,7 +1913,7 @@ lower bound $g'$?
 #+attr_html: :class inset large
 [[file:figs/6-small-k.svg][file:figs/6-small-k.svg]]
 
-To end, we once more compare all sampling schemes so far in [[summary]]. We also include a
+To end, in [[summary]] we once more compare all sampling schemes so far. We also include a
 $k>1$ variant of the sus-anchor, that simply picks the smallest-unique-substring
 that has length at least $k$. Since the sus-anchor works well for small $k$, we
 can use $r=1$ for the extended mod-mini version of it. As can be seen, this is
@@ -1849,10 +1940,10 @@ We repeat the open problems that came up so far:
 Additionally, there is the question of how much better general forward schemes
 are compared to minimizer schemes. Of all the schemes in [[summary]], only the
 sus-achor is not a minimizer scheme. So this raises the question: are minimizer
-schemes as good as forward schemes, given that $k$ is sufficiently large?
+schemes as good as forward schemes when $k$ is sufficiently large?
 
 
-* Checks
+# * Checks
 # - select -> samples
 # - Marcais -> Marçais
 # - symbol -> character
