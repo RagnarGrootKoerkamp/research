@@ -614,7 +614,7 @@ Overall, the speedup was roughly 4 (at array size 1GB) when using 8 threads. Thi
 with a standard sorted array. However, we won't delve into this here, as there is more efficient stuff one can do; check out Ragnar's post on S-trees!
 
 * Interpolation search
-In the static search tree post, Ragnar suggests looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
+In the static search tree post, Ragnar suggested looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
 For completeness, we will implement it here as well to check out how it performs.
 
 The idea behind interpolation search based on the fact if data is drawn from a random uniform distribution, then when we sort it
@@ -751,9 +751,17 @@ The division is a real bottleneck and it is hard to optimize it away. I tried to
 instructions don't really exist either, and the performance gains are minimal.
 
 Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
-ideas; if you have them, send me a message!
+ideas; if you have them, please let me know.
 
-* Comparing implementations on the human genome
+An interesting factor for interpolation search is also how it performs well on non-random data. Therefore, we download a part of the human genome
+and compute 32-bit prefixes of all the suffixes. We then search in a subset of them and measure performance. This should be slower, as the data
+is not going to be exactly uniformly distributed.
 
+* Conclusion and takeaways
+Overall, we found that the conclusions from the Algorithmica article and from the array layouts paper hold even for batched settings. Eytzinger
+is the best choice for a simple algorithm that is also very fast. It beats standard binary search due to its better cache use characteristics
+and ease of prefetching.
 
-* Conclusion
+When writing this, I was suprised to see that the Rust standard library has some optimizations for binary search already implemented, but not all that are recommended
+by our sources, namely, prefetching is missing. This is suprising, because prefetching arguably does not cost almost anything. Is it due to unavailability of prefetch instructions
+on some platforms? If you know, please let me know.
