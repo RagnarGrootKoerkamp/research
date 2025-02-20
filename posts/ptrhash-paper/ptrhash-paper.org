@@ -806,15 +806,18 @@ evaluation, as indicated with blue, black, and red dots in [[construction]]:
 *** [Appendix?] Remap
 #+name: remap
 #+caption: Comparison of space usage (bits/key) and query throughput (ns/query) of PtrHash when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead. Giulio: drop params; mention in caption instead
-| Parameters                                              |     Pilots | Query |    PHF | Remap       |      Remap | Query |   MPHF |
-|                                                         |            |  Loop | Stream |             |            |  Loop | Stream |
-|---------------------------------------------------------+------------+-------+--------+-------------+------------+-------+--------|
-| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |       2.67 |  11.5 |    8.6 | Vec<u32>    |       0.33 |  12.5 |    8.8 |
-|                                                         |            |       |        | CacheLineEF |       0.12 |  12.9 |    8.8 |
-|                                                         |            |       |        | EF          |       0.09 |  14.2 |    9.7 |
-| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |       2.00 |  17.7 |    8.0 | Vec<u32>    |       0.33 |  20.3 |    8.6 |
-|                                                         |            |       |        | CacheLineEF |       0.12 |  20.9 |    8.6 |
-|                                                         |            |       |        | EF          |       0.09 |  21.7 |    9.7 |
+| Parameters                                              | Pilots | Query |    PHF | Remap       | Remap | Query |   MPHF |
+|                                                         |        |  Loop | Stream |             |       |  Loop | Stream |
+|---------------------------------------------------------+--------+-------+--------+-------------+-------+-------+--------|
+| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |   2.67 |  11.6 |    8.6 | Vec<u32>    |  0.33 |  12.7 |    8.9 |
+|                                                         |        |       |        | CacheLineEF |  0.12 |  12.1 |    8.9 |
+|                                                         |        |       |        | EF          |  0.09 |  14.4 |    9.7 |
+| Default: $\alpha=0.99$, $\lambda=3.5$, cubic $\gamma_3$ |   2.29 |  17.6 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.6 |
+|                                                         |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.7 |
+|                                                         |        |       |        | EF          |  0.09 |  21.2 |    9.6 |
+| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |   2.00 |  17.5 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.5 |
+|                                                         |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.6 |
+|                                                         |        |       |        | EF          |  0.09 |  21.3 |    9.5 |
 
 In [[remap]], we compare the space usage and query throughput of the different remap
 data structures for both the fast and compact parameters, for $n=10^9$ keys. We observe that
@@ -860,6 +863,7 @@ hashes to disk in 3 batches of 8 shards at a time. This brings the total time
 down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
 writing hashes to disk, and 21s is spent reading hashes from disk, which
 together is faster than the 65s that was previously spent on hashing all keys.
+
 
 ** Query Throughput
 :PROPERTIES:
@@ -944,13 +948,15 @@ Minimal perfect hashing is only slightly slower than perfect hashing.
 :END:
 
 #+name: comparison
-#+caption: Performance comparison of MPHF on 300 million random string keys of uniform length between 10 and 50. Construction time is shown for 6 threads. A * indicates single-threaded timings, and the optimistic 6-fold faster time in parentheses. Near-optimal values in each column are shown in bold. The common parameters $\lambda$ (number of elements per bucket) and $\alpha$ (initial load factor) are shown separately.
+#+caption: Performance comparison of MPHF on 300 million random string keys of uniform length between 10 and 50. Construction time is shown for 6 threads. A * indicates single-threaded timings, and the optimistic 6-fold faster time in parentheses. Near-optimal values in each column are shown in bold.
 #+attr_html: :class small
 | Approach            | Configuration                               | Space@@html:<br/>@@bits/key | Construction@@html:<br/>@@ 6t, ns/key | Query @@html:<br/>@@ns/query |
 | Brute-force         |                                             |                             |                                       |                              |
 | SIMDRecSplit        | $n{=}5$, $b{=}5$                            |                        2.96 |                                  *26* |                          310 |
 | SIMDRecSplit        | $n{=}8$, $b{=}100$                          |                      *1.81* |                                    66 |                          258 |
 | Bip. ShockHash-Flat | $n{=}64$                                    |                      *1.62* |                           2140* (357) |                          201 |
+| Consensus           | $k=256$ $\varepsilon=0.10$                  |                      *1.58* |                                   521 |                          565 |
+| Consensus           | $k=512$ $\varepsilon=0.03$                  |                      *1.49* |                                  1199 |                          528 |
 |                     |                                             |                             |                                       |                              |
 | Fingerprinting      |                                             |                             |                                       |                              |
 | FMPH                | $\gamma{=}2.0$                              |                        3.40 |                                    44 |                          168 |
@@ -977,8 +983,11 @@ Minimal perfect hashing is only slightly slower than perfect hashing.
 | PHOBIC              | $\lambda{=}7.0$, $\alpha{=}1.0$, IC-R       |                      *1.86* |                                   446 |                          157 |
 | PtrHash, fast       | $\lambda{=}3.0$, $\alpha{=}0.99$, Vec       |                        2.99 |                                  *26* |                         *38* |
 | + streaming         |                                             |                             |                                       |                         *20* |
+| PtrHash, default    | $\lambda{=}3.5$, $\alpha{=}0.99$, CLEF      |                        2.40 |                                  *32* |                         *44* |
+| + streaming         |                                             |                             |                                       |                         *25* |
 | PtrHash, compact    | $\lambda{=}4.0$, $\alpha{=}0.99$, CLEF      |                        2.12 |                                    62 |                         *42* |
 | + streaming         |                                             |                             |                                       |                         *23* |
+
 
 In [[comparison]] we compare the performance of PtrHash against other methods on
 short, random strings.
