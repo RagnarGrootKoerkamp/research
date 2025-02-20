@@ -368,17 +368,6 @@ In particular, for a given $S$ and $P=P(S)=\lceil n/(\alpha S)\rceil$, we estima
 which this is below $S-1.5\sqrt{n/P}$, where the buffer ensures that, at least
 in practice, a larger-than-expected largest part still fits.
 
-#+name: parameters
-#+caption: Input parameters with typical values, and computed variables.
-| Name                                                                  | Definition                                                        |
-| $\alpha = 0.99$                                                       | Load factor. Expected number of keys per part is $\alpha\cdot S$. |
-| $\lambda=4$                                                           | Expected number of elements per bucket.                           |
-| $\gamma(x) = \frac{255}{2^8}\cdot (x^2+x^3)/2 + \frac{1}{2^8}\cdot x$ | Bucket function controlling relative bucket sizes.                |
-| $n$                                                                   | Total number of keys.                                             |
-| $S = 2^{18}$                                                          | Number of slots per part.                                         |
-| $P = \lceil n/(\alpha \cdot S)\rceil$                                 | Number of parts.                                                  |
-| $B = \lceil(\alpha \cdot S)/\lambda\rceil$                            | Number of buckets per part.                                       |
-
 #+name: query-code
 #+caption: Rust code for a simple implementation of the data structure and query function.
 #+begin_src rust
@@ -441,8 +430,7 @@ fast access (e.g. requiring the interleaved coding of PHOBIC).
 Unfortunately, /hash and displace/ is already taken
 by hash-and-displace [cite/t:@hash-displace;@chd].].* In PtrHash, we instead use /fixed width/, single byte pilots. To achieve
 this, we use a technique resembling cuckoo hashing [cite:@cuckoo-hashing] that
-was also independently found in [cite/t:Section 4.5 @phobic-thesis]. This is
-shown in [[construction-code]].
+was also independently found in [cite/t:Section 4.5 @phobic-thesis].
 As before, buckets are greedily /inserted/ from large to small. For some buckets,
 there may be no pilot in $[2^8]$ such that all its keys map to empty slots. When
 this happens, a pilot is found with the lowest weighted number of /collisions/.
@@ -451,38 +439,6 @@ The weight of a collision with an element of a bucket of size $s$ is $s^2$, to p
 The colliding buckets are evicted by emptying the slots they map to and
 pushing them back onto the priority queue of remaining buckets.
 Then, the new bucket is inserted.
-
-#+name: construction-code
-#+caption: Conceptual Rust code for determining the pilot values for each part. In practice, a number of optimizations are made.
-#+begin_src rust
-/// Given the buckets of hashed keys for a part, search for pilot values.
-fn pilots_for_part(&self, buckets: Vec<&[Hash]>) -> Vec<u8> {
-    let mut pilots = vec![0; self.B];                    // One pilot per bucket.
-    let mut slots = vec![None; self.S];       // Bucket idx mapping to each slot.
-
-    // A priority queue (max-heap) of buckets.
-    let mut queue = BinaryHeap::from_iter(
-        (0..buckets.len()).iter().map(|i| (buckets[i].len(), i))
-    );
-
-    while let Some((_, i)) = queue.pop() {       // Insert next-largest bucket i.
-        pilots[i] = self.find_pilot(buckets[i], &mut slots);
-        for &h in buckets[i] {
-            let slot = self.slot_for_hashed_key(h, pilots[i]);
-            if let Some(j) = slots[slot] {           // Evict colliding bucket j.
-                for &h_j in buckets[j] {
-                    let slot_j = self.slot_for_hashed_key(h_j, pilots[j]);
-                    slots[slot_j] = None;
-                }
-                todo.push((buckets[j].len(), j));
-            }
-            slots[slot] = Some(i);
-        }
-    }
-
-    pilots
-}
-#+end_src
 
 [APPENDIX] *Optimizations.* In order to speed up the code to search for pilots, a number of
 optimizations are made to the conceptual idea of [[construction-code]].
@@ -624,11 +580,7 @@ This is stored as follows.
 This relative high part can be found as $2^8\cdot(\select(i)-i)$, where $\select(i)$ gives
 the position of the $i$'th 1 bit. In practice, this can be implemented
 efficiently using the =PDEP= instruction provided by the BMI2 bit manipulation
-instruction set [cite:@fast-select]:
-[DROP?] this operation can /deposit/ the mask =1<<i= onto our bit pattern, so that the
-1 ends up at the position of the $i$'th one of our pattern. Then, it suffices
-to count the number of trailing zeros, which is provided by the =TZCNT=
-instruction in BMI1.
+instruction set [cite:@fast-select].
 
 *Limitations.* CacheLineEF uses $64/44\cdot 8 = 11.6$ bits per value, which is
 more than the usual Elias-Fano, which for example takes $8+2=10$ bits per value for data
@@ -654,55 +606,6 @@ variable widths, and adds a second level of EF
 to encode the part offsets. Instead, CacheLineEF prefers simplicity and uses
 fixed part sizes with a constant width encoding and simply stores the offsets directly.
 
-
-#+name: cacheline-ef-code
-#+caption: Code for constructing and querying CacheLineEF.
-#+attr_html: :class inset large
-#+begin_src rust
-const L: usize = 44; // The number of elements per cache line.
-
-#[repr(C)]
-#[repr(align(64))]   // Align the 64byte object to cache lines.
-pub struct CacheLineEF {
-    high: [u64; 2],  // Encoding of the high bits.
-    offset: u32,     // Offset of the first element.
-    low: [u8; L],    // Low 8 bits of each element.
-}
-
-impl CacheLineEF {
-    fn new(vals: &[u64; L]) -> Self {
-        let offset = vals[0] >> 8;
-        let mut low = [0u8; L];
-        for (i, &v) in vals.iter().enumerate() {
-            low[i] = (v & 0xff) as u8;
-        }
-        let mut high = [0u64; 2];
-        for (i, &v) in vals.iter().enumerate() {
-            let idx = i + ((v >> 8) - offset) as usize;
-            high[idx / 64] |= 1 << (idx % 64);
-        }
-        Self {
-            offset: offset as u32,
-            high,
-            low,
-        }
-    }
-
-    fn get(&self, idx: usize) -> u64 {
-        let p = self.high[0].count_ones() as usize;
-        // Select the position of the 1 using the BMI2 PDEP instruction.
-        let one_pos = if idx < p {
-            self.high[0].select_in_word(idx)
-        } else {
-            64 + self.high[1].select_in_word(idx - p)
-        };
-
-        self.low[idx] as u64
-            + 256 * self.reduced_offset as u64
-            + 256 * (one_pos - idx) as u64
-    }
-}
-#+end_src
 
 ** Parallel Queries
 :PROPERTIES:
@@ -1199,88 +1102,6 @@ This work was supported by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
 
 #+LaTeX: \appendix
 * Appendix
-** Rust and Assembly Code for Streaming
-[[streaming-code]] shows the Rust code for the streaming version of PtrHash, and
-[[streaming-asm]] shows the corresponding assembly code with =perf record= results.
-
-#+name: streaming-code
-#+caption: Rust code for streaming indexing that prefetches $B$ iterations ahead.
-#+begin_src rust
-pub fn index_stream<'a, const B: usize, const MINIMAL: bool>(
-    &'a self,
-    keys: impl IntoIterator<Item = &'a Key> + 'a,
-) -> impl Iterator<Item = usize> + 'a {
-    // Append B values at the end of the iterator to make sure we wrap sufficiently.
-    let mut hashes = keys.into_iter().map(|x| self.hash_key(x)).chain([0; B]);
-
-    // Ring buffers to cache the hash and bucket of upcoming queries.
-    let mut next_hashes: [Hx::H; B] = [Hx::H::default(); B];
-    let mut next_buckets: [usize; B] = [0; B];
-
-    // Initialize and prefetch first B values.
-    for idx in 0..B {
-        next_hashes[idx] = hashes.next().unwrap();
-        next_buckets[idx] = self.bucket(next_hashes[idx]);
-        crate::util::prefetch_index(self.pilots, next_buckets[idx]);
-    }
-    hashes.enumerate().map(move |(idx, next_hash)| {
-        let idx = idx % B;
-        let cur_hash = next_hashes[idx];
-        let cur_bucket = next_buckets[idx];
-        let pilot = self.pilots[cur_bucket];
-        let mut slot = self.slot(cur_hash, pilot);
-        if MINIMAL && slot >= self.n {
-            slot = self.remap.index(slot - self.n) as usize;
-        };
-
-        // Prefetch B iterations ahead.
-        next_hashes[idx] = next_hash;
-        next_buckets[idx] = self.bucket(next_hashes[idx]);
-        crate::util::prefetch_index(self.pilots, next_buckets[idx]);
-
-        slot
-    })
-}
-#+end_src
-
-#+name: streaming-asm
-#+caption: Assembly code of streaming indexing (without the final =remap=) that prefetches 32 iterations ahead, with =perf record= measurement of time time spent on each line. TODO: Update for latest version.
-#+begin_src asm
-  2.57 │ a0:   lea        (%r14,%rbp,1),%r12d
-  0.95 │       mov        0x8(%rsp),%rdx
- 16.93 │       mov        (%rdx,%r14,8),%rdx
-  0.80 │       imul       %r11,%rdx
-  2.30 │       and        $0x1f,%r12d
-  0.90 │       mov        0x8(%rcx,%r12,8),%rsi
-  1.36 │       mulx       %rbx,%r8,%r9
-  2.24 │       mov        0x108(%rcx,%r12,8),%r10
-  0.92 │       mov        %rdx,0x8(%rcx,%r12,8)
-  0.48 │       mov        %r8,%rdx
-  2.99 │       mulx       %r8,%rdx,%rdx
-  1.03 │       mov        0x20(%rsp),%r8
-  1.44 │       mulx       %r8,%rdx,%rdx
-  2.15 │       imul       0x18(%rsp),%r9
-  1.08 │       add        %rdx,%r9
-  0.83 │       mov        %r9,0x108(%rcx,%r12,8)
- 46.61 │       prefetcht0 (%r15,%r9,1)            ; Nearly half the time is spent here.
-  1.39 │       movzbl     (%r15,%r10,1),%r8d
-  0.54 │       imul       %r11,%r8
-  0.31 │       xor        %rsi,%r8
-  2.34 │       mov        %rsi,%rdx
-  1.43 │       mulx       %rbx,%rdx,%rdx
-  0.30 │       shlx       %r13,%rdx,%rdx
-  2.43 │       add        %rdx,%rax
-  0.87 │       mov        %r8,%rdx
-  0.72 │       mulx       %r11,%rdx,%rdx
-  2.37 │       and        %rdi,%rdx
-  0.98 │       add        %rdx,%rax
-  0.51 │       inc        %r14
-       │       cmp        %r14,0x28(%rsp)
-  0.23 │     ↑ jne        a0
-#+end_src
-
-
-
 
 ** Input Types and Hash Functions
 :PROPERTIES:
