@@ -165,7 +165,7 @@ def build_stats():
 
         ax1.set_ylim(0, 1.0)
         ax3.set_ylim(0, 1)
-        ax2.set_ylim(0, 10)
+        ax2.set_ylim(0, 20)
 
         ax1.set_title(name.capitalize() + f", $\\lambda = {l}$")
 
@@ -258,9 +258,9 @@ def space(f, out):
 
     alpha_size = {
         0.998: 0.8,
-        0.995: 1.2,
-        0.99: 1.6,
-        0.98: 2.0,
+        0.995: 1.4,
+        0.99: 2.0,
+        0.98: 2.6,
     }
 
     groups = df.groupby(["n", "alpha", "bucketfn", "real_alpha"])
@@ -301,18 +301,27 @@ def space(f, out):
     l = 3.0
     a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "Linear") & (df["lambda"] == l)].c
-    ax.plot(l, y, "bo", ms=9)
+    ax.plot(l, y, "o", ms=9, color="blue")
     y = 8 / l + 32 * (1 / a - 1)
-    ax2.plot(l, y, "o", color="green", ms=8, mew=2, mec="blue")
+    ax2.plot(l, y, "o", ms=8, mew=2, color="blue", mec="blue")
+
+    # Add dots for the default configuration
+    l = 3.5
+    a = 0.99
+    y = df[(df.alpha == a) & (df.bucketfn == "CubicEps") & (df["lambda"] == l)].c
+    ax.plot(l, y, "o", ms=9, color="black")
+    y = 8 / l + (512 / 44) * (1 / a - 1)
+    # Red outline to marker
+    ax2.plot(l, y, "o", ms=8, mew=2, color="black", mec="black")
 
     # Add dots for the compact configuration
     l = 4.0
     a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "CubicEps") & (df["lambda"] == l)].c
-    ax.plot(l, y, "ro", ms=9)
+    ax.plot(l, y, "o", ms=9, color="red")
     y = 8 / l + (512 / 44) * (1 / a - 1)
     # Red outline to marker
-    ax2.plot(l, y, "o", color="orange", ms=8, mew=2, mec="red")
+    ax2.plot(l, y, "o", ms=8, mew=2, color="red", mec="red")
 
     ax.set_xlim(2.7, 4.20)
     ax.set_ylim(0, 140)
@@ -399,9 +408,9 @@ def query_batching(f, out):
     axs[0].set_ylabel("Query throughput (ns/key)")
 
     df.loc[df["mode"] == "loop_bb", "mode"] = "loop"
-    groups = df.groupby(["n", "alpha", "bucketfn", "mode"])
+    groups = df.groupby(["n", "alpha", "lambda", "bucketfn", "mode"])
     for k, g in groups:
-        n, alpha, bucketfn, mode = k
+        n, alpha, lmbda, bucketfn, mode = k
         ls = "solid"
         lw = 1
         a = 0.8
@@ -410,8 +419,10 @@ def query_batching(f, out):
             # a = 0.5
             # lw += 1
             ax = axs[0]
-        if bucketfn == "Linear":
+        if lmbda == 3.0:
             color = "blue"
+        elif lmbda == 3.5:
+            color = "black"
         else:
             color = "red"
         if mode == "stream":
@@ -427,7 +438,7 @@ def query_batching(f, out):
         if mode == "loop":
             # Horizontal line at height g['q_phf']
             # Min over loop and loop_bb
-            assert len(g) == 2
+            assert len(g) == 2, len(g)
             ax.axhline(y=g["q_phf"].values.min(), color=color, lw=lw, ls=ls)
         if n == 10**9:
             ax.set_title(f"$n = 10^9$")
@@ -453,8 +464,9 @@ def query_batching(f, out):
         ax.spines["right"].set_visible(False)
 
     # Build legend
-    lcompact = mpatches.Patch(color="red", label="Compact")
-    lsimple = mpatches.Patch(color="blue", label="Fast")
+    lcompact = mpatches.Patch(color="red", label="Cubic γ₃, Default/Compact")
+    lsimple = mpatches.Patch(color="blue", label="Linear γ₁, Fast")
+    # ldefault = mpatches.Patch(color="black", label="Default")
     lloop = Line2D([0], [0], label="Loop", lw=2, color="black", ls="solid")
     lbatch = Line2D([0], [0], label="Batch", lw=2, color="black", ls="dotted")
     lstream = Line2D([0], [0], label="Stream", lw=2, color="black", ls="dashed")
@@ -532,9 +544,9 @@ def query_throughput(f, out):
     axs[0].set_ylabel("Query throughput (ns/key)")
 
     df.loc[df["mode"] == "loop_bb", "mode"] = "loop"
-    groups = df.groupby(["n", "alpha", "bucketfn", "mode", "remap_type"])
+    groups = df.groupby(["n", "alpha", "lambda", "bucketfn", "mode", "remap_type"])
     for k, g in groups:
-        n, alpha, bucketfn, mode, remap_type = k
+        n, alpha, lmbda, bucketfn, mode, remap_type = k
         ls = "solid"
         lw = 2
         ax = axs[int(n == 10**9)]
@@ -545,12 +557,12 @@ def query_throughput(f, out):
         # if n < 10**9:
         #     continue
         #     ax = axs[0]
-        if bucketfn == "Linear":
+        if lmbda == 3.0:
             c1 = "blue"
-            c2 = "green"
+        elif lmbda == 3.5:
+            c1 = "black"
         else:
             c1 = "red"
-            c2 = "orange"
         if mode == "stream":
             ls = "dashed"
         if mode == "batch":
@@ -603,11 +615,14 @@ def query_throughput(f, out):
     )
 
     # Build legend
+    # TODO: Legend for default black params
     lcompact = MulticolorPatch(
-        "Compact", [{"color": "red", "alpha": aa}, {"color": "red", "alpha": 1.0}]
+        "Cubic γ₃, Default/Compact",
+        [{"color": "red", "alpha": aa}, {"color": "red", "alpha": 1.0}],
     )
     lsimple = MulticolorPatch(
-        "Fast", [{"color": "blue", "alpha": aa}, {"color": "blue", "alpha": 1.0}]
+        "Linear γ₁, Fast",
+        [{"color": "blue", "alpha": aa}, {"color": "blue", "alpha": 1.0}],
     )
     lphf = MulticolorPatch(
         "PHF", [{"color": "red", "alpha": aa}, {"color": "blue", "alpha": aa}]
@@ -646,7 +661,7 @@ def string_queries(f):
     # Convert json to dataframe
     df = pd.DataFrame(data)
 
-    df = df[df.bucketfn == "Linear"]
+    df = df[df.bucketfn == "CubicEps"]
 
     df = df.pivot_table(
         "q_mphf", ["hash", "input_type", "bucketfn"], "mode", sort=False
