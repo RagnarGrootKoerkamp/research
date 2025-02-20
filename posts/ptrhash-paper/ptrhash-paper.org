@@ -372,13 +372,16 @@ in practice, a larger-than-expected largest part still fits.
 #+caption: Rust code for a simple implementation of the data structure and query function.
 #+begin_src rust
 struct PtrHash {
-    n: usize,         // Number of elements
-    P: usize,         // Number of parts
-    B: usize,         // Buckets per parts
-    S: usize,         // Slots per parts
-    lgS: usize        // S = 2^lgS
-    pilots: Vec<u8>,  // P*B pilots
-    free: Vec<usize>, // P*S-n remap indices
+    alpha: f32,        // Load factor; α≈0.99
+    lambda: f32,       // Average bucket size; λ≈3.5
+    gamma: Fn(u64) -> u64,  // Bucket-assignment function
+    n: usize,          // Number of elements
+    S: usize,          // Slots per part
+    P: usize,          // Number of parts;  P = ⌈n/(α·S)⌉
+    B: usize,          // Buckets per part; B = ⌈n/P/λ⌉
+    lgS: usize         // S = 2^lgS
+    pilots: Vec<u8>,   // P·B pilots
+    remap: Vec<usize>, // P·S-n remap indices
 }
 
 /// Multiply a and b as if they are fractions of 2^64.
@@ -387,20 +390,14 @@ fn mul(a: usize, b: usize) -> usize {
     ((a as u128 * b as u128) >> 64) as usize
 }
 
-impl PtrHash {
-    fn query(&self, key: Key) -> usize {
-        let h = self.hash(key);
-        let part = mul(self.P, h);
-        let bucket = mul(self.B, self.gamma(self.P * h));
-        let pilot = self.pilots[bucket];
-        let slot_in_part = mul(self.C, h ^ self.hash_pilot(pilot)) & (self.S - 1);
-        let slot = (part << self.lgS) + slot_in_part;
-        if slot < self.n {
-            return slot
-        } else {
-            return self.free[slot - self.n]
-        }
-    }
+fn query(ph: &PtrHash, key: Key) -> usize {
+    let h = hash(key);
+    let part = mul(ph.P, h);
+    let bucket = mul(ph.B, ph.gamma(ph.P * h));
+    let pilot = ph.pilots[bucket];
+    let slot_in_part = mul(C, h ^ (C * pilot)) & (ph.S - 1);
+    let slot = (part << ph.lgS) + slot_in_part;
+    return if slot < ph.n { slot } else { ph.remap[slot - ph.n] }
 }
 #+end_src
 
@@ -438,30 +435,31 @@ The weight of a collision with an element of a bucket of size $s$ is $s^2$, to p
 /evicting/ large buckets, as those are harder to place.
 The colliding buckets are evicted by emptying the slots they map to and
 pushing them back onto the priority queue of remaining buckets.
-Then, the new bucket is inserted.
+Then, the new bucket is inserted, and the next largest remaining or evicted
+bucket is inserted.
 
-[APPENDIX] *Optimizations.* In order to speed up the code to search for pilots, a number of
-optimizations are made to the conceptual idea of [[construction-code]].
-1. *=taken= bit mask.* Like PTHash and PHOBIC, Instead of determining whether a slot is free by
-   checking the =slots= array for the optional index of the bucket mapping
-   there, we keep a separate bit mask =taken= that takes only $1$ bit instead
-   of $32$ bits per element. This allows for better caching and hence faster access.
+*Implementation details.* In order to speed up the code to search for pilots, a number of
+optimizations are made.
+1. *=taken= bit mask.* Like PTHash and PHOBIC,
+   we keep a =taken= bit mask that indicates for each slot whether it was taken.
+   This keeps the array small so it can be cached efficiently.
 2. *Collision-free hot path.* When searching for pilots, we first test if there
    is a pilot without any collisions. This is usually the case, and is faster
-   since it only needs access to =taken=, not =slots=. Additionally, where there
+   since it only needs access to the bit vector. Additionally, where there
    /is/ a collision, we know a pilot is optimal when it collides with exactly
-   one bucket of minimal size.
+   one bucket of minimal size, allowing for an early break.
 3. *Avoiding loops.* To avoid repeated patterns of the same buckets evicting
    each other, the search for a pilot starts at a random number in $[2^8]$,
-   rather than at $0$.
+   rather than always restarting at 0.
 4. *Avoiding loops more.* Each time a bucket is placed that evicted some other
-   bucket(s), it is added to a list of the $16$ most recently placed buckets.
+   bucket(s), it is added to a list of the 16 most recently placed buckets.
    Buckets in this list are never evicted. This avoids short cycles, where for
-   example two buckets keep evicting each other for the same slot.
+   example two buckets keep evicting each other from the same slot.
 
 *Analysis.* Unfortunately, we do not currently have a formal analysis showing
 that the hash-evict method works with high probability given that certain
-criteria are met. In [[*Results]], we will show some practical results.
+criteria are met. Ideally, the analysis [cite/t:Section 5 @phobic-thesis] would
+be extended to fully cover our method. In [[*Results]], we show some practical results.
 
 ** Bucket Assignment Functions
 :PROPERTIES:
@@ -578,7 +576,7 @@ This is stored as follows.
 *Lookup.* The value at position $i$ is found by summing the terms of Equation
 \ref{eq:clef}. The offset and low bits can be read directly.
 This relative high part can be found as $2^8\cdot(\select(i)-i)$, where $\select(i)$ gives
-the position of the $i$'th 1 bit. In practice, this can be implemented
+the position of the $i$'th 1 bit in the 128-bit-encoded relative high parts. In practice, this can be implemented
 efficiently using the =PDEP= instruction provided by the BMI2 bit manipulation
 instruction set [cite:@fast-select].
 
@@ -651,7 +649,7 @@ Thus, our goal is to achieve a query throughput of 7.4 ns.
 We consider two models to implement prefetching: batching and streaming.
 
 #+name: streaming
-#+caption: [DROP?] Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallelism than batching (left).
+#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallelism than batching (left).
 #+attr_html: :class inset
 [[file:./streaming.drawio.svg]]
 
@@ -843,13 +841,15 @@ simpler and slightly faster plain vector for fast parameters.
 :PROPERTIES:
 :CUSTOM_ID: sharding-results
 :END:
-We tested the in-memory and hybrid sharding by constructing PtrHash on $5\cdot
+
+TODO: update results
+
+We tested the in-memory and hybrid sharding by constructing PtrHash with default
+parameters on $5\cdot
 10^{10}$ random integer keys on a laptop with only 64 GB of memory, using 6 cores
 in parallel.
 All 64-bit hashes would take 400 GB, so we use 24 shards of
-around $2^{31}$ keys, that each take 16 GB.  We use the compact parameters, but
-with $\lambda=3.9$, as $\lambda=4.0$ turns out to be slightly too close to the limit for
-reliable construction when the number of parts is large.
+around $2^{31}$ keys, that each take 16 GB.
 The final data structure takes 2.17 bits/key, or 13.6 GB in total, and the
 peak memory usage is around 50 GB.
 
@@ -1128,6 +1128,8 @@ This work was supported by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
 | &[u8]     | 39.2 | 37.0 |  50.9 |   27.2 | 17.8 |  23.1 |
 | Vec<u8>   | 40.2 | 40.6 |  52.7 |   28.3 | 20.2 |  25.3 |
 
+TODO: update table
+
 Setup:
 - TODO cite fx and xx.
 - xx64 calls =xxhash_rust::xxh3::xxh3_64_with_seed=
@@ -1157,8 +1159,9 @@ Results:
 - 4 bit pilots with buckets of half the size -> doesn't work.
 
 * TODO
+- update results (evals section, also in conclusion and abstract/intro)
 - /default/ config with cubic fn, $\lambda = 3.5$, and CLEF
-- compare against consensus?
 - drop code samples for paper; probably also from blog
+- Cite and explain consensus (x2: intro + eval)
 
 #+print_bibliography:
