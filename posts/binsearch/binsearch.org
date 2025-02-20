@@ -294,8 +294,7 @@ We compare the two best variants to see their differences:
 
 We see that the prefetching is not really helping at large batch sizes. My intuition for it is
 that the batching effectively hides the memory latency anyway and the prefetching only adds unnecessary extra memory
-traffic. We also see that batching provides speedups until batch size of
-32 and then it levels out.
+traffic.
 
 ** A note on power-of-two array sizes
 In the bechmarking setup section, we wrote about not doing the
@@ -347,10 +346,10 @@ which is well described in Algorithmica, so we will not waste space here
 and will refer the reader there if interested.
 
 Eytzinger should give us better cache utilization by grouping together
-commonly accessed elements on the top of the tree (when you think of it, the first 4 layers of the tree fit in a single cache line for =u32= values).
-This is very helpful for small array sizes and speeds up the searching versus vanilla binary
-search. It is however worse at the bottom of the tree, where values are
-very far apart and have poor spatial locality.
+commonly accessed elements on the top of the tree (the first 4 layers of the tree fit in a single cache line for =u32= values).
+This is very helpful for small array sizes and speeds up the searching as compared to vanilla binary
+search. It is however worse at the bottom of the tree, where subsequent memory queries are
+very far apart.
 
 ** Naive implementation
 The API stays the same as for normal binary search; we get a query and
@@ -491,7 +490,7 @@ the performance when the array size is big.
 Now, let us do batching the same way we did with binary search. We will
 consider two variants, prefetched and not prefetched. The prefetching shouldn't really be needed; the
 batching should properly overlay memory requests anyway. But modern computers
-are strange beasts, so we'll try it anyway and we'll see. See the source code below.
+are strange beasts, so we'll try it and we'll see. See the source code below.
 
 *** Non-prefetched
 
@@ -559,7 +558,7 @@ non-prefetched:
 [[file:plots/eytzinger-best-batching-comparison.svg]]
 
 We see that the prefetched version is a few percent faster on large input sizes.
-Therefore, we select it as our best eytzinger.
+Therefore, we select it as our best eytzinger version.
 
 * Eytzinger or BinSearch?
 Now, to compare batched Eytzinger to batched binary search:
@@ -567,7 +566,15 @@ Now, to compare batched Eytzinger to batched binary search:
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion.svg]]
 
-We see that Eytzinger is slightly better at large
+We see that batched Eytzinger beats batched binary search by some amount, especially at larger array sizes.
+If we compare the two layouts, we know that Eytzinger provides better locality at the top of the search
+while the normal sorted array layout for binary search provides better locality at the bottom of the search.
+Both of these effects are largely offset by batching (because it hides the latency of memory accesses quite well).
+So the limit is likely memory throughput.
+
+When it comes to memory throughput, Eytzinger is more advantageous. This is because the more-accessed top levels of the
+tree are more efficiently cached and can be reused between queries. This leads to less cache lines fetched from main memory overall
+compared to binary search.
 
 * Memory efficiency -- parallel search and comparison to B-trees
 Now let us push memory to its limits and compare the layouts when we are allowed to use multiple threads to query.
@@ -577,7 +584,7 @@ The first interesting aspect of this is whether prefetching will help now. Let's
 #+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch-multithreaded.svg]]
 
-We see that as the prefetching increases pressure on memory, it is mostly counterproductive in the multithreaded setting.
+We see that as the prefetching increases pressure on memory, it is again mostly counterproductive in the multithreaded setting.
 In the next plot we see that batching is helpful up to roughly size 32, and then it levels out.
 
 #+attr_html: :class inset
@@ -600,8 +607,11 @@ So for the final comparison:
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion-multithreaded.svg]]
 
-We see that Eytzinger is a bit faster, likely due to better memory efficiency with respect to caches.
-TODO analysis for why they are so similar
+We see that Eytzinger is a bit faster, likely due to better memory efficiency in the top tree levels, as we have already seen in the singlethreaded
+case. There, the difference between Eytzinger and binary search was roughly 8-10% of performance at 1GB; here we see the difference is also in the single percentage digits.
+
+Overall, the speedup was roughly 4 (at array size 1GB) when using 8 threads. This clearly indicates that we're memory bound. If we wanted to go for more speed and more cache utilization, we could start the first $\lg(n)/2$ layers with the Eytzinger layout and the bottom $\lg(n)/2$ layers
+with a standard sorted array. However, we won't delve into this here, as there is more efficient stuff one can do; check out Ragnar's post on S-trees!
 
 * Interpolation search
 In the static search tree post, Ragnar suggests looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
@@ -610,8 +620,6 @@ For completeness, we will implement it here as well to check out how it performs
 The idea behind interpolation search based on the fact if data is drawn from a random uniform distribution, then when we sort it
 and plot the indices on the x-axis and values on the y-axis, we should roughly get a straight line. Using that, when we have the query,
 we can efficiently interpolate ("guess") where values corresponding to the query should be.
-
-TODO visualization/explanation
 
 When the input data is nicely evenly distributed, the complexity is $O(\lg \lg n)$ iterations, rather than $O(\lg n)$ for binary search.
 When the data is not well distributed, the worst case complexity is $O(n)$, which is illustrated by the following example. Imagine we're searching for
@@ -746,4 +754,6 @@ Overall, I did not see this as a priority and did not spend too much time at opt
 ideas; if you have them, send me a message!
 
 * Comparing implementations on the human genome
+
+
 * Conclusion
