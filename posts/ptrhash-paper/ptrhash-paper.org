@@ -152,6 +152,10 @@ size at most $\ell \leq 16$. These /leafs/ can then be solved using brute-force,
 overall space usage can be as low as 1.56 bits/key. SIMDRecSplit significantly
 improves the construction time by using a meet-in-the-middle approach for the
 leafs, and generally speeds up the implementation.
+Consensus-RecSplit [cite:@consensus] is a recent MPHF that is the first to
+achieve construction time linear in $1/\varepsilon$, where $\varepsilon$ is the
+bits-per-key space overhead on top of the $\log_2(e)$ lower bound. Its core idea
+is to efficiently encode the seeds for multiple sub-problems together.
 
 *Graphs.*
 SicHash [cite:@sichash] and its predecessor BPZ [cite:@bpz] are based on
@@ -227,6 +231,10 @@ is to simplify PTHash to speed up both query speed
 and construction time, at the cost of possibly using slightly more memory.
 We first give a high level overview of PtrHash ([[*Overview]]). Then, we explain
 specific parts of PtrHash in more detail.
+
+In Appendix [[#throughput]], we investigate /batching/ to improve query
+throughput, and in Appendix [[#sharding]] we give details on the /sharding/ of the
+input to construct PtrHash on large inputs.
 
 ** Overview
 
@@ -955,8 +963,8 @@ Minimal perfect hashing is only slightly slower than perfect hashing.
 | SIMDRecSplit        | $n{=}5$, $b{=}5$                            |                        2.96 |                                  *26* |                          310 |
 | SIMDRecSplit        | $n{=}8$, $b{=}100$                          |                      *1.81* |                                    66 |                          258 |
 | Bip. ShockHash-Flat | $n{=}64$                                    |                      *1.62* |                           2140* (357) |                          201 |
-| Consensus           | $k=256$ $\varepsilon=0.10$                  |                      *1.58* |                                   521 |                          565 |
-| Consensus           | $k=512$ $\varepsilon=0.03$                  |                      *1.49* |                                  1199 |                          528 |
+| Consensus           | $k=256$, $\varepsilon=0.10$                 |                      *1.58* |                             521* (87) |                          565 |
+| Consensus           | $k=512$, $\varepsilon=0.03$                 |                      *1.49* |                           1199* (200) |                          528 |
 |                     |                                             |                             |                                       |                              |
 | Fingerprinting      |                                             |                             |                                       |                              |
 | FMPH                | $\gamma{=}2.0$                              |                        3.40 |                                    44 |                          168 |
@@ -981,11 +989,11 @@ Minimal perfect hashing is only slightly slower than perfect hashing.
 | PHOBIC              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-R       |                      *1.94* |                                   215 |                          163 |
 | PHOBIC              | $\lambda{=}6.5$, $\alpha{=}1.0$, IC-C       |                        2.44 |                                   220 |                          108 |
 | PHOBIC              | $\lambda{=}7.0$, $\alpha{=}1.0$, IC-R       |                      *1.86* |                                   446 |                          157 |
-| PtrHash, fast       | $\lambda{=}3.0$, $\alpha{=}0.99$, Vec       |                        2.99 |                                  *26* |                         *38* |
+| *PtrHash*, fast     | $\lambda{=}3.0$, $\alpha{=}0.99$, Vec       |                        2.99 |                                  *26* |                         *38* |
 | + streaming         |                                             |                             |                                       |                         *20* |
-| PtrHash, default    | $\lambda{=}3.5$, $\alpha{=}0.99$, CLEF      |                        2.40 |                                  *32* |                         *44* |
+| *PtrHash, default*  | $\lambda{=}3.5$, $\alpha{=}0.99$, CLEF      |                        2.40 |                                  *32* |                         *44* |
 | + streaming         |                                             |                             |                                       |                         *25* |
-| PtrHash, compact    | $\lambda{=}4.0$, $\alpha{=}0.99$, CLEF      |                        2.12 |                                    62 |                         *42* |
+| *PtrHash*, compact  | $\lambda{=}4.0$, $\alpha{=}0.99$, CLEF      |                        2.12 |                                    62 |                         *42* |
 | + streaming         |                                             |                             |                                       |                         *23* |
 
 
@@ -994,6 +1002,7 @@ short, random strings.
 In particular, we compare against methods and configurations that are reasonably fast to construct:
 SIMDRecSplit [cite:@recsplit;@recsplit-gpu],
 Bipartite ShockHash-Flat [cite:@shockhash;@bipartite-shockhash],
+Consensus-RecSplit [cite:@consensus],
 FMPH and FMPHGO [cite:@fmph],
 FiPS [cite:@phf-thesis],
 SicHash [cite:@sichash],
@@ -1039,6 +1048,10 @@ Compared to the next-fastest method to query, PTHash-CC (HEM), PtrHash is twice
 faster to query (or nearly $4\times$ when streaming), is $6.5\times$ faster to build, and
 even slightly smaller.
 
+With default parameters, PtrHash is $1.75\times$ faster to query than the
+fastest configuration of PTHash, and $3.1\times$ faster when using streaming,
+while being over $5\times$ faster to construct.
+
 Indeed, the speedup in query speed is explained by the fact that only a single
 memory access is needed for most queries (compared to $\geq 2$ for PtrHash-HEM
 and PHOBIC), and generally by the fact that the code for querying is short.
@@ -1050,10 +1063,9 @@ When space is of importance, the compact version can be used (2.12 bits/key).
 This takes $2.4\times$ longer to build at 62 ns/key, and has only slightly slower queries.
 Compared to methods that are smaller,
 PtrHash is over $3\times$ faster to build than PHOBIC.
-SIMDRecSplit and SicHash achieve smaller space of 1.81 and 2.08 bits/key in
-comparable time (63 ns to 66 ns), but again are over $3\times$ slower to query, or
-over $6\times$ compared to streaming queries. Bipartite ShockHash-Flat is even
-smaller at 1.62 bits/key, but also over $5\times$ slower to build and query.
+Consensus, SIMDRecSplit, and SicHash achieve smaller space of 1.58, 1.81 and 2.08 bits/key in
+comparable time (63-87 ns/key), but again are at least $3\times$ slower to query, or
+over $6\times$ compared to streaming queries.
 
 * Conclusions and Future Work
 We have introduced PtrHash, a minimal perfect hash function that builds on
