@@ -21,8 +21,8 @@ batching and different implementations of it, some of them using vector
 instructions. Our language of choice will be Rust.
 
 The goal of this text is mainly educational, as we'll mostly be
-replicating research that was done already. We however add some novelty
-with the use of batching.
+replicating research that has already been done. In addition,
+we will try how much batching can improve performance of the search schemes.
 
 ** Problem statement
 :PROPERTIES:
@@ -39,7 +39,7 @@ time per query, i.e. the not queries/time, but time/query.
 Optimizing for throughput is relevant because for many use-cases,
 e.g. in bioinformatics, the queries are often independent and the
 latency of one is not critical. It also allows for the usage of
-batching, which allows us to hide memory latency.
+batching, which helps us to hide memory latency.
 
 ** Inspiration and background
 This article is inspired by a post in
@@ -50,6 +50,9 @@ took inspiration from the notable paper
 [[https://arxiv.org/pdf/1509.05053][Array Layouts For Comparison-Based
 Searching]] by Paul-Virak Khuong and Pat Morin, which goes in-depth on
 more-or-less successful array layouts.
+
+The paper is great because it goes step by step and introduces nice models
+for why different schemes behave like they behave. It is worth a read!
 
 ** Benchmarking setup
 The benchmarking was done using =rustc 1.85.0-nightly=. The CPU is an AMD
@@ -63,7 +66,7 @@ The measurements are done at \(1.17^k\) so as to be similar to
 Algorithmica. This also mitigates some artefacts of limited cache set
 associativity which we describe this a later section.
 
-* Baseline
+* Binary search
 We start with a textbook binary search implementation,
 and we see if we can replicate the results from Algorithmica. Here's the
 code:
@@ -169,15 +172,15 @@ where
 So they do a constant number of iterations instead of early stopping
 when the value is found and they try to use the =cmov= instruction if it
 is available in the [[https://doc.rust-lang.org/std/intrinsics/fn.select_unpredictable.html][=select_unpredictable=]] function. Both these optimizations are done so that the branch
-predictor has an easier time and does not mispredict. The =cmov=
-instruction is notably useful when the result of the comparison can't be
-reliably predicted (which here it really can't). They are also both
-recommended by the original Algorithmica post, and make the code
-effectively "branchless".
+predictor has an easier time (as mispredictions are expensive). The =cmov=
+instruction is useful when the result of the comparison can't be
+reliably predicted (which here it really can't)[fn::Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]]. They are also both
+recommended by the Algorithmica post, and make the code effectively branchless.
 
 It now makes sense that our naive version is faster on large array sizes.
 Algorithmica explains this by the fact that with =cmov=, the branch predictor can't
-start to speculatively prefetch data from main memory (as there is no branch).
+start to speculatively prefetch data from main memory (as there is no branch). The =cmov=-optimized version
+therefore suffers more memory latency, as it can't be hidden by prefetching.
 
 Note that originally, I intended to write here that I did not see this effect of missing speculation.
 I then found out that when testing on arrays of power-of-two size can give very skewed results; but more on
@@ -214,6 +217,7 @@ error condition at the end, leading to it being better by a small
 fraction.
 
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
+This negates the CPU's inability to prefetch when we use the =cmov= instruction.
 We use the following construction for prefetching in Rust:
 
 #+begin_src rust
@@ -335,9 +339,10 @@ name. It was for a university programming homework and the task was to
 code a binary heap. To not have to deal with pointers, the heap layout
 was specified by indices in arrays. When at position \(i\), the left
 descendant is at position \(2i\) and the right one is at position
-\(2i + 1\). An illustration for an Eytzinger layout is shown below:
+\(2i + 1\). I think it is a very common exercise, so maybe you have encountered it in the same way.
+An illustration of the layout is shown below:
 
-#+caption: A picture of the Eytzinger layout stolen from Algorithmica
+#+caption: A picture of the Eytzinger layout (stolen from Algorithmica)
 #+attr_html: :class inset
 [[file:plots/eytzinger-layout-picture.png]]
 
@@ -348,7 +353,7 @@ and will refer the reader there if interested.
 Eytzinger should give us better cache utilization by grouping together
 commonly accessed elements on the top of the tree (the first 4 layers of the tree fit in a single cache line for =u32= values).
 This is very helpful for small array sizes and speeds up the searching as compared to vanilla binary
-search. It is however worse at the bottom of the tree, where subsequent memory queries are
+search. The layout is worse at the bottom of the tree, where subsequent memory queries are
 very far apart.
 
 ** Naive implementation
@@ -745,7 +750,8 @@ We try if batching can hide some of this, as it did before:
 [[file:plots/interp-vs-binsearch-batched.svg]]
 The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
 The division is a real bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
-instructions don't really exist either, and the performance gains are minimal.
+instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself
+by thinking that the Rust portable SIMD `clamp()` function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.
 
 Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
 ideas; if you have them, please let me know.
@@ -755,7 +761,7 @@ from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies
 and compute 32-bit prefixes of all the suffixes. We then search in a subset of them and measure performance. This should be slower, as the data
 is not going to be exactly uniformly distributed.
 
-We try at first with our original benchmarking setup; we take the first X 16-mers, sort them and work on them. The results are really strange:
+We try at first with our original benchmarking setup; we take the first X 16-mers, sort them and work on them. The results are a bit strange:
 
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched-human.svg]]
@@ -764,13 +770,19 @@ The reason for this strange result is that the human data is strongly non-unifor
 performs badly with increasing non-uniformity, we can assume that the start of the genome is really, really badly distributed
 and the distribution goes back to something resembling a uniform one as we increase the size of the sample we're searching.
 
-We will
+We will fix this by not always starting from the beginning, but taking a random starting index in the unsorted array of 16-mers
+and taking a continuous segment from it. That way, the results will be realistic (it makes sense to search through a continuous segment
+of the genome) but we will avoid the skewed start.
 
 
 * Conclusion and takeaways
-Overall, we found that the conclusions from the Algorithmica article and from the array layouts paper hold even for batched settings. Eytzinger
+Overall, we found that the conclusions from the Algorithmica article and from the array layouts paper mostly hold even for batched settings. Eytzinger
 is the best choice for a simple algorithm that is also very fast. It beats standard binary search due to its better cache use characteristics
-and ease of prefetching.
+and ease of prefetching. The other major takeaway is of course that batching is essentially free performance and if you can, you should always do it.
+
+For interpolation search, I did not believe the scheme to be too worthwhile; it is difficult to optimize and relies on the characteristics of the data
+for performance. Given there are schemes like Eytzinger or S-trees that are well suited for modern hardware optimizations, I think you should mostly
+use those even though the asymptotics are worse.
 
 When writing this, I was suprised to see that the Rust standard library has some optimizations for binary search already implemented, but not all that are recommended
 by our sources, namely, prefetching is missing. This is suprising, because prefetching arguably does not cost almost anything. Is it due to unavailability of prefetch instructions
