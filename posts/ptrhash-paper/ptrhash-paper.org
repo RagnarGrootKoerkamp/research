@@ -45,7 +45,7 @@ keys mapping to it.
 PtrHash builds on this by using 1) fixed-width (uncompressed) 8-bit pilots, 2) a construction
 algorithm similar to cuckoo-hashing to find suitable pilot values. Further, it 3)
 uses the same number of buckets /and slots/ for each part, with 4) a /single/
-remap table to map intermediate positions $\geq n$ to $<n$>, 5) encoded using
+remap table to map intermediate positions $\geq n$ to $<n$, 5) encoded using
 per-cacheline Elias-Fano coding. Lastly, 6) PtrHash support /streaming/ queries, where we use
 prefetching to answer a stream of multiple queries more efficiently than one-by-one processing.
 
@@ -106,8 +106,9 @@ We introduce PtrHash, a minimal perfect hash function that is primarily optimize
 query throughput and construction speed, at the cost of slightly more memory usage.
 
 Compared to PTHash and PHOBIC, the main novelties are:
-1. a fixed number of buckets /and slots/ per part;
-2. the use of fixed-width 8-bit /pilots/, leading to very simple lookups;
+1. a fixed number of buckets /and slots/ per part, removing the need for a
+   part-offset lookup;
+2. the use of fixed-width 8-bit /pilots/, so that no compact encoding is needed;
 3. a pilot search based on cuckoo-hashing;
 4. remapping using a /single/ remap table, again simplifying lookups;
 5. a remap table based on a per-cacheline Elias-Fano encoding [cite:@elias;@fano], CacheLineEF;
@@ -238,6 +239,7 @@ input to construct PtrHash on large inputs.
 ** Overview
 
 #+name: overview
+#+caption: Overview of PtrHash on $n=23$ keys. The keys are hashed into $[H] = [2^{64}]$ and this range is split into $P=2$ parts and $B=5$ buckets per part. The key highlighted in yellow has a the 9'th smallest hash, and ends up in /bucket/ 4 (starting at index 0). The corresponding /pilot/ $p_4$ hashes the key to /slot/ 6. The array of pilots (grey background) is the main component of the PtrHash data structure, and ensures that all keys hash to different slots. The blue key has a hash in the second part (upper half) of hashes, in bucket 6. It gets hashed to slot 25, which is larger than the number of keys $n=23$. Thus, it is /remapped/ (along with the other red cells) into an empty slot $<n$ via a (compressed) list of free slots, which is the second main component of the data structure.
 #+caption: Overview of PtrHash on $n=23$ keys. The keys are hashed into $[H] = [2^{64}]$ and this range is split into $P=2$ parts and $B=5$ buckets per part. In red are four keys hashing to the same bucket in the first part, and in blue are three keys belonging to the same bucket in the second part. The /pilots/ of the $P\cdot B=10$ buckets in the highlighted area are the main component of the data structure, and control to which /slots/ keys in the bucket are mapped to avoid collisions. The blue highlighted key is initially mapped to a position $\geq n$, and thus (along with the other yellow cells) /remapped/ into an empty slot $<n$ via a (compressed) table of free slots.
 #+attr_html: :class inset large
 [[file:./overview.drawio.svg]]
@@ -375,7 +377,7 @@ which this is below $S-1.5\sqrt{n/P}$, where the buffer ensures that, at least
 in practice, a larger-than-expected largest part still fits.
 
 #+name: query-code
-#+caption: Rust code for a simple implementation of the data structure and query function.
+#+caption: Rust code for a simple implementation of the query function.
 #+begin_src rust
 struct PtrHash {
     alpha: f32,        // Load factor; α≈0.99
@@ -702,14 +704,14 @@ evaluation, as indicated with blue, black, and red dots in [[construction]]:
   Construction takes only just over 20 ns/key, close to the apparent lower
   bound, and space usage is 3 bits/key. This can be used when $n$ is small, or
   more generally when memory usage is not a bottleneck.
+- *Default* (black), a trade-off between fast construction and small
+  space: using cubic $\gamma_3$, $\lambda=3.5$, and $\alpha=0.99$, with
+  CacheLineEF remapping.
 - *Compact* (red), aiming for small space: using the cubic $\gamma_3$, $\lambda=4.0$, $\alpha=0.99$, and
   CacheLineEF remapping. Construction now takes around 50 ns/key, but the data
   structure only uses 2.12 bits/key.
   In practice, this configuration sometimes ends up in endless eviction cycles
   and $\lambda=3.9$ may be better.
-- *Default* (black), a trade-off between fast construction and small
-  space: using cubic $\gamma_3$, $\lambda=3.5$, and $\alpha=0.99$, with
-  CacheLineEF remapping.
 
 *** Remap
 #+name: remap
@@ -761,8 +763,8 @@ simpler and slightly faster plain vector for fast parameters.
 | SIMDRecSplit        | $n{=}5$, $b{=}5$                            |                        2.96 |                                  *26* |                          310 |
 | SIMDRecSplit        | $n{=}8$, $b{=}100$                          |                      *1.81* |                                    66 |                          258 |
 | Bip. ShockHash-Flat | $n{=}64$                                    |                      *1.62* |                           2140* (357) |                          201 |
-| Consensus           | $k=256$, $\varepsilon=0.10$                 |                      *1.58* |                             521* (87) |                          565 |
-| Consensus           | $k=512$, $\varepsilon=0.03$                 |                      *1.49* |                           1199* (200) |                          528 |
+| Consensus-RecSplit  | $k=256$, $\varepsilon=0.10$                 |                      *1.58* |                             521* (87) |                          565 |
+| Consensus-RecSplit  | $k=512$, $\varepsilon=0.03$                 |                      *1.49* |                           1199* (200) |                          528 |
 |                     |                                             |                             |                                       |                              |
 | Fingerprinting      |                                             |                             |                                       |                              |
 | FMPH                | $\gamma{=}2.0$                              |                        3.40 |                                    44 |                          168 |
@@ -1181,10 +1183,5 @@ ns/key slower.
 Overall, FxHash is the best hash to use for integer keys, and XXH3-64 is a good
 choice for strings. XXH3-128 is slower and should only be used when really needed.
 Hashing is slightly faster when the keys are back to back in memory.
-
-* TODO
-- update sharding results
-- make into latex
-  - check double equation
 
 #+print_bibliography:
