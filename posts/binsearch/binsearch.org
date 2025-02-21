@@ -628,12 +628,13 @@ As far as Eytzinger goes:
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison-multithreaded.svg]]
-Here we see that the prefetching does not necessarily hurt, but it is not really helpful either. We keep it for the comparison.
+Here we see that prefetching does makes it slightly better. We keep it for the comparison.
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison-multithreaded.svg]]
 
-We use batch size 16 as a reference for Eytzinger, as it nicely combines speedup at small and large sizes.
+Here we see that increasing batch size too much hurts performance at small array sizes, and does not improve
+performance much beyond batch size 16. We therefore use batch size 16 as a reference for Eytzinger, as it nicely combines speedup at small and large sizes.
 So for the final comparison:
 
 #+attr_html: :class inset
@@ -822,4 +823,6 @@ use those even though the asymptotics are worse.
 
 When writing this, I was suprised to see that the Rust standard library has some optimizations for binary search already implemented, but not all that are recommended
 by our sources, namely, prefetching is missing. This is suprising, because prefetching arguably does not cost almost anything. Is it due to unavailability of prefetch instructions
-on some platforms? If you know, please let me know.
+on some platforms?
+
+Anyway, it was a lot of fun to go a bit into the world of performance engineering. Thanks to Ragnar for the idea & the opportunity!
