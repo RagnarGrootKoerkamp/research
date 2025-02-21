@@ -67,7 +67,11 @@ show the spread of the 2nd to 4th value (i.e., after discarding the
 minimum and maximum). Note that the results are often very deterministic and the spread is therefore not very visible.
 The measurements are done at \(1.17^k\) so as to be similar to
 Algorithmica. This also mitigates some artefacts of limited cache set
-associativity which we describe this a later section.
+associativity which we describe in a later section.
+
+This post will be built around plenty of performance plots. These all show inverse throughput,
+e.g. average time per one query. Therefore, in all plots, lower is better. We will benchmark
+in arrays up to a size of 1GB, well beyond the size of L3 cache, to see effects of going to main memory.
 
 * Binary search
 We start with a textbook binary search implementation,
@@ -315,8 +319,10 @@ benchmarks on power-of two-sized arrays. Now is the time to talk about
 why. Let us repeat the previous experiment with multiple batch sizes
 with arrays of size \(2^k\), \(5/4 \cdot 2^k\) , \(3/2 \cdot 2^k\) and
 \(7/4 \cdot 2^k\).
+
 [[file:plots/binsearch-branchless-batched-comparison-pow2.svg]]
-Notice the sawtooth pattern. We see that when the size of the searched
+
+Notice the sawtooth pattern on the right side of the plot. We see that when the size of the searched
 array is a power of two, the time per query jumps higher. This effect
 also gets more pronounced with more batching. Why is this?
 
