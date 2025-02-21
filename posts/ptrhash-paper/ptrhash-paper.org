@@ -613,107 +613,6 @@ to encode the part offsets. Instead, CacheLineEF prefers simplicity and uses
 fixed part sizes with a constant width encoding and simply stores the offsets directly.
 
 
-** Parallel Queries
-:PROPERTIES:
-:CUSTOM_ID: parallel-queries
-:END:
-*Throughput.*
-In practice in bioinformatics applications such as SSHash, we expect many
-independent queries to the MPHF. This means that queries can be answered in
-parallel, instead of one by one. Thus, we should optimize for query /throughput/
-rather than individual query latency. We report throughput as /inverse
-throughput/ in amortized nanoseconds per query, rather than the usual queries
-per second.
-
-*Out-of-order execution.*
-An MPHF on $10^9$ keys requires memory at least $1.5\mathrm{bits}/\mathrm{key} \cdot 10^9
-\mathrm{keys} = 188$ MB, which is much larger than the L3 cache of size around
-16 MB. Thus, most queries require reading a pilot from main memory (RAM), which usually
-has a latency around 80 ns.
-Nevertheless, existing MPHFs such as FCH [cite:@fch] achieve an inverse throughput as
-low as 35 ns/query on such a dataset [cite:@pthash].
-This is achieved by /pipelining/ and the /reorder buffer/.
-For example, Intel Skylake CPUs can execute over 200 instructions ahead while waiting for memory
-to become available [cite:@measuring-rob;@measuring-rob-skylake]. This allows the CPU to already start processing 'future'
-queries and fetch the required cache lines from RAM while waiting for the
-current query. Thus, when each iteration requires less than 100 instructions
-and there are no branch-misses, this effectively makes up to two reads in
-parallel. A large part of speeding up queries is then to reduce the length of
-each iteration so that out-of-order execution can fetch memory more iterations ahead.
-
-*Prefetching.*
-Instead of relying on the CPU hardware to parallellize requests to memory, we can also
-explicitly /prefetch/[fn::There are typically multiple types of prefetching
-instructions that prefetch into a different level of the cache hierarchy. We
-prefetch into all levels of cache using =prefetcht0=.] cache lines from our code.
-Each prefetch requires a /line fill buffer/ to store the result before it is
-copied into the L1 cache. Skylake has 12 line fill buffers
-[cite:@line-fill-buffer-skylake], and hence can support up to 12 parallel
-reads from memory.
-In theory, this gives a maximal random memory throughput around $80/12 = 6.67$ns per read
-from memory, but in practice experiments show that the limit is 7.4 ns per read.
-Thus, our goal is to achieve a query throughput of 7.4 ns.
-
-We consider two models to implement prefetching: batching and streaming.
-
-#+name: streaming
-#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallelism than batching (left).
-#+attr_html: :class inset
-[[file:./streaming.drawio.svg]]
-
-*Batching.*
-In this approach, the queries are split into batches (chunks) of size
-$B$, and are then processed one batch at a time ([[streaming]], left).
-In each batch, two passes are made over all keys.
-In the first pass, each key is hashed, its
-bucket it determined, and the cache line containing the corresponding pilot is prefetched.
-In the second pass, the hashes are iterated again, and the corresponding slots are
-computed.
-
-*Streaming.*
-A drawback of batching is that at the start and end of each batch, the
-memory bandwidth is not fully saturated.
-Streaming fixes this by prefetching the cache line for the pilot $B$ iterations
-ahead of the current one, and is able to sustain the maximum possible number of
-parallel prefetches throughout, apart from at the very start and end ([[streaming]], right).
-
-
-** Sharding
-
-When the number of keys is large, say over $10^{10}$, their 64-bit (or 128-bit) hashes may not all fit
-in memory at the same time, even though the final PtrHash data structure (the
-list of pilots) would fit. Thus, we can not simply sort all hashes in
-memory to partition them. Instead, we split the set of all $n$ hashes into, say
-$s=\lceil n/2^{32}\rceil$ /shards/ of $\approx 2^{32}$ elements each,
-where the $i$'th shard corresponds to hash values in $s_i:=[2^{64}\cdot i/s,
-2^{64}\cdot (i+1)/s)$.
-Then, shards are processed one at a time. The hashes in each shard are
-sorted and split into parts, after which the parts are constructed as usual.
-This way, the shards only play a role during construction, and the final
-constructed data structure is independent of which sharding strategy was used.
-
-*In-memory sharding.*
-The first approach to sharding is to iterate over the set of keys $s$ times.
-In the $i$'th iteration, all keys are hashed, and only those hashes in the
-corresponding interval $s_i$ are stored and processed.
-This way, no disk space is needed for construction.
-
-*On-disk sharding.*
-A drawback of the first approach is that keys are potentially hashed many times.
-This can be avoided by writing hashes to disk. Specifically, we can create one
-file per shard and append hashes to their corresponding file.
-These files are then read and processed one by one.
-
-*Hybrid sharding.* A hybrid of the two approaches above only requires disk space
-for $D<s$ shards. This iterates and hashes the keys $\lceil s/D\rceil$ times,
-and in each iteration writes hashes for $D$ shards to disk. Those are then
-processed one by one as before.
-
-*On-disk PtrHash.*
-When the number of keys is so large that even the pilots do not fit in memory, they
-can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde;@webgraph].
-
-
 * Results
 We now evaluate PtrHash construction and query throughput for
 different parameters, and compare PtrHash to other minimal perfect hash functions.
@@ -726,6 +625,11 @@ memory is 64 GiB DDR4 at 3200 MHz, split over two 32 GiB banks.
 In [[#construction-eval]], we compare the effect of various parameters and
 configurations on the size, construction speed, and query speed of PtrHash.
 In Section [[#comparison]], we compare PtrHash to other methods.
+
+Additionally, in Appendix [[#query-eval]] we investigate query throughput with
+batching and when using multiple threads. In Appendix [[#sharding-eval]] we
+compare various sharding methods, and lastly in [[#hash-eval]] we compare the effect
+of different input types and hash functions on query throughput.
 
 ** Construction
 :PROPERTIES:
@@ -809,9 +713,9 @@ evaluation, as indicated with blue, black, and red dots in [[construction]]:
   space: using cubic $\gamma_3$, $\lambda=3.5$, and $\alpha=0.99$, with
   CacheLineEF remapping.
 
-*** [Appendix?] Remap
+*** Remap
 #+name: remap
-#+caption: Comparison of space usage (bits/key) and query throughput (ns/query) of PtrHash when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead. Giulio: drop params; mention in caption instead
+#+caption: Comparison of space usage (bits/key) and query throughput (ns/query) of PtrHash on $10^9$ integer keys when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead. Giulio: drop params; mention in caption instead
 | Parameters                                              | Pilots | Query |    PHF | Remap       | Remap | Query |   MPHF |
 |                                                         |        |  Loop | Stream |             |       |  Loop | Stream |
 |---------------------------------------------------------+--------+-------+--------+-------------+-------+-------+--------|
@@ -845,110 +749,6 @@ plain vector, while EF is 1 ns slower.
 In the end, we choose CacheLineEF when using compact parameters, but prefer the
 simpler and slightly faster plain vector for fast parameters.
 
-*** Sharding
-:PROPERTIES:
-:CUSTOM_ID: sharding-results
-:END:
-
-TODO: update results
-
-We tested the in-memory and hybrid sharding by constructing PtrHash with default
-parameters on $5\cdot
-10^{10}$ random integer keys on a laptop with only 64 GB of memory, using 6 cores
-in parallel.
-All 64-bit hashes would take 400 GB, so we use 24 shards of
-around $2^{31}$ keys, that each take 16 GB.
-The final data structure takes 2.17 bits/key, or 13.6 GB in total, and the
-peak memory usage is around 50 GB.
-
-The in-memory strategy iterates through and hashes the integer keys 24 times, and takes
-3996 seconds in total or 166s per shard. Of this, 65s (39%) is spent on hashing
-the keys, 15s (9%) is spent sorting hashes into buckets, and 82s (49%) is spent
-searching for pilots.
-
-The hybrid strategy is allowed to use up to 128 GB of disk space, and thus writes
-hashes to disk in 3 batches of 8 shards at a time. This brings the total time
-down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
-writing hashes to disk, and 21s is spent reading hashes from disk, which
-together is faster than the 65s that was previously spent on hashing all keys.
-
-
-** Query Throughput
-:PROPERTIES:
-:CUSTOM_ID: throughput-eval
-:END:
-
-*A note on benchmarking.*
-To our knowledge, all recent papers on (minimal) perfect hashing measure query
-speed by first creating a list of keys, and then querying all keys in the list,
-as in =for key in keys { ptr_hash.query(key); }=. One might think this measures the average
-latency of a query, but that is not the case, as the CPU will execute
-instructions from adjacent iterations at the same time.
-Indeed, as can be seen in [[remap]], this loop can be as fast as 12
-ns/key for $n=10^9$, which is over 6 times faster than the RAM latency of
-around 80 ns (for an input of size 300 MB),
-and thus, at least 6 iterations are being processed in parallel.
-
-Hence, we argue that existing benchmarks measure (and optimize for)
-throughput and that they assume that the list of keys to query is known in advance.
-We make this assumption explicit by changing the API to benchmark all queries at
-once, as in =ptr_hash.query_all(keys)=. This way, we can explicitly process
-multiple queries in parallel as described in [[#parallel-queries]].
-
-We also argue that properly optimizing for throughput is relevant for
-applications. SSHash, for example, queries all minimizers of a DNA sequence,
-which can be done by first computing and storing those minimizers, followed by
-querying them all at once.
-
-We now explore the effect of the batch size and number of parallel threads on
-query throughput.
-
-*** [Appendix?] Batching and Streaming
-#+name: batching
-#+caption: Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
-#+attr_html: :class inset
-[[file:plots/query_batching.svg]]
-
-In [[batching]], we compare the query throughput of a simple for loop with the
-batching and streaming variants with various batch/lookahead sizes. We see that
-both for small $n=20\cdot 10^6$ and large $n=10^9$, the simple parameters yield
-higher throughput than the compact parameters when using a for loop. This is
-because of the overhead of computing $\gamma_3(x)$. For small $n$, batching and
-streaming do not provide much benefit, indicating that memory latency is not a
-bottleneck. However, for large $n$, both batching and streaming improve over the
-plain for loop. As expected, streaming is faster than batching here. For
-streaming, throughput saturates when prefetching around 16 iterations ahead. At
-this point, memory throughput is the bottleneck, and the difference between the
-compact and simple parameters disappears. In fact, compact parameters with
-$\gamma_3$ are slightly /faster/. This is because $\gamma_3$ has a more skew
-distribution of bucket sizes with more large buckets. When the pilots for these
-large buckets are cached, they are more likely to be hit by subsequent queries,
-and hence avoid some accesses to main memory.
-
-For further experiments we choose streaming over batching, and use a lookahead
-of 32 iterations.
-The final throughput of 8 ns per query is very close to the optimal throughput of
-7.4 ns per random memory read.
-
-*** [Appendix?] Multi-threaded Throughput
-#+name: throughput
-#+caption: In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. On the right, the solid black line shows the maximum throughput based on 7.4 ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6 GB/s.
-#+attr_html: :class inset
-[[file:plots/query_throughput.svg]]
-
-In [[throughput]] we compare the throughput of the fast and compact parameters for
-multiple threads. When $n=20\cdot 10^6$ is small and the entire data structure
-fits in L3 cache, the scaling to multiple threads is nearly perfect. As
-expected, minimal perfect hashing (bright) tends to be slightly slower than
-perfect hashing (dimmed), but the difference is small. The fast $\gamma_1$ is faster than
-the compact $\gamma_3$, and streaming provides only a small benefit over a for
-loop.
-For large $n=10^9$, all methods converge towards the limit imposed by the full
-RAM throughput of 25.6 GB/s. Streaming variants hit this starting at around 4
-threads, and remain faster than the for loop. As before, the compact version is
-slightly faster because of its more efficient use of the caches, and is even
-slightly better than the maximum throughput of random reads to RAM.
-Minimal perfect hashing is only slightly slower than perfect hashing.
 
 ** Comparison to Other Methods
 :PROPERTIES:
@@ -1035,7 +835,7 @@ The hashing of input strings has a much worse effect on query throughput. In
 configurations when looping, and as low as 8 ns when streaming queries. With
 string inputs, these numbers more than double to 38 ns resp. 42 ns when looping,
 and 20 ns when streaming. A similar effect can be seen when comparing Tables 3
-and 4 of [cite:@fmph]. [[#hashing]] further investigates this.
+and 4 of [cite:@fmph]. [[#hash-eval]] further investigates this.
 
 *Speed.*
 We observe that PtrHash with fast parameters is the fastest to construct
@@ -1122,11 +922,221 @@ $\varepsilon$-serde, and lastly I thank Hans-Peter Lehmann for feedback on the t
 This work was supported by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
 
 #+LaTeX: \appendix
-* Appendix
-
-** Input Types and Hash Functions
+* Appendix: Query throughput
 :PROPERTIES:
-:CUSTOM_ID: hashing
+:CUSTOM_ID: throughput
+:END:
+** Batching and streaming
+*Throughput.*
+In practice in bioinformatics applications such as SSHash, we expect many
+independent queries to the MPHF. This means that queries can be answered in
+parallel, instead of one by one. Thus, we should optimize for query /throughput/
+rather than individual query latency. We report throughput as /inverse
+throughput/ in amortized nanoseconds per query, rather than the usual queries
+per second.
+
+*Out-of-order execution.*
+An MPHF on $10^9$ keys requires memory at least $1.5\mathrm{bits}/\mathrm{key} \cdot 10^9
+\mathrm{keys} = 188$ MB, which is much larger than the L3 cache of size around
+16 MB. Thus, most queries require reading a pilot from main memory (RAM), which usually
+has a latency around 80 ns.
+Nevertheless, existing MPHFs such as FCH [cite:@fch] achieve an inverse throughput as
+low as 35 ns/query on such a dataset [cite:@pthash].
+This is achieved by /pipelining/ and the /reorder buffer/.
+For example, Intel Skylake CPUs can execute over 200 instructions ahead while waiting for memory
+to become available [cite:@measuring-rob;@measuring-rob-skylake]. This allows the CPU to already start processing 'future'
+queries and fetch the required cache lines from RAM while waiting for the
+current query. Thus, when each iteration requires less than 100 instructions
+and there are no branch-misses, this effectively makes up to two reads in
+parallel. A large part of speeding up queries is then to reduce the length of
+each iteration so that out-of-order execution can fetch memory more iterations ahead.
+
+*Prefetching.*
+Instead of relying on the CPU hardware to parallellize requests to memory, we can also
+explicitly /prefetch/[fn::There are typically multiple types of prefetching
+instructions that prefetch into a different level of the cache hierarchy. We
+prefetch into all levels of cache using =prefetcht0=.] cache lines from our code.
+Each prefetch requires a /line fill buffer/ to store the result before it is
+copied into the L1 cache. Skylake has 12 line fill buffers
+[cite:@line-fill-buffer-skylake], and hence can support up to 12 parallel
+reads from memory.
+In theory, this gives a maximal random memory throughput around $80/12 = 6.67$ns per read
+from memory, but in practice experiments show that the limit is 7.4 ns per read.
+Thus, our goal is to achieve a query throughput of 7.4 ns.
+
+We consider two models to implement prefetching: batching and streaming.
+
+#+name: streaming
+#+caption: Simplified schematic of in-progress reads from main memory (RAM) when using two different prefetching approaches processing (up to) $8$ reads in parallel. Each horizontal line indicates the duration a read is in progress, from the moment it is prefetched (left vertical bar) to the moment it is available in L1 cache and its corresponding line fill buffer is free again (right vertical bar). Streaming (right) provides better parallelism than batching (left).
+#+attr_html: :class inset
+[[file:./streaming.drawio.svg]]
+
+*Batching.*
+In this approach, the queries are split into batches (chunks) of size
+$B$, and are then processed one batch at a time ([[streaming]], left).
+In each batch, two passes are made over all keys.
+In the first pass, each key is hashed, its
+bucket it determined, and the cache line containing the corresponding pilot is prefetched.
+In the second pass, the hashes are iterated again, and the corresponding slots are
+computed.
+
+*Streaming.*
+A drawback of batching is that at the start and end of each batch, the
+memory bandwidth is not fully saturated.
+Streaming fixes this by prefetching the cache line for the pilot $B$ iterations
+ahead of the current one, and is able to sustain the maximum possible number of
+parallel prefetches throughout, apart from at the very start and end ([[streaming]], right).
+
+** Evaluation
+:PROPERTIES:
+:CUSTOM_ID: query-eval
+:END:
+*A note on benchmarking throughput.*
+To our knowledge, all recent papers on (minimal) perfect hashing measure query
+speed by first creating a list of keys, and then querying all keys in the list,
+as in =for key in keys { ptr_hash.query(key); }=. One might think this measures the average
+latency of a query, but that is not the case, as the CPU will execute
+instructions from adjacent iterations at the same time.
+Indeed, as can be seen in [[remap]], this loop can be as fast as 12
+ns/key for $n=10^9$, which is over 6 times faster than the RAM latency of
+around 80 ns (for an input of size 300 MB),
+and thus, at least 6 iterations are being processed in parallel.
+
+Hence, we argue that existing benchmarks measure (and optimize for)
+throughput and that they assume that the list of keys to query is known in advance.
+We make this assumption explicit by changing the API to benchmark all queries at
+once, as in =ptr_hash.query_all(keys)=. This way, we can explicitly process
+multiple queries in parallel.
+
+We also argue that properly optimizing for throughput is relevant for
+applications. SSHash, for example, queries all minimizers of a DNA sequence,
+which can be done by first computing and storing those minimizers, followed by
+querying them all at once.
+
+We now explore the effect of the batch size and number of parallel threads on
+query throughput.
+
+*Batching and Streaming.*
+#+name: batching
+#+caption: Query throughput of prefetching via batching (dotted) and streaming (dashed) with various batch/lookahead sizes, compared to a plain for loop (solid), for $n=20\cdot 10^6$ (left) and $n=10^9$ (right) keys. Blue shows the results for the fast parameters, and red for the compact parameters. Default parameters give performance nearly identical to the compact parameters, since the main differentiating factor is the use of $\gamma_1$ versus $\gamma_3$. All times are measured over a total of $10^9$ queries, and for (non-minimal) perfect hashing only, /without/ remapping.
+#+attr_html: :class inset large
+[[file:plots/query_batching.svg]]
+
+
+In [[batching]], we compare the query throughput of a simple for loop with the
+batching and streaming variants with various batch/lookahead sizes. We see that
+both for small $n=20\cdot 10^6$ and large $n=10^9$, the fast parameters yield
+higher throughput than the compact parameters when using a for loop. This is
+because of the overhead of computing $\gamma_3(x)$. For small $n$, batching and
+streaming do not provide much benefit, indicating that memory latency is not a
+bottleneck. However, for large $n$, both batching and streaming improve over the
+plain for loop. As expected, streaming is faster than batching here. For
+streaming, throughput saturates when prefetching around 16 iterations ahead. At
+this point, memory throughput is the bottleneck, and the difference between the
+compact and fast parameters disappears. In fact, compact parameters with
+$\gamma_3$ are slightly /faster/. This is because $\gamma_3$ has a more skew
+distribution of bucket sizes with more large buckets. When the pilots for these
+large buckets are cached, they are more likely to be hit by subsequent queries,
+and hence avoid some accesses to main memory.
+
+For further experiments we choose streaming over batching, and use a lookahead
+of 32 iterations.
+The final throughput of 8 ns per query is very close to the optimal throughput of
+7.4 ns per random memory read.
+
+
+
+
+** Multi-threaded Throughput
+#+name: throughput
+#+caption: In this plot we compare the throughput of a for loop (solid) versus streaming (dashed) for multiple threads, for both non-minimal (dimmed) and minimal (bright) perfect hashing. The left shows results for $n=20\cdot 10^6$, and the right shows results for $n=10^9$. In blue the results for the fast parameters with $\gamma_1$, and in red the results for compact parameters with $\gamma_3$, which perfors nearly identical to the default parameters. On the right, the solid black line shows the maximum throughput based on 7.4 ns per random memory access per thread, and the solid black line shows the maximum throughput based on the total memory bandwidth of 25.6 GB/s.
+#+attr_html: :class inset large
+[[file:plots/query_throughput.svg]]
+
+In [[throughput]] we compare the throughput of the fast and compact parameters for
+multiple threads. When $n=20\cdot 10^6$ is small and the entire data structure
+fits in L3 cache, the scaling to multiple threads is nearly perfect. As
+expected, minimal perfect hashing (bright) tends to be slightly slower than
+perfect hashing (dimmed), but the difference is small. The fast $\gamma_1$ is faster than
+the compact $\gamma_3$, and streaming provides only a small benefit over a for
+loop.
+For large $n=10^9$, all methods converge towards the limit imposed by the full
+RAM throughput of 25.6 GB/s. Streaming variants hit this starting at around 4
+threads, and remain faster than the for loop. As before, the compact version is
+slightly faster because of its more efficient use of the caches, and is even
+slightly better than the maximum throughput of random reads to RAM.
+Minimal perfect hashing is only slightly slower than perfect hashing.
+
+* Appendix: Sharding
+:PROPERTIES:
+:CUSTOM_ID: sharding
+:END:
+
+When the number of keys is large, say over $10^{10}$, their 64-bit (or 128-bit) hashes may not all fit
+in memory at the same time, even though the final PtrHash data structure (the
+list of pilots) would fit. Thus, we can not simply sort all hashes in
+memory to partition them. Instead, we split the set of all $n$ hashes into, say
+$s=\lceil n/2^{32}\rceil$ /shards/ of $\approx 2^{32}$ elements each,
+where the $i$'th shard corresponds to hash values in $s_i:=[2^{64}\cdot i/s,
+2^{64}\cdot (i+1)/s)$.
+Then, shards are processed one at a time. The hashes in each shard are
+sorted and split into parts, after which the parts are constructed as usual.
+This way, the shards only play a role during construction, and the final
+constructed data structure is independent of which sharding strategy was used.
+
+*In-memory sharding.*
+The first approach to sharding is to iterate over the set of keys $s$ times.
+In the $i$'th iteration, all keys are hashed, and only those hashes in the
+corresponding interval $s_i$ are stored and processed.
+This way, no disk space is needed for construction.
+
+*On-disk sharding.*
+A drawback of the first approach is that keys are potentially hashed many times.
+This can be avoided by writing hashes to disk. Specifically, we can create one
+file per shard and append hashes to their corresponding file.
+These files are then read and processed one by one.
+
+*Hybrid sharding.* A hybrid of the two approaches above only requires disk space
+for $D<s$ shards. This iterates and hashes the keys $\lceil s/D\rceil$ times,
+and in each iteration writes hashes for $D$ shards to disk. Those are then
+processed one by one as before.
+
+*On-disk PtrHash.*
+When the number of keys is so large that even the pilots do not fit in memory, they
+can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde;@webgraph].
+
+
+** Evaluation
+:PROPERTIES:
+:CUSTOM_ID: sharding-eval
+:END:
+
+TODO: update results
+
+We tested the in-memory and hybrid sharding by constructing PtrHash with default
+parameters on $5\cdot
+10^{10}$ random integer keys on a laptop with only 64 GB of memory, using 6 cores
+in parallel.
+All 64-bit hashes would take 400 GB, so we use 24 shards of
+around $2^{31}$ keys, that each take 16 GB.
+The final data structure takes 2.17 bits/key, or 13.6 GB in total, and the
+peak memory usage is around 50 GB.
+
+The in-memory strategy iterates through and hashes the integer keys 24 times, and takes
+3996 seconds in total or 166s per shard. Of this, 65s (39%) is spent on hashing
+the keys, 15s (9%) is spent sorting hashes into buckets, and 82s (49%) is spent
+searching for pilots.
+
+The hybrid strategy is allowed to use up to 128 GB of disk space, and thus writes
+hashes to disk in 3 batches of 8 shards at a time. This brings the total time
+down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
+writing hashes to disk, and 21s is spent reading hashes from disk, which
+together is faster than the 65s that was previously spent on hashing all keys.
+
+
+* Appendix: Evaluating Hash Functions
+:PROPERTIES:
+:CUSTOM_ID: hash-eval
 :END:
 
 #+name: hashes
