@@ -41,6 +41,9 @@ e.g. in bioinformatics, the queries are often independent and the
 latency of one is not critical. It also allows for the usage of
 batching, which helps us to hide memory latency.
 
+For ease of implementation and the ability to easily check the implementations against each other,
+we always have the largest possible value in the input array, so that the result always exists.
+
 ** Inspiration and background
 This article is inspired by a post in
 [[https://en.algorithmica.org/hpc/data-structures/binary-search/][Algorithmica
@@ -186,6 +189,7 @@ Note that originally, I intended to write here that I did not see this effect of
 I then found out that when testing on arrays of power-of-two size can give very skewed results; but more on
 that soon when we talk about batching.
 
+** Branchless search
 Now let us implement these branchless optimizations as well and see how we do then.
 Here's the code:
 
@@ -216,6 +220,7 @@ assume this is due to our function being specialized and not having an
 error condition at the end, leading to it being better by a small
 fraction.
 
+** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
 This negates the CPU's inability to prefetch when we use the =cmov= instruction.
 We use the following construction for prefetching in Rust:
@@ -239,7 +244,9 @@ prefetch_index(&self.vals, (base + half + half / 2 - 1) as usize);
 [[file:plots/binsearch-std-vs-branchless-prefetch.svg]]
 
 The prefetching does its part, giving us a nice small ~10-15% speedup.
+You see there is a small slowdown at small sizes, which is to be expected.
 
+** Batching
 So far we have been replicating the work Algorithmica has done, just in
 Rust. Now it is time to use the fact that we only care about throughput,
 and talk about batching.
@@ -297,8 +304,10 @@ We compare the two best variants to see their differences:
 [[file:plots/binsearch-batched-vs-batched-prefetch.svg]]
 
 We see that the prefetching is not really helping at large batch sizes. My intuition for it is
-that the batching effectively hides the memory latency anyway and the prefetching only adds unnecessary extra memory
-traffic.
+that the batching effectively hides the memory latency anyway and the prefetching only adds unnecessary memory
+traffic. Compared to the Eytzinger layout that we will look into next, the prefetching is also pretty inefficient
+with respect to how many cache lines must be fetched compared to the amount of values that are actually used, especially
+at the higher levels of the search.
 
 ** A note on power-of-two array sizes
 In the bechmarking setup section, we wrote about not doing the
