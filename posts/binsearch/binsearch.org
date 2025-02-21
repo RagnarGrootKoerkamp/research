@@ -760,7 +760,7 @@ We try if batching can hide some of this, as it did before:
 The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
 The division is a real bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
 instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself
-by thinking that the Rust portable SIMD `clamp()` function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.
+by thinking that the Rust portable SIMD `clamp()` function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]]], at least not at this time.
 
 Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
 ideas; if you have them, please let me know.
