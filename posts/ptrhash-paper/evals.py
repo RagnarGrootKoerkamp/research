@@ -298,30 +298,31 @@ def space(f, out):
             )
 
     # Add dots for the fast configuration
+    ms = 11
     l = 3.0
     a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "Linear") & (df["lambda"] == l)].c
-    ax.plot(l, y, "o", ms=9, color="blue")
+    ax.plot(l, y, "o", ms=ms, color="blue")
     y = 8 / l + 32 * (1 / a - 1)
-    ax2.plot(l, y, "o", ms=8, mew=2, color="blue", mec="blue")
+    ax2.plot(l, y, "o", ms=ms, color="blue", mec="blue")
 
     # Add dots for the default configuration
     l = 3.5
     a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "CubicEps") & (df["lambda"] == l)].c
-    ax.plot(l, y, "o", ms=9, color="black")
+    ax.plot(l, y, "o", ms=ms, color="black")
     y = 8 / l + (512 / 44) * (1 / a - 1)
     # Red outline to marker
-    ax2.plot(l, y, "o", ms=8, mew=2, color="black", mec="black")
+    ax2.plot(l, y, "o", ms=ms, color="black", mec="black")
 
     # Add dots for the compact configuration
     l = 4.0
     a = 0.99
     y = df[(df.alpha == a) & (df.bucketfn == "CubicEps") & (df["lambda"] == l)].c
-    ax.plot(l, y, "o", ms=9, color="red")
+    ax.plot(l, y, "o", ms=ms, color="red")
     y = 8 / l + (512 / 44) * (1 / a - 1)
     # Red outline to marker
-    ax2.plot(l, y, "o", ms=8, mew=2, color="red", mec="red")
+    ax2.plot(l, y, "o", ms=ms, color="red", mec="red")
 
     ax.set_xlim(2.7, 4.20)
     ax.set_ylim(0, 140)
@@ -401,7 +402,7 @@ def query_batching(f, out):
 
     # A plot with lambda on the x-axis, and two y-axes with build time and size.
     # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
-    fig, axs = plt.subplots(1, 2, figsize=(7, 3), layout="constrained")
+    fig, axs = plt.subplots(1, 2, figsize=(8.5, 4), layout="constrained")
 
     for ax in axs:
         ax.set_xlabel("Batch or lookahead size")
@@ -464,8 +465,8 @@ def query_batching(f, out):
         ax.spines["right"].set_visible(False)
 
     # Build legend
-    lcompact = mpatches.Patch(color="red", label="Cubic γ₃, Default/Compact")
-    lsimple = mpatches.Patch(color="blue", label="Linear γ₁, Fast")
+    lcompact = mpatches.Patch(color="red", label="Cubic, Default/Compact")
+    lsimple = mpatches.Patch(color="blue", label="Linear, Fast")
     # ldefault = mpatches.Patch(color="black", label="Default")
     lloop = Line2D([0], [0], label="Loop", lw=2, color="black", ls="solid")
     lbatch = Line2D([0], [0], label="Batch", lw=2, color="black", ls="dotted")
@@ -533,7 +534,7 @@ def query_throughput(f, out):
 
     # A plot with lambda on the x-axis, and two y-axes with build time and size.
     # Create 6 lines, for 3 different alpha values and 2 different bucket functions.
-    fig, axs = plt.subplots(1, 2, figsize=(7, 3), layout="constrained")
+    fig, axs = plt.subplots(1, 2, figsize=(8.5, 4), layout="constrained")
 
     print("Fastest: ", df["q_phf"].min())
 
@@ -598,7 +599,7 @@ def query_throughput(f, out):
     for ax in axs:
         ax.grid(axis="y", lw=aa)
         ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
-        ax.set_ylim(0, 21.5)
+        ax.set_ylim(0, 13.9)
         ax.set_xlim(0.8, 6.2)
 
         ax.spines["top"].set_visible(False)
@@ -617,11 +618,11 @@ def query_throughput(f, out):
     # Build legend
     # TODO: Legend for default black params
     lcompact = MulticolorPatch(
-        "Cubic γ₃, Default/Compact",
+        "Cubic, Default/Compact",
         [{"color": "red", "alpha": aa}, {"color": "red", "alpha": 1.0}],
     )
     lsimple = MulticolorPatch(
-        "Linear γ₁, Fast",
+        "Linear, Fast",
         [{"color": "blue", "alpha": aa}, {"color": "blue", "alpha": 1.0}],
     )
     lphf = MulticolorPatch(
@@ -713,9 +714,8 @@ def comparison(f):
 
     # 'threads'
     df = df[["name", "size", "build", "query"]]
-    df["prod"] = df["build"] * df["query"] * df["size"]
-    # sort by size
-    # df = df.sort_values("prod")
+    df["prod"] = df["build"] * df["query"]
+    df = df.sort_values("prod")
 
     print(df)
     print(
