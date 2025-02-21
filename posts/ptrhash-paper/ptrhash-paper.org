@@ -50,13 +50,14 @@ per-cacheline Elias-Fano coding. Lastly, 6) PtrHash support /streaming/ queries,
 prefetching to answer a stream of multiple queries more efficiently than one-by-one processing.
 
 *Results.*
-We test two parameter configurations of PtrHash, /fast/ and /compact/, that
-achieve 3.0 and 2.12 bits per key. On 300 million string keys, they are as fast or faster
-to build than other MPHFs at a similar size, and at least $2.8\times$ faster to query. When
-streaming multiple queries, this improves to $5.4\times$ speedup over the
-fastest alternative. When using $10^9$ integer keys instead, query times are as
+With default parameters, PtrHash takes 2.40 bits per key.
+On 300 million string keys, PtrHash is as fast or faster
+to build than other MPHFs, and at least $1.75\times$ faster to query. When
+streaming multiple queries, this improves to $3.1\times$ speedup over the
+fastest alternative, while also being significantly faster to construct.
+When using $10^9$ integer keys instead, query times are as
 low as 12 ns/key when iterating in a for loop, or even down to 8 ns/key when using
-the streaming approach, just short of the 7.4 ns throughput of random memory accesses.
+the streaming approach, within $10\%$ of the maximum memory-bound throughput.
 
 *Source:* [[https://github.com/RagnarGrootKoerkamp/ptrhash][github.com/RagnarGrootKoerkamp/ptrhash]]
 
@@ -113,17 +114,15 @@ Compared to PTHash and PHOBIC, the main novelties are:
 6. the use of /prefetching/ to /stream/ multiple queries in parallel.
 
 *Results.*
-We propose two parameter configurations for PtrHash, /fast/ and /compact/.
-When using 300 million string keys, the fast configuration takes 3.0 bits/key and is nearly as fast to construct as the fastest
-other methods. It provides $2.8\times$ faster queries when looping naively, or $5.4\times$ faster when streaming.
-Similarly, the compact configuration takes 2.12 bits/key, and is over $3\times$
-faster to query (or $6\times$ when streaming) than other methods requiring
-similar space and construction time.
+When using 300 million string keys, PtrHash with default parameters takes 2.40 bits/key and is nearly as fast to construct as the fastest
+other methods, while being much faster to query. Compared to the next-fastest
+method to query, PtrHash provides $1.75\times$ faster queries when looping naively, or $3.1\times$ faster when streaming.
 
 When using $10^9$ integer keys instead, PtrHash can achieve a throughput of up to
 12 ns/key when looping over queries, or even 8 ns/key when streaming, close to matching the
 maximum throughput of random memory accesses of a single thread. In a
-multi-threaded setting, PtrHash can fully saturate the DDR4 memory bandwidth.
+multi-threaded setting, PtrHash can fully saturate the DDR4 memory bandwidth
+with 4 threads.
 
 * Related work
 There is a vast amount of literature on (minimal) perfect hashing. Here we only
@@ -239,10 +238,9 @@ input to construct PtrHash on large inputs.
 ** Overview
 
 #+name: overview
-#+caption: Overview of PtrHash on $n=23$ keys. The keys are hashed into $[H] = [2^{64}]$ and this range is split into $P=2$ parts and $B=5$ buckets per part. In red are four keys hashing to the same bucket in the first part, and in blue are three keys belonging to the same bucket in the second part. The /pilots/ of the $P\cdot B=10$ buckets in the highlighted area are the main component of the data structure, and control to which /slots/ keys in the bucket are mapped to avoid collisions. The blue highlighted key is initially mapped to a position $\geq n$, and thus (along with the other yellow cells) /remapped/ into an empty slot $<n$ via a (compressed) table of free slots. (Giulio: change color for pilots vs slots? fix colours? swap red & yellow maybe? fig is complicated...)
+#+caption: Overview of PtrHash on $n=23$ keys. The keys are hashed into $[H] = [2^{64}]$ and this range is split into $P=2$ parts and $B=5$ buckets per part. In red are four keys hashing to the same bucket in the first part, and in blue are three keys belonging to the same bucket in the second part. The /pilots/ of the $P\cdot B=10$ buckets in the highlighted area are the main component of the data structure, and control to which /slots/ keys in the bucket are mapped to avoid collisions. The blue highlighted key is initially mapped to a position $\geq n$, and thus (along with the other yellow cells) /remapped/ into an empty slot $<n$ via a (compressed) table of free slots.
 #+attr_html: :class inset large
 [[file:./overview.drawio.svg]]
-
 
 Before going into details, we first briefly explain the fully constructed
 PtrHash data structure and how to query it, see [[overview]] and [[query-code]]. We also
@@ -674,7 +672,7 @@ speed, and the cubic $\gamma_3$ for space efficiency.
 *** Tuning Parameters for Construction
 
 #+name: construction
-#+caption: This plot shows the construction time (blue and red, left axis) and data structure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue and red dots highlight the chosen /simple/ and /compact/ parameter configurations.
+#+caption: This plot shows the construction time (blue and red, left axis) and data structure size (black, green, and yellow, right axis) as a function of $\lambda$ for $n=10^9$ keys. Parallel construction time on 6 threads is shown for both the linear and cubic $\gamma$, and for various values of $\alpha$ (thickness). The curves stop because construction times out when $\lambda$ is too large. For each $\lambda$, the black line shows the space taken by the array of pilots. For larger $\lambda$ there are fewer buckets, and hence the pilots take less space. The total size including the remap table is shown in green (plain vector) and yellow (CacheLineEF) for various $\alpha$. The blue (fast), black (default), and red (compact) dots highlight the chosen parameter configurations.
 #+attr_html: :class inset
 [[file:plots/size.svg]]
 
@@ -709,25 +707,25 @@ evaluation, as indicated with blue, black, and red dots in [[construction]]:
   structure only uses 2.12 bits/key.
   In practice, this configuration sometimes ends up in endless eviction cycles
   and $\lambda=3.9$ may be better.
-- *Default* (black), a tradeoff between fast construction and small
+- *Default* (black), a trade-off between fast construction and small
   space: using cubic $\gamma_3$, $\lambda=3.5$, and $\alpha=0.99$, with
   CacheLineEF remapping.
 
 *** Remap
 #+name: remap
-#+caption: Comparison of space usage (bits/key) and query throughput (ns/query) of PtrHash on $10^9$ integer keys when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead. Giulio: drop params; mention in caption instead
-| Parameters                                              | Pilots | Query |    PHF | Remap       | Remap | Query |   MPHF |
-|                                                         |        |  Loop | Stream |             |       |  Loop | Stream |
-|---------------------------------------------------------+--------+-------+--------+-------------+-------+-------+--------|
-| Fast: $\alpha=0.99$, $\lambda=3.0$, linear $\gamma_1$   |   2.67 |  11.6 |    8.6 | Vec<u32>    |  0.33 |  12.7 |    8.9 |
-|                                                         |        |       |        | CacheLineEF |  0.12 |  12.1 |    8.9 |
-|                                                         |        |       |        | EF          |  0.09 |  14.4 |    9.7 |
-| Default: $\alpha=0.99$, $\lambda=3.5$, cubic $\gamma_3$ |   2.29 |  17.6 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.6 |
-|                                                         |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.7 |
-|                                                         |        |       |        | EF          |  0.09 |  21.2 |    9.6 |
-| Compact: $\alpha=0.99$, $\lambda=4.0$, cubic $\gamma_3$ |   2.00 |  17.5 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.5 |
-|                                                         |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.6 |
-|                                                         |        |       |        | EF          |  0.09 |  21.3 |    9.5 |
+#+caption: Comparison of space usage (bits/key) and query throughput (ns/query) of PtrHash on $10^9$ integer keys when using the recommended parameters with different remap structures. Query throughput is shown both for perfect hashing without remap, and for minimal perfect hashing with remap. Additionally, query throughput is shown both for a for-loop and for streaming with prefetching 32 iterations ahead.
+| Parameters | Pilots | Query |    PHF | Remap       | Remap | Query |   MPHF |
+|            |        |  Loop | Stream |             |       |  Loop | Stream |
+|------------+--------+-------+--------+-------------+-------+-------+--------|
+| Fast       |   2.67 |  11.6 |    8.6 | Vec<u32>    |  0.33 |  12.7 |    8.9 |
+|            |        |       |        | CacheLineEF |  0.12 |  12.1 |    8.9 |
+|            |        |       |        | EF          |  0.09 |  14.4 |    9.7 |
+| Default    |   2.29 |  17.6 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.6 |
+|            |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.7 |
+|            |        |       |        | EF          |  0.09 |  21.2 |    9.6 |
+| Compact    |   2.00 |  17.5 |    7.9 | Vec<u32>    |  0.33 |  20.0 |    8.5 |
+|            |        |       |        | CacheLineEF |  0.12 |  21.0 |    8.6 |
+|            |        |       |        | EF          |  0.09 |  21.3 |    9.5 |
 
 In [[remap]], we compare the space usage and query throughput of the different remap
 data structures for both the fast and compact parameters, for $n=10^9$ keys. We observe that
@@ -1187,9 +1185,8 @@ choice for strings. XXH3-128 is slower and should only be used when really neede
 Hashing is slightly faster when the keys are back to back in memory.
 
 * TODO
-- update results (evals section, also in conclusion and abstract/intro)
-- /default/ config with cubic fn, $\lambda = 3.5$, and CLEF
-- drop code samples for paper; probably also from blog
-- Cite and explain consensus (x2: intro + eval)
+- update sharding results
+- make into latex
+  - check double equation
 
 #+print_bibliography:
