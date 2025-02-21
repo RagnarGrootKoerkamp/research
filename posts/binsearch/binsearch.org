@@ -703,11 +703,8 @@ We try if batching can hide some of this, as it did before:
             }
         }
 
-        // this loop should not be difficult to make a fixed number of iterations, or just not have to check
-        // the condition every time
         while done_count < P {
             for i in 0..P {
-                // this might be a hard-to-predict branch
                 if done[i] {
                     continue;
                 }
@@ -754,8 +751,21 @@ Overall, I did not see this as a priority and did not spend too much time at opt
 ideas; if you have them, please let me know.
 
 An interesting factor for interpolation search is also how it performs well on non-random data. Therefore, we download a part of the human genome
+from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz][here]].
 and compute 32-bit prefixes of all the suffixes. We then search in a subset of them and measure performance. This should be slower, as the data
 is not going to be exactly uniformly distributed.
+
+We try at first with our original benchmarking setup; we take the first X 16-mers, sort them and work on them. The results are really strange:
+
+#+attr_html: :class inset
+[[file:plots/interp-vs-binsearch-batched-human.svg]]
+
+The reason for this strange result is that the human data is strongly non-uniform. As interpolation search
+performs badly with increasing non-uniformity, we can assume that the start of the genome is really, really badly distributed
+and the distribution goes back to something resembling a uniform one as we increase the size of the sample we're searching.
+
+We will
+
 
 * Conclusion and takeaways
 Overall, we found that the conclusions from the Algorithmica article and from the array layouts paper hold even for batched settings. Eytzinger
