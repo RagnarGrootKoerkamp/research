@@ -1103,13 +1103,10 @@ processed one by one as before.
 When the number of keys is so large that even the pilots do not fit in memory, they
 can also be stored to disk and read on-demand while querying. This is supported using $\varepsilon$-serde [cite:@epserde;@webgraph].
 
-
 ** Evaluation
 :PROPERTIES:
 :CUSTOM_ID: sharding-eval
 :END:
-
-TODO: update results
 
 We tested the in-memory and hybrid sharding by constructing PtrHash with default
 parameters on $5\cdot
@@ -1117,19 +1114,20 @@ parameters on $5\cdot
 in parallel.
 All 64-bit hashes would take 400 GB, so we use 24 shards of
 around $2^{31}$ keys, that each take 16 GB.
-The final data structure takes 2.17 bits/key, or 13.6 GB in total, and the
+The final data structure takes 2.40 bits/key, or 15 GB in total, and the
 peak memory usage is around 50 GB.
 
 The in-memory strategy iterates through and hashes the integer keys 24 times, and takes
-3996 seconds in total or 166s per shard. Of this, 65s (39%) is spent on hashing
-the keys, 15s (9%) is spent sorting hashes into buckets, and 82s (49%) is spent
+3098 seconds in total or 129 s per shard. Of this, 67s (52%) is spent on hashing
+the keys, 14s (11%) is spent sorting hashes into buckets, and 45s (35%) is spent
 searching for pilots.
 
 The hybrid strategy is allowed to use up to 128 GB of disk space, and thus writes
 hashes to disk in 3 batches of 8 shards at a time. This brings the total time
-down to 3314s (17% faster), and uses 138s per shard. Of this, 24s is spent
-writing hashes to disk, and 21s is spent reading hashes from disk, which
-together is faster than the 65s that was previously spent on hashing all keys.
+down to 2494 s (17% faster), and uses 104 s per shard. Of this, an amortized 31
+s (30%) per shard is spent
+writing hashes to disk, and 9 s (9%) is spent reading hashes from disk, which
+together is faster than the 67s that was previously spent on hashing all keys.
 
 
 * Appendix: Evaluating Hash Functions
