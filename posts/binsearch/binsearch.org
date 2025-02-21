@@ -22,7 +22,7 @@ instructions. Our language of choice will be Rust.
 
 The goal of this text is mainly educational, as we'll mostly be
 replicating research that has already been done. In addition,
-we will try how much batching can improve performance of the search schemes.
+we will explore how much batching can improve performance of the search schemes.
 
 ** Problem statement
 :PROPERTIES:
@@ -76,6 +76,10 @@ This post will be built around plenty of performance plots. These all show inver
 e.g. average time per one query. Therefore, in all plots, lower is better. We will benchmark
 in arrays up to a size of 1GB, well beyond the size of L3 cache, to see effects of going to main memory.
 
+One thing that I am sorry about are the colors in the plots. In some plots, there will be two lines with the same color;
+usually it is in the noncritical ones. I made it so that algorithms would keep their color across plots, and that
+means that sometimes, this happened. It only happens in the non-critical plots though.
+
 * Binary search
 We start with a textbook binary search implementation,
 and we see if we can replicate the results from Algorithmica. Here's the
@@ -105,13 +109,13 @@ bounds checks. This will also be the case for all the further
 experiments.
 
 So, how does it perform? Let's compare to the Rust standard library
-version:
+version (denoted here by =binary_search_std=):
 
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-binsearch.svg]]
 
 We can see that our naive version is slower, except for large array sizes. Checking out the
-standard library source code, we can see that the implementation already
+standard library source code, we can see that their implementation already
 has some optimizations in place. In the =binary_search_by= function, we
 see the following:
 
@@ -184,16 +188,18 @@ when the value is found and they try to use the =cmov= instruction if it
 is available in the [[https://doc.rust-lang.org/std/intrinsics/fn.select_unpredictable.html][=select_unpredictable=]] function. Both these optimizations are done so that the branch
 predictor has an easier time (as mispredictions are expensive). The =cmov=
 instruction is useful when the result of the comparison can't be
-reliably predicted (which here it really can't)[fn::Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]]. They are also both
+reliably predicted (which here it really can't).[fn::Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]] They are also both
 recommended by the Algorithmica post, and make the code effectively branchless.
+
+In addition, they do their accesses to the array without bounds checks, in the same way we do.
 
 It now makes sense that our naive version is faster on large array sizes.
 Algorithmica explains this by the fact that with =cmov=, the branch predictor can't
 start to speculatively prefetch data from main memory (as there is no branch). The =cmov=-optimized version
 therefore suffers more memory latency, as it can't be hidden by prefetching.
 
-Note that originally, I intended to write here that I did not see this effect of missing speculation.
-I then found out that when testing on arrays of power-of-two size can give very skewed results; but more on
+Note that originally, I intended to write here that I did not see this effect of missing speculation and prefetching.
+I then found out that when testing on arrays of power-of-two size can give skewed results; but more on
 that soon when we talk about batching.
 
 ** Branchless search
@@ -201,15 +207,17 @@ Now let us implement these branchless optimizations as well and see how we do th
 Here's the code:
 
 #+begin_src rust
-let mut base: u64 = 0;
-let mut len: u64 = self.vals.len() as u64;
-while len > 1 {
-    let half = len / 2;
-    let cmp = self.get((base + half - 1) as usize) < q;
-    base = select_unpredictable(cmp, base + half, base);
-    len = len - half;
+pub fn binary_search_branchless(&self, q: u32) -> u32 {
+    let mut base: u64 = 0;
+    let mut len: u64 = self.vals.len() as u64;
+    while len > 1 {
+        let half = len / 2;
+        let cmp = self.get((base + half - 1) as usize) < q;
+        base = select_unpredictable(cmp, base + half, base);
+        len = len - half;
+    }
+    self.get(base as usize)
 }
-self.get(base as usize)
 #+end_src
 
 When first implementing this, me, being a Rust newbie, immediately went
@@ -217,7 +225,7 @@ for the =cmov= crate, as I was unable to make the compiler generate
 the =cmov= on its own just with an if expression. Trying this, I found
 out that it is still plenty slower than the =select_unpredictable=
 function that is used in =binary_search_by=, so I followed the approach
-that the standard library has.
+of the standard library.
 
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-branchless.svg]]
@@ -225,12 +233,12 @@ that the standard library has.
 We can see that we now match the performance of the library version, even surpassing it. We
 assume this is due to our function being specialized and not having an
 error condition at the end, leading to it being better by a small
-fraction.
+fraction. On large sizes, we're still worse off than the naive version, though.
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
 This negates the CPU's inability to prefetch when we use the =cmov= instruction.
-We use the following construction for prefetching in Rust:
+We use the following construction:
 
 #+begin_src rust
 pub fn prefetch_index<T>(s: &[T], index: usize) {
@@ -240,7 +248,7 @@ pub fn prefetch_index<T>(s: &[T], index: usize) {
 #+end_src
 
 And using this function, we explicitly prefetch both the locations where
-the binary search could lead us from a given iteration:
+the binary search could lead us in a given iteration:
 
 #+begin_src rust
 prefetch_index(&self.vals, (base + half / 2 - 1) as usize);
@@ -251,17 +259,17 @@ prefetch_index(&self.vals, (base + half + half / 2 - 1) as usize);
 [[file:plots/binsearch-std-vs-branchless-prefetch.svg]]
 
 The prefetching does its part, giving us a nice small ~10-15% speedup.
-You see there is a small slowdown at small sizes, which is to be expected.
+You see there is a small slowdown at small sizes, which is to be expected,
+because we have to do a bit more. But the speedup at large sizes is really worth it.
 
 ** Batching
-So far we have been replicating the work Algorithmica has done, just in
-Rust. Now it is time to use the fact that we only care about throughput,
+So far we have been replicating the work Algorithmica has done. Now it is time to use the fact that we only care about throughput,
 and talk about batching.
 
 In this context, batching is just what it sounds like: we will take
 several requests at once, and we will handle them concurrently within a
 single function. In every loop iteration, we do a comparison for each of
-the queries, and we move the =base= index for it accordingly. The
+the queries, and we move the =base= index for the query accordingly. The
 branchless version can be seen below; the =P= is a generic parameter.
 
 #+begin_src rust
@@ -286,21 +294,21 @@ pub fn batch_impl_binary_search_branchless_prefetch<const P: usize>(
 }
 #+end_src
 
-The reason this improves performance is that it allows us to "amortize"
+The reason this is advantageous is that it allows us to "amortize"
 memory latency; while comparing and computing the next relevant address
 for the search, we can already query the memory for the next value. Since we don't care
-about latency but only throughput, we can do this at essentially no cost!
+about latency but only throughput, we can do this at essentially no cost! And since
+the search is a memory-bottlenecked operation, we can speed it up many times.
 
-When I first thought about this, I figured that explicit prefetching should not be needed.
-But in the S+-tree post, Ragnar found that explicitly prefetching memory that
-was going to be accessed at the next interval size was also helpful. We
-therefore add it as well; we'll compare versions with and without
-prefetching.
+
 
 #+attr_html: :class inset
 [[file:plots/binsearch-branchless-batched.svg]]
 
-and
+When I first thought about this, I figured that explicit prefetching should not be needed.
+But in the S+-tree post, Ragnar found that explicitly prefetching memory that
+was going to be accessed at the next interval size was also helpful. We
+therefore add it as well, just to compare:
 
 #+attr_html: :class inset
 [[file:plots/binsearch-branchless-prefetched-batched.svg]]
@@ -311,10 +319,10 @@ We compare the two best variants to see their differences:
 [[file:plots/binsearch-batched-vs-batched-prefetch.svg]]
 
 We see that the prefetching is not really helping at large batch sizes. My intuition for it is
-that the batching effectively hides the memory latency anyway and the prefetching only adds unnecessary memory
+that the batching effectively hides memory latency anyway and the prefetching only adds unnecessary memory
 traffic. Compared to the Eytzinger layout that we will look into next, the prefetching is also pretty inefficient
 with respect to how many cache lines must be fetched compared to the amount of values that are actually used, especially
-at the higher levels of the search.
+at the higher levels of the search (where we will need one value, but we will fetch a whole cacheline).
 
 ** A note on power-of-two array sizes
 In the bechmarking setup section, we wrote about not doing the
@@ -323,6 +331,7 @@ why. Let us repeat the previous experiment with multiple batch sizes
 with arrays of size \(2^k\), \(5/4 \cdot 2^k\) , \(3/2 \cdot 2^k\) and
 \(7/4 \cdot 2^k\).
 
+#+attr_html: :class inset
 [[file:plots/binsearch-branchless-batched-comparison-pow2.svg]]
 
 Notice the sawtooth pattern on the right side of the plot. We see that when the size of the searched
@@ -360,7 +369,7 @@ descendant is at position \(2i\) and the right one is at position
 \(2i + 1\). I think it is a very common exercise, so maybe you have encountered it in the same way.
 An illustration of the layout is shown below:
 
-#+caption: A picture of the Eytzinger layout (stolen from Algorithmica)
+#+caption: A picture of the Eytzinger layout (taken from Algorithmica)
 #+attr_html: :class inset
 [[file:plots/eytzinger-layout-picture.png]]
 
@@ -424,7 +433,7 @@ Putting this together, what we want to do is this (hidden in the function
 idx >> (idx.trailing_ones() + 1)
 #+end_src
 
-Okay, let us see how it performs! TODO fix plot colours!
+Okay, let us see how it performs!
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-vs-binsearches.svg]]
@@ -439,7 +448,7 @@ are at index \(i\), the next index is going to be at \(2i\) or
 \(2i + 1\). That means that if we prefetch, we can actually prefetch
 both of the possible options within the same cacheline!
 
-We can abuse this effect up to the effective cache line size. A usual CL
+We can make use of this effect up to the effective cache line size. A usual CL
 length is 64 bytes, meaning that the cache line can fit 16 =u32= values.
 If we prefetch 4 Eytzinger iterations ahead, e.g. to position \(16i\),
 we can get all the possible options at that search level in a single
@@ -767,12 +776,9 @@ We try if batching can hide some of this, as it did before:
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched.svg]]
 The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
-The division is a real bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
+The division is a bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
 instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself
 by thinking that the Rust portable SIMD `clamp()` function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]]], at least not at this time.
-
-Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
-ideas; if you have them, please let me know.
 
 An interesting factor for interpolation search is also how it performs well on non-random data. Therefore, we download a part of the human genome
 from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz][here]].
@@ -801,6 +807,9 @@ show the graph for the multithreaded case:
 
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched-human-final-multithreaded.svg]]
+
+Overall, I did not see this as a priority and did not spend too much time at optimizing it, as it seems like a bit of a dead end. I would appreciate
+ideas; if you have them, please let me know.
 
 * Conclusion and takeaways
 Overall, we found that the conclusions from the Algorithmica article and from the array layouts paper mostly hold even for batched settings. Eytzinger
