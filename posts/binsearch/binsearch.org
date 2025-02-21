@@ -604,7 +604,9 @@ while the normal sorted array layout for binary search provides better locality 
 Both of these effects are largely offset by batching (because it hides the latency of memory accesses quite well).
 So the limit is likely memory throughput.
 
-When it comes to memory throughput, Eytzinger is more advantageous. This is because the more-accessed top levels of the
+So why is Eytzinger faster? I was wondering this and so I wrote a simple Python script simulating the behaviour
+of batched Eytzinger and binary search. The setup was a single-layer, fixed-size, direct-mapped cache. What I found
+was that when it comes to memory throughput, batched Eytzinger is more advantageous. This is because the more-accessed top levels of the
 tree are more efficiently cached and can be reused between queries. This leads to less cache lines fetched from main memory overall
 compared to binary search.
 
@@ -706,6 +708,8 @@ pub fn interpolation_search(&self, q: u32) -> u32 {
 }
 #+end_src
 
+For the following plots, please notice that compared to the previous section, the scale changed quite drastically, so the results
+are quite a bit worse for the algorithm.
 
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch.svg]]
