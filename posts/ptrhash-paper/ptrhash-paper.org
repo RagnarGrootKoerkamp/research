@@ -1130,45 +1130,51 @@ This work was supported by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
 :END:
 
 #+name: hashes
-#+caption: MPHF query throughput of PtrHash with fast parameters for $n=10^8$ keys. (Not $10^9$ because this takes too much memory.)  Hashing plain ints with FxHash is fastest, followed by hashing Boxed ints. XxHash is much slower, already when hashing ints. In fact, xxHash is faster at hashing strings than integers! The string length does not have a very big impact, but variable-length strings are consistently slightly slower.
-| input     | loop |      |       | stream |      |       |
-|           |   fx | xx64 | xx128 |     fx | xx64 | xx128 |
-| u64       | 11.1 | 24.4 |  29.9 |    7.2 |  9.1 |  10.5 |
-| Box<u64>  | 12.7 | 30.1 |  31.2 |    8.7 | 11.1 |  12.4 |
-| &[u8; 10] | 19.4 | 27.7 |  32.9 |   10.1 | 12.5 |  14.2 |
-| &[u8; 50] | 34.1 | 28.6 |  32.8 |   16.5 | 12.7 |  14.1 |
-| &[u8]     | 39.2 | 37.0 |  50.9 |   27.2 | 17.8 |  23.1 |
-| Vec<u8>   | 40.2 | 40.6 |  52.7 |   28.3 | 20.2 |  25.3 |
+#+caption: MPHF query throughput (ns/key) of PtrHash with fast parameters ($\alpha=0.99$, $\lambda=3.0$, $\gamma_1(x)=x$, and a plain vector for remapping) for $n=10^8$ keys.
+| Input     |   Loop |         |          | Stream |         |          |
+|           | FxHash | XXH3-64 | XXH3-128 | FxHash | XXH3-64 | XXH3-128 |
+| u64       |   11.1 |    24.4 |     29.9 |    7.2 |     9.1 |     10.5 |
+| Box<u64>  |   12.7 |    30.1 |     31.2 |    8.7 |    11.1 |     12.4 |
+| &[u8; 10] |   19.4 |    27.7 |     32.9 |   10.1 |    12.5 |     14.2 |
+| &[u8; 50] |   34.1 |    28.6 |     32.8 |   16.5 |    12.7 |     14.1 |
+| &[u8]     |   39.2 |    37.0 |     50.9 |   27.2 |    17.8 |     23.1 |
+| Vec<u8>   |   40.2 |    40.6 |     52.7 |   28.3 |    20.2 |     25.3 |
 
-TODO: update table
+In [[hashes]], we compare the throughput of various hash functions on different
+types of inputs, both when iterating and streaming through queries.
+The hash functions being compared are 64-bit FxHash [cite:@fxhash], and the
+64-bit and 128-bit variants of XxHash (XXH3 specifically).
+We test various inputs, of increasing complexity:
+1. plain integers keys, the easy case;
+2. allocated integer keys, to measure the overhead of the memory indirection;
+3. short back-to-back packed fixed-length strings, to measure the overhead of string hashing;
+4. longer packed fixed-length strings, to measure the overhead of iteration the string characters;
+5. variable-length packed strings, to measure the overhead of branch-mispredictions;
+6. allocated variable-length strings, to again measure pointer indirection
+   overhead.
 
-Setup:
-- TODO cite fx and xx.
-- xx64 calls =xxhash_rust::xxh3::xxh3_64_with_seed=
-- xx128 calls =xxhash_rust::xxh3::xxh3_128_with_seed=
-- String slices are all packed into a single large vector, so they are
-  effectively streaming and at predictable locations in memory.
-- Box<u64> and Vec<u8> are allocated in query order, so are likely somewhat
-  ordered in memory as well.
+The string slices are all packed back-to-back into a single large allocation, so
+that their contents can be efficiently prefetched. The =Vec<u8>= version on the
+other hand uses the default allocator, which may or may not put things close to
+each other and/or in order.
 
-Results:
-- xx64 always faster than xx128
-- Fx faster than xx64 for ints and short fixed-length strings.
-- xx64 wins for long and arbitrary-length strings, especially when streaming.
-- Packed string input is faster than separately allocated string input.
-- Looking at streaming xx64:
-  - 7 ns lookup (fx)
-  - +2 ns int hashing overhead (xx)
-  - +3.5 ns for hashing fixed-length strings. Not much dependent on length 10 or 50.
-  - +5 ns for variable-length strings, for the branch-miss.
-  - +3 ns for indirection of arbitrary allocations.
+*Results.*
+Both when iterating and when streaming queries, FxHashing plain integers is
+fastest, as expected. Both XxHash variants are quite a bit slower, especially
+when using plain iteration. On boxed integers, most methods become around 1 ns/key slower.
+FxHash maintains this speed advantage for short strings, but for longer strings
+XXH3-64 becomes faster. In fact, XXH3 is only marginally slower for 50 byte
+strings than for boxed integers, which is quite impressive!
 
-** Failed Ideas
-- always compute remap to avoid branch:
-  - Instead, an additional layer of prefetching helps a bit, but too complicated
-    and annoying.
-- rattle kicking?
-- 4 bit pilots with buckets of half the size -> doesn't work.
+When moving on to variable-length strings, all methods take quite a hit of at
+least 5 ns/key due to the branch-mispredictions.
+XXH3-64 remains fastest, but FxHash is nearly as fast when looping over queries.
+The same is true when moving to allocated strings, which is again around 2
+ns/key slower.
+
+Overall, FxHash is the best hash to use for integer keys, and XXH3-64 is a good
+choice for strings. XXH3-128 is slower and should only be used when really needed.
+Hashing is slightly faster when the keys are back to back in memory.
 
 * TODO
 - update results (evals section, also in conclusion and abstract/intro)
