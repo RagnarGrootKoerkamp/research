@@ -1,0 +1,515 @@
+#+title: Pairwise alignment
+#+filetags: @thesis @survey pairwise-alignment highlight wip
+#+HUGO_LEVEL_OFFSET: 0
+#+OPTIONS: ^:{} num:2 H:4
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_paired_shortcodes: %notice
+#+date: <2025-02-21 Fri>
+
+#+attr_shortcode: attribution
+#+begin_notice
+This chapter is based on two papers:
+- The A*PA paper, which has joint first-authorship with Pesho Ivano:
+
+  [cite/bibentry/b:@astarpa]
+- The A*PA2 paper:
+
+  [cite/bibentry/b:@astarpa2]
+Further, the survey is based on ongoing notes on pairwise alignment that are also co-authored
+with Pesho Ivanov.
+
+A*PA was developed in close collaboration with Pesho Ivanov. Specifically, the
+seed heuristic is a direct application of his earlier work
+[cite:@astarix-1;@astarix-2]. Pesho Ivanov's contributions predominantly
+include the extensions to the more general seed heuristic with chaining, gaps,
+and inexact matches. My own contributions predominantly include match pruning,
+the implementation using contours, and the proofs and experiments.
+
+TODO: The extension to semi-global alignment is my own work, and currently unpublished.
+#+end_notice
+
+#+attr_shortcode: summary
+#+begin_notice
+In this chapter, we explore methods for /global pairwise alignment/, that find the
+minimal number of edits between two genomic sequences.
+
+There is a vast amount of literature on algorithms for pairwise alignment and
+its variants, and we start with a corresponding survey.
+
+Then, we introduce /A* pairwise aligner/, an aligner that, as the name says,
+uses the A* shortest path algorithm. Its main novelties are a significantly
+stronger /gap-chaining seed heuristic/ than was used in previous methods. Adding
+/pruning/ to this enables near-linear runtime on inputs with
+sufficiently low error rate.
+
+A drawback of A*PA is that it is based on plain A*, which, like Dijkstra's
+algorithm, is a relatively cache-inefficient graph algorithm.
+Some of the fastest aligners use DP (dynamic programming) with /bitpacking/ to
+very efficiently compute the edit distance between sequences. In /A*PA2/, we
+build a highly optimized aligner that merges A* with bitpacking, yielding
+significant speedups over both A*PA and Edlib.
+#+end_notice
+
+$$
+\newcommand{\g}{g^*}
+\newcommand{\h}{h^*}
+\newcommand{\f}{f^*}
+\newcommand{\cgap}{c_{\mathrm{gap}}}
+\newcommand{\xor}{\ \mathrm{xor}\ }
+\renewcommand{\and}{\ \mathrm{and}\ }
+\renewcommand{\st}[2]{\langle #1, #2\rangle}
+\newcommand{\matches}{\mathcal M}
+\newcommand{\ed}{\operatorname{ed}}
+\renewcommand{\d}{\operatorname{d}}
+$$
+
+* Introduction
+- introduced by [cite:@nw] for biology
+** Overview
+- briefly highlight the three chapters
+- cite navarros review
+
+* A history of pairwise alignment
+** Problem statement
+The main problem of this chapter is as follows.
+#+begin_problem Global pairwise alignment
+Given two sequences $A$ and $B$ of lengths $n$ and $m$, compute the edit
+distance $\ed(A,B)$ between them.
+#+end_problem
+
+Before looking into solutions to this problem, we first cover some theory to precisely define it.
+
+*Input sequences.*
+As input, we take two sequences $A=a_0a_1\dots a_{n-1}$ and $B=b_0b_1\dots
+b_{m-1}$ of lengths $n$ and $m$ over an alphabet $\Sigma$ that is typically of
+size $\sigma=4$. We usually assume that $n\geq m$.
+We refer substrings
+$a_i\dots a_{i'-1}$ as $A_{i\dots i'}$ to a prefix $a_0\dots a_{i-1}$ as
+$A_{<i}$ and to a suffix $a_i\dots a_{n-1}$ as $A_{\geq i}$.
+
+*Edit distance.*
+The /edit distance/ $\ed(A,B)$ is the minimum number of
+insertions, deletions, and substitutions needed to convert $A$ into $B$.
+In practice, we also consider the /divergence/ $d:=\ed(A,B)/n$, which is the
+average number of errors per characters. This is
+different from the /error rate/ $e$, which we consider to be the (relative)
+number of errors /applied/ to a pair of sequence. The error rate is typically
+higher than the divergence, since random errors can cancel each other.
+
+#+name: edit-graph
+#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite/t:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. All edges are directed from the top-left to the bottom-right. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state.
+#+attr_html: :class inset
+[[file:../astarpa2/edit-graph2.drawio.svg]]
+
+*Edit graph.*
+The /alignment graph/ or /edit graph/ ([[edit-graph]]) is a way to formalize edit distance.
+It contains /states/ $\st ij$ ($0\leq
+i\leq n$, $0\leq j\leq m$) as vertices.
+It further contains edges, such that an edge of cost $0$ corresponds to a pair
+of matching characters, and an edge of cost $1$ corresponds to an insertion,
+deletion, or substitution.
+The vertical insertion and
+horizontal deletion edges have the form $\st ij \to \st i{j+1}$ and $\st ij \to \st {i+1}j$ of cost $1$.
+Diagonal edges are $\st ij\to \st{i+1}{j+1}$ and have cost $0$ when $A_i = B_i$ and
+substitution cost $1$ otherwise.  A shortest path from $v_s:=\st 00$ to $v_t :=
+\st nm$ in the edit graph corresponds to an alignment of $A$ and $B$.
+The /distance/ $d(u,v)$ from $u$ to $v$ is the length of the shortest (minimal
+cost) path from $u$ to $v$, and we use /edit distance/, /distance/, /length/, and /cost/ interchangeably.
+Further we write
+$\g(u) := d(v_s, u)$ for the distance from the start to $u$,
+$\h(u) := d(u, v_t)$
+for the distance from $u$ to the end, and $\f(u) := \g(u) + \h(u)$ for the minimal cost
+of a path through $u$.
+
+In figures, we draw sequence $A$ at the top and sequence $B$ on the left. Index
+$i$ will always be used for $A$ and indicates a column, while index $j$ is used
+for $B$ and indicates a row.
+
+*Shortest path algorithms.*
+Using this graph, the problem of pairwise alignment reduces to finding a
+shortest path in a graph. There are many shortest path algorithms for graphs,
+and indeed, many of them are used for pairwise alignment.
+Since the graph is /acyclic/,
+the simplest method is to greedily process the states in any topologically
+sorted order such as row-wise, column-wise, or anti-diagonal by anti-diagonal.
+We then start by setting $d(\st 00)=0$, and
+find the distance to any other state as the minimum distance to an incoming
+neighbour plus the cost of the final edge. As we will see soon, this is often
+implemented using /dynamic programming/ (DP).
+
+A second shortest path algorithm is Dijkstra's algorithm
+[cite:@dijkstra59], but more importantly, a number of papers build on the A*
+algorithm [cite:@astar-hart67], which is an improvement of Dijkstra.
+
+** Variations on pairwise alignment
+There are a few variants of pairwise alignments and edit distance. While the
+focus of this chapter is (unit cost) edit distance, it is helpful to first have
+an overview of the different variants since most papers each assume a slightly
+different context.
+*** Alignment types
+TODO: Also put Pesho's 2nd figure?
+
+#+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/alignment-types.drawio.svg][source]])
+#+caption: TODO: re-scale image
+#+name: alignment-types
+#+attr_html: :class inset
+[[file:../pairwise-alignment-history/drawings/alignment-types.drawio.svg]]
+
+In /global/ pairwise alignment, the two sequences must be fully matched against
+each other. In practice though, there are a number of
+different settings, see [[alignment-types]].
+
+- *Global:* Align both sequences fully, end-to-end.
+- *Semi-global:* Align a full sequence to a substring of a reference.
+- *Global-extension:* Align one sequence to a prefix of the other.
+- *Overlap:* Align two partially overlapping reads against each other.
+- *Extension:* Align a prefix of the two sequences. Similar to
+    local, but anchored at the start.
+- *Local:* Align a substring of $A$ to a substring of $B$. Like ends-free, but
+  now we may skip the and start of both sequences.
+
+Of these, semi-global is very commonly used when /mapping/ reads onto a larger
+reference. A slightly difference is that we consider semi-global alignment to be
+a one-off alignment between two sequences, whereas for /mapping/, we usually
+align many small reads onto a single long reference.
+
+*** Cost Models
+
+#+caption: Overview of different cost models. (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/cost-models.drawio.svg][source]])
+#+name: cost-models
+#+attr_html: :class large
+[[file:../pairwise-alignment-history/drawings/cost-models.drawio.svg]]
+
+There are different models to specify the cost of each edit operation
+([[cost-models]]). In particular, in a biological setting the probability of various
+types of mutations may not be equal, and thus, the associated costs should be different.
+We list some of them here, from simple to more complicated.
+
+- *LCS:* The /longest common subsequence/ maximizes the number of matches, or
+  equivalently, minimizes the number of /indels/ (insertions or deletions) while
+  not allowing substitutions. Insertions and deletions both have a cost of $1$.
+- *Unit cost edit distance / Levenshtein distance:*
+  The classic edit distance counts the minimum number of idels and/or
+  substitutions needed, where each has a cost of $1$.
+- *Edit distance:*
+  In general, the edit distance allows for arbitrary indel and substitution costs.
+  Matches/mismatches between characters $a_i$ and $b_j$ have cost $\delta(a_i, b_j)$.
+  Inserting/deleting a character has cost $\delta(\varepsilon, b_j)>0$ and $\delta(a_i, \varepsilon)>0$ respectively.
+  Usually the cost of a match is $0$ or negative ($\delta(a,a) \leq 0$) and the
+  cost of a mismatch is positive ($\delta(a,b)>0$ for $a\neq b$).
+
+  In this chapter, when we use edit distance, we usually mean the unit-cost version.
+- *Affine cost:*
+  It turns out that insertions and deletions in DNA sequences are somewhat rare,
+  but that once there is an indel, it is relatively common for it to be longer
+  than a single character. This is modelled using /affine/ costs [cite:@smith81], where there is
+  a cost $o$ to /open/ a gap, and a cost $e$ to /extend/ a gap, so that the cost
+  of a gap of length $k$ is $w_k = o+k\cdot e$.
+
+  It is also possible to have different parameters $(o_{\mathrm{ins}},
+  e_{\mathrm{ins}})$ and $(o_{\mathrm{del}}, e_{\mathrm{del}})$ for insertions
+  and deletions.
+
+- *Dual affine:*
+  It turns out that affine costs are not sufficient to capture all biological
+  processes: the gap-cost can give a too large penalty to very long indels of
+  length $100$ to $1000$. To fix this, a /second/ gap-cost can be introduced
+  with separate parameters $(o_2, e_2)$, with for example an offset of $o=1000$
+  and an extend cost of $e=0.5$.
+  The cost of a gap of length $k$ is now given by $w_k = \min(o_1 + k\cdot e_1, o_2 + k\cdot e_2)$.
+- *Concave:* Even more general, we can give gaps of length $k$ a cost $w_k$, where $w_k$ is a
+  concave function of $k$, where longer gaps become relatively
+  less expensive. Affine costs are an example of a concave gap cost.
+- *Arbitrary:* Even more general, we can merge the concave gap-costs with
+  arbitrary substitution costs $\delta(a,b)$ for (mis)matches.
+
+In practice, most methods use a match cost $\delta(a,a) = 0$, fixed mismatch
+cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
+$\delta(a,\varepsilon) = \delta(\varepsilon,b) = I$.
+
+*** Minimizing Cost versus Maximizing Score
+
+So far, the cost models we considered are just that: /cost/ models. They focus
+on minimizing the cost of the edits between two sequences, and usually assume
+that all costs are $\geq 0$, so that in particular matching two characters has a
+cost of $0$.
+
+In some settings, /scores/ are considered instead, which are simple the negative
+of the cost. In this setting, matching characters usually give a positive score,
+so that this is explicitly rewarded. This is for example the case when finding
+the longest common subsequence, where each pair of matching characters gives a
+score of $1$, and everything else has a score of $0$.
+
+Both approaches have their benefits. When using non-negative costs, all edges in the
+alignment graph have non-negative weights. This significantly simplifies the
+shortest path problem, since this is, for example, a requirement for Dijkstra's algorithm.
+Scores, on the other hand, work better for overlap, extension, and local
+alignment: in these cases, the empty alignment is usually a solution, and thus,
+we must give some bonus to the matching of characters to compensate for the
+inevitable mismatches that will also occur.
+Unfortunately, this more general setting usually means that algorithms have to
+explore a larger part of the alignment graph.
+The ratio between the match bonus
+(score $>0$) and mismatch penalty (score $<0$) influences the trade-off between
+how many additional characters must be matched for each additional mismatch.
+
+*Cost-vs-score duality.*
+For the problem of longest common subsequence there is a specific duality
+between scores and costs. When $p$ is the
+length of the LCS, and $s$ is the cost of aligning the two sequences via
+the LCS cost model where indels cost $1$ and mismatches are not allowed, we have
+\begin{align}
+    2\cdot p + s = n+m.
+\end{align}
+Thus, maximizing the number of matched characters is equivalent to minimizing
+the number of insertions and deletions.
+
+More generally, for global alignment there is a direct correspondence between
+maximizing score and minimizing cost [cite:@wfalm]:
+given a scoring model with fixed affine costs $\delta(a, a) = M$, $\delta(a,b) = X$,
+and $w_k = O + E \cdot k$, there is a cost-model (with $\delta(a,a)=0$) that
+yields the same optimal alignment.
+
+** The classic quadratic DP algorithms
+We are now ready to look into the first algorithms.
+We start with DP algorithms, that process the graph one column at a time. Note
+that we present all algorithms as similar as possible: they go from the top-left
+to the bottom-right, and always minimize the cost. We write $D(i,j)=\g(\st ij)$ for the
+cost to state $\st ij$.
+
+#+name: fig:nw
+#+caption: The cubic algorithm as shown by [cite/text:@nw]. Note that as shown, it works from the bottom right to the top left, and maximizes the LCS score instead of minimizing cost. Consider the outlined 1-cell. It has a score of 1 because the characters in its row and column match. The final score of the cell is this 1, plus the maximum of the remaining outlined cells in the row below and column right of it.
+#+attr_html: :class inset
+[[file:../pairwise-alignment-history/screenshots/nw-cubic.png]]
+
+*Needleman-Wunsch' cubic algorithm.*
+The problem of pairwise alignment of biological sequences was first formalized
+by Needleman and Wunsch [cite:@nw]. They provide a /cubic/ recurrence
+that assumes a (mis)match between $a_{i-1}$ and $b_{j-1}$ of cost
+$\delta(a_{i-1},b_{j-1})$ and an arbitrary gap cost $w_k$.
+The recursion uses that before matching $a_{i-1}$ and $b_{j-1}$,
+either $a_{i-2}$ and $b_{j-2}$ are matched to each other, or one of them is
+matched to some other character:
+\begin{align*}
+    D(0,0) &= D(i,0) = D(0,j) := 0\\
+    D(i,j) &:= \delta(a_{i{-}1}, b_{j{-}1})&& \text{cost of match}\\
+&\phantom{:=} + \min\big( \min_{0\leq i' < i} D(i', j{-}1) + w_{i{-}i'{-}1},&&\text{cost of matching $a_{i'-1}$ against $b_{j-2}$ next}\\
+&\phantom{:=+\min\big(} \min_{0\leq j'<j} D(i{-}1, j')+w_{j{-}j'{-}1}\big).&&\text{cost of matching $a_{i-2}$ against $b_{j'-1}$ next}
+\end{align*}
+The value of $D(n,m)$ is the final cost of the alignment.
+
+The total runtime is $O(nm \cdot (n+m)) = O(n^2m)$ since each of the $n\cdot m$ cells requires $O(n+m)$ work.
+
+*A quadratic DP.*
+The cubic DP was improved into a quadratic DP by Sellers [cite:@sellers] and
+Wagner and Fisher [cite:@wagner74].
+The improvement comes from dropping the arbitrary gap cost $w_k$, so that
+instead of trying all $O(n+m)$ indels in each position, only one insertion and
+one deletion is tries:
+\begin{align*}
+D(0,0) &:= 0\\
+    D(i, 0) &:= D(i-1,0)+ \delta(a_i, \varepsilon) \\
+    D(0, j) &:= D(0,j-0)+ \delta(\varepsilon, b_j) \\
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(a_i, b_j), &&\text{(mis)match}\\
+            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(a_i, \varepsilon), && \text{deletion}\\
+            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(\varepsilon, b_j)\big). && \text{insertion}.
+\end{align*}
+
+This algorithm takes $O(nm)$ time since it now does constant work per DP cell.
+
+This quadratic DP is now called the Needleman-Wunsch (NW) algorithm.
+Gotoh [cite:@gotoh] refers to it as Needleman-Wunsch-Sellers' algorithm, to
+highlight the speedup that Sellers contributed [cite:@sellers].
+Apparently Gotoh was not aware of the identical formulation of Wagner and Fischer [cite:@wagner74].
+
+Vintsyuk published a quadratic algorithm published already before
+Needleman and Wunsch [cite:@vintsyuk68], but in the context of speech
+recognition.
+Instead of a cost of matching characters, there is some cost $\delta(i,j)$ associated
+to matching two states, and it does not allow deletions:
+\begin{align*}
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1), D(i{-}1, j)\big) + \delta(i,j).
+\end{align*}
+
+Sankoff also gives a quadratic recursion [cite:@sankoff], similar to the one by
+Sellers [cite:@sellers], but specifically for LCS. This leads to the recursion
+\begin{align*}
+    S(i, j) &:= \max\big(S(i{-}1,j{-}1) + \delta(a_i, b_j),\, D(i{-}1, j), D(i, j{-}1)\big).
+\end{align*}
+
+# The wiki pages on [[https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm][Wagner-Fisher]] and [[https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm#Historical_notes_and_algorithm_development][Needleman-Wunsch]] have some more historical context.
+
+*Local alignment.*
+Smith and Waterman [cite:@sw] introduce a DP for /local/ alignment.
+The structure of their algorithm is similar to the cubic DP of
+Needleman and Wunsch and allows for arbitrary gap costs $w_k$.
+While introduced as a maximization of score, here we present it as minimizing
+cost (with $\delta(a,a)<0$) for consistency. The new addition is a $\min(0, \dots)$ term, that can
+/reset/ the alignment whenever the cost goes above $0$.
+The best local alignment ends in the smallest value of $D(i,j)$ in the table.
+\begin{align*}
+    D(0, 0) &= D(i, 0) = D(0, j) := 0 \\
+    D(i,j)  &= \min\big(0, &&\text{start a new local alignment}\\
+    &\phantom{=\min\big(} D(i-1, j-1) + \delta(a_{i{-}1}, b_{j{-}1}), &&\text{(mis)math}\\
+    &\phantom{=\min\big(} \min_{0\leq i' < i} D(i', j) - w_{i{-}i'}, &&\text{deletion}\\
+    &\phantom{=\min\big(} \min_{0\leq j'<j} D(i, j')-w_{j{-}j'}\big).&&\text{insertion}
+\end{align*}
+This algorithm uses arbitrary gap costs $w_k$, as first mentioned
+in [cite/text:@nw] and formally introduced by [cite/text:@waterman].
+Because of this, it runs in $O(n^2m)$.
+
+The quadratic algorithm for local alignment is now usually referred to as the
+Smith-Waterman-Gotoh (SWG) algorithm, since the ideas introduced by Gotoh [cite:@gotoh] can
+be used to reduce the runtime from cubic by assuming affine costs,
+just like to how [cite/text:@sellers] sped up [cite/text:@nw] for global alignment
+costs by assuming linear gap costs.
+Note though that Gotoh only mentions this speedup in passing, and
+that Smith and Waterman [cite:@sw] could have directly based their idea on the quadratic
+algorithm of Sellers [cite:@sellers] instead.
+
+*Affine costs.*
+To my knowledge, the first mention of affine costs of the form $o+k\cdot e$ is
+by Smith, Waterman, and Fitch [cite:@smith81].
+Gotoh [cite:@gotoh] generalized the quadratic recursion to these affine costs,
+to circumvent the cubic runtime needed for the arbitrary
+gap costs $w_k$ of [cite/text:@waterman].
+This is done by introducing two additional matrices
+$P(i,j)$ and $Q(i,j)$ that contain the minimal cost to get to $(i,j)$ where the
+last step is required to be an insertion or deletion respectively:
+\begin{align*}
+    D(i, 0) &= P(i, 0) = I(i, 0) := 0 \\
+    D(0, j) &= P(0, j) = I(0, j) := 0 \\
+    P(i, j) &:= \min\big(D(i-1, j) + o+e, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ P(i-1, j) + e\big)&&\text{extend gap}\\
+    Q(i, j) &:= \min\big(D(i, j-1) + o+e, &&\text{new gap}\\
+    &\phantom{:= \min\big(}\ Q(i, j-1) + e\big)&&\text{extend gap}\\
+    D(i, j) &:= \min\big(D(i-1, j-1) + \delta(a_{i-1}, b_{j-1}),\, P(i, j),\, Q(i, j)\big).
+\end{align*}
+This algorithm run in $O(nm)$ time.
+
+Gotoh also mentions that this method can be modified to solve the local
+alignment of [cite/text:@sw] in quadratic time.
+
+*Traceback.*
+To compute the final alignment, we can follow the /trace/ of the DP matrix:
+starting at the end $\st nm$, we can repeatedly determine which of the preceding DP-states
+was optimal as predecessor and store these states. This takes linear time, but
+requires quadratic memory since all states could be on the optimal path. Gotoh
+notes [cite:@gotoh] that if only the final score is required,
+only the last two columns of the DP matrix $D$ (and $P$ and $Q$) are needed at
+any time, so that linear memory suffices.
+
+** Linear Memory using Divide and Conquer
+#+name: myers88
+#+caption: Divide-and-conquer as shown in [cite/text/cf:@myers88].
+#+caption: Unlike the main text, in this figure, the recursion is on the middle row, rather than the middle column.
+#+attr_html: :class inset small
+[[file:../pairwise-alignment-history/screenshots/myers88.png]]
+
+Hirschberg [cite:@hirschberg75] introduces a divide-and-conquer algorithm to
+compute the LCS of two sequences in linear space.
+Instead of computing the full alignment from
+$\st 00$ to $\st nm$, we first fix a column halfway, $i^\star = \lfloor
+n/2\rfloor$.
+This splits the problem
+into two halves: we compute the /forward/ DP matrix $D(i, j)$ for all $i\leq
+i^\star$, and introduce a /backward/ DP $D'(i, j)$ that is computed for all
+$i\geq i^\star$. Here, $D'(i,j)$ is the minimal cost for aligning suffixes
+of length $n-i$ and $m-j$ of $A$ and $B$. It is shown that
+there must exist a $j^\star$ such that $D(i^\star, j^\star) + D'(i^\star,
+j^\star) = D(n, m)$, and we can find this $j^\star$ as the $j$ that minimizes
+$D(i^\star, j) + D'(i^\star, j)$.
+
+At this point, we know that the point $(i^\star, j^\star)$ is part of an optimal alignment.
+The two resulting subproblems of aligning $A[0, i^\star]$ to $B[0, j^\star]$ and
+$A[i^\star, n]$ to $B[j^\star, m]$ can now be solved recursively using the same
+technique, where again we find the midpoint of the alignment. This recursive
+process is shown in figure [[myers88]].
+The recursion stops as soon as the alignment problem becomes trivial, or, in
+practice, small enough to solve with the usual quadratic-memory approach.
+
+*Space complexity.*
+The benefit of this method is that it only uses linear memory: each forward or
+reverse DP is only needed to compute the scores in the final column, and thus
+can be done in linear memory. After the midpoint $\st {i^\star}{j^\star}$ is
+found, the results of the left and right subproblem can be discarded before
+recursing further. Additionally, the space for the solution itself is linear.
+
+*Time complexity.*
+We analyse the time complexity following [cite:@myers88].
+The first step takes $2\cdot O((n/2)m) = O(nm)$ time.
+We are then left with two subproblems of size $i^\star \cdot j^\star$ and
+$(n-i^\star)(m-j^\star)$. Since $i^\star = n/2$, their total size is $n/2 \cdot
+j^\star + n/2 \cdot (m-j^\star) = nm/2$. Thus, the total time in the first layer
+of the recursion is $nm/2$. Extending this, we see that the total number of states
+halves with each level of the recursion. Thus, the total time is bounded by
+\begin{equation*}
+mn + \frac 12 \cdot mn + \frac 14 \cdot mn + \frac 18\cdot mn + \dots \leq 2\cdot mn = O(mn).
+\end{equation*}
+Indeed, in practice this algorithm indeed takes around twice as long to find an
+alignment as the non-recursive algorithm takes to find just the score.
+
+*Applications.*
+Hirschberg introduced this algorithm for computing the longest common
+subsequence [cite:@hirschberg75].
+It was then applied multiple times to reduce the space complexity of other
+variants as well:
+Myers first applied it to the $O(ns)$ LCS algorithm [cite/text:@myers86],
+and also improved the $O(nm)$ algorithm by Gotoh [cite:@gotoh] to
+linear memory [cite:@myers88].
+Similarly, BiWFA [cite:@biwfa] improves the space complexity of WFA from
+$O(n+s^2)$ to
+$O(s)$ working memory, where $s$ is the cost of the alignment.
+** Computational volumes
+- Band doubling
+** LCS and Contours
+- LCS
+- LCSk
+** Diagonal transition
+** graph algos
+- Dijkstra
+- A* + heuristics
+- gap-cost
+** Four russians
+** parallelism & Bitpacking
+- Profile
+** Approximate
+*** seed-chain-extend approximate
+*** BlockAligner
+** Semi-global highlight
+** Tools
+* A*PA
+** Summary/overview/contribs
+** Methods
+** Evaluation
+** Discussion
+
+* A*PA2
+- TODO: Properly contextualize A*PA2 wrt A*PA:
+  - Drop the graph stuff
+  - Do DP/NW/SIMD/bitpacking instead
+** Summary/overview/contribs
+- blocks
+- simd
+- encoding
+- incremental doubling
+- traceback
+- A*
+- sparse heuristic invocation
+** Notation
+** Methods
+- mostly copy paste; include some appendix stuff
+** Evaluation
+- mostly copy paste; include some appendix stuff?
+** Discussion
+
+
+
+* TODO
+- where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
+- consistent capitalization of headers
+- consider dropping appendix/human data results; we only have to make the
+  high-level point here
+
+#+print_bibliography:
