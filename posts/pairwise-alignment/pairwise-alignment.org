@@ -70,6 +70,14 @@ $$
 - Premise: if we can clearly see the optimal alignment in a dot-plot, why do we need
   quadratic time anyway?
 - mention hamming distance
+- $O(n^{2-\delta})$ lower bound
+
+  *Lower bound.*
+  [cite/text/cf:@no-subquadratic-ed] show that Levenshtein distance can not be solved in
+  time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
+  Exponential Time Hypothesis/ (SETH) is true.
+  Note that the $n^2/\lg n$ runtime of the four Russians method is not
+  $O(n^{2-\delta})$ for any $\delta>0$, and hence does not contradict this.
 
 As [cite/t:@fickett84 p. 1] stated 40 years ago and still true today,
 #+begin_quote
@@ -663,6 +671,7 @@ TODO: Check figure references.
 
 #+caption: Furthest reaching points for LCS by [cite/text:@myers86].
 #+name: furthest-reaching
+#+attr_html: :class inset
 [[file:../pairwise-alignment-history/screenshots/furthest-reaching.png]]
 
 Around 1985, the /diagonal transition/ algorithm was independently discovered by
@@ -713,11 +722,14 @@ that in practice the total time needed for $\lcp$ can be small, and Myers proves
 [cite:@myers86] that the LCS-version of the algorithm does run in expected $O(n+s^2)$ when we assume that the
 input is a random pair of sequences with distance $s$.
 
-Myers also notes that the
-$\lcp$ can be computed in $O(1)$ by first building (in $O(n+m)$ time) a suffix tree
-on the input strings and then using an auxiliary data structure to answer
-lowest-common-ancestor queries, leading to a worst-case $O(n+s^2)$ algorithm.
-However, this does not perform well in practice.
+Myers also notes that the $\lcp$ can be computed in $O(1)$ by first building (in
+$O(n+m)$ time) a suffix tree on the input strings and then using an auxiliary
+data structure to answer lowest-common-ancestor queries, leading to a worst-case
+$O(n+s^2)$ algorithm.  However, this does not perform well in practice.
+
+We remark here that when the divergence $d=s/n$ is fixed at, say, $1\%$, $s^2$
+still grows quadratically in $n$, and thus, in practice still method still
+becomes slow when the inputs become too long.
 
 *Space complexity.* A naive implementation of the method requires $O(s^2)$
 memory to store all values of $F_{gk}$ (on top of the $O(n+m)$ input sequences).
@@ -729,7 +741,7 @@ parallel, from the start and end of the alignment graph, until they meet. Then,
 this meeting point must be on the optimal alignment, and we can recurse into the
 two sub-problems. These now have distance $s/2$, so that overall, the cost is
 $$
-s^2 + 2\cdot (s/2)^2 + 4\cdot (s/4)^2 + \dots = s^2+s^2/2+s^2/4+\dots < 2s^2.
+2\cdot (s/2)^2 + 4\cdot (s/4)^2 + \dots = s^2/2+s^2/4+\dots < s^2.
 $$
 
 *Applications.*
@@ -743,11 +755,55 @@ divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 (on top of the $O(n+m)$ input).
 
 
-** LCS and Contours
+** Four Russians
+:PROPERTIES:
+:CUSTOM_ID: four-russians
+:END:
+
+#+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
+#+caption: For each block, differences between DP table cells along the top row $R$ and left column $S$ are the /input/, together with the corresponding substrings of $A$ and $B$.
+#+caption: The /output/ are the differences along the bottom row $R'$ and right column $S'$.
+#+caption: For each possible input of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
+#+caption: Red shaded states are not visited.
+#+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
+#+name: fig:four-russians
+#+attr_html: :class inset
+[[file:../pairwise-alignment-history/drawings/four-russians.drawio.svg]]
+
+The so called /four Russians method/ was introduced by [cite:@four-russians].
+It is a general method to speed up DP algorithms from $n^2$ to $n^2 / \lg n$,
+provided that entries are integers and all operations are 'local'.
+
+This idea was applied to pairwise alignment by Masek [cite:@four-russians-ed],
+resulting
+in the first subquadratic worst-case algorithm for edit distance.
+It works by partitioning
+the $n\times m$ matrix in blocks of size $r\times r$, for some $r=\log_k n$, as
+shown in figure [[fig:four-russians]]. Consider the differences $R_i$ and $S_i$ between
+adjacent DP cells along the top row ($R_i$) and left column ($S_i$) of
+the block. The core observation is that the differences $R'_i$ and $S'_i$ along
+the bottom row and right column of the block only depend on $R_i$, $S_i$, and
+the substrings $a_i\cdots a_{i+r}$ and $b_j\cdots b_{j+r}$. This means that for
+some value of $k$ depending on the alphabet size $\sigma$, $r=\log_k n$ is small enough so that we can precompute the
+values of $R'$ and $S'$ for all possibilities of $(R, S, a_i\cdots a_{i+r},
+b_j\cdots b_{j+r})$ in $O(n^2/r)$ time. In practice, $r$ needs to be quite small.
+
+Using these precomputed values, the DP can be sped up by doing a single $O(r)$
+lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\lg
+n)$. Not that while this is the only known worst-case subquadratic algorithm, it
+does not break the $O(n^{2-\delta})$ lower bound, since $\lg n$ grows subpolynomial.
+
+Wu et al. provide an implementation of this
+method for approximate string matching [cite/text/c:@wu96]. They suggest a block size of $1\times
+r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
+block to the next.
+
+Nowadays, the bit-parallel technique (e.g. [cite/text:@myers99]) have
+replaced four Russians, since it can compute up to 64 cells in a single step,
+while not having to wait for (comparatively) slow lookups of the precomputed data.
+
 - LCS
 - LCSk
-** Four russians
-- lower bound
 ** parallelism & Bitpacking
 As Spouge notes:
 #+begin_quote
@@ -798,6 +854,7 @@ But this is exactly what was investigated a lot in the search for more efficient
 - consider dropping appendix/human data results; we only have to make the
   high-level point here
 - Redo copied figures
+- figure captions
 - Add figures to methods
 - Add the big table and make it complete
 - incorporate ideas from more pairwise alignment blogposts?
