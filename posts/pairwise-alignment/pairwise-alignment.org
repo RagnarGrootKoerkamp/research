@@ -62,15 +62,30 @@ $$
 \newcommand{\matches}{\mathcal M}
 \newcommand{\ed}{\operatorname{ed}}
 \renewcommand{\d}{\operatorname{d}}
+\newcommand{\lcp}{\operatorname{LCP}}
 $$
 
 * Introduction
 - introduced by [cite:@nw] for biology
+- Premise: if we can clearly see the optimal alignment in a dot-plot, why do we need
+  quadratic time anyway?
+- mention hamming distance
+
+As [cite/t:@fickett84 p. 1] stated 40 years ago and still true today,
+#+begin_quote
+at present one must choose between an algorithm which gives the best alignment
+but is expensive, and an algorithm which is fast but may not give the best
+alignment.
+#+end_quote
+In this paper we narrow this gap and show that A*PA2 is nearly as fast as
+approximate methods.
+
 ** Overview
 - briefly highlight the three chapters
 - cite navarros review
 
 * A history of pairwise alignment
+- topic-by-topic, rather than chronological
 ** Problem statement
 The main problem of this chapter is as follows.
 #+begin_problem Global pairwise alignment
@@ -89,7 +104,7 @@ $a_i\dots a_{i'-1}$ as $A_{i\dots i'}$ to a prefix $a_0\dots a_{i-1}$ as
 $A_{<i}$ and to a suffix $a_i\dots a_{n-1}$ as $A_{\geq i}$.
 
 *Edit distance.*
-The /edit distance/ $\ed(A,B)$ is the minimum number of
+The /edit distance/ $s:=\ed(A,B)$ is the minimum number of
 insertions, deletions, and substitutions needed to convert $A$ into $B$.
 In practice, we also consider the /divergence/ $d:=\ed(A,B)/n$, which is the
 average number of errors per characters. This is
@@ -103,7 +118,8 @@ higher than the divergence, since random errors can cancel each other.
 [[file:../astarpa2/edit-graph2.drawio.svg]]
 
 *Edit graph.*
-The /alignment graph/ or /edit graph/ ([[edit-graph]]) is a way to formalize edit distance.
+The /alignment graph/ or /edit graph/ ([[edit-graph]]) is a way to formalize edit distance
+[cite:@vintsyuk68;@ukkonen85].
 It contains /states/ $\st ij$ ($0\leq
 i\leq n$, $0\leq j\leq m$) as vertices.
 It further contains edges, such that an edge of cost $0$ corresponds to a pair
@@ -138,9 +154,12 @@ find the distance to any other state as the minimum distance to an incoming
 neighbour plus the cost of the final edge. As we will see soon, this is often
 implemented using /dynamic programming/ (DP).
 
-A second shortest path algorithm is Dijkstra's algorithm
-[cite:@dijkstra59], but more importantly, a number of papers build on the A*
-algorithm [cite:@astar-hart67], which is an improvement of Dijkstra.
+Dijkstra's
+shortest path algorithm can also be applied here [cite:@dijkstra59],
+which visits states in order of increasing distance. This
+does require that all edges have non-negative weights.
+An extension of Dijkstra's algorithm is A* [cite:@astar-hart67], which visits
+states in order of increasing ``anticipated total distance''.
 
 ** Variations on pairwise alignment
 There are a few variants of pairwise alignments and edit distance. While the
@@ -186,6 +205,9 @@ There are different models to specify the cost of each edit operation
 types of mutations may not be equal, and thus, the associated costs should be different.
 We list some of them here, from simple to more complicated.
 
+- *Hamming distance:* The /hamming distance/ between two sequences is the number
+  of substitutions required to transform one into the other, where insertions or
+  deletions are not allowed. This is simple to compute in linear time.
 - *LCS:* The /longest common subsequence/ maximizes the number of matches, or
   equivalently, minimizes the number of /indels/ (insertions or deletions) while
   not allowing substitutions. Insertions and deletions both have a cost of $1$.
@@ -461,18 +483,278 @@ linear memory [cite:@myers88].
 Similarly, BiWFA [cite:@biwfa] improves the space complexity of WFA from
 $O(n+s^2)$ to
 $O(s)$ working memory, where $s$ is the cost of the alignment.
-** Computational volumes
-- Band doubling
+
+** Dijkstra's algorithm and A*
+:PROPERTIES:
+:CUSTOM_ID: graphs
+:END:
+
+*Dijkstra's algorithm.*
+Both [cite/t:@ukkonen85] and [cite/t:@myers86]
+remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
+which visits states by increasing distance.
+Ukkonen gave a bound of $O(nm \log (nm))$, whereas Myers' analysis uses the fact
+that there are only $O(ns)$ at distance $\leq s$ (see [[#computational-volumes]]), and thus concludes that the
+algorithms runs in $O(ns)$ ([[intro]]a).
+
+However, [cite/t:@myers86 p. 2] observes that
+#+begin_quote
+the resulting algorithm involves a relatively complex discrete priority queue
+and this queue may contain as many as $O(ns)$ entries even in the case where just
+the length of the shortest edit script is being computed.
+#+end_quote
+And indeed, I am not aware of any tool that practically implemented Dijkstra's algorithm to
+compute the edit distance.
+
+*A**.
+Hadlock realized [cite:@hadlock88detour] that Dijkstra's algorithm can be improved
+upon by using A* [cite:@astar-hart67;@astar-hart67-correction;@pearl1984heuristics], a more /informed/ algorithm that uses a
+/heuristic/ function $h$ that gives a lower bound on the remaining edit distance
+between two suffixes. He proposes two heuristics, one based on character
+frequencies, and also the widely
+used /gap cost/ heuristic
+[cite:@ukkonen85;@hadlock88detour;@spouge89;@spouge91].
+This uses the difference in length between two sequences as a lower bound on
+their edit distance ([[intro]]d):
+$$
+\cgap(\st ij, \st{i'}{j'}) = |(i-i') - (j-j')|.
+$$
+We specifically highlight the papers by Wu et al. [cite:@wu90-O-np] and Papamichail and Papamichail
+[cite:@papamichail2009], where the authors' method exactly matches the A* algorithm
+with the gap-heuristic, in combination with diagonal transition (Section [[#diagonal-transition]]).
+
+Much more recently, A*ix [cite:@astarix-1;@astarix-2] introduced the much stronger /seed heuristic/
+for the problem of sequence-to-graph alignment. This heuristic
+splits the sequence $A$ into disjoint k-mers, and uses that at least one edit is
+needed for each remaining k-mer that is not present in sequence $B$.
+
+In A*PA [cite:@astarpa] (Section [[*A*PA]]) we will improve this into the
+/gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
+alignment when the divergence is sufficient low ([[intro]]g).
+
+*Notation.*
+To prepare for the theory on A*PA, we now introduce some formal terminology and
+notation for Dijkstra's algorithm and A*.
+Dijkstra's algorithm finds a shortest path from $v_s=\st 00$
+to $v_t=\st nm$ by /expanding/ (generating all successors) vertices in order of
+increasing distance $\g(u)$ from the start.
+This next vertex to be expanded is chosen from a set of /open/ vertices.
+The A* algorithm, instead, directs the
+search towards a target by expanding vertices in order of increasing ${f(u) :=
+g(u) + h(u)}$, where $h(u)$ is a heuristic function that estimates the distance
+$\h(u)$ to the end and $g(u)$ is the shortest length of a path from $v_s$ to $u$
+found so far. A heuristic is /admissible/ if it is a lower bound on the
+remaining distance ($h(u) \leq \h(u)$), which guarantees that A* has found a
+shortest path as soon as it expands $v_t$. A heuristic $h_1$ /dominates/ (is
+/more accurate/ than) another heuristic $h_2$ when $h_1(u) \ge h_2(u)$ for
+all vertices $u$. A dominant heuristic will usually (but not
+always [cite:@astar-misconceptions]) expand less vertices. Note that Dijkstra's
+algorithm is equivalent to A* using a heuristic that is always $0$, and that
+both algorithms require non-negative edge costs.
+
+We end our discussion of graph algorithms with a quote:
+as Spouge states [cite:@spouge91 p. 3],
+#+begin_quote
+algorithms exploiting the lattice structure of an alignment graph are usually faster.
+#+end_quote
+and further [cite:@spouge89 p. 4]:
+#+begin_quote
+This suggests a radical approach to A* search complexities: dispense with the
+lists [of open states] if there is a natural order for vertex expansion.
+#+end_quote
+In A*PA2 [cite:@astarpa2] (Section [[*A*PA2]]),
+we follow this advice and replace the plain A* search in A*PA with a much
+more efficient approach based on /computational volumes/ that merges DP and A*.
+
+** Computational volumes and band doubling
+:PROPERTIES:
+:CUSTOM_ID: computational-volumes
+:END:
+All methods we have seen so far use time $\Theta(nm)$ or worse, even when the
+two input sequences are very similar, or even equal.
+To our knowledge, Wilbur and Lipman [cite:@wilbur-lipman-83] are the first to
+speed this up, by only considering states near diagonals with many
+/k-mer matches/. However, this method is not /exact/, i.e., it could return a
+suboptimal alignment.
+
+*Reordering the matrix computation.*
+The main reason the methods so far are quadratic is that they compute the entire
+$n\times m$ matrix. But, especially when the two sequences are similar, the
+optimal alignment is likely to be close to the main diagonal.
+Thus, Fickett [cite:@fickett84] proposes to compute the entries of the DP matrix
+in a new order: Instead of column by column, we can first compute all entries at
+distance up to $t$, and if this does not yet result in a path to the end ($\st
+nm$), we can incrementally extend to computed area to a
+larger area with distance up to $t'>t$, and so on, until we try a $t\geq s$.
+In fact, when $t$ is increased by $1$ at a time this is similar to Dijkstra's algorithm.
+
+Vertices at distance $\leq t$ can never be more than $t$ diagonals away
+from the main diagonal, and hence, computing them can be done in $O(nt)$ time.
+This can be much faster than $O(nm)$ when $s$ and $t$ are both small, and works
+especially well when $t$ is not too much larger than $s$.
+For example, $t$ can be set as a known upper bound for the
+data being aligned, or as the length of some known suboptimal alignment.
+
+#+name: intro
+#+name: intro
+#+caption: Alignment of two sequences of length $3000$bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation. TODO: Review figs and caption
+#+attr_html: :class equal-width
+| [[file:../astarpa2/imgs/intro/2_dijkstra.png]] | [[file:../astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:../astarpa2/imgs/intro/0_gap-gap.png]] | [[file:../astarpa2/imgs/intro/0_bitpacking.png]] | [[file:../astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:../astarpa2/imgs/intro/7_astarpa2_full.png]] | file:../astarpa2/imgs/intro/5_astarpa-prune.png |
+|                                | + DT                                      | + band doubling               | + gap heuristic and bitpacking   | + blocks                              | + GCSH                              | A*                                  |
+| Dijkstra                       | WFA                                       | Ukkonen                       | Edlib                            | A*PA2-simple                          | A*PA2-full                          | A*PA                                |
+
+*Gap heuristic.*
+In parallel, Ukkonen introduced a very similar idea [cite:@ukkonen85], /statically/ bounding the
+computation to only those states that can be contained in a path of length at most $t$
+from the start to the end of the graph ([[intro]]c). In particular, it uses the /gap
+heuristic/: the minimal cost of a path from $\st
+00$ to $\st ij$ is at least the number of diagonals needed to get there:
+$\cgap(\st 00, \st ij) = |i-j|$. Then, the minimal cost of an alignment
+containing $\st ij$ is
+$$
+f(\st ij) := \cgap(\st 00, \st ij) + \cgap(\st ij, \st nm) = |i-j| + |(n-i) - (m-j)|,
+$$
+and Ukkonen's algorithm only considers those states for which $f(\st ij) \leq t$.
+Thus, instead that the /actual/
+distance to a state is at most $t$ ($\g(\st ij) \leq t$), it requires that
+the best possible cost of a path containing $\st ij$ is sufficiently low.
+
+*Band doubling.*
+Ukkonen also introduces /band doubling/ [cite:@ukkonen85]:
+if it turns out that $t=t_0<s$,
+then it can be doubled to $t_1 = 2t_0$, until a $t_i\geq s$ is found.
+/doubled/ ($t_i = 2^i$) until $t_k$ is at least the actual distance $s$.
+As we already saw, testing $t$ takes $O(nt)$ time.
+Now suppose we test $t_0=1$,
+$t_1=2$, $\dots$, $t_{i-1}=2^{i-1}<s$, up to $t_i=2^i \geq s$. Then the total
+cost of this, assuming that no data is reused between testing increasing values
+of $t$, is
+$$
+t_0n + t_1n + \dots + t_i n = 1\cdot n + 2\cdot n + \dots + 2^i \cdot n <
+2^{i+1}\cdot n = 4\cdot 2^{i-1}\cdot n < 4sn.
+$$
+Thus, band doubling finds an optimal alignment in $O(ns)$ time.
+
+Two tools implementing this band doubling are Edlib and KSW2.
+
+*Computational volumes.*
+Spouge unifies the methods of Fickett and Ukkonen in /computational volumes/
+[cite:@spouge89], which are subgraphs of the full edit graph that are guaranteed
+to contain /all/ shortest paths.
+thus, to find an alignment, it is sufficient to only consider the states in such
+a computational volume.
+Given a bound $t\geq s$, some examples of
+computational volumes are:
+1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
+2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
+   [cite/t:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
+3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the static set of states possibly on a path
+   of cost $\leq t$ ([[intro]]c) [cite:@ukkonen85].
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]de) [cite:@edlib;@spouge91;@papamichail2009].
+5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$, which we will
+   use in A*PA2 and is similar to A* ([[intro]]fg).
+
+TODO: Check figure references.
+
+** Diagonal transition
+:PROPERTIES:
+:CUSTOM_ID: diagonal-transition
+:END:
+
+#+caption: Furthest reaching points for LCS by [cite/text:@myers86].
+#+name: furthest-reaching
+[[file:../pairwise-alignment-history/screenshots/furthest-reaching.png]]
+
+Around 1985, the /diagonal transition/ algorithm was independently discovered by
+Ukkonen [cite:@ukkonen83;@ukkonen85] (for edit distance) and Myers
+[cite:@myers86] (for LCS). It hinges on the
+observation that along diagonals of the edit graph (or DP matrix), the value of
+$\g(\st ij) = D(i,j)$ never decreases [cite:Lemma 3 @ukkonen85], as can be seen in [[edit-graph]].
+
+We already observed before that when the edit distance is $s$, only the $s$
+diagonals above and below the main diagonal are needed, and on these diagonals,
+we only are interested in the values up to $s$. Thus, on each diagonal, there
+are at most $s$ transition from a distance $g\leq s$ to distance $g+1$.
+We call the farthest state along a diagonal with a given distance a /farthest
+reaching state/. Specifically, given a diagonal $-s\leq k\leq s$, we consider
+the farthest $u=\st ij$ on this diagonal (i.e., with $i-j=k$) at distance $g$ ($\g(u) \leq
+g$).
+Then we write $F_{gk}:=i+j$ to indicate the antidiagonal of this farthest
+reaching state. (Note that more commonly [cite:@ukkonen85;@wfa], just the column $i$ is used to
+indicate how far along diagonal $k=i-j$ can be found, the using $i+j$ leads to
+more symmetric formulas.)
+In order to write the recursive formula on the $F_{gk}$, we need a helper
+function: $\lcp(i, j)$ returns the length of the longest
+common prefix between $A_{\geq i}$ and $B_{\geq j}$, which indicates how far we can walk along the diagonal
+for free starting at $u=\st ij$. We call this /extending/ from $u$.
+The recursion then starts with $F_{00} = \lcp(0,0)$ as the farthest state along
+the main diagonal with cost $0$. To compute /wavefront/ $F_{g, \bullet}$ in terms of $F_{g-1, \bullet}$,
+we first find the farthest state at distance $g$ on diagonal $k$ that is /adjacent/ to a state
+at distance $g-1$:
+$$
+X_{gk} := \max(F_{g-1,k-1}+1, F_{g-1,k}+2, F_{g-1,k+1}+1).
+$$
+From this state, with coordinates $i(X_{gk}) = (X_{gk}+k)/2$ and $j(X_{gk})=(X_{gk}-k)/2$, we can possibly walk further along the diagonal for free to
+obtain the farthest reaching point:
+$$
+F_{gk} = X_{gk} + \lcp(i(X_{gk}), j(X_{gk})).
+$$
+The edit distance between two sequences is then the smallest $g$ such that
+$F_{g, n-m} \geq n+m$.
+
+*Time complexity.*
+The total number of farthest reaching states is $O(s^2)$, since there are $2s+1$
+diagonal within distance $s$, and each has at most $s+1$ farthest reaching
+states.
+The total time spent on $\lcp$ is at most $O(ns)$, since on each of the $2s+1$
+diagonals, the $\lcp$ calls cover at most $n$ characters in total.
+Thus, the worst case of this method is $O(ns)$. Nevertheless, Ukkonen observes [cite:@ukkonen85]
+that in practice the total time needed for $\lcp$ can be small, and Myers proves
+[cite:@myers86] that the LCS-version of the algorithm does run in expected $O(n+s^2)$ when we assume that the
+input is a random pair of sequences with distance $s$.
+
+Myers also notes that the
+$\lcp$ can be computed in $O(1)$ by first building (in $O(n+m)$ time) a suffix tree
+on the input strings and then using an auxiliary data structure to answer
+lowest-common-ancestor queries, leading to a worst-case $O(n+s^2)$ algorithm.
+However, this does not perform well in practice.
+
+*Space complexity.* A naive implementation of the method requires $O(s^2)$
+memory to store all values of $F_{gk}$ (on top of the $O(n+m)$ input sequences).
+If only the distance is needed, only the last front has to be stored and $O(s)$
+additional memory suffices.
+To reduce the $O(s^2)$ memory, Hirschberg's divide-and-conquer technique can
+also be applied here [cite:@myers86]: we can run two instances of the search in
+parallel, from the start and end of the alignment graph, until they meet. Then,
+this meeting point must be on the optimal alignment, and we can recurse into the
+two sub-problems. These now have distance $s/2$, so that overall, the cost is
+$$
+s^2 + 2\cdot (s/2)^2 + 4\cdot (s/4)^2 + \dots = s^2+s^2/2+s^2/4+\dots < 2s^2.
+$$
+
+*Applications.*
+Wu et al. [cite:@wu90-O-np] and Papamichail and Papamichail [cite:@papamichail2009] apply diagonal transition to align
+sequences of different lengths, by incorporating the gap-heuristic.
+Diagonal transition has also been extended to linear and affine costs in the
+/wavefront alignment/ algorithm (WFA) [cite:@wfa] in a way similar
+to [cite:@gotoh], by introducing multiple layers to the graph.
+Similar to Myers [cite:@myers86], BiWFA [cite:@biwfa] applies Hirscherg's
+divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
+(on top of the $O(n+m)$ input).
+
+
 ** LCS and Contours
 - LCS
 - LCSk
-** Diagonal transition
-** graph algos
-- Dijkstra
-- A* + heuristics
-- gap-cost
 ** Four russians
+- lower bound
 ** parallelism & Bitpacking
+As Spouge notes:
+#+begin_quote
+The order of computation (row major, column major or antidiagonal) is just a
+minor detail in most algorithms.
+#+end_quote
+But this is exactly what was investigated a lot in the search for more efficient implementations.
 - Profile
 ** Approximate
 *** seed-chain-extend approximate
@@ -505,11 +787,19 @@ $O(s)$ working memory, where $s$ is the cost of the alignment.
 ** Discussion
 
 
+* A*PA
+* A*PA2
+* Semi-global alignment
+
 
 * TODO
 - where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
 - consistent capitalization of headers
 - consider dropping appendix/human data results; we only have to make the
   high-level point here
+- Redo copied figures
+- Add figures to methods
+- Add the big table and make it complete
+- incorporate ideas from more pairwise alignment blogposts?
 
 #+print_bibliography:
