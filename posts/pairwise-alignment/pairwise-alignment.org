@@ -72,13 +72,6 @@ $$
 - mention hamming distance
 - $O(n^{2-\delta})$ lower bound
 
-  *Lower bound.*
-  [cite/text/cf:@no-subquadratic-ed] show that Levenshtein distance can not be solved in
-  time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
-  Exponential Time Hypothesis/ (SETH) is true.
-  Note that the $n^2/\lg n$ runtime of the four Russians method is not
-  $O(n^{2-\delta})$ for any $\delta>0$, and hence does not contradict this.
-
 As [cite/t:@fickett84 p. 1] stated 40 years ago and still true today,
 #+begin_quote
 at present one must choose between an algorithm which gives the best alignment
@@ -755,10 +748,16 @@ Similar to Myers [cite:@myers86], BiWFA [cite:@biwfa] applies Hirscherg's
 divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 (on top of the $O(n+m)$ input).
 
-** Four Russians
-:PROPERTIES:
-:CUSTOM_ID: four-russians
-:END:
+** Subquadratic methods and lower bounds
+
+*Lower bounds.*
+Backurs and Indyk [cite:@no-subquadratic-ed] have shown that unit cost edit distance can not be solved in
+time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
+Exponential Time Hypothesis/ (SETH) is true. Soon after, it was also shown that
+SETH implies that
+LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
+[cite:@no-subquadratic-lcs].
+
 
 #+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
 #+caption: For each block, differences between DP table cells along the top row $R$ and left column $S$ are the /input/, together with the corresponding substrings of $A$ and $B$.
@@ -770,8 +769,9 @@ divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 #+attr_html: :class inset
 [[file:../pairwise-alignment-history/drawings/four-russians.drawio.svg]]
 
+*Four Russians method.*
 The so called /four Russians method/ was introduced by [cite:@four-russians].
-It is a general method to speed up DP algorithms from $n^2$ to $n^2 / \lg n$,
+It is a general method to speed up DP algorithms from $n^2$ to $n^2 / \log n$,
 provided that entries are integers and all operations are 'local'.
 
 This idea was applied to pairwise alignment by Masek [cite:@four-russians-ed],
@@ -786,13 +786,23 @@ the bottom row and right column of the block only depend on $R_i$, $S_i$, and
 the substrings $a_i\cdots a_{i+r}$ and $b_j\cdots b_{j+r}$. This means that for
 some value of $k$ depending on the alphabet size $\sigma$, $r=\log_k n$ is small enough so that we can precompute the
 values of $R'$ and $S'$ for all possibilities of $(R, S, a_i\cdots a_{i+r},
-b_j\cdots b_{j+r})$ in $O(n^2/r)$ time. In practice, $r$ needs to be quite small.
+b_j\cdots b_{j+r})$ in $O(n^2/r^2)$ time. In practice, $r$ needs to be quite small.
 
-Using these precomputed values, the DP can be sped up by doing a single $O(r)$
-lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\lg
-n)$. Not that while this is the only known worst-case subquadratic algorithm, it
-does not break the $O(n^{2-\delta})$ lower bound, since $\lg n$ grows subpolynomial.
+Using these precomputed values, the DP can be sped up by doing a single $O(1)$
+lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\log^2
+n)$. The runtime was originally reported as $O(n^2/\log n)$, but subsequent
+papers realized that the $r$ differences along each block boundary fit in a
+single machine word, so that lookups are indeed $O(1)$ instead of $O(r)$.
+While this is the only known subquadratic worst-case algorithm, it
+does not break the $O(n^{2-\delta})$ lower bound, since $\log^2 n$ grows subpolynomial.
 
+Masek's method requires a constant size alphabet.
+A first extension to general alphabets increased the time to $O(n^2 (\log \log
+n)^2 / \log^2(n))$ [cite:@four-russians-ed-general-alphabet], and this was later
+improved to $O(n^2 \log \log n / \log^2(n))$ [cite:@grabowski14]. An algorithm
+with similar complexity also works for LCS.
+
+*Applications.*
 Wu et al. provide an implementation of this
 method for approximate string matching [cite/text/c:@wu96]. They suggest a block size of $1\times
 r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
