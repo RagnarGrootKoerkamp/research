@@ -826,64 +826,6 @@ Nowadays, the bit-parallel technique (e.g. [cite/text:@myers99]) have
 replaced four Russians, since it can compute up to 64 cells in a single step,
 while not having to wait for (comparatively) slow lookups of the precomputed data.
 
-** LCS and Contours
-#+caption: Contours as shown in [cite/text:@hirschberg77]
-#+name: contours
-#+attr_html: :class inset
-[[file:../pairwise-alignment-history/screenshots/contours.png]]
-
-So far, all pairwise alignment methods we looked at are based on the alignment graph. The
-longest common subsequence problem also admits different solutions. See e.g.
-[cite:@lcs-survey] for a survey.
-
-*Sparse dynamic programming.*
-Instead of finding a minimal-cost path through a graph, we can search for the
-longest /chain/ of matches [cite:@hirschberg75;@hirschberg77;@hunt77]. Suppose there are $r$ /matches/ in
-total, where each match is a pair $(i,j)$ such that $a_i=b_j$. We can then
-process these matches from left to right (by increasing $i$ and $j$), and for
-each of them determine the longest chain of matches ending in them.
-By extension, we determine for each state $\st ij$ the length $S(\st ij)$ of the
-LCS of $A_{<i}$ and $B_{<j}$.
-Such methods that only consider a subset of vertices of the graph or DP-matrix
-are using /sparse dynamic programming/, and are reviewed and extended in
-[cite:@sparse-dynamic-programming-1;@sparse-dynamic-programming-2].
-
-Note that $S$ can never decrease as we move right or
-down the matrix, and this allows to efficiently store the values of a column via
-a list of /thresholds/ of rows where the LCS jumps from $g$ to $g+1$. Then, the
-value of a cell can be found using binary search, so that the overall algorithm
-runs in $O((r + n) \lg n)$.
-While this is slow in general, when there are only few ($r\approx n$) matches,
-as may be the case when comparing lines of code, this algorithm is much faster
-than previous quadratic methods.
-
-*Contours.* The regions of equal $S$ create a set of /contours/ ([[contours]]), where contour $\ell$ is the
-boundary between the regions with $S(u)\geq \ell$ and $S(u) < \ell$.
-Each contour is determined by a set of /dominant/ matches
-$a_i=b_j$ for which $S(i+1,j+1)$ is larger than both $S(i, j+1)$ and $S(i+1,j)$.
-
-*LCSk.* We also mention here the LCSk variant, where the task is to maximize the number
-of length-$k$ matches between the two input strings.
-This was first introduced around 1982 by Wilbur and Lipman
-[cite:@wilbur-lipman-83;@wilbur-lipman-84], and rediscovered in 2014
-[cite:@lcsk;@lcsk++;@lcsk-fast;@lcsk-overview]. When choosing $k$
-sufficiently larger than $\log_\sigma n$, this has the benefit that the number
-of $k$-mer matches between the two strings is typically much smaller than $n^2$,
-so that the $O((r+n)\lg n)$ runtime becomes feasible. The drawback, however, is
-that this not provide an exact solution to the original LCS problem.
-
-*Chaining k-mers.* A solution to the LCSk problem consist of a sequence of matching
-$k$-mers. Together, these form a /chain/, which is formally defined as a
-sequence of vertices $u_1$, $\dots$, $u_n$ in a partially ordered set (whose
-transitive close is a directed acyclic graph), such that $u_1\leq u_2\leq \dots
-\leq u_n$. Then, LCSk is equivalent to finding the longest chain in the poset of
-k-mer matches. In this formulation, a score (the length) is maximized. Myers and
-Miller [cite:@myers-miller-95] instead consider a version where the cost of a
-chain is minimized, by using the /gap cost/ over the gap between consecutive
-k-mer matches in the chain.
-
-TODO: Refer myers-miller-95 in context of A*PA seed heuristic. it's nearly the same.
-
 ** Parallelism
 
 So far we have mostly focused on the theoretical time complexity of methods.
@@ -996,6 +938,64 @@ bits to store and more of them can be processed in parallel
 local alignment, and this has subsequently been used by KSW2 and BSAlign [cite:@bsalign].
 
 TODO: Many packing tools (also based on automata) for text search / semi-global alignment
+
+** LCS and Contours
+#+caption: Contours as shown in [cite/text:@hirschberg77]
+#+name: contours
+#+attr_html: :class inset
+[[file:../pairwise-alignment-history/screenshots/contours.png]]
+
+So far, all pairwise alignment methods we looked at are based on the alignment graph. The
+longest common subsequence problem also admits different solutions. See e.g.
+[cite:@lcs-survey] for a survey.
+
+*Sparse dynamic programming.*
+Instead of finding a minimal-cost path through a graph, we can search for the
+longest /chain/ of matches [cite:@hirschberg75;@hirschberg77;@hunt77]. Suppose there are $r$ /matches/ in
+total, where each match is a pair $(i,j)$ such that $a_i=b_j$. We can then
+process these matches from left to right (by increasing $i$ and $j$), and for
+each of them determine the longest chain of matches ending in them.
+By extension, we determine for each state $\st ij$ the length $S(\st ij)$ of the
+LCS of $A_{<i}$ and $B_{<j}$.
+Such methods that only consider a subset of vertices of the graph or DP-matrix
+are using /sparse dynamic programming/, and are reviewed and extended in
+[cite:@sparse-dynamic-programming-1;@sparse-dynamic-programming-2].
+
+Note that $S$ can never decrease as we move right or
+down the matrix, and this allows to efficiently store the values of a column via
+a list of /thresholds/ of rows where the LCS jumps from $g$ to $g+1$. Then, the
+value of a cell can be found using binary search, so that the overall algorithm
+runs in $O((r + n) \lg n)$.
+While this is slow in general, when there are only few ($r\approx n$) matches,
+as may be the case when comparing lines of code, this algorithm is much faster
+than previous quadratic methods.
+
+*Contours.* The regions of equal $S$ create a set of /contours/ ([[contours]]), where contour $\ell$ is the
+boundary between the regions with $S(u)\geq \ell$ and $S(u) < \ell$.
+Each contour is determined by a set of /dominant/ matches
+$a_i=b_j$ for which $S(i+1,j+1)$ is larger than both $S(i, j+1)$ and $S(i+1,j)$.
+
+*LCSk.* We also mention here the LCSk variant, where the task is to maximize the number
+of length-$k$ matches between the two input strings.
+This was first introduced around 1982 by Wilbur and Lipman
+[cite:@wilbur-lipman-83;@wilbur-lipman-84], and rediscovered in 2014
+[cite:@lcsk;@lcsk++;@lcsk-fast;@lcsk-overview]. When choosing $k$
+sufficiently larger than $\log_\sigma n$, this has the benefit that the number
+of $k$-mer matches between the two strings is typically much smaller than $n^2$,
+so that the $O((r+n)\lg n)$ runtime becomes feasible. The drawback, however, is
+that this not provide an exact solution to the original LCS problem.
+
+*Chaining k-mers.* A solution to the LCSk problem consist of a sequence of matching
+$k$-mers. Together, these form a /chain/, which is formally defined as a
+sequence of vertices $u_1$, $\dots$, $u_n$ in a partially ordered set (whose
+transitive close is a directed acyclic graph), such that $u_1\leq u_2\leq \dots
+\leq u_n$. Then, LCSk is equivalent to finding the longest chain in the poset of
+k-mer matches. In this formulation, a score (the length) is maximized. Myers and
+Miller [cite:@myers-miller-95] instead consider a version where the cost of a
+chain is minimized, by using the /gap cost/ over the gap between consecutive
+k-mer matches in the chain.
+
+TODO: Refer myers-miller-95 in context of A*PA seed heuristic. it's nearly the same.
 
 ** TODO Approximate alignment
 
