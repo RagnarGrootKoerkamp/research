@@ -1,0 +1,79 @@
+#+title: 3. High Throughput Bioinformatics
+#+filetags: @thesis hpc highlight wip
+#+HUGO_LEVEL_OFFSET: 0
+#+OPTIONS: ^:{} num:2 H:4
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_paired_shortcodes: %notice
+#+date: <2025-02-20 Fri>
+
+#+attr_shortcode: attribution
+#+begin_notice
+This chapter is based on two preprints:
+- SimdMinimizers, coauthored with Igor Martayan:
+
+  [cite/bibentry/b:@simd-minimizers-preprint]
+- PtrHash, which is my own work:
+
+  [cite/bibentry/b:@ptrhash-full]
+
+Further, the introduction of this chapter contains some unpublished experiments
+on high throughput computing.
+
+The SimdMinimizers code was largely developed by myself, with contributions from
+Igor Martayan to support the NEON architecture.
+The paper itself has equal contribution from both Igor Martayan and myself.
+#+end_notice
+
+#+attr_shortcode: summary
+#+begin_notice
+In this chapter, the goal will be /fast code/.
+Specifically, the goal is to solve some given problem as fast as possible
+by fully exhausting the hardware.
+In fact, the goal is not just fast code in itself, but /provably/ fast code:
+ideally we can prove that, given some assumptions,
+the code is within some percentage of the fastest the given hardware could be.
+
+We start by introducing a few common techniques to achieve speedups.
+For compute-bound problems, these include
+SIMD, avoiding unpredictable branches, and instruction-level parallellism,
+For memory-bound problems, the core principle is to optimize for /throughput/
+rather than /latency. Some solutions are interleaving multiple queries
+using batching or streaming, prefetching, and doing cache line-aware optimization
+of the memory layout.
+
+We will use the SSHash $k$-mer index as a motivating application.
+This data structure takes as input a text, and builds a dictionary on its
+$k$-mers. It can then efficiently answer queries whether given $k$-mers occur in
+the input text.
+
+The first step is to compute the minimizers of the text. As the number of
+minimizers is typically much lower than the number of characters in the text, we
+want this to be fast so that this ``compression'' step is not the bottleneck.
+
+Then, when answering queries, SSHash uses a /minimal perfect hash function/
+(MPHF) to
+find the index of each minimizer in its internal data structure.
+With PtrHash, we develop an MPHF that only needs a single memory access for most
+queries, and can answer queries nearly as fast as the memory can support random
+access reads.
+#+end_notice
+
+
+* Introduction
+- Large scale text indices
+- More data -> faster algorithms
+
+- (not) latency
+- throughput
+
+- Text indexing.
+- SSHash (future work)
+- SimdMinimizers
+- PtrHash
+
+** Two applications
+
+**
+* SimdMinimizers
+* PtrHash

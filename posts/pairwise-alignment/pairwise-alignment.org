@@ -1,11 +1,11 @@
-#+title: Pairwise alignment
+#+title: 1. Pairwise Alignment
 #+filetags: @thesis @survey pairwise-alignment highlight wip
 #+HUGO_LEVEL_OFFSET: 0
 #+OPTIONS: ^:{} num:2 H:4
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_paired_shortcodes: %notice
-#+date: <2025-02-21 Fri>
+#+date: <2025-02-22 Fri>
 
 #+attr_shortcode: attribution
 #+begin_notice
@@ -1055,13 +1055,14 @@ Smith et al. [cite:@smith81], Kruskal [cite/text:@kruskal83], Spouge
 survey on LCS algorithms [cite:@lcs-survey].  A more recent review on
 read-aligners was done by Alser et al. [cite:@alser21].
 
-#+caption: Chronological overview of papers related to exact global pairwise alignment. Parameters are sequence lenghts $n$ and $m$ with $n\geq $m$. The (edit) distance is $s$. The number of matching characters or k-mers is $r$. The length of the LCS is $p$. $w=64$ is the word size, and lastly we assume a fixed-size alphabet $\Sigma$. Time is worst-case unless noted otherwise, and space usage is to obtain the full alignment. Methods in bold are newly introduced or combined.
+#+caption: Chronological overview of papers related to exact global pairwise alignment. Parameters are sequence lengths $n$ and $m$ with $n\geq $m$. The (edit) distance is $s$. The number of matching characters or k-mers is $r$. The length of the LCS is $p$. $w=64$ is the word size, and lastly we assume a fixed-size alphabet $\Sigma$. Time is worst-case unless noted otherwise, and space usage is to obtain the full alignment. Methods in bold are newly introduced or combined.
 #+name: table
 #+attr_html: :class full-width
 | Paper                                                | Cost model                                 | Time                                      | Space                       | Method                                                            | Remarks                                                                          |
+| <20>                                                 | <10>                                       |                                           | <10>                        |                                                                   | <30>                                                                             |
 |------------------------------------------------------+--------------------------------------------+-------------------------------------------+-----------------------------+-------------------------------------------------------------------+----------------------------------------------------------------------------------|
 | [cite/text/cf:@vintsyuk68]                           | no deletions                               | $O(nm)$                                   | $O(nm)$                     | DP                                                                | different formulation in a different domain, but conceptually similar            |
-| [cite/text/cf:@nw]                                   | *edit distance* [fn::also arbitrary gaps?] | $O(n^2m)$                                 | $O(nm)$                     | DP                                                                | solves pairwise alignment in polynomial time                                     |
+| [cite/text/cf:@nw]                                   | *edit distance* TODO ARBITRARY GAPS??? | $O(n^2m)$                                 | $O(nm)$                     | DP                                                                | solves pairwise alignment in polynomial time                                     |
 | [cite/text/cf:@sankoff]                              | LCS                                        | $\boldsymbol{O(nm)}$                      | $O(nm)$                     | DP                                                                | the first quadratic algorithm                                                    |
 | [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                              | $O(nm)$                                   | $O(nm)$                     | DP                                                                | the quadratic algorithm now known as Needleman-Wunch                             |
 | [cite/text/cf:@hirschberg75]                         | LCS                                        | $O(nm)$                                   | $\boldsymbol{O(n)}$         | divide-and-conque                                                 | introduces linear memory backtracking                                            |
@@ -1089,7 +1090,7 @@ read-aligners was done by Alser et al. [cite:@alser21].
 | [cite/text/cf:@papamichail2009]                      | unit costs                                 | $O(n+(s-\vert n-m\vert)s)$                | $O(s)$                      | A*, gap heuristic, diagonal transition                            |                                                                                  |
 | [cite/text/cf:@lcsk-overview]                        | LCS$k$                                     | $O(n + r \log l)$                         | $O(n + \min(r, nl))$        | thresholds                                                        | modifies [cite/text:@hunt77] for LCS$k$                                          |
 | BitPAl [cite/text/cf:@bitpal]                        | Edit distance                              | $O(znm/w)$                                | $O(znm/w)$                  | Bitpacking, *difference recurrence*                               | $z$ depends on edit costs                                                        |
-| [cite/text/cf:@grabowski14]                          | unit cost/LCS                          | $O(nm \log \log n / \log^2 n)$            | $o(n)$ overhead             | Four-russians                                                     | General alphabet                                                                 |
+| [cite/text/cf:@grabowski14]                          | unit cost/LCS                              | $O(nm \log \log n / \log^2 n)$            | $o(n)$ overhead             | Four-russians                                                     | General alphabet                                                                 |
 | Edlib [cite/text/cf:@edlib]                          | unit costs                                 | $O(ns/w)$                                 | $O(n)$                      | Bitpacking, band-doubling, divide-and-conquer                     | extends Myers' bit-packing to global alignment                                   |
 | libgaba [cite/text/cf:@suzuki-kasahara]              | Affine                                     | -                                         | -                           | *SIMD*, *affine difference recurrence relation*                   | Adaptive band; not exact                                                         |
 | KSW2 [cite/text/cf:@minimap2]                        | Affine, Double affine                      | $O(nm/w)$                                 | $O(nm/w)$                   | Implements [cite:@suzuki-kasahara]                                | $w$ SIMD lanes                                                                   |
@@ -1111,44 +1112,44 @@ read-aligners was done by Alser et al. [cite:@alser21].
 # ** Discussion
 
 * A*PA2
-# - TODO: Properly contextualize A*PA2 wrt A*PA:
-#   - Drop the graph stuff
-#   - Do DP/NW/SIMD/bitpacking instead
-# ** Summary/overview/contribs
-# - blocks
-# - simd
-# - encoding
-# - incremental doubling
-# - traceback
-# - A*
-# - sparse heuristic invocation
-# ** Notation
-# ** Methods
-# - mostly copy paste; include some appendix stuff
-# ** Evaluation
-# - mostly copy paste; include some appendix stuff?
-# ** Discussion
+- TODO: Properly contextualize A*PA2 wrt A*PA:
+  - Drop the graph stuff
+  - Do DP/NW/SIMD/bitpacking instead
+** Summary/overview/contribs
+- blocks
+- simd
+- encoding
+- incremental doubling
+- traceback
+- A*
+- sparse heuristic invocation
+** Notation
+** Methods
+- mostly copy paste; include some appendix stuff
+** Evaluation
+- mostly copy paste; include some appendix stuff?
+** Discussion
 
 
-# * Semi-global alignment
+* Semi-global alignment
 
 
-# * TODO
-# - where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
-# - consistent capitalization of headers
-# - consider dropping appendix/human data results; we only have to make the
-#   high-level point here
-# - Redo copied figures
-# - figure captions
-# - Add figures to methods
-# - Add the big table and make it complete
-# - incorporate ideas from more pairwise alignment blogposts?
-# - 0 and 1 and so do not go in math
-# - $k$-mers
-# - Talco technique
-# - BSAlign technique?
-# - ensure all mentioned papers are also in the table?
-# - Refer myers-miller-95 in context of A*PA seed heuristic. it's nearly the same.
+* TODO
+- where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
+- consistent capitalization of headers
+- consider dropping appendix/human data results; we only have to make the
+  high-level point here
+- Redo copied figures
+- figure captions
+- Add figures to methods
+- Add the big table and make it complete
+- incorporate ideas from more pairwise alignment blogposts?
+- 0 and 1 and so do not go in math
+- $k$-mers
+- Talco technique
+- BSAlign technique?
+- ensure all mentioned papers are also in the table?
+- Refer myers-miller-95 in context of A*PA seed heuristic. it's nearly the same.
 
 
 #+print_bibliography:
