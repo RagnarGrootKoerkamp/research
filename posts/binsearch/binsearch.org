@@ -653,11 +653,20 @@ So for the final comparison:
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion-multithreaded.svg]]
 
-We see that Eytzinger is a bit faster, likely due to better memory efficiency in the top tree levels, as we have already seen in the singlethreaded
+In the plot, we also include one of the fast S-tree versions to have a direct comparison on my machine. We can see that the S-trees are a bit
+slower at small array sizes, but get faster on large sizes. The greater speed at larger sizes is well explained by the fact that S-trees
+utilize the cache much better (one node in the tree is essentially one cacheline), leading to less main memory transfers.
+
+We also see that Eytzinger is a bit faster than binsearch, likely due to better memory efficiency in the top tree levels, as we have already seen in the singlethreaded
 case. There, the difference between Eytzinger and binary search was roughly 8-10% of performance at 1GB; here we see the difference is also in the single percentage digits.
 
+We can also look at a direct comparison of single and multi-threaded variants:
+
+#+attr_html: :class inset
+[[file:plots/single-vs-multithreaded.svg]]
+
 Overall, the speedup was roughly 4 (at array size 1GB) when using 8 threads. This clearly indicates that we're memory bound. If we wanted to go for more speed and more cache utilization, we could start the first $\lg(n)/2$ layers with the Eytzinger layout and the bottom $\lg(n)/2$ layers
-with a standard sorted array. However, we won't delve into this here, as there is more efficient stuff one can do; check out Ragnar's post on S-trees!
+with a standard sorted array. However, we won't delve into this here, as there is more efficient stuff one can do; check out the post on S-trees!
 
 * Interpolation search
 In the static search tree post, Ragnar suggested looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
