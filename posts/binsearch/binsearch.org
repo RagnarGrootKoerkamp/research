@@ -34,7 +34,7 @@ The source code can be found at [[https://github.com/RagnarGrootKoerkamp/suffix-
 if no such element exists.
 
 *Metric*: we optimize throughput. In plots, we usually report amortized
-time per query, i.e. the not queries/time, but time/query.
+time per query, i.e. not queries/time, but time/query.
 
 Optimizing for throughput is relevant because for many use-cases,
 e.g. in bioinformatics, the queries are often independent and the
@@ -189,7 +189,7 @@ when the value is found and they try to use the =cmov= instruction if it
 is available in the [[https://doc.rust-lang.org/std/intrinsics/fn.select_unpredictable.html][=select_unpredictable=]] function. Both these optimizations are done so that the branch
 predictor has an easier time (as mispredictions are expensive). The =cmov=
 instruction is useful when the result of the comparison can't be
-reliably predicted (which here it really can't).[fn:Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]] They are also both
+reliably predicted (which here it really can't).[fn::Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]] They are also both
 recommended by the Algorithmica post, and make the code effectively branchless.
 
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
@@ -800,10 +800,10 @@ We try if batching can hide some of this, as it did before:
 
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched.svg]]
+
 The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
 The division is a bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
-instructions don't really exist either, and the performance gains are minimal. [fn:When reimplementing the batched version with SIMD, I burned myself
-by thinking that the Rust portable SIMD `clamp()` function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.]
+instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself by thinking that the Rust portable SIMD =clamp()= function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.]
 
 An interesting factor for interpolation search is also how it performs well on non-random data. Therefore, we download a part of the human genome
 from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz][here]].
