@@ -225,10 +225,11 @@ of the standard library.
 We can see that we now match the performance of the library version, even surpassing it. We
 assume this is due to our function being specialized and not having an
 error condition at the end, leading to it being better by a small
-fraction. On large sizes, we're still worse off than the naive version, though.
+fraction. On large sizes, we are still surpassed by our first naive implementation.
 
 Since we do a fixed number of iterations, we can clearly see "stairs" in the graph with every
 power of two, as the number of instructions is now pretty much a deterministic function of the input size.
+As caches make the whole process much faster at small sizes, there are also steps, but they are much smaller.
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
@@ -302,7 +303,10 @@ the search is a memory-bottlenecked operation, we can speed it up many times.
 When I first thought about this, I figured that explicit prefetching should not be needed.
 But in the S+-tree post, Ragnar found that explicitly prefetching memory that
 was going to be accessed at the next interval size was also helpful. We
-therefore add it as well, just to compare:
+therefore add it as well, just to compare. The advantage here is that when batching,
+we can do the prefetch after doing the comparison, meaning we already know which value
+to prefetch and we don't have to do two memory accesses instead of one. It should therefore
+be essentially free.
 
 #+attr_html: :class inset
 [[file:plots/binsearch-branchless-prefetched-batched.svg]]
@@ -370,17 +374,16 @@ which is well described in Algorithmica, so we will not waste space here
 and will refer the reader there if interested.
 
 So, why should Eytzinger be better?
-The whole problem of array searching is very memory bound; it is about how fast can we query memory
+The whole problem of array searching is memory bound; it is about how fast can we query memory
 and how many levels of the search can we fit into caches so that we don't have to do many main memory requests.
 In many ways, a normal sorted array and Eytzinger are similar. Eytzinger is very efficient at caching values
 at the top of the tree (one fetched cacheline of 64B contains 4 layers) while sorted array
 is efficient in the same manner at the bottom of the tree. In addition, Eytzinger will allow us to more efficiently prefetch
 all the possible paths up to 4 steps into the future.
 
-Algorithmica finds that in the end, it is the efficient prefetching that leads to good performance. We shall see
-that for a batched and a multithreaded implementation, it the better efficiency at the top of the tree is crucial.
-When conducting many queries, caching the top is better, because it can be better reused and leads to less main
-memory traffic overall. But we shall see that in due time.
+Algorithmica finds that in the end, it is the efficient prefetching that leads to good performance.
+When conducting many queries, caching the top should also be better, because it can be better reused and leads to less main
+memory traffic overall. We shall see whether that holds up.
 
 ** Naive implementation
 The API stays the same as for normal binary search; we get a query and
