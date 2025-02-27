@@ -1,0 +1,238 @@
+#+title: Near-optimal sampling schemes
+#+hugo_section: slides
+#+filetags: @slides minimizers
+#+OPTIONS: ^:{} num: num:t toc:nil
+#+hugo_front_matter_key_replace: author>authors
+# #+toc: depth 2
+#+reveal_theme: white
+#+reveal_extra_css: /css/slide.min.css
+#+export_file_name: ../../static/slides/minimizers
+#+hugo_paired_shortcodes: %notice
+#+date: <2025-02-27 Thu>
+# Export using C-c C-e R R
+
+# Toggle org-hugo-auto-export-mode
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+# - slides: [[https://curiouscoding.nl/slides/minimizer.html][curiouscoding.nl/slides/minimizers.html]]
+# - post: [[https://curiouscoding.nl/slides/minimizers][curiouscoding.nl/slides/minimizers]]
+
+
+* /Minimizer/ schemes
+:PROPERTIES:
+:CUSTOM_ID: minimizers
+:END:
+#+attr_html: :style display:none
+$$\newcommand{\order}{\mathcal{O}}$$
+
+- Minimizer scheme: Given a window of $w$ k-mers, pick the (leftmost) /smallest/ one
+  - according to some order $\order_k$
+- $k=1$, $w=5$:
+  - =BCADF= $\to$ =[B, C, A, D, F]= $\to$ =A=
+- $k=2$, $w=5$:
+  - =CABCAC.....= $\to$ =[CA, AB, BC, CA, AC]= $\to$ =AB=
+  - =.ABCACC....= $\to$ =[AB, BC, CA, AC, CC]= $\to$ =AB=
+  - =..BCACCX...= $\to$ =[BC, CA, AC, CC, CX]= $\to$ =AC= new
+  - =...CACCXY..= $\to$ =[CA, AC, CC, CX, XY]= $\to$ =AC=
+  - =....ACCXYZ.= $\to$ =[AC, CC, CX, XY, YZ]= $\to$ =AC=
+  - =.....CCXYZX= $\to$ =[CC, CX, XY, YZ, XZ]= $\to$ =CC= new
+
+#+reveal: split
+
+#+attr_html: :style width:75% :src /ox-hugo/before.svg
+[[file:before.svg]]
+
+#+reveal: split
+
+
+#+attr_html: :style width:75% :src /ox-hugo/overview.svg
+[[file:overview.svg]]
+
+#+reveal: split
+
+#+attr_html: :style width:75% :src /ox-hugo/greedymini.png
+[[file:greedymini.png]]
+
+# - plot showing bad small k perf
+# - Can we get closer to the lower bound?
+# - Can we design /fully exact/ schemes for some params?
+#   - $k\to\infty$: Mod-minimizer gets very close
+#   - $k\approx w$: Recent greedymini does a good job, but 'bruteforce', so not insightful
+#   - $k=1$ (and $k < \log_\sigma w$): Topic of this talk
+
+** Minimizer density lower bound
+:PROPERTIES:
+:CUSTOM_ID: density-lower-bound
+:END:
+- Density of minimizer scheme is $\geq 1/\sigma^k$:
+
+  sample exactly every =AAA= k-mer, and nothing else.
+
+- $k=1$: density at least $1/\sigma = 1/4$.
+
+
+
+
+* /Sampling/ schemes: more general
+:PROPERTIES:
+:CUSTOM_ID: sampling-schemes
+:END:
+- /Any/ function $f: \Sigma^{w+k-1} \to \{0, \dots, w-1\}$
+- i.e.: pick any k-mer, but more flexible than just the /smallest/.
+- We fix $k=1$ from now: $f: \Sigma^w\to \{0, \dots, w-1\}$
+- E.g., smallest /substring/:
+
+  =BACAB=: We have =AB < AC=, so pick the final =A=:
+
+  =...^.=
+
+** Bidirectional anchors
+:PROPERTIES:
+:CUSTOM_ID: bd-anchors
+:END:
+- Pick the start of the /smallest rotation/
+  - =EADCAE......=: =.ADCAE......=
+  - =.ADCAEB.....=: =.ADCAEB.....=
+  - =..DCAEBE....=: =....AEBE....= jump
+  - =...CAEBEC...=: =....AEBEC...=
+  - =....AEBECD..=: =....AEBECD..=
+  - =.....EBECDC.=: =......BECDC.= jump
+  - =......BECDCD=: =......BECDCD=
+
+
+** Limitations of bd-anchors
+:PROPERTIES:
+:CUSTOM_ID: bd-anchors-limitations
+:END:
+- Lexicographic is bad:
+  - =AAAABCD...=: =AAAABCD...=
+  - =.AAABCDE..=: =.AAABCDE..= jump
+  - =..AABCDEF.=: =..AABCDEF.= jump
+  - =...ABCDEFG=: =...ABCDEFG= jump
+- Comparing rotations is unstable:
+  - =AABACD..=: =AABACD....=
+  - =.ABACDA.=: =......A|AB= jump -> unstable
+  - =..BACDAE=: =...ACDAE..= backwards jump
+
+- Avoid last $r$ positions.
+
+#+reveal: split
+
+#+attr_html: :style width:75% :src /ox-hugo/bd-anchor.svg
+[[file:bd-anchor.svg]]
+
+
+
+* Smallest-unique-substring anchors
+:PROPERTIES:
+:CUSTOM_ID: sus-anchors
+:END:
+- Idea: instead of smallest rotation: smallest suffix.
+- What about =CABA=: is =ABA= or =A= smaller?
+  - We choose =ABA= smaller for stability.
+- =AB= is the /smallest unique substring/.
+- Stable:
+  - =AABACD..=: =AABACD..=
+  - =.ABACDA.=: =.ABACDA.= fwd jump -> bad lexicographic order
+  - =..BACDAE=: =...ACDAE= fwd jump
+
+#+reveal: split
+
+#+attr_html: :style width:75% :src /ox-hugo/sus-lex.svg
+[[file:sus-lex.svg]]
+
+
+* Anti-lex: Avoiding consecutive samples
+:PROPERTIES:
+:CUSTOM_ID: anti-lex
+:END:
+- When =AAAA= is the smallest string, it has many small suffixes
+  - small strings overlap
+  - small strings cluster
+- We want the opposite!
+- /Anti-lexicographic order/: =AZZZZZ= is the smallest string
+  - no overlap!
+  - no clustering
+
+#+reveal: split
+
+#+attr_html: :style width:75% :src /ox-hugo/sus-anti-lex.svg
+[[file:sus-anti-lex.svg]]
+
+#+reveal: split
+#+attr_html: :style width:75% :src /ox-hugo/sus-anti-lex-s2.svg
+[[file:sus-anti-lex-s2.svg]]
+
+
+* Understanding the lower bound
+:PROPERTIES:
+:CUSTOM_ID: lower-bound-cycles
+:END:
+- The density is at least $2 / (w+1)$:
+- Say $w=4$. Consider a /cyclic/ string of length $w+1=5$, =ABCDE=.
+  - =ABCD....= choose =C=
+  - =.BCDE...=
+  - =..CDEA..=
+  - =...DEAB.= <- =C= isn't here! must be different
+  - =....EABC=
+- At least $2$ samples in the $w+1$ cycle.
+
+- To reach lower bound: /exactly/ 2 samples in /every/ $w+1$ cycle.
+
+#+reveal: split
+#+attr_html: :style width:80% :src /ox-hugo/lower-bound.svg
+[[file:../../posts/minimizers/figs/lower-bound.svg]]
+
+** Asus has failure cases
+:PROPERTIES:
+:CUSTOM_ID: asus-failure
+:END:
+- =0010101= cycle:
+  - =001010......=: =001010......= 1 =00=
+  - =.010101.....=: =.010101.....= 2 =01010=
+  - =..101010....=: =...01010....= 4 =0101=
+  - =...010100...=: =.......00...= 1 =00=
+  - =....101001..=: =.......001..= 1 =00=
+  - =.....010010.=: =.......0010.= 1 =00=
+  - =......100101=: =.......00101= 1 =00=
+- The =01010= sus is not /overlap free/
+  - Just like how =AAA= is not /overlap free/
+
+** Can we design a perfectly optimal scheme?
+:PROPERTIES:
+:CUSTOM_ID: perfect-schemes
+:END:
+- Goal: For every $w+1$ window, find two non-overlapping small strings.
+- Instead of looking for =011...11=, look for =00...0011...11=
+  - Also non-overlapping, and more signal.
+  - Still not optimal.
+- Tried *many* things. No general solution found yet.
+
+* Tech-tip: =diskcache=
+:PROPERTIES:
+:CUSTOM_ID: diskcache
+:END:
+
+#+begin_src python
+from functools import cache
+
+@cache
+def density(tp, text_len, w, k, sigma, **args):
+    return minimizers.density(tp, _text, w, k, sigma, **args)
+#+end_src
+
+#+begin_src python
+from diskcache import Cache
+diskcache = Cache("cache")
+
+@diskcache.memoize(tag="density")
+def density(tp, text_len, w, k, sigma, **args):
+    return minimizers.density(tp, _text, w, k, sigma, **args)
+#+end_src
+
+- Efficient reuse of values in =.py= files.
+- No need for =.ipynb= notebooks.
+  - No/annoying hot-reloading of (compiled) modules
+  - =@cache= is lost on kernel restarts
