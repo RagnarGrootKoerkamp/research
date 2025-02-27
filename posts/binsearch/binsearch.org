@@ -229,7 +229,7 @@ error condition at the end, leading to it being better by a small
 fraction. On large sizes, we're still worse off than the naive version, though.
 
 Since we do a fixed number of iterations, we can clearly see "stairs" in the graph with every
-power of two, as the runtime is now pretty much a deterministic function of the input size.
+power of two, as the number of instructions is now pretty much a deterministic function of the input size.
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
@@ -611,14 +611,15 @@ tree are more efficiently cached and can be reused between queries. This leads t
 compared to binary search. However, we do not see this effect here, probably because the better efficiency is offset by batching anyway.
 
 * Memory efficiency -- parallel search and comparison to B-trees
-Now let us push memory to its limits and compare the layouts when we are allowed to use multiple threads to query.
+Now let us push memory throughput to its limits and compare the layouts when we are allowed to use multiple threads to query.
 For this test, I have turned off hyperthreading and locked the CPU to 8 cores.
 The first interesting aspect of this is whether prefetching will help now. Let's first look at binary search:
 
 #+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch-multithreaded.svg]]
 
-We see that as the prefetching increases pressure on memory, it is again mostly counterproductive in the multithreaded setting.
+In the same way as in the single-threaded version, we see that the prefetching helps a bit, as it does not actually add memory
+traffic, it only hints to the CPU where to look.
 In the next plot we see that batching is helpful up to roughly size 32, and then it levels out.
 
 #+attr_html: :class inset
@@ -643,11 +644,12 @@ So for the final comparison:
 [[file:plots/binsearch-eytzinger-conclusion-multithreaded.svg]]
 
 In the plot, we also include one of the fast S-tree versions to have a direct comparison on my machine. We can see that S-trees have a slower rise to the curve,
-but are quite a bit slower at small array sizes. This is suprising because their layout should treat the caches optimally, giving us the best utilization.
-A possible reason for this is that they do more operations at smaller sizes (for every 4 levels, Eytzinger/binsearch does 4 operations, but the SIMD variants of S-trees
+but are quite a bit slower at small array sizes. The slower rise makes sense; S-trees should utilize the cache much better.
+
+A possible reason for them being slower at small sizes this is that they do more operations (for every 4 levels, Eytzinger/binsearch does 4 operations, but the SIMD variants of S-trees
 do 16 comparisons).
 
-We see that Eytzinger and binsearch are almost equal, leading us to believe that their advantages effectively align; Eytzinger is better at the top while binary search is better
+We also see that Eytzinger and binsearch are almost equal, leading us to believe that their advantages effectively align; Eytzinger is better at the top while binary search is better
 at the bottom of the search.
 
 We can also look at a direct comparison of single and multi-threaded variants:
