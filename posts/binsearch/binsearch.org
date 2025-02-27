@@ -375,7 +375,7 @@ So, why should Eytzinger be better?
 The whole problem of array searching is very memory bound; it is about how fast can we query memory
 and how many levels of the search can we fit into caches so that we don't have to do many main memory requests.
 In many ways, a normal sorted array and Eytzinger are similar. Eytzinger is very efficient at caching values
-at the top of the tree (one query of 64B can help us go forward by 4 layers in the search) while sorted array
+at the top of the tree (one fetched cacheline of 64B contains 4 layers) while sorted array
 is efficient in the same manner at the bottom of the tree. In addition, Eytzinger will allow us to more efficiently prefetch
 all the possible paths up to 4 steps into the future.
 
