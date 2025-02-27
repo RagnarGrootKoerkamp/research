@@ -53,6 +53,7 @@ build a highly optimized aligner that merges A* with bitpacking, yielding
 significant speedups over both A*PA and Edlib.
 #+end_notice
 
+#+begin_export html
 $$
 \newcommand{\g}{g^*}
 \newcommand{\h}{h^*}
@@ -66,13 +67,14 @@ $$
 \renewcommand{\d}{\operatorname{d}}
 \newcommand{\lcp}{\operatorname{LCP}}
 $$
+#+end_export
 
 * Introduction
 - introduced by [cite:@nw] for biology
 - Premise: if we can clearly see the optimal alignment in a dot-plot, why do we need
   quadratic time anyway? [cite:@wilbur-lipman-83] observe the same
 
-As [cite/t:@fickett84 p. 1] stated 40 years ago and still true today,
+As Fickett stated 40 years ago [cite:@fickett84 p. 1] and still true today,
 #+begin_quote
 at present one must choose between an algorithm which gives the best alignment
 but is expensive, and an algorithm which is fast but may not give the best
@@ -108,7 +110,7 @@ Lastly, we note that most moderns read mappers and alignment tools are
 provably minimal cost. A*PA and A*PA2 are both exact methods, and thus we will
 focus on thos.
 
-** Problem statement
+* Problem statement
 The main problem of this chapter is as follows.
 #+begin_problem Global pairwise alignment
 Given two sequences $A$ and $B$ of lengths $n$ and $m$, compute the edit
@@ -135,9 +137,9 @@ number of errors /applied/ to a pair of sequence. The error rate is typically
 higher than the divergence, since random errors can cancel each other.
 
 #+name: edit-graph
-#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite/t:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. All edges are directed from the top-left to the bottom-right. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state.
+#+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. All edges are directed from the top-left to the bottom-right. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state.
 #+attr_html: :class inset
-[[file:../astarpa2/edit-graph2.drawio.svg]]
+[[file:astarpa2/edit-graph2.drawio.svg]]
 
 *Edit graph.*
 The /alignment graph/ or /edit graph/ ([[edit-graph]]) is a way to formalize edit distance
@@ -183,19 +185,19 @@ does require that all edges have non-negative weights.
 An extension of Dijkstra's algorithm is A* [cite:@astar-hart67], which visits
 states in order of increasing ``anticipated total distance''.
 
-** Variations on pairwise alignment
+* Variations on pairwise alignment
 There are a few variants of pairwise alignments and edit distance. While the
 focus of this chapter is (unit cost) edit distance, it is helpful to first have
 an overview of the different variants since most papers each assume a slightly
 different context.
-*** Alignment types
+** Alignment types
 TODO: Also put Pesho's 2nd figure?
 
 #+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/alignment-types.drawio.svg][source]])
 #+caption: TODO: re-scale image
 #+name: alignment-types
 #+attr_html: :class inset
-[[file:../pairwise-alignment-history/drawings/alignment-types.drawio.svg]]
+[[file:pairwise-alignment-history/drawings/alignment-types.drawio.svg]]
 
 In /global/ pairwise alignment, the two sequences must be fully matched against
 each other. In practice though, there are a number of
@@ -220,12 +222,12 @@ a one-off alignment between two sequences, whereas for /mapping/, we usually
 align many small reads onto a single long reference.
 
 
-*** Cost Models
+** Cost Models
 
 #+caption: Overview of different cost models. (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/cost-models.drawio.svg][source]])
 #+name: cost-models
 #+attr_html: :class large
-[[file:../pairwise-alignment-history/drawings/cost-models.drawio.svg]]
+[[file:pairwise-alignment-history/drawings/cost-models.drawio.svg]]
 
 There are different models to specify the cost of each edit operation
 ([[cost-models]]) [cite:@spouge91]. In particular, in a biological setting the probability of various
@@ -280,7 +282,7 @@ In practice, most methods use a match cost $\delta(a,a) = 0$, fixed mismatch
 cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
 $\delta(a,\varepsilon) = \delta(\varepsilon,b) = I$.
 
-*** Minimizing Cost versus Maximizing Score
+** Minimizing Cost versus Maximizing Score
 
 So far, the cost models we considered are just that: /cost/ models. They focus
 on minimizing the cost of the edits between two sequences, and usually assume
@@ -323,7 +325,7 @@ given a scoring model with fixed affine costs $\delta(a, a) = M$, $\delta(a,b) =
 and $w_k = O + E \cdot k$, there is a cost-model (with $\delta(a,a)=0$) that
 yields the same optimal alignment.
 
-** The classic quadratic DP algorithms
+* The classic quadratic DP algorithms
 We are now ready to look into the first algorithms.
 We start with DP algorithms, that process the graph one column at a time. Note
 that we present all algorithms as similar as possible: they go from the top-left
@@ -333,9 +335,9 @@ Smith et al. [cite:@smith81] provide a nice overview of the similarities and
 differences between the early approaches.
 
 #+name: fig:nw
-#+caption: The cubic algorithm as shown by [cite/text:@nw]. Note that as shown, it works from the bottom right to the top left, and maximizes the LCS score instead of minimizing cost. Consider the outlined 1-cell. It has a score of 1 because the characters in its row and column match. The final score of the cell is this 1, plus the maximum of the remaining outlined cells in the row below and column right of it.
+#+caption: The cubic algorithm as shown by Needleman and Wunsch [cite:@nw]. Note that as shown, it works from the bottom right to the top left, and maximizes the LCS score instead of minimizing cost. Consider the outlined 1-cell. It has a score of 1 because the characters in its row and column match. The final score of the cell is this 1, plus the maximum of the remaining outlined cells in the row below and column right of it.
 #+attr_html: :class inset
-[[file:../pairwise-alignment-history/screenshots/nw-cubic.png]]
+[[file:pairwise-alignment-history/screenshots/nw-cubic.png]]
 
 *Needleman-Wunsch' cubic algorithm.*
 The problem of pairwise alignment of biological sequences was first formalized
@@ -411,13 +413,13 @@ The best local alignment ends in the smallest value of $D(i,j)$ in the table.
     &\phantom{=\min\big(} \min_{0\leq j'<j} D(i, j')-w_{j{-}j'}\big).&&\text{insertion}
 \end{align*}
 This algorithm uses arbitrary gap costs $w_k$, as first mentioned
-in [cite/text:@nw] and formally introduced by [cite/text:@waterman].
+by Needleman and Wunsch [cite:@nw] and formally introduced by Waterman [cite:@waterman].
 Because of this, it runs in $O(n^2m)$.
 
 The quadratic algorithm for local alignment is now usually referred to as the
 Smith-Waterman-Gotoh (SWG) algorithm, since the ideas introduced by Gotoh [cite:@gotoh] can
 be used to reduce the runtime from cubic by assuming affine costs,
-just like to how [cite/text:@sellers] sped up [cite/text:@nw] for global alignment
+just like to how Sellers [cite:@sellers] sped up the Needleman-Wunsch algorithm [cite:@nw] for global alignment
 costs by assuming linear gap costs.
 Note though that Gotoh only mentions this speedup in passing, and
 that Smith and Waterman [cite:@sw] could have directly based their idea on the quadratic
@@ -428,7 +430,7 @@ To my knowledge, the first mention of affine costs of the form $o+k\cdot e$ is
 by Smith, Waterman, and Fitch [cite:@smith81].
 Gotoh [cite:@gotoh] generalized the quadratic recursion to these affine costs,
 to circumvent the cubic runtime needed for the arbitrary
-gap costs $w_k$ of [cite/text:@waterman].
+gap costs $w_k$ of Waterman [cite:@waterman].
 This is done by introducing two additional matrices
 $P(i,j)$ and $Q(i,j)$ that contain the minimal cost to get to $(i,j)$ where the
 last step is required to be an insertion or deletion respectively:
@@ -444,7 +446,7 @@ last step is required to be an insertion or deletion respectively:
 This algorithm run in $O(nm)$ time.
 
 Gotoh also mentions that this method can be modified to solve the local
-alignment of [cite/text:@sw] in quadratic time.
+alignment of Smith and Waterman [cite:@sw] in quadratic time.
 Later, Gotoh further extended the method to support double affine costs and more
 general piecewise linear gap costs [cite:@gotoh90].
 
@@ -457,12 +459,12 @@ notes [cite:@gotoh] that if only the final score is required,
 only the last two columns of the DP matrix $D$ (and $P$ and $Q$) are needed at
 any time, so that linear memory suffices.
 
-** Linear Memory using Divide and Conquer
+* Linear Memory using Divide and Conquer
 #+name: myers88
-#+caption: Divide-and-conquer as shown in [cite/text/cf:@myers88].
+#+caption: Divide-and-conquer as shown by Myers and Miller [cite:@myers88].
 #+caption: Unlike the main text, in this figure, the recursion is on the middle row, rather than the middle column.
 #+attr_html: :class inset small
-[[file:../pairwise-alignment-history/screenshots/myers88.png]]
+[[file:pairwise-alignment-history/screenshots/myers88.png]]
 
 Hirschberg [cite:@hirschberg75] introduces a divide-and-conquer algorithm to
 compute the LCS of two sequences in linear space.
@@ -512,27 +514,27 @@ Hirschberg introduced this algorithm for computing the longest common
 subsequence [cite:@hirschberg75].
 It was then applied multiple times to reduce the space complexity of other
 variants as well:
-Myers first applied it to the $O(ns)$ LCS algorithm [cite/text:@myers86],
+Myers first applied it to the $O(ns)$ LCS algorithm [cite:@myers86],
 and also improved the $O(nm)$ algorithm by Gotoh [cite:@gotoh] to
 linear memory [cite:@myers88].
 Similarly, BiWFA [cite:@biwfa] improves the space complexity of WFA from
 $O(n+s^2)$ to
 $O(s)$ working memory, where $s$ is the cost of the alignment.
 
-** Dijkstra's algorithm and A*
+* Dijkstra's algorithm and A*
 :PROPERTIES:
 :CUSTOM_ID: graphs
 :END:
 
 *Dijkstra's algorithm.*
-Both [cite/t:@ukkonen85] and [cite/t:@myers86]
+Both Ukkonen [cite:@ukkonen85] and Myers [cite:@myers86]
 remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
 which visits states by increasing distance.
 Ukkonen gave a bound of $O(nm \log (nm))$, whereas Myers' analysis uses the fact
 that there are only $O(ns)$ at distance $\leq s$ (see [[#computational-volumes]]), and thus concludes that the
 algorithms runs in $O(ns)$ ([[intro]]a).
 
-However, [cite/t:@myers86 p. 2] observes that
+However, Myers [cite:@myers86 p. 2] observes that
 #+begin_quote
 the resulting algorithm involves a relatively complex discrete priority queue
 and this queue may contain as many as $O(ns)$ entries even in the case where just
@@ -563,7 +565,7 @@ for the problem of sequence-to-graph alignment. This heuristic
 splits the sequence $A$ into disjoint k-mers, and uses that at least one edit is
 needed for each remaining k-mer that is not present in sequence $B$.
 
-In A*PA [cite:@astarpa] (Section [[*A*PA]]) we will improve this into the
+In A*PA [cite:@astarpa] (Section FIXME) we will improve this into the
 /gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
 alignment when the divergence is sufficient low ([[intro]]g).
 
@@ -598,11 +600,11 @@ and further [cite:@spouge89 p. 4]:
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-In A*PA2 [cite:@astarpa2] (Section [[*A*PA2]]),
+In A*PA2 [cite:@astarpa2] (Section FIXME),
 we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
-** Computational volumes and band doubling
+* Computational volumes and band doubling
 :PROPERTIES:
 :CUSTOM_ID: computational-volumes
 :END:
@@ -637,7 +639,7 @@ data being aligned, or as the length of some known suboptimal alignment.
 #+name: intro
 #+caption: Alignment of two sequences of length $3000$bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation. TODO: Review figs and caption
 #+attr_html: :class equal-width
-| [[file:../astarpa2/imgs/intro/2_dijkstra.png]] | [[file:../astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:../astarpa2/imgs/intro/0_gap-gap.png]] | [[file:../astarpa2/imgs/intro/0_bitpacking.png]] | [[file:../astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:../astarpa2/imgs/intro/7_astarpa2_full.png]] | file:../astarpa2/imgs/intro/5_astarpa-prune.png |
+| [[file:astarpa2/imgs/intro/2_dijkstra.png]] | [[file:astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:astarpa2/imgs/intro/0_gap-gap.png]] | [[file:astarpa2/imgs/intro/0_bitpacking.png]] | [[file:astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:astarpa2/imgs/intro/7_astarpa2_full.png]] | file:astarpa2/imgs/intro/5_astarpa-prune.png |
 |                                | + DT                                      | + band doubling               | + gap heuristic and bitpacking   | + blocks                              | + GCSH                              | A*                                  |
 | Dijkstra                       | WFA                                       | Ukkonen                       | Edlib                            | A*PA2-simple                          | A*PA2-full                          | A*PA                                |
 
@@ -683,7 +685,7 @@ Given a bound $t\geq s$, some examples of
 computational volumes are:
 1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
 2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
-   [cite/t:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
+   Fickett [cite:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
 3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the /static/ set of states possibly on a path
    of cost $\leq t$ ([[intro]]c) [cite:@ukkonen85].
 4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]de) [cite:@edlib;@spouge91;@papamichail2009].
@@ -692,15 +694,15 @@ computational volumes are:
 
 TODO: Check figure references.
 
-** Diagonal transition
+* Diagonal transition
 :PROPERTIES:
 :CUSTOM_ID: diagonal-transition
 :END:
 
-#+caption: Farthest reaching points for LCS by [cite/text:@myers86].
+#+caption: Farthest reaching points for LCS by Myers [cite:@myers86].
 #+name: farthest-reaching
 #+attr_html: :class inset
-[[file:../pairwise-alignment-history/screenshots/furthest-reaching.png]]
+[[file:pairwise-alignment-history/screenshots/furthest-reaching.png]]
 
 Around 1985, the /diagonal transition/ algorithm was independently discovered by
 Ukkonen [cite:@ukkonen83;@ukkonen85] (for edit distance) and Myers
@@ -782,7 +784,7 @@ Similar to Myers [cite:@myers86], BiWFA [cite:@biwfa] applies Hirscherg's
 divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 (on top of the $O(n+m)$ input).
 
-** Subquadratic methods and lower bounds
+* Subquadratic methods and lower bounds
 
 *Lower bounds.*
 Backurs and Indyk [cite:@no-subquadratic-ed] have shown that unit cost edit distance can not be solved in
@@ -801,7 +803,7 @@ LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
 #+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
 #+name: fig:four-russians
 #+attr_html: :class inset
-[[file:../pairwise-alignment-history/drawings/four-russians.drawio.svg]]
+[[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]
 
 *Four Russians method.*
 The so called /four Russians method/ was introduced by [cite:@four-russians].
@@ -838,15 +840,15 @@ with similar complexity also works for LCS.
 
 *Applications.*
 Wu et al. provide an implementation of this
-method for approximate string matching [cite/text/c:@wu96]. They suggest a block size of $1\times
+method for approximate string matching [cite:@wu96]. They suggest a block size of $1\times
 r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
 block to the next.
 
-Nowadays, the bit-parallel technique (e.g. [cite/text:@myers99]) have
+Nowadays, the bit-parallel technique of Myers [cite:@myers99] has
 replaced four Russians, since it can compute up to 64 cells in a single step,
 while not having to wait for (comparatively) slow lookups of the precomputed data.
 
-** Parallelism
+* Parallelism
 
 So far we have mostly focused on the theoretical time complexity of methods.
 However, since the introduction of $O(n+s^2)$ diagonal transition around 1985,
@@ -876,7 +878,7 @@ given query in multiple reference sequences in parallel
 *Anti-diagonals.*
 Hughey [cite:@hughey96] notes that values along /anti-diagonals/ of the DP
 matrix are not dependent on each other, and thus can be computed in parallel.
-Wozniak [cite/t:@wozniak97] applied SIMD (single
+Wozniak [cite:@wozniak97] applied SIMD (single
 instruction, multiple data) instructions for this purpose, which are special CPU instructions
 that operate on multiple (currently up to $8$, for AVX-512) computer words at a time.
 
@@ -959,11 +961,11 @@ local alignment, and this has subsequently been used by KSW2 and BSAlign [cite:@
 
 TODO: Many packing tools (also based on automata) for text search / semi-global alignment
 
-** LCS and Contours
-#+caption: Contours as shown in [cite/text:@hirschberg77]
+* LCS and Contours
+#+caption: Contours as shown by Hirschberg [cite:@hirschberg77]
 #+name: contours
 #+attr_html: :class inset
-[[file:../pairwise-alignment-history/screenshots/contours.png]]
+[[file:pairwise-alignment-history/screenshots/contours.png]]
 
 So far, all pairwise alignment methods we looked at are based on the alignment graph. The
 longest common subsequence problem also admits different solutions. See e.g.
@@ -1028,7 +1030,7 @@ k-mer matches in the chain.
 # - Baeza-Yates Navarro 96
 # - LEAP: https://www.biorxiv.org/content/10.1101/133157v3
 
-** Some tools
+* Some tools
 We now briefly list a few recent and competitive global alignment tools. For more, we refer to the
 survey of Alser et al. [cite:@alser21].
 
@@ -1048,12 +1050,12 @@ sequences are short enough that quadratic memory can be used.
 similar to [cite:@gotoh]. *BiWFA* [cite:@biwfa] is a later version that applies
 divide-and-conquer to reduce to linear memory usage.
 
-** Summary
+* Summary
 We summarize most of the papers discussed in this section in chronological order
 in [[table]].
 Not mentioned in the table are the review papers by
-Smith et al. [cite:@smith81], Kruskal [cite/text:@kruskal83], Spouge
-[cite:@spouge91], and Navarro [cite/text:@navarro01], and also Bergroth et al.'s
+Smith et al. [cite:@smith81], Kruskal [cite:@kruskal83], Spouge
+[cite:@spouge91], and Navarro [cite:@navarro01], and also Bergroth et al.'s
 survey on LCS algorithms [cite:@lcs-survey].  A more recent review on
 read-aligners was done by Alser et al. [cite:@alser21].
 
@@ -1107,36 +1109,11 @@ read-aligners was done by Alser et al. [cite:@alser21].
 
 
 
-* A*PA
-# ** Summary/overview/contribs
-# ** Methods
-# ** Evaluation
-# ** Discussion
-
-* A*PA2
-- TODO: Properly contextualize A*PA2 wrt A*PA:
-  - Drop the graph stuff
-  - Do DP/NW/SIMD/bitpacking instead
-** Summary/overview/contribs
-- blocks
-- simd
-- encoding
-- incremental doubling
-- traceback
-- A*
-- sparse heuristic invocation
-** Notation
-** Methods
-- mostly copy paste; include some appendix stuff
-** Evaluation
-- mostly copy paste; include some appendix stuff?
-** Discussion
-
-
-* Semi-global alignment
 
 
 * TODO
+
+
 - where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
 - consistent capitalization of headers
 - consider dropping appendix/human data results; we only have to make the

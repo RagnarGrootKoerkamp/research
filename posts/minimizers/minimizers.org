@@ -7,6 +7,8 @@
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-21 Tue>
 
+* Theory of sampling schemes
+
 #+attr_shortcode: attribution
 #+begin_notice
 This chapter is based on three papers:
@@ -64,8 +66,7 @@ very close to the lower bound for alphabet size $\sigma=4$.
 #+end_notice
 
 
-
-
+#+begin_export html
 $$
 \newcommand{\O}{\mathcal O}
 \newcommand{\order}{\mathcal O}
@@ -87,8 +88,9 @@ $$
 \newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
 \newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
 $$
+#+end_export
 
-* Introduction
+** Introduction
 
 As does nearly every paper in bioinformatics, we will start here with the remark
 that the amount of biological data has been and still is increasing rapidly over
@@ -216,53 +218,7 @@ A second review, [cite/t:@minimizer-review-2], focuses specifically on
 applications, and details how minimizers are used in various tools and domains
 of bioinformatics.
 
-# Locality preserving hashing and similarity estimation both cluster kmers on
-# similarity, but there are some differences:
-# - In LPH, we want /consecutive/ kmers to share a minimizer. I.e. we want to
-#   partition the De Bruijn graph into long paths.
-# - In similarity estimation, we want /similar/ kmers to share a minimizer, where
-#   /similar/ explicitly includes small mutations. I.e. we want to partition the
-#   De Bruijn graph into 'blobs' covering many variants.
-
-
-# #+begin_quote
-# [At RECOMB 2022, discussing DeepMinimizer]
-
-# Why would we even care about better minimizer? We have this simple and fast
-# random minimizer that's only at most $2\times$ away from optimal. Why would
-# anyone invest time in optimizing this by maybe $25\%$?
-# There are so much bigger gains possible elsewhere.
-# #+end_quote
-
-# ** Introduction
-
-# *Copied*
-# Minimizers can be used for various purposes, such as:
-# - Compressing sequences, such as in minimizer-space De Bruijn graphs [cite:@mdbg].
-# - Similarity estimation,
-# - /Locality preserving hashing/ of kmers for different types of /clustering/.
-  # 1. [cite:@sshash;@lphash].
-  #    - Here a large $k \geq \log_\sigma N$ is used so that minimizers are unique keys.
-  #    - The objective is to have as few minimizers as possible in any sequence, to
-  #      reduce the number of cache-misses due to non-locality.
-  # 2. Similarity estimation [cite:@minimap].
-  #    - Here the goal is to cluster similar reads. Ideally reads with a few small
-  #      mutations have the same minimizer.
-
-
-# - Lots of DNA data
-# - Most algorithms deal with $k$-mers.
-# - $k$-mers overlap, and hence considering all of them is redundant.
-# - Thus: sample a subset of the kmers.
-# - Must be 'locally consistent' and deterministic to be useful.
-# - Enter random minimizers.
-# - Parameter $w$: guarantee that at least one $k$-mer is sampled out of every
-#   window of $w$ $k$-mers.
-# *Applications.*
-# - DeBruin graph partitioning/glueing [cite:@compacting-dbg]
-# - TODO: lc-covers of all-you-need (1.3)
-
-* Theory of sampling schemes
+** Theory of sampling schemes
 The theory of minimizer schemes started with two independent papers proposing
 roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite/t:@minimizers] in 2004.
 At the core, the presented ideas are very similar: to deterministically sample a $k$-mer out of each
@@ -281,7 +237,7 @@ While the winnowing paper was published first, the 'minimizer' terminology is th
 that appears to be used most these days. Apart from terminology, also notations
 tend to differ between different papers. Here we fix things as follows.
 
-*Notation.*
+** Notation
 Throughout this chapter, we use the following notation.
 For $n\in \mathbb N$, we write $[n]:=\{0, \dots, n-1\}$.
 The alphabet is $\S = [\sigma]$ and has size $\sigma =2^{O(1)}$, so that each character can
@@ -1944,7 +1900,7 @@ lower bound $g'$?
 #   - Test various word-sets for their sparsity and specificity.
 # - [cite/t:@unavoidable-sets]
 
-* Discussion
+** TODO Discussion
 #+name: summary
 #+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
 #+attr_html: :class inset large
