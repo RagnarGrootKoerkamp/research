@@ -187,9 +187,10 @@ recommended by the Algorithmica post, and make the code effectively branchless.
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
 
 It now makes sense that our naive version is faster on large array sizes.
-Algorithmica explains this by the fact that with =cmov=, the branch predictor can't
-start to speculatively prefetch data from main memory (as there is no branch). The =cmov=-optimized version
-therefore suffers more memory latency, as it can't be hidden by prefetching.
+The fact that it contains a branch allows the branch predictor to pick one possibility and
+to start to prefetch it. This will then reduce memory latency, as if the branch predictor
+is correct, waiting for this prefetched value will not take such a long time.
+When we use a =cmov=, there is no branch, and so the branch predictor can't do any prefetching.
 
 Note that originally, I intended to write here that I did not see this effect of missing speculation and prefetching.
 I then found out that when testing on arrays of power-of-two size can give skewed results; but more on
