@@ -102,6 +102,9 @@ pub fn binary_search(&self, q: u32) -> u32 {
 }
 #+end_src
 
+Here, =self= is a =SortedVec= class, which is a wrapper that allocates the sorted =vals= array
+on hugepages.
+
 We note that by default, Rust wraps all accesses to vectors with bounds
 checks. Since we are comparing against C++ implementations and there is
 no risk of accessing unallocated memory, we implement the =get=
@@ -133,10 +136,6 @@ pub fn binary_search_by<'a, F>(&'a self, mut f: F) -> Result<usize, usize>
 where
     F: FnMut(&'a T) -> Ordering,
 {
-    let mut size = self.len();
-    if size == 0 {
-        return Err(0);
-    }
     let mut base = 0usize;
 
     // This loop intentionally doesn't have an early exit if the comparison
@@ -147,9 +146,6 @@ where
         let half = size / 2;
         let mid = base + half;
 
-        // SAFETY: the call is made safe by the following inconstants:
-        // - `mid >= 0`: by definition
-        // - `mid < size`: `mid = size / 2 + size / 4 + size / 8 ...`
         let cmp = f(unsafe { self.get_unchecked(mid) });
 
         // Binary search interacts poorly with branch prediction, so force
@@ -168,16 +164,12 @@ where
         size -= half;
     }
 
-    // SAFETY: base is always in [0, size) because base <= mid.
     let cmp = f(unsafe { self.get_unchecked(base) });
     if cmp == Equal {
-        // SAFETY: same as the `get_unchecked` above.
         unsafe { hint::assert_unchecked(base < self.len()) };
         Ok(base)
     } else {
         let result = base + (cmp == Less) as usize;
-        // SAFETY: same as the `get_unchecked` above.
-        // Note that this is `<=`, unlike the assume in the `Ok` path.
         unsafe { hint::assert_unchecked(result <= self.len()) };
         Err(result)
     }
@@ -321,11 +313,9 @@ We compare the two best variants to see their differences:
 #+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch.svg]]
 
-We see that the prefetching is not really helping at large batch sizes. My intuition for it is
-that the batching effectively hides memory latency anyway and the prefetching only adds unnecessary memory
-traffic. Compared to the Eytzinger layout that we will look into next, the prefetching is also pretty inefficient
-with respect to how many cache lines must be fetched compared to the amount of values that are actually used, especially
-at the higher levels of the search (where we will need one value, but we will fetch a whole cacheline).
+We see that the prefetching is helping a bit at large array sizes, so we'll keep it. It does not add too much memory traffic
+(the CPU would have to fetch the data anyway) and provides a nice hint when there is time to prefetch ahead. It makes things a bit worse
+at small array sizes, but that is to be expected.
 
 ** A note on power-of-two array sizes
 In the bechmarking setup section, we wrote about not doing the
