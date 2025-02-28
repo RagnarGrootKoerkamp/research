@@ -7,51 +7,27 @@
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-22 Fri>
 
-#+attr_shortcode: attribution
-#+begin_notice
-This chapter is based on two papers:
-- *A*PA, Bioinformatics 24,* which has joint first-authorship with Pesho Ivanov.
-
-  [cite/bibentry/b:@astarpa]
-- *A*PA2, WABI24.*
-
-  [cite/bibentry/b:@astarpa2]
-A*PA was developed in close collaboration with Pesho Ivanov. Specifically, the
-seed heuristic is a direct application of his earlier work on A*ix.
-Pesho Ivanov's contributions predominantly
-include the extension of the heuristic to the more general seed heuristic with chaining, gaps,
-and inexact matches. My own contributions predominantly include match pruning,
-the implementation using contours, and the proofs and experiments.
-
-Further, the survey is based on ongoing notes on pairwise alignment that are also co-authored
-with Pesho Ivanov.
-
-A*PA2 is my own work.
-
-TODO: The extension to semi-global alignment is my own work, and currently unpublished.
-#+end_notice
-
 #+attr_shortcode: summary
 #+begin_notice
-In this chapter, we explore methods for /global pairwise alignment/, that find the
-minimal number of edits between two genomic sequences.
+In this chapter, we survey methods for /global pairwise alignment/, which is
+the problem of finding the minimal number of mutations between two genomic sequences.
 
 There is a vast amount of literature on algorithms for pairwise alignment and
-its variants, and we start with a corresponding survey.
-
-Then, we introduce /A* pairwise aligner/, an aligner that, as the name says,
-uses the A* shortest path algorithm. Its main novelties are a significantly
-stronger /gap-chaining seed heuristic/ than was used in previous methods. Adding
-/pruning/ to this enables near-linear runtime on inputs with
-sufficiently low error rate.
-
-A drawback of A*PA is that it is based on plain A*, which, like Dijkstra's
-algorithm, is a relatively cache-inefficient graph algorithm.
-Some of the fastest aligners use DP (dynamic programming) with /bitpacking/ to
-very efficiently compute the edit distance between sequences. In /A*PA2/, we
-build a highly optimized aligner that merges A* with bitpacking, yielding
-significant speedups over both A*PA and Edlib.
+its variants. We start with the classic DP
+algorithm by Needleman and Wunsch and go over a number of improvements, both
+algorithmic and in the implementation.
+We focus on those methods that A*PA (\cref{ch:astarpa}) and A*PA2
+(\cref{ch:astarpa2}) build on.
 #+end_notice
+
+#+attr_shortcode: attribution
+#+begin_notice
+This chapter is based on the introductions of the A*PA and A*PA2 papers
+[cite:@astarpa;@astarpa2], and also on unpublished notes on pairwise alignment.
+The A*PA paper has joint first-authorship with Pesho Ivanov, and also the
+unpublished notes are coauthored with Pesho Ivanov.
+#+end_notice
+
 
 #+begin_export html
 $$
@@ -69,10 +45,100 @@ $$
 $$
 #+end_export
 
-* Introduction
-- introduced by [cite:@nw] for biology
-- Premise: if we can clearly see the optimal alignment in a dot-plot, why do we need
-  quadratic time anyway? [cite:@wilbur-lipman-83] observe the same
+* A Brief History
+The problem of /pairwise alignment/ was originally introduced in genomics in 1970 by
+Needleman and Wunsch [cite:@nw].
+In their paper, they use their method to align proteins of around 100 amino acids.
+This way, they find the /mutations/ between the two sequences, which can be
+insertions, deletions, or substitutions of single amino acids.
+Specifically, the /alignment/ corresponds to the minimal number of such
+mutations that is needed to transform one sequence into the other.
+
+Since this first paper, the sequences being aligned have grown significantly in length.
+For example, the mutations between different strains of the $30\ 000$ bases long
+SARS-CoV-2 (COVID) virus can be found this way. Even more, full-genome alignment
+of $3\ 000\ 000\ 000$ bases long human genomes is entering the picture, although
+here approximate rather than exact methods tend to be used.
+
+*Algorithmic improvement.* Along with the increasing length and amount of genomic sequences, alignment
+algorithms have significantly improved since their introduction over 50 years
+ago.
+This started with a significant number of algorithmic improvements from 1970
+to 1990.
+These first brought the runtime down from cubic ($O(n^2m)$ for sequences of
+length $n$ and $m$) to near-linear when the sequences are similar, with
+the band-doubling method of Ukkonen [cite:@ukkonen85] with complexity $O(ns)$.
+This is still used by the popular tool Edlib [cite:@edlib].
+At the same time, that complexity was further improved to $O(n+s^2)$ in
+expectation by Ukkonen and Myers [cite:@ukkonen85;@myers86] with the /diagonal
+transition/ method, and also this is used in the popular BiWFA [cite:@wfa;@biwfa] aligner.
+BiWFA further incorporates the /divide-and-conquer/ technique or Hirschberg
+[cite:@hirschberg75] to reduce its memory usage.
+
+All this is to say: there was a large number of early algorithmic contributions,
+and at the core, the best methods conceptually haven't changed much since then [cite:@medvedev-edit-distance].
+
+*Implementation improvements.* Nevertheless, the amount of genomic data has significantly increased since then, and
+algorithms had to speed up at the same time to keep up.
+As the algorithmic speedups seemed exhausted, starting in roughly 1990, the
+focus shifted more towards more efficient implementations of these methods [cite:@.
+By 1999, this resulted in the $O(ns/w)$ bitpacking algorithm of Myers [cite:@myers99],
+that provides up to $w=64\times$ speedup by packing 64 adjacent states of the
+internal DP matrix into two 64 bit computer words. With more recent advances
+in computer hardware, this has also extended to SIMD instructions that can do up
+to 512-bit operations, providing another up to $8\times$ speedup [cite:@suzuki-kasahara].
+
+*Approximate alignment.*
+At the same time, there also has been a rise in popularity of /approximate/
+alignment algorithms and tools. Unlike all methods considered so far, these are
+not guaranteed to find the /minimal/ number of mutations between the two
+sequences. Rather, they sacrifice this /optimality/ guarantee to achieve a
+speedup over exact methods.
+Two common techniques are x-drop [cite:@x-drop] and static banding
+[cite:@minimap] (TODO better citation), that both significantly reduce the region of the DP
+matrix ([[edit-graph]]) that needs to be computed to find an alignment.
+
+Before proceeding with the survey, we briefly highlight the contributions A*PA
+and A*PA2 make.
+
+** A*PA
+Despite all the algorithmic contributions so far, in a
+retrospective on pairwise alignment [cite:@medvedev-edit-distance], Medvedev observed that
+#+begin_quote
+a major open problem is to implement an algorithm with linear-like empirical
+scaling on inputs where the edit distance is linear in $n$.
+#+end_quote
+Indeed, the best algorithms so far scale as $O(s^2)$ when the edit distance is
+$s$, and this is still linear in $n$ when the edit distance is, say, $s=0.01 \cdot n$.
+A*PA attempts to break this boundary.
+
+
+As we will see soon, pairwise alignment corresponds to finding the shortest path
+in a graph. The classic algorithm for this is Dijkstra's algorithm
+[cite:@dijkstra59]. A faster version of it that can use domain-specific
+information is the A* algorithm [cite:@astar-hart67]. It achieves this by using
+a /heuristic/ that estimates the cost of the (remaining) alignment.
+In /A*PA/ (\cref{ch:astarpa}), we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
+starting point and improve it to the /gap-chaining seed heuristic/ with /inexact
+matches/. For inputs
+with uniform error rate up to $10\%$, this can estimate the remaining distance
+very accurately. By additionally adding /pruning/, A*PA2 ends up being near-linear
+in practice when errors are uniformly distributed, improving on the quadratic
+behaviour of previous exact methods.
+
+** A*PA2
+A drawback of A*PA is that it is based on plain A*, which, like Dijkstra's
+algorithm, is a relatively cache-inefficient graph algorithm.
+
+On the other hand, some of the fastest aligners use DP (dynamic programming) with /bitpacking/ to
+very efficiently compute the edit distance between sequences, even though they
+do not have the near-linear scaling of A*PA.
+In /A*PA2/ (\cref{ch:astarpa2}), we
+build a highly optimized aligner.
+It merges the ideas of band-doubling and bit-packing (as already used by Edlib
+[cite:@edlib]) with SIMD and the heuristics developed for A*PA.
+This results in significant speedups over both A*PA and Edlib.
+In particular, A*PA2 is up to $1000\times$ faster per visited state.
 
 As Fickett stated 40 years ago [cite:@fickett84 p. 1] and still true today,
 #+begin_quote
@@ -80,37 +146,54 @@ at present one must choose between an algorithm which gives the best alignment
 but is expensive, and an algorithm which is fast but may not give the best
 alignment.
 #+end_quote
-In this paper we narrow this gap and show that A*PA2 is nearly as fast as
-approximate methods.
+A*PA2 narrows this gap, and is nearly as fast as approximate methods.
 
 
 ** Overview
-- briefly highlight the three chapters
+The remainder of this chapter reviews the history of /exact/ /global/ pairwise
+alignment in more detail.
+In particular, we focus on those methods that A*PA and A*PA2 build on, including
+algorithmic improvements and implementation techniques.
+Rather than presenting all work strictly chronologically, we treat them topic by topic.
+At times, we include formal notation for the concepts we introduce, which will
+be useful in later chapters.
 
-* A history of pairwise alignment
-*Overview.* This survey focuses on /exact/ /global/ pairwise alignment. In
-particular, we focus on research from roughly 1970 to 1990 on
-improving the complexity of alignment algorithms. This is followed by more
-recent papers on improving the practical performance of these methods through
-more efficient use of the hardware.
-Rather than presenting all work chronologically, we treat them topic by topic.
+We start our survey with a formal problem statement for pairwise alignment
+([[*Problem Statement]]). Then, we list a number of variants of global alignment ([[*Variants of pairwise alignment]]).
+While these are not our focus, they can help to contextualize other existing methods.
+Then we move on to the classic DP algorithms in [[*The Classic Quadratic DP
+Algorithms]] and the algorithmic improvements in later sections.
+In [[*Subquadratic Methods and Lower Bounds]] we present some theoretical results on
+the complexity of the pairwise alignment problem and the best worst-case
+methods (although not practical).
+We also introduce some methods for the strongly related longest common
+subsequence (LCS) problem ([[*LCS and Contours]]).
+Then, in [[*Some Tools]], we briefly explain the methods used in some common tools that are the
+main baseline for the comparison of A*PA and A*PA2.
+We end with a table summarizing the papers discussed in this chapter, [[*Summary]].
 
 *Scope.*
-There is also a vast literature on /text searching/, where all occurrences of a
-short pattern in a long text must be found. This field was very active from
-around 1990 to 2010, and again includes a large number of papers.
+There is also a vast literature on /text searching/, where all (approximate) occurrences of a
+short pattern in a long text must be found. This field has been very active since
+around 1990, and again includes a large number of papers.
 We consider these mostly out of scope and refer the reader to Navarro's survey [cite:@navarro01].
 
 More recently, /read mapping/ has become a crucial part of bioinformatics, and
 indeed, there is also a plethora of different tools for aligning and mapping
-reads. Here, we refer the reader to the survey by Alser at al. [cite:@alser21].
+reads. This is a generalization of text searching where patterns tend to be
+significantly longer (100 to 10000 of bases, rather than tens of characters).
+Due to the amounts of data involved, most solutions to this problem are approximate, with
+the notable exception of A*ix [cite:@astarix-1;@astarix-2], which is the precursor for the work on A*PA
+presented in subsequent chapters, and POASTA [cite:@poasta].
+we refer the reader to the survey by Alser at al. [cite:@alser21] for a thorough
+overview of /many/ tools and methods used for read alignment.
 
-Lastly, we note that most moderns read mappers and alignment tools are
+Lastly, we again note that most moderns read mappers and alignment tools are
 /approximate/, in that they are not guaranteed to return an alignment with
 provably minimal cost. A*PA and A*PA2 are both exact methods, and thus we will
-focus on thos.
+focus on these. We again refer the reader to [cite:@alser21].
 
-* Problem statement
+* Problem Statement
 The main problem of this chapter is as follows.
 #+begin_problem Global pairwise alignment
 Given two sequences $A$ and $B$ of lengths $n$ and $m$, compute the edit
@@ -185,7 +268,7 @@ does require that all edges have non-negative weights.
 An extension of Dijkstra's algorithm is A* [cite:@astar-hart67], which visits
 states in order of increasing ``anticipated total distance''.
 
-* Variations on pairwise alignment
+* Variants of Pairwise Alignment
 There are a few variants of pairwise alignments and edit distance. While the
 focus of this chapter is (unit cost) edit distance, it is helpful to first have
 an overview of the different variants since most papers each assume a slightly
@@ -325,7 +408,7 @@ given a scoring model with fixed affine costs $\delta(a, a) = M$, $\delta(a,b) =
 and $w_k = O + E \cdot k$, there is a cost-model (with $\delta(a,a)=0$) that
 yields the same optimal alignment.
 
-* The classic quadratic DP algorithms
+* The Classic Quadratic DP Algorithms
 We are now ready to look into the first algorithms.
 We start with DP algorithms, that process the graph one column at a time. Note
 that we present all algorithms as similar as possible: they go from the top-left
@@ -333,6 +416,10 @@ to the bottom-right, and always minimize the cost. We write $D(i,j)=\g(\st ij)$ 
 cost to state $\st ij$.
 Smith et al. [cite:@smith81] provide a nice overview of the similarities and
 differences between the early approaches.
+
+Note that for the sake of exposition, we start with the paper of Needleman and
+Wunsch [cite:@nw], even though Vintsyuk [cite:@vintsyuk68] already discovered a very similar method
+a few years before, although in a different domain.
 
 #+name: fig:nw
 #+caption: The cubic algorithm as shown by Needleman and Wunsch [cite:@nw]. Note that as shown, it works from the bottom right to the top left, and maximizes the LCS score instead of minimizing cost. Consider the outlined 1-cell. It has a score of 1 because the characters in its row and column match. The final score of the cell is this 1, plus the maximum of the remaining outlined cells in the row below and column right of it.
@@ -408,7 +495,7 @@ The best local alignment ends in the smallest value of $D(i,j)$ in the table.
 \begin{align*}
     D(0, 0) &= D(i, 0) = D(0, j) := 0 \\
     D(i,j)  &= \min\big(0, &&\text{start a new local alignment}\\
-    &\phantom{=\min\big(} D(i-1, j-1) + \delta(a_{i{-}1}, b_{j{-}1}), &&\text{(mis)math}\\
+    &\phantom{=\min\big(} D(i-1, j-1) + \delta(a_{i{-}1}, b_{j{-}1}), &&\text{(mis)match}\\
     &\phantom{=\min\big(} \min_{0\leq i' < i} D(i', j) - w_{i{-}i'}, &&\text{deletion}\\
     &\phantom{=\min\big(} \min_{0\leq j'<j} D(i, j')-w_{j{-}j'}\big).&&\text{insertion}
 \end{align*}
@@ -521,7 +608,7 @@ Similarly, BiWFA [cite:@biwfa] improves the space complexity of WFA from
 $O(n+s^2)$ to
 $O(s)$ working memory, where $s$ is the cost of the alignment.
 
-* Dijkstra's algorithm and A*
+* Dijkstra's Algorithm and A*
 :PROPERTIES:
 :CUSTOM_ID: graphs
 :END:
@@ -593,18 +680,18 @@ both algorithms require non-negative edge costs.
 We end our discussion of graph algorithms with a quote:
 as Spouge states [cite:@spouge91 p. 3],
 #+begin_quote
-algorithms exploiting the lattice structure of an alignment graph are usually faster.
+algorithms exploiting the lattice structure of an alignment graph are usually faster,
 #+end_quote
 and further [cite:@spouge89 p. 4]:
 #+begin_quote
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-In A*PA2 [cite:@astarpa2] (Section FIXME),
+In A*PA2 [cite:@astarpa2] (\cref{ch:astarpa2}),
 we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
-* Computational volumes and band doubling
+* Computational Volumes and Band Doubling
 :PROPERTIES:
 :CUSTOM_ID: computational-volumes
 :END:
@@ -694,7 +781,7 @@ computational volumes are:
 
 TODO: Check figure references.
 
-* Diagonal transition
+* Diagonal Transition
 :PROPERTIES:
 :CUSTOM_ID: diagonal-transition
 :END:
@@ -708,7 +795,7 @@ Around 1985, the /diagonal transition/ algorithm was independently discovered by
 Ukkonen [cite:@ukkonen83;@ukkonen85] (for edit distance) and Myers
 [cite:@myers86] (for LCS). It hinges on the
 observation that along diagonals of the edit graph (or DP matrix), the value of
-$\g(\st ij) = D(i,j)$ never decreases [cite:Lemma 3 @ukkonen85], as can be seen in [[edit-graph]].
+$\g(\st ij) = D(i,j)$ never decreases [cite:@ukkonen85 Lemma 3], as can be seen in [[edit-graph]].
 
 We already observed before that when the edit distance is $s$, only the $s$
 diagonals above and below the main diagonal are needed, and on these diagonals,
@@ -784,7 +871,7 @@ Similar to Myers [cite:@myers86], BiWFA [cite:@biwfa] applies Hirscherg's
 divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 (on top of the $O(n+m)$ input).
 
-* Subquadratic methods and lower bounds
+* Subquadratic Methods and Lower Bounds
 
 *Lower bounds.*
 Backurs and Indyk [cite:@no-subquadratic-ed] have shown that unit cost edit distance can not be solved in
@@ -1030,7 +1117,7 @@ k-mer matches in the chain.
 # - Baeza-Yates Navarro 96
 # - LEAP: https://www.biorxiv.org/content/10.1101/133157v3
 
-* Some tools
+* Some Tools
 We now briefly list a few recent and competitive global alignment tools. For more, we refer to the
 survey of Alser et al. [cite:@alser21].
 
@@ -1107,50 +1194,6 @@ read-aligners was done by Alser et al. [cite:@alser21].
 | A*PA [cite/text/cf:@astarpa]                         | unit costs                                 | $O(n)$ best case                          | $O(n)$                      | A*, *gap-chaining seed heuristic*, *pruning*, diagonal-transition | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
 | A*PA2 [cite/text/cf:@astarpa2]                       | unit costs                                 | $O(n)$ best case                          |                             | DP, A*, blocks, (incremental) band-doubling, SIMD, bitpacking     |                                                                                  |
 
-
-
-
-
-* TODO
-
-
-- where to make the point that graph/Dijkstra is slow, and DP is 1000x faster?
-- consistent capitalization of headers
-- consider dropping appendix/human data results; we only have to make the
-  high-level point here
-- Redo copied figures
-- figure captions
-- Add figures to methods
-- Add the big table and make it complete
-- incorporate ideas from more pairwise alignment blogposts?
-- 0 and 1 and so do not go in math
-- $k$-mers
-- Talco technique
-- BSAlign technique?
-- ensure all mentioned papers are also in the table?
-- Refer myers-miller-95 in context of A*PA seed heuristic. it's nearly the same.
-- Mention that content focusses on background for A*PA[2]
-
-** A*PA2
-- TODO: Properly contextualize A*PA2 wrt A*PA:
-  - Drop the graph stuff
-  - Do DP/NW/SIMD/bitpacking instead
-*** Summary/overview/contribs
-- blocks
-- simd
-- encoding
-- incremental doubling
-- traceback
-- A*
-- sparse heuristic invocation
-*** Notation
-*** Methods
-- mostly copy paste; include some appendix stuff
-*** Evaluation
-- mostly copy paste; include some appendix stuff?
-*** Discussion
-
-** Semi-global alignment
 
 
 #+begin_export html
