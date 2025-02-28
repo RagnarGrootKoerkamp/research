@@ -9,7 +9,7 @@
 
 #+attr_shortcode: attribution
 #+begin_notice
-This chapter is based on two preprints:
+This part is based on two preprints:
 - *SimdMinimizers, submitted to SEA25.*
 
   [cite/bibentry/b:@simd-minimizers-preprint]
@@ -40,11 +40,13 @@ We start by introducing a few common techniques to achieve speedups.
 For compute-bound problems, these include
 SIMD, avoiding unpredictable branches, and instruction-level parallellism,
 For memory-bound problems, the core principle is to optimize for /throughput/
-rather than /latency. Some solutions are interleaving multiple queries
+rather than /latency/. Some solutions are interleaving multiple queries
 using batching or streaming, prefetching, and doing cache line-aware optimization
 of the memory layout.
 
-We will use the SSHash $k$-mer index as a motivating application.
+We also include some general background on benchmarking and optimizing code.
+
+We show these techniques by optimizing parts of the SSHash $k$-mer index.
 This data structure takes as input a text, and builds a dictionary on its
 $k$-mers. It can then efficiently answer queries whether given $k$-mers occur in
 the input text.
@@ -62,7 +64,6 @@ access reads.
 #+end_notice
 
 
-* Introduction
 - Large scale text indices
 - More data -> faster algorithms
 
@@ -74,8 +75,257 @@ access reads.
 - SimdMinimizers
 - PtrHash
 
-** Two applications
 
-**
-* SimdMinimizers
-* PtrHash
+
+
+Both these problems are relevant for indexing genomic data, and specifically,
+they are both components of the SSHash $k$-mer index [cite:@sshash].
+
+
+* Optimizing Compute Bound Code: Random Minimizers
+We start with an overview of techniques that can be used to optimize
+compute-bound code.
+
+As an example application, we apply these techniques to the problem of
+efficiently computing the minimizers of a sequence.
+There are many indices and tools using minimizers,
+such as SSHash [cite:@sshash]
+and minimizer-space De Bruijn graphs [cite:@mdbg].
+In some cases, minimizers are also specifically used as a sketch of the text
+[cite:@sampling-sa-minimizers;@u-index-preprint]. Specifically there, this
+``compression'' step of computing the minimizers can easily become a bottleneck,
+since all subsequent operations only have to operate on the much smaller
+sketched space. Thus, this is a classic compute bound problem, where the input
+is a DNA sequence, and the output is the set of minimizer positions or kmers.
+
+*A*PA2.*
+Most of the techniques mentioned below are also already used in the A*PA2
+pairwise aligner (TODO REF), which is
+also compute bound.
+It processes parts of the DP matrix in large blocks, so that the execution is
+very predictable and branch misses are avoided. It also uses SIMD (on top of
+bitpacking) to compute even more states in parallel, and exploits instruction
+level parallellism by independently processing two SIMD vectors at a time. It
+also uses a bit-packed input format to reduce the memory pressure.
+
+** Avoiding Branch Misses
+Modern CPUs have execution /pipelines/ that are hundreds of instructions long
+Thus, if one instruction is waiting for some data (from memory), the CPU will
+already start execution upcoming instructions.
+When a branch occurs, the CPU has to predict which of the two paths will be
+taken in order to proceed this /speculative execution/, since waiting for the
+condition to be resolved would remove most of the benefits of pipelining.
+
+Thus, the CPU has a /branch predictor/ that fulfils this task.
+Very much simplified, it tracks for each branch instruction whether it is usually taken or
+not, and makes a prediction based on this. Modern branch predictors can
+perfectly recognize patterns like taking a branch every 10th iteration.
+
+When a /branch misprediction/ happens, the CPU has to unwind the speculative computations
+that depended on the wrong assumption, and then start over with the correct
+sequence of instructions. In practice, this can cause a delay of 10 to 20 clock
+cycles, and can easily become the bottleneck for performance.
+Thus, we should aim to design algorithms without /data-dependent branches/, so
+the branches that remain are all predictable and quick to compute.
+
+*Application.*
+For the problem of computing minimizers, we apply this technique by replacing
+the classic queue based algorithm for minimizers by an efficient version of the
+/two-stacks/ method, that only uses a single branch every $w$ iterations.
+
+** SIMD: Processing In Parallel
+A common technique to speed up computations on modern hardware is by using SIMD,
+or single-instruction-multiple-data, instructions. The are for example 256 bit
+registers that contain four 64 bit integers at once, or eight 32 bit
+integers. The processor can then do arithmetic on all /lanes/ in parallel,
+providing up to $4\times$ or $8\times$ speedup over scalar arithmetic.
+
+In order to use SIMD instructions, we have to make sure that the
+input data is sufficiently homogeneous: we need to fill the lanes with integers
+that require exactly the same computation. And since these computations happen
+in parallel, they can not depend on each other.
+
+*Application.*
+Unfortunately, the problem of computing minimizers is (locally) very sequential, since it
+requires taking a rolling minimum.  To circumvent this, we can split each input
+sequence into 8 /chunks/ that are independent and can be processed in parallel
+via 256 bit AVX2 SIMD instructions on 8 32 bit lanes.
+
+Because we use a data-independent method to compute the minimizers, the
+data-flow and executed instructions in each of the 8 chunks are exactly the
+same. This is the perfect case for SIMD, since there is no /divergence/ between
+the lanes.
+
+** Instruction Level Parallelism
+Modern CPUs can not only execute many instructions ahead, but they also execute many
+instructions in parallel. For example, typical Intel CPUs can execute up to 4
+instructions each clock cycle. In particular in very simple for loops, e.g.,
+that sum the values of an array, there is a /loop carried dependency/, and each
+iteration depends on the previous one. Thus only one addition can be executed at
+a time, so that the CPU is not fully utilized.
+
+One way to increase the amount of parallelism available in the code is by
+solving two instances in parallel. For example, to sum the integers in a vector,
+we can split it in two halves (or even four quarters!) and sum them at the same
+time.
+
+*Application.*
+We tried to apply this to the computation of minimizers by splitting the input
+into 16 chunks, and then running two instances of the 8-lane algorithm
+interleaved. In this case, the gains were marginal. Probably the additional
+instructions increase the load on the hardware registers too much.
+
+** Input Format
+Lastly, also the input format and more generally memory IO can have a big impact on
+performance, since highly optimized code usually processes a lot of data.
+
+Specifically, the SIMD =scatter= instruction, that reads 8 arbitrary addresses,
+and =gather= instruction, that writes to 8 arbitrary addresses, are often slow.
+More generally, any kind of shuffling data, either by writing spread out over
+memory or by reading from random parts of memory, tends to be much slower than
+simply sequentially iterating over some input.
+
+*Application.*
+The input for the SIMD version of our minimizer algorithm is 8 streams of text,
+that are initially encoded as plain 8 bit ASCII characters.
+Thus, while we could read one character from each stream at a time, it is much
+more efficient to =gather= 8 32 bit integers at once, each containing 4 characters.
+In practice, it is better to read a full 64 bit
+integer at a time, rather than splitting this into 2 32 bit reads.
+
+Still that is not maximally efficient. For DNA, each ASCII character can only
+really be one of four values, $\nuc{ACGT}$. (TODO NUC)
+Thus, each 8 bit character has 6 wasted bits.
+We can avoid this by first /packing/ the input in a separate linear pass.
+Then, the algorithm itself can read 64 bits at a time from each lane, containing
+32 characters.
+
+
+* Optimizing Memory Bound Code: Minimal Perfect Hashing
+We now consider techniques for optimizing memory bound code.
+
+As an application, we consider the /minimal perfect hash function/ in SSHash.
+SSHash first collects all minimizers, and then builds a hash table on
+these minimizers as a part of its data structure.
+Building a classic hash table that stores the values of the keys is possible,
+but this would take a lot of space, since it has to store all the keys.
+Instead, we can use the fact that the data
+structure is /static/: the set of $m$ minimizers is fixed. Thus, we can build a
+/minimal perfect hash function/ (MPHF) that takes this set, and bijectively maps them to the range
+$\{0, \dots, m-1\}$. Then, queries can use this
+function to find the right slot in an array storing additional data for each minimizer.
+
+We focus on designing an MPHF that can answer queries quickly.
+Specifically, we optimize for throughput, i.e., to answer as many independent
+queries per second as possible.
+When the number of keys (minimizers) is large, say $10^9$, the MPHF data structure
+will not fit in L3 cache, and hence, most of the queries will need to access
+main memory. Thus, this problem is memory-bound.
+
+We note that code can be memory bound in two ways: by memory /latency/, where it
+is usually waiting for one read to come through, or by
+memory /throughput/, where the entire bandwidth is saturated.
+We should avoid being bound by latency, and instead aim to get as much work done
+as possible given the available throughput.
+
+** Using Less Memory
+A first way to reduce a memory latency or throughput bottleneck is by simply
+using less memory. CPUs have a hierarchy of caches, typically with L1, L2, and
+L3 cache, with L1 being the closest to the CPU and hence fastest, but also the
+smallest. This means that if the data fits in L1, random accesses to it will be
+significantly faster (a few cycles) than for data that only fits in L2 (around
+10 cycles), L3 (around 40 cycles), or main memory (up to 200 cycles).
+Thus, smaller data fits in a smaller cache, and hence will have faster accesses.
+Even when the data is much larger than L3, reducing its size can still help,
+because then, a larger fraction of it can be cached in L3.
+
+One way to apply this is by reducing the size of integers from 64 bits to 32
+bits, when this is still sufficiently large to hold the data.
+
+** Reducing Memory Accesses
+A first step to reduce the memory bottleneck is by avoiding memory access as
+much as possible. Completely removing a dependency on some data is usually not
+possible, but instead, it is often possible to organize data more efficiently.
+
+In particular, RAM works in units of /cache lines/, which (usually) consist of
+64 bytes. Thus, whenever an integer is read from main memory, the entire
+corresponding cache line must be fetched into the L1 cache.
+This means that it may be more efficient to store a single /array of structs/
+rather than a /struct of arrays/ if elements of the struct are usually accessed together.
+
+Additionally, one should avoid sequential memory accesses, where the result of
+memory read determines the location of a second access to memory, since these
+can not be executed in parallel.
+
+*Application.*
+A common application of this technique is in B-trees, which are balanced search
+trees holding a set of sorted elements. Classic binary search trees have an
+indirection at every level of the tree. B-trees on the other hand store $B$
+values in each node. This reduces the height of the tree from $\log_2(n)$ to
+$\log_(B+1)(n)$, and efficiently uses a cacheline by reading $B$ values from it
+at once, rather than just a single value.
+
+Our MPHF, PtrHash, internally uses Elias-Fano (EF) coding [cite:@elias;@fano] to
+compactly encode sequences of integers. We introduce a CacheLineEF version, that
+overall uses a bit more space, but stores the information to retrieve each value
+in a single cache line. That way, we can still compress the data, while not
+paying with more memory accesses.
+
+** Interleaving Memory Accesses
+As already discussed, CPU pipelines can execute many instructions ahead.
+This also means that the CPU will already fetch memory for upcoming instructions
+whenever it can. For example, in a for-loop where each iteration reads a
+single independent memory address, the CPU can fetch memory a number of
+iterations ahead.
+ahead.
+
+More precisely, each core in the CPU has a number (12, for me) of /line fill
+buffers/. Each time the core requests a new cache line to be read from memory,
+it reserves one of these buffers so that the result can be stored there when it
+is available. Thus, the latency of each individual access can be hidden by doing
+around 10 reads in parallel. The result is then 10 times higher memory throughput.
+
+This can be used by clustering independent memory accesses, so that they indeed
+occur in parallel. Additionally, it can help to have as little code as possible
+in between consecutive reads, so that the CPU can look relatively more
+iterations ahead.
+
+** Batching, Streaming, and Prefetching
+One way to make the interleaving of memory accesses more explicit is by using
+/batching/. If we have to process $n$ independent iterations of a for loop, and
+each requires a read to memory, we can group (chunk) them into /batches/ of size
+$B$, say of size $B=16$ or $B=32$. Then, we can first make $B$ reads to memory,
+and then process the results.
+
+To make this slightly more efficient, /prefetching/ can be used, where instead of
+directly reading the $B$ values into a register, we first ask the CPU to read
+them into L1 cache using a dedicated prefetch instruction. Then we process the
+elements in the batch as usual, and all the data should already be present.
+
+A slight variant of this is /streaming/, where instead of processing chunks of
+size $B$, we prefetch the data required for the iteration $B$ ahead of the
+current one.
+
+*Application.*
+We apply both batching and streaming in PtrHash, and achieve up to $2\times$
+speedup compare to plain for-loops. In particular, using these techniques, each
+iteration only takes just over 8 ns on average, which on my CPU, is very close to the
+maximum random memory throughput each core can have.
+
+* TODO Writing High Performance Code
+We end this introduction to high performance code with some tips on
+benchmarking, profiling, and estimating performance.
+** TODO Benchmarking
+
+** Writing and Optimizing High Performance Code
+
+** DROP? Performance Metrics
+We end this section with a summary of useful performance metrics.
+These should all be taken with some margin, as they can vary wildly between
+different CPUs. Still, they should provide a useful starting point for
+back-of-the-envelope performance estimates.
+
+- TODO
+- memory latency
+- throughput
+- back-of-the-envelope stuff
