@@ -1,0 +1,105 @@
+#+title: Code snippets for Latex, Rust, and Python
+#+filetags: devops note
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2025-01-15 Wed>
+
+These are some common libraries and code snippets for various tasks.
+
+* Latex
+
+** Code highlighting: =minted=
+
+#+begin_src LaTeX
+\usepackage[newfloat=true]{minted}
+\newmintedfile{rust}{
+  linenos,
+  numbersep=5pt,
+  frame=lines,
+  baselinestretch=1.05,
+  fontsize=\footnotesize,
+}
+
+\begin{listing}[t]
+  \rustfile{code.rs}%
+  \vspace{-1.3em}%
+  \caption{Caption}%
+  \label{rs:label}%
+\end{listing}
+#+end_src
+
+* Rust
+
+** =Cargo.toml= workspace
+#+begin_src toml
+[workspace]
+members = [
+    "a",
+    "b",
+]
+resolver = "2"
+
+[workspace.dependencies]
+serde = "1.0"
+#+end_src
+
+** Release profile
+#+begin_src toml
+[profile.release]
+lto = "thin"
+incremental = true
+debug = true
+#+end_src
+
+** List exported functions
+#+begin_src sh
+cargo modules generate tree  --fns --traits --types --sort-by visibility
+#+end_src
+
+** Read human genome using =needletail=
+#+begin_src rust
+fn read_human_genome() -> PackedSeqVec {
+    let mut packed_text = PackedSeqVec::default();
+    let Ok(mut reader) = needletail::parse_fastx_file("human-genome.fa") else {
+        eprintln!("Did not find human-genome.fa. Add/symlink it to test runtime on it.");
+        return PackedSeqVec::default();
+    };
+    while let Some(r) = reader.next() {
+        let r = r.unwrap();
+        eprintln!(
+            "Read {:?} of len {:?}",
+            std::str::from_utf8(r.id()),
+            r.raw_seq().len()
+        );
+        packed_text.push_ascii(r.raw_seq());
+    }
+    packed_text
+}
+#+end_src
+
+** Prevent auto-vectorization
+=v[i]= prevents auto-vectorization, because the index can panic.
+Sometimes we want =v.get_unchecked(i)= instead, but now there are no more panic
+and the auto-vectorizer can kick in. Sometimes we want that, but sometimes we
+don't. Especially with array indexing this is prone to generate slow =gather=
+instructions.
+Prevent this using:
+#+begin_src rust
+unsafe {
+    asm!("");
+    *v.get_unchecked(b as usize)
+}
+#+end_src
+
+* Python
+** Export org table
+#+begin_src py
+import tabulate
+print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".1f"))
+#+end_src
+** Pretty plots
+Much nicer/softer colours with
+#+begin_src py
+plt.style.use('ggplot')?
+#+end_src
