@@ -302,7 +302,7 @@ the search is a memory-bottlenecked operation, we can speed it up many times.
 
 When I first thought about this, I figured that explicit prefetching should not be needed.
 But in the S+-tree post, Ragnar found that explicitly prefetching memory that
-was going to be accessed at the next interval size was also helpful. We
+was going to be accessed at the next interval size was helpful. We
 therefore add it as well, just to compare. The advantage here is that when batching,
 we can do the prefetch after doing the comparison, meaning we already know which value
 to prefetch and we don't have to do two memory accesses instead of one. It should therefore
@@ -353,7 +353,7 @@ large sizes, only to find it actually is not.
 An issue with the standard array layout is that caches are not optimally
 exploited. When you think about it, the first few queries in the array are really
 far apart from each other, and for each of them, we need to fetch a whole cacheline,
-but we only use one element from that cacheline. We can only exploit spatial locality
+but we only use one element from that cacheline. We can only exploit locality
 in the bottom layers of the search. The Eytzinger layout can fix this, while also being
 friendly to efficient prefetching.
 
@@ -448,7 +448,7 @@ branch mispredictions in the final loop iteration. We'll fix them later.
 The great thing about Eytzinger is that
 prefetching can be super effective. This is due to the fact that if we
 are at index \(i\), the next index is going to be at \(2i\) or
-\(2i + 1\). That means that if we prefetch, we can actually prefetch
+\(2i + 1\). That means that if we prefetch and the subsequent values are well aligned (which they will be), we can actually prefetch
 both of the possible options within the same cacheline!
 
 We can make use of this effect up to the effective cache line size. A usual cache line size
@@ -482,8 +482,8 @@ And we can see that prefetching 4 iterations ahead is really best,
 which makes sense, because we're not really doing more work, we're just utilizing the fetched cachelines better.
 
 ** Branchless Eytzinger
-Now, we go on to fixing the bumpiness in the Eytzinger graph. This is
-caused by branch mispredictions on when to end the loop; if the array
+Now, we will fix the bumpiness in the Eytzinger graph. This is
+caused by branch mispredictions when deciding whether to end the loop; if the array
 size is close to a power of two, the ending is easy to predict, but
 otherwise, it is difficult for the CPU. We proceed as Algorithmica
 suggests, doing a fixed number of iterations and then doing one
@@ -511,8 +511,9 @@ pub fn search_branchless_prefetch<const L: usize>(&self, q: u32) -> u32 {
 }
 #+end_src
 
-Where the =get_next_index_branchless= uses an explicit =cmov= from the
-=cmov= crate. It was surprisingly difficult to get the compiler to
+As `num_iters`, we pre-compute the integer logarithm of the size of the array.
+The =get_next_index_branchless= uses an explicit =cmov= from the
+=cmov= crate. Without it, it was surprisingly difficult to get the compiler to
 accept this optimization, as =select_unpredictable= did not quite work.
 
 #+attr_html: :class inset
@@ -523,9 +524,9 @@ the performance when the array size is big.
 
 ** Batched Eytzinger
 Now, let us do batching the same way we did with binary search. We will
-consider two variants, prefetched and not prefetched. The prefetching shouldn't really be needed; the
+consider two variants, prefetched and non-prefetched. The prefetching shouldn't really be needed; the
 batching should properly overlay memory requests anyway. But modern computers
-are strange beasts, so we'll try it and we'll see. See the source code below.
+are strange beasts and we saw prefetching being helpful with batched binary search already, so we'll try it and we'll see. See the source code below.
 
 *** Non-prefetched
 
@@ -550,6 +551,8 @@ pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-comparison.svg]]
+
+Without prefetching, we see gains up until batch size of 16 and then the gains level out.
 
 *** Prefetched
 
@@ -585,6 +588,7 @@ pub fn batch_impl_prefetched<const P: usize, const L: usize>(&self, qb: &[u32; P
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison.svg]]
 
+With prefetching, batch size of 16 is suprisingly better than larger batch sizes.
 
 We compare the two graphs and compare the two best options, one from prefetched and
 non-prefetched:
@@ -608,11 +612,11 @@ Both of these effects are largely offset by batching (because it hides the laten
 
 To investigate this further, I wrote a small Python script simulating the behaviour of both algorithms with respect to caches.
 The setup was a single-layer, fixed-size, direct-mapped cache. What I found
-was that when it comes to memory throughput, batched Eytzinger is more advantageous. This is because the more-accessed top levels of the
+was that when it comes to memory throughput, batched Eytzinger should be more advantageous. This is because the more-accessed top levels of the
 tree are more efficiently cached and can be reused between queries. This leads to less cache lines fetched from main memory overall
-compared to binary search. However, we do not see this effect here, probably because the better efficiency is offset by batching anyway.
+compared to binary search. However, we do not see this effect here, probably because the better memory efficiency is offset by batching anyway.
 
-* Memory efficiency -- parallel search and comparison to B-trees
+* Memory efficiency -- parallel search and comparison to S-trees
 Now let us push memory throughput to its limits and compare the layouts when we are allowed to use multiple threads to query.
 For this test, I have turned off hyperthreading and locked the CPU to 8 cores.
 The first interesting aspect of this is whether prefetching will help now. Let's first look at binary search:
@@ -664,11 +668,11 @@ with a standard sorted array. However, we won't delve into this here, as there i
 Otherwise, if you are curious, the array layouts paper goes quite in-depth on this.
 
 * Interpolation search
-In the static search tree post, Ragnar suggested looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to do less accesses to main memory.
+In the static search tree post, Ragnar suggested looking at [[https://en.wikipedia.org/wiki/Interpolation_search][interpolation search]] as an option to reduce the amount of accesses to main memory.
 For completeness, we will implement it here as well to check out how it performs.
 
 The idea behind interpolation search based on the fact if data is drawn from a random uniform distribution, then when we sort it
-and plot the indices on the x-axis and values on the y-axis, we should roughly get a straight line. Using that, when we have the query,
+and plot the indices on the x-axis and values on the y-axis, we should roughly get a linear function. Using that, when we have the query,
 we can efficiently interpolate ("guess") where values corresponding to the query should be.
 
 When the input data is nicely evenly distributed, the complexity is $O(\lg \lg n)$ iterations, rather than $O(\lg n)$ for binary search.
@@ -685,8 +689,10 @@ When the data is not well distributed, the worst case complexity is $O(n)$, whic
                         *    *
 #+end_src
 
-Every time we do the interpolation, we suspect that the 2 is on the second position of the array. It is therefore very easy to construct pathological
-examples for interpolation search. Even in non-adversarial settings, like with the human genome, we could get into trouble with non-uniform distribution
+Every time we do the interpolation, we suspect that the 2 is on the second position of the array. Therefore, we reduce the searched area only by one element
+in every iteration and end up with a linear time complexity.
+
+Even in non-adversarial settings, like with the human genome, we could get into trouble with non-uniform distribution
 of input data. But let's try it out anyway and see how it goes.
 
 
@@ -723,7 +729,7 @@ pub fn interpolation_search(&self, q: u32) -> u32 {
 }
 #+end_src
 
-For the following plots, please notice that compared to the previous section, the scale changed quite drastically, so the results
+For the following plots, please notice that compared to the previous section, the scale changed quite drastically, as the results
 are quite a bit worse for the algorithm.
 
 #+attr_html: :class inset
@@ -733,7 +739,7 @@ We see that the performance is mostly terrible, multiple times slower than even 
 we see that the issue is two-fold. Firstly, there is a data hazard on the if condition in each iteration. But secondly, integer division
 is just very slow.
 
-We try if batching can hide some of this, as it did before:
+We can see if batching can hide some of this, as it did before:
 
 #+begin_src rust
     pub fn interp_search_batched<const P: usize>(&self, qs: &[u32; P]) -> [u32; P] {
@@ -801,7 +807,7 @@ The division is a bottleneck and it is hard to optimize it away. I tried to go a
 instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself by thinking that the Rust portable SIMD =clamp()= function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.]
 
 An interesting factor for interpolation search is also how it performs well on non-random data. Therefore, we download a part of the human genome
-from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz][here]].
+from [[https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz][here]]
 and compute 32-bit prefixes of all the suffixes. We then search in a subset of them and measure performance. This should be slower, as the data
 is not going to be exactly uniformly distributed.
 
