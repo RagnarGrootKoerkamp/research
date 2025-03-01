@@ -57,8 +57,9 @@ for why different schemes behave like they behave. It is worth a read! It change
 my mind on how a good scientific article should look.
 
 ** Benchmarking setup
-The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag. The CPU is an AMD
-Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
+The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as =-C target-cpu=native=.
+This allows the compiler to make use of architectural specifics of the machine the code is compiled on.
+The CPU is an AMD Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
 was locked at 1.7GHz and turbo boost was disabled.
 
 This post will is built around plenty of performance plots. These all show average time per one query.
@@ -67,7 +68,7 @@ to see effects of going to main memory.
 
 All measurements are done 5 times. The lines in plots follow the median, and we
 show the spread of the 2nd to 4th value (i.e., after discarding the
-minimum and maximum). Note that the results are often very deterministic and the spread is therefore not very visible.
+minimum and maximum). Note that the results are sometimes very deterministic and the spread is therefore not very visible.
 The measurements are done at \(1.17^k\) so as to be similar to
 Algorithmica. This also mitigates some artifacts of limited cache set
 associativity which we describe in a later section.
@@ -116,8 +117,10 @@ version (denoted here by =binary_search_std=):
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-binsearch.svg]]
 
-We can see that our naive version is slower, except for large array sizes. Checking out the
-standard library source code, we can see that their implementation already
+We can see that our naive version is pretty much the same as the library version, only with the exception of the bumps
+on the graph.
+
+Checking out the standard library source code, we can see that their implementation already
 has some optimizations in place. In the =binary_search_by= function, we
 see the following:
 
@@ -184,15 +187,17 @@ recommended by the Algorithmica post, and make the code effectively branchless.
 
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
 
-It now makes sense that our naive version is faster on large array sizes.
-The fact that it contains a branch allows the branch predictor to pick one possibility and
+It now makes sense that the naive binary search has bumps on the graph. The compiler is capable of making the code partially branchless;
+it replaces the conditional branch with a =cmov=, but it cannot yet make the code take a fixed number of iterations. Whether
+to stop on the final iteration becomes difficult to predict when the array does not have a size of a power of two, and therefore
+the code takes longer to run, as mispredictions are expensive.
+
+It is notable that when you don't compile with the =target-cpu= flag, the compiler does not replace the branch with a =cmov=.
+Then, you can replicate the result from the first plot in Algorithmica, where the naive code is much slower on small array sizes
+but faster on large array sizes. The fact that it contains a branch allows the branch predictor to pick one possibility and
 to start to prefetch it. This will then reduce memory latency, as if the branch predictor
 is correct, waiting for this prefetched value will not take such a long time.
 When we use a =cmov=, there is no branch, and so the branch predictor can't do any prefetching.
-
-Note that originally, I intended to write here that I did not see this effect of missing speculation and prefetching.
-I then found out that when testing on arrays of power-of-two size can give skewed results; but more on
-that soon when we talk about batching.
 
 ** Branchless search
 Now let us implement these branchless optimizations as well and see how we do then.
