@@ -7,28 +7,7 @@
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-20 Fri>
 
-#+attr_shortcode: attribution
-#+begin_notice
-This part is based on two preprints:
-- *SimdMinimizers, submitted to SEA25.*
-
-  [cite/bibentry/b:@simd-minimizers-preprint]
-- *PtrHash, submitted to SEA25.*
-
-  [cite/bibentry/b:@ptrhash-full]
-
-Further, the introduction of this chapter contains some unpublished experiments
-on high throughput computing.
-
-The SimdMinimizers code was largely developed by myself, with contributions from
-Igor Martayan to support the NEON architecture.
-The paper itself has equal contribution from both Igor Martayan and myself.
-
-PtrHash is my own work.
-#+end_notice
-
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 In this chapter, the goal will be /fast code/.
 Specifically, the goal is to solve some given problem as fast as possible
 by fully exhausting the hardware.
@@ -61,28 +40,144 @@ find the index of each minimizer in its internal data structure.
 With PtrHash, we develop an MPHF that only needs a single memory access for most
 queries, and can answer queries nearly as fast as the memory can support random
 access reads.
-#+end_notice
+#+end_summary
+
+#+begin_attribution
+In this part, we summarize high level techniques for writing high
+throughput code.
+We give examples of how these optimizations are applied in the two upcoming
+chapters, where we optimize the computation of random minimizers [cite:@simd-minimizers-preprint] and build a
+fast /minimal perfect hash function/ data structure [cite:@ptrhash-full].
+
+All text is my own, and at most loosely based on the mentioned papers.
+#+end_attribution
 
 
-- Large scale text indices
-- More data -> faster algorithms
+* Introduction
 
-- (not) latency
-- throughput
+The amount of sequenced biological data is growing exponentially.
+For a long time, the performance of computer
+hardware was also growing exponentially (TODO cite Moores law), but over the
+last years this has slowed down. As a result, waiting for faster hardware is not
+an solution if one wants to process all current data.
+Thus, there is a need for faster algorithms, and indeed, many papers in
+bioinformatics use this remark as their motivation.
 
-- Text indexing.
-- SSHash (future work)
-- SimdMinimizers
-- PtrHash
+*Complexity.*
+Unfortunately, the performance of a piece of code does not /just/ depend on the
+theoretical runtime complexity of the algorithm used [cite:@medvedev-edit-distance]. For example, the /hidden
+constant/ can have a large influence on the actual running time.
+For example, summing a list of $n$ integers is $O(n)$, and can be done
+very efficiently using SIMD instructions at a speed of 0.1 ns per value (or
+4 values per CPU cycle).
+On the other hand, reading $n$ values from random memory addresses is also
+considered $O(n)$, but this can be as slow as 100 ns per read, which is $1000\times$
+slower!
 
+*I/O complexity.*
+Thus, the performance of an algorithm also depends on the type of operations it
+does.
+One way to capture this is by using the IO model, where the number of memory
+(or disk) accesses is explicitly tracked.
+This also somewhat captures the intuitive simplicity of an algorithm: it is well
+known that dynamic programming algorithms that simply do linear loops over an
+array are much faster than IO-bound data structures.
 
+*Implementation.*
+Lastly, we come to the most practical part, which is the implementation of the
+algorithm.
+While Moore's law may not quite apply anymore, modern CPUs are vastly complex
+machines, with increasingly more optimizations and heuristics to squeeze everything out of
+the code they execute.
+We, the programmer, should be aware of these things, and write our code in such a way
+that indeed the CPU can execute it efficiently. This also means that we should
+explicitly use the dedicated instructions that the CPU provides, such as SIMD
+(/single-instruction multiple-data/)
+instructions to operate on up to 8 64-bit integers at a time, or the BMI2 (/bit
+manipulation/) instruction set for efficient bit-wise instructions.
 
+*Algorithm design.*
+Taking this one step further, we should not just aim to implement our algorithm
+of choice efficiently, but we may want to choose and design our algorithm by
+explicitly keeping in mind the capabilities of the hardware it will run on.
 
-Both these problems are relevant for indexing genomic data, and specifically,
-they are both components of the SSHash $k$-mer index [cite:@sshash].
+** Overview
+In this chapter, we will go over some techniques to optimize code for modern
+CPUs.
+We group them into two categories.
+First, in [[#compute-bound,]] we consider optimizations for compute-bound problems, where the
+execution of the given instructions itself is the bottleneck.
+Then, in [[#memory-bound]], we look at memory-bound setting, where the CPU is mostly waiting for data
+to be read from RAM (or disk).
 
+In this chapter, we give examples of each optimization based on two
+applications, that are covered in more detail in the following two chapters.
+The first, in \cref{ch:simdmini}, is \texttt{simd-minimizers}, which is an
+efficient compute-bound implementation of an algorithm to compute random minimizers.
+We have also already seen a number of compute-bound optimizations being applied to A*PA2
+in \cref{ch:astarpa2}.
+
+Then, in \cref{ch:ptrhash}, we consider a memory-bound application: minimal
+perfect hashing. Here, the problem is to build a data structure that, given a
+fixed input set $S$ of $n$ elements, efficiently maps each element to a unique
+integer in $\{0, \dots, n-1\}$.
+
+*Text indexing.*
+We note that both these applications have uses in text indexing.
+First, minimizers are used in many different data structures. One way in which
+they are used is to /sketch/ the input text into a smaller representation. Then,
+one can build a much smaller and faster data structure only on this sketched
+representation [cite:@u-index-preprint;@sampling-sa-minimizers;@mdbg].
+This sketching step can also be seen as a way to compress the data. This means
+that the compression algorithm itself (the computation of the minimizers)
+is the only part of the pipeline that sees the full input data, while all
+subsequent steps only work on the sketched representation.
+This means that as the compression factor increases (for example, because
+genomic reads become more accurate), the proportion of time spent on the
+compression increases, and indeed, this can take a significant portion of the time.
+Thus, we design an optimized implementation to compute random minimizers.
+
+A second application of minimizers is to cluster the $k$-mers of a text, where
+$k$-mers that share the same minimizer are mapped to the same bucket.
+This is used, for example, by the GGCAT De Bruijn graph construction algorithm
+[cite:@ggcat] in order to build disjoint pieces of the graph in parallel, and
+a similar technique is used by k-mer counting methods such as KMC2 [cite:@kmc2].
+
+The same technique is also used by SSHash [cite:@sshash], which is an
+efficient representation of a static set of $k$-mers. Again, each k-mer is
+first mapped to its minimizer. It then efficiently stores buckets of k-mers
+that share the same minimizer via super-$k$-mers, which are longer strings containing
+multiple adjacent $k$-mers as substrings.
+Once the data structure is built, a critical step is to efficiently retrieve the
+bucket that corresponds to a minimizer, which is done by building a /minimal
+perfect hash function/.
+Since a data structure implementing such a hash naturally takes quite some
+space, queries usually hit the main memory, and thus this is a memory bound problem.
+
+SSHash originally uses PTHash [cite:@pthash], and in \cref{ch:ptrhash}, we
+build on this to develop PtrHash by applying the techniques from this chapter to optimize its throughput.
+
+*Throughput, not latency.*
+We end here with one more remark. Many memory-bound applications are in fact bound by
+the memory /latency/. For example, this means that a piece of data is requested from
+RAM, and then the CPU has to wait for this data to become available before
+further progress can be made. This means that for (up to) the entire duration of
+the request, which can take 80 ns, the CPU is waiting for one bit of data.
+At the same time, the memory can handle many more reads than only one every 80
+ns, and thus, the memory bandwidth is also not exhausted.
+
+We argue that in many bioinformatics applications, sequences are processed in a
+relatively homogeneous way, where for example the same function is applied to
+every k-mer. This means that multiple k-mers are processed independently. If
+every k-mer requires read from memory, we can then process those in parallel.
+
+Currently, not many applications are written in this way, and thus, there is a
+lot of room for improvement.
 
 * Optimizing Compute Bound Code: Random Minimizers
+:PROPERTIES:
+:CUSTOM_ID: compute-bound
+:END:
 We start with an overview of techniques that can be used to optimize
 compute-bound code.
 
@@ -202,6 +297,9 @@ Then, the algorithm itself can read 64 bits at a time from each lane, containing
 
 
 * Optimizing Memory Bound Code: Minimal Perfect Hashing
+:PROPERTIES:
+:CUSTOM_ID: memory-bound
+:END:
 We now consider techniques for optimizing memory bound code.
 
 As an application, we consider the /minimal perfect hash function/ in SSHash.
