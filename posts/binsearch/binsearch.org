@@ -57,7 +57,7 @@ for why different schemes behave like they behave. It is worth a read! It change
 my mind on how a good scientific article should look.
 
 ** Benchmarking setup
-The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as =-C target-cpu=native=.
+The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as ~ -C target-cpu=native~.
 This allows the compiler to make use of architectural specifics of the machine the code is compiled on.
 The CPU is an AMD Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
 was locked at 1.7GHz and turbo boost was disabled.
@@ -186,7 +186,7 @@ reliably predicted (which here it really can't).[fn::Here's [[https://yarchive.n
 recommended by the Algorithmica post, and make the code effectively branchless.
 
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
-
+TODO perf here
 It now makes sense that the naive binary search has bumps on the graph. The compiler is capable of making the code partially branchless;
 it replaces the conditional branch with a =cmov=, but it cannot yet make the code take a fixed number of iterations. Whether
 to stop on the final iteration becomes difficult to predict when the array does not have a size of a power of two, and therefore
@@ -200,7 +200,7 @@ is correct, waiting for this prefetched value will not take such a long time.
 When we use a =cmov=, there is no branch, and so the branch predictor can't do any prefetching.
 
 ** Branchless search
-Now let us implement these branchless optimizations as well and see how we do then.
+Now let us implement branchless optimizations ourselves as well and see how we do then.
 Here's the code:
 
 #+begin_src rust
@@ -230,11 +230,14 @@ of the standard library.
 We can see that we now match the performance of the library version, even surpassing it. We
 assume this is due to our function being specialized and not having an
 error condition at the end, leading to it being better by a small
-fraction. On large sizes, we are still surpassed by our first naive implementation.
+fraction.
 
 Since we do a fixed number of iterations, we can clearly see "stairs" in the graph with every
 power of two, as the number of instructions is now pretty much a deterministic function of the input size.
 As caches make the whole process much faster at small sizes, there are also steps, but they are much smaller.
+
+But why is the code so much faster than a naive implementation or the standard library version?
+TODO perf here
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
@@ -264,7 +267,7 @@ The prefetching does its part, giving us a nice small ~10-15% speedup.
 You see there is a small slowdown at small sizes, which is to be expected.
 
 ** Batching
-So far we have been replicating the work Algorithmica has done. Now it is time to use the fact that we only care about throughput,
+So far we have been replicating the work Algorithmica has done. Now it is time to use the fact that we only care about throughput
 and talk about batching.
 
 In this context, batching is just what it sounds like: we will take
@@ -408,8 +411,8 @@ idx = search_result_to_index(idx);
 self.get(idx)
 #+end_src
 
-The first while loop looks through the array, but the index it generates
-in the end will be out of bounds. How do we get the index of the lower
+When you think about it, you see that the first while loop looks through the array, but the index it generates
+in the end will be out of bounds. How do we then get the index of the lower
 bound?
 
 I needed some time to grok this from the Algorithmica post, so I will
@@ -446,8 +449,9 @@ Okay, let us see how it performs!
 [[file:plots/eytzinger-vs-binsearches.svg]]
 
 Okay, so we see the layout is a bit slower at the smaller sizes and not too great at the large
-array sizes. So far, not too good. Notice the bumps; these are not random, they are actually
-branch mispredictions in the final loop iteration. We'll fix them later.
+array sizes. So far, not too good. Notice the bumps; we have already seem those when looking at
+the naive implementation of binary search. These are also caused by the branch predictor not knowing when
+to stop the loop. We will deal with them later.
 
 ** Prefetching
 The great thing about Eytzinger is that
@@ -516,7 +520,7 @@ pub fn search_branchless_prefetch<const L: usize>(&self, q: u32) -> u32 {
 }
 #+end_src
 
-As `num_iters`, we pre-compute the integer logarithm of the size of the array.
+As =num_iters=, we pre-compute the integer logarithm of the size of the array.
 The =get_next_index_branchless= uses an explicit =cmov= from the
 =cmov= crate. Without it, it was surprisingly difficult to get the compiler to
 accept this optimization, as =select_unpredictable= did not quite work.
