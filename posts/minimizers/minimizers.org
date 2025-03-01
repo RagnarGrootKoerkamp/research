@@ -8,43 +8,12 @@
 #+date: <2025-02-21 Tue>
 
 * Theory of sampling schemes
+:PROPERTIES:
+:EXPORT_FILE_NAME: theory.tex
+:END:
 
-#+attr_shortcode: attribution
-#+begin_notice
-This chapter is based on three papers:
-- *Mod-minimizer, WABI24.*
-
-  [cite/bibentry/b:@modmini]
-- TODO *Open-closed mod-minimizer, AMB 25.*
-
-  [cite/bibentry/b:@oc-modmini]
-- *Minimizer density lower bound, Bioinformatics 24.*
-
-  [cite/bibentry/b:@sampling-lower-bound]
-
-The idea for the mod-minimizer is my own.
-The implementation, evaluation, and writing of the paper were done in equal parts by Giulio
-Ermanno Pibiri and myself.
-
-The open-closed minimizer was found in close collaboration with Daniel Liu and
-Giulio Ermanno Pibiri. The implementation, evaluation, and writing of the paper
-were done in equal parts by Giulio Ermanno Pibiri and myself.
-
-Slightly different versions of the density lower bound
-were independently discovered by Bryce Kille and myself: I discovered the
-simpler version for arbitrary $w$, while Bryce Kille discovered the tighter
-version for $w=2$. A first version of the ILP was also implemented by both of us
-independently, and Bryce Kille optimized this into a faster version.
-
-The sus-anchor is my own work, and currently unpublished.
-#+end_notice
-
-
-
-
-#+attr_shortcode: summary
-#+begin_notice
-In this chapter, we explore /minimizers/, and more general /sampling schemes/.
+#+begin_summary
+In this chapter, we introduce /minimizers/, and more general /sampling schemes/.
 These are methods to sample a subset of $k$-mers from a text in a deterministic
 way, such that at least one $k$-mer is sampled from every string of length
 $k+w-1$, for some /window guarantee/ $w$.
@@ -53,17 +22,20 @@ A key property of such schemes is their /density/: how few $k$-mers can be sampl
 while still respecting the window guarantee. Applications benefit from a lower
 density, since this usually means indices on the text are smaller.
 
-We first review the theory of minimizer and sampling schemes.
-Then we go over existing lower bounds on the density, and give the first
-nearly-tight lower bound, that improves significantly over previous bounds.
-We then review existing minimizer schemes, and introduce the /open-closed
-minimizer/ and the /(extended) mod-minimizer/, that significantly improves
-density when $k\gg w$ and in fact has density close to the lower bound.
+We cover a number of theoretical results from the literature, and explain how the density of a
+minimizer scheme can be computed.
+This will serve as the background for the following two chapters, that go deeper
+into lower bounds on sampling scheme density and practical sampling schemes.
+#+end_summary
 
-We end with a look into the specific case where $k=1$, which are also called
-/selection schemes/. We introduce the sus-anchor, which empirically has density
-very close to the lower bound for alphabet size $\sigma=4$.
-#+end_notice
+#+begin_attribution
+In this chapter, we survey existing literature on minimizers.
+Small parts of this chapter are loosely based on the background sections of the
+mod-minimizer papers [cite:@modmini;@oc-modmini-preprint], written with Giulio
+Ermanno Pibiri and Daniel Liu, and the density lower bound
+paper [cite:@sampling-lower-bound], written with Bryce Kille and others.
+Specifically some definitions and theorem statements are copied verbatim.
+#+end_attribution
 
 
 #+begin_export html
@@ -742,6 +714,41 @@ Other works in this direction are
 scheme that orders $k$-mers such that rare $k$-mers are preferred over more common ones.
 
 * Lower bounds
+:PROPERTIES:
+:EXPORT_FILE_NAME: lower_bounds.tex
+:END:
+
+
+#+begin_summary
+In this chapter, we look into lower bounds on the density of sampling schemes.
+We first go over previous lower bounds, including Schleimer et al.'s original
+one [cite:@winnowing] and the ``fixed'' version by Marçais et al.
+[cite:@asymptotic-optimal-minimizers].
+Then, we first give a novel near-tight lower bound [cite:@sampling-lower-bound],
+that significantly improves significantly over previous bounds.
+This new lower bound is the first to show that density $2/(w+1)$ is optimal for
+$k=1$. Additionally, an search for optimal schemes for small parameters using
+integer linear programming (ILP) shows that the lower bound is tight whenever $k\equiv
+1\pmod w$.
+#+end_summary
+
+#+begin_attribution
+The background in this chapter is newly written, and loosely based on the
+appendix of the mod-minimizer paper [cite:@modmini] that was coauthored with
+Giulio Ermanno Pibiri. The proof of the improved version of the lower bound of
+Marçais et al. is taken from there.
+The main result of this chapter, a novel near-tight lower bound, is based on the paper
+``A near-tight lower bound on the density of forward sampling schemes''
+[cite:@sampling-lower-bound], that was written with Bryce Kille and others, and
+has shared first-authorship between Bryce Kille and myself.
+
+Slightly different versions of the density lower bound
+were independently discovered by Bryce Kille and myself: I discovered the
+simpler version for arbitrary $w$, while Bryce Kille discovered the tighter
+version for $w=2$. A first version of the ILP was also implemented by both of us
+independently, and Bryce Kille optimized this into a faster version.
+#+end_attribution
+
 The starting point for this section is the trivial lower bound:
 #+begin_theorem Trivial lower bound
 For any local, forward, or minimizer scheme $f$, the density is at least $1/w$.
@@ -1120,6 +1127,42 @@ already:
   done before by Mykkeltveit [cite:@mykkeltveit].
 
 * Sampling schemes
+:PROPERTIES:
+:EXPORT_FILE_NAME: sampling_schemes.tex
+:END:
+
+#+begin_summary
+In this chapter, we review existing minimizer schemes and more general sampling schemes.
+The fall into a few categories: they are variants of lexicographic
+minimizers, based on universal-hitting-sets with a greedy construction, or based
+on syncmers.
+
+We then introduce the /open-closed minimizer/ [cite:@oc-modmini-preprint], which is a small variant of
+/miniception/ that not only uses /closed syncmers/, but also /open syncmers/.
+Then, we introduce the /(extended) mod-minimizer/ [cite:@modmini], which is a practical
+minimizer scheme that reaches asymptotic optimal density $1/w$ as $k\to\infty$.
+For large alphabets, the mod-minimizer exactly matches the density of the lower
+bound when $k\equiv 1\pmod w$. Together, these make the mod-minimizer the lowest
+density scheme when $k>w$.
+#+end_summary
+
+#+begin_attribution
+This chapter is based on two papers. ``The mod-minimizer: A simple and
+efficient sampling algorithm for long $k$-mers'' [cite:@modmini] is coauthored
+with Giulio Ermanno Pibiri and introduces the mod minimizer.
+The followup preprint ``The open-closed mod-minimizer algorithm''
+[cite:@oc-modmini-preprint] was written with Giulio Ermanno Pibiri and Daniel
+Liu and introduces the open-closed minimizer and the extended mod-minimizer.
+
+The idea for the mod-minimizer is my own.
+The implementation, evaluation, and writing of the paper were done in equal parts by Giulio
+Ermanno Pibiri and myself.
+
+The open-closed minimizer was found in close collaboration with Daniel Liu and
+Giulio Ermanno Pibiri. The implementation, evaluation, and writing of the paper
+were done in equal parts by Giulio Ermanno Pibiri and myself.
+#+end_attribution
+
 We now turn our attention from lower bounds and towards low-density sampling schemes.
 We first consider various existing schemes, that we go over in three groups.
 In Section [[#lexmin]] we consider some simple
@@ -1684,6 +1727,34 @@ Is it possible when $\sigma\to\infty$? Or when $w\to\infty$?
 #+end_openproblem
 
 * Selection schemes
+:PROPERTIES:
+:EXPORT_FILE_NAME: selection_schemes.tex
+:END:
+
+#+begin_summary
+We end this part on minimizers with a look into /selection/ schemes,
+which are sampling schemes with $k=1$. These are interesting, because the lower
+bound appears to tight: for small parameters, the brute force search finds
+exactly optimal schemes. Thus, we ask ourselves whether we can construct
+``pure'' optimal schemes that are simple to understand and analyxe.
+
+We first review /bidirectional anchors/ (bd-anchors) [cite:@bdanchors-esa].
+Then, we newly introduce /smallest-unique-substring/ anchors, or /sus-anchors/.
+Initially these improve only slightly over bd-anchors, and by changing from
+lexicographic order to /anti-lexicographic order/, they become nearly optimal.
+
+We end with a discussion on the remaining gap between our scheme and the true
+lower bound, and how this could be closed.
+More generally, we also recap the results on minimizer density we obtained, and
+state some open problems related to this.
+#+end_summary
+
+#+begin_attribution
+This chapter is based on unpublished notes that are my own work.
+Some of the open problems in the discussion are based on previously written
+discussions [cite:@modmini;@oc-modmini-preprint;@sampling-lower-bound].
+#+end_attribution
+
 As we saw for the sampling schemes so far, they do not do well for very small
 $k$. Indeed, they are all minimizer schemes, and these can not achieve density
 below $1/\sigma^k$. Here, we explore the $k=1$ case, where the window size is $\ell=w+k-1=w$. We first introduce
@@ -1847,21 +1918,6 @@ there is still some room for improvement.
 #+attr_html: :class inset
 [[file:figs/5-selection-s2.svg][file:figs/5-selection-s2.svg]]
 
-** Discussion
-:PROPERTIES:
-:CUSTOM_ID: selection-schemes-discussion
-:END:
-As mentioned earlier, ILP is always able to find exactly optimal schemes for
-small parameters when $k=1$. The sus-anchor with anti-lexicographic sorting gets
-very close to optimal for $\sigma=4$, but still has a little gap when $\sigma=2$.
-Thus, the problem remains:
-
-#+begin_openproblem Optimal selection schemes
-Are there pure selection schemes with optimal density /exactly/ matching the
-lower bound $g'$?
-#+end_openproblem
-
-
 # ** TODO Towards Optimal schemes?
 # I have a bunch of attempts and ideas for improving the anti-lex sus-anchor
 # further into a perfectly optimal scheme, but this is not yet working so far...
@@ -1900,12 +1956,29 @@ lower bound $g'$?
 #   - Test various word-sets for their sparsity and specificity.
 # - [cite/t:@unavoidable-sets]
 
-** TODO Discussion
+** Discussion
+:PROPERTIES:
+:CUSTOM_ID: selection-schemes-discussion
+:END:
+
+*Selection schemes.*
+As mentioned earlier, ILP is always able to find exactly optimal schemes for
+small parameters when $k=1$. The sus-anchor with anti-lexicographic sorting gets
+very close to optimal for $\sigma=4$, but still has a little gap when $\sigma=2$.
+Thus, the questions remains:
+
+#+begin_openproblem Optimal selection schemes
+Are there pure selection schemes with optimal density /exactly/ matching the
+lower bound $g'$?
+#+end_openproblem
+
+
 #+name: summary
 #+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
 #+attr_html: :class inset large
 [[file:figs/6-small-k.svg][file:figs/6-small-k.svg]]
 
+*Sampling schemes.*
 To end, in [[summary]] we once more compare all sampling schemes so far. We also include a
 $k>1$ variant of the sus-anchor, that simply picks the smallest-unique-substring
 that has length at least $k$. Since the sus-anchor works well for small $k$, we
@@ -1935,19 +2008,5 @@ are compared to minimizer schemes. Of all the schemes in [[summary]], only the
 sus-achor is not a minimizer scheme. So this raises the question: are minimizer
 schemes as good as forward schemes when $k$ is sufficiently large?
 
-
-* Checks
-- select -> samples
-- Marcais -> Marçais
-- symbol -> character
-- Fix $k$-mer and $t$-mer and $s$-mer and plurals
-- Attribute copied proofs
-- Attribute used papers in the beginning
-- Attribute individual figures & tables in captions
-- consistent uppercase characters ABC..Z.
-- theorem / lemma / prop / ...
-- ''quotes''
-- TODO: Mention that lower bound paper has a table with bruteforce results
-- TODO: Credit other coauthors of lower bound?
 
 #+print_bibliography:
