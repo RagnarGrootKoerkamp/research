@@ -86,7 +86,7 @@ By 1999, this resulted in the $O(ns/w)$ bitpacking algorithm of Myers [cite:@mye
 that provides up to $w=64\times$ speedup by packing 64 adjacent states of the
 internal DP matrix into two 64 bit computer words. With more recent advances
 in computer hardware, this has also extended to SIMD instructions that can do up
-to 512-bit operations, providing another up to $8\times$ speedup [cite:@suzuki-kasahara].
+to 512-bit instructions, providing another up to $8\times$ speedup [cite:@suzuki-kasahara].
 
 *Approximate alignment.*
 At the same time, there also has been a rise in popularity of /approximate/
@@ -119,8 +119,8 @@ in a graph. The classic algorithm for this is Dijkstra's algorithm
 information is the A* algorithm [cite:@astar-hart67]. It achieves this by using
 a /heuristic/ that estimates the cost of the (remaining) alignment.
 In /A*PA/ (\cref{ch:astarpa}), we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
-starting point and improve it to the /gap-chaining seed heuristic/ with /inexact
-matches/. For inputs
+starting point and improve it to the /gap-chaining seed heuristic/, similar to
+[cite:@myers-miller-95], and extend it with /inexact matches/. For inputs
 with uniform error rate up to $10\%$, this can estimate the remaining distance
 very accurately. By additionally adding /pruning/, A*PA2 ends up being near-linear
 in practice when errors are uniformly distributed, improving on the quadratic
@@ -163,6 +163,8 @@ We start our survey with a formal problem statement for pairwise alignment
 While these are not our focus, they can help to contextualize other existing methods.
 Then we move on to the classic DP algorithms in [[*The Classic Quadratic DP
 Algorithms]] and the algorithmic improvements in later sections.
+These are also covered in the surveys by Kruskal [cite:@kruskal83] and Navarro [cite:@navarro01].
+
 In [[*Subquadratic Methods and Lower Bounds]] we present some theoretical results on
 the complexity of the pairwise alignment problem and the best worst-case
 methods (although not practical).
@@ -224,6 +226,13 @@ higher than the divergence, since random errors can cancel each other.
 #+attr_html: :class inset
 [[file:astarpa2/edit-graph2.drawio.svg]]
 
+*Dynamic programming.*
+Pairwise alignment has classically been approached as a dynamic programming (DP)
+problem. For input strings of lengths \(n\) and \(m\), this method creates a \((n+1)\times
+(m+1)\) table that is filled cell by cell using a recursive formula, as we.
+There are many algorithms based on DP, as we will see in [[#dp]].
+
+
 *Edit graph.*
 The /alignment graph/ or /edit graph/ ([[edit-graph]]) is a way to formalize edit distance
 [cite:@vintsyuk68;@ukkonen85].
@@ -262,8 +271,8 @@ neighbour plus the cost of the final edge. As we will see soon, this is often
 implemented using /dynamic programming/ (DP).
 
 Dijkstra's
-shortest path algorithm can also be applied here [cite:@dijkstra59],
-which visits states in order of increasing distance. This
+shortest path algorithm,
+which visits states in order of increasing distance, can also be applied here [cite:@dijkstra59]. This
 does require that all edges have non-negative weights.
 An extension of Dijkstra's algorithm is A* [cite:@astar-hart67], which visits
 states in order of increasing ``anticipated total distance''.
@@ -409,6 +418,9 @@ and $w_k = O + E \cdot k$, there is a cost-model (with $\delta(a,a)=0$) that
 yields the same optimal alignment.
 
 * The Classic Quadratic DP Algorithms
+:PROPERTIES:
+:CUSTOM_ID: dp
+:END:
 We are now ready to look into the first algorithms.
 We start with DP algorithms, that process the graph one column at a time. Note
 that we present all algorithms as similar as possible: they go from the top-left
@@ -625,12 +637,12 @@ However, Myers [cite:@myers86 p. 2] observes that
 #+begin_quote
 the resulting algorithm involves a relatively complex discrete priority queue
 and this queue may contain as many as $O(ns)$ entries even in the case where just
-the length of the shortest edit script is being computed.
+the length of the [...] shortest edit script is being computed.
 #+end_quote
 And indeed, I am not aware of any tool that practically implemented Dijkstra's algorithm to
 compute the edit distance.
 
-*A* *and the gap cost heuristic*.
+*A** *and the gap cost heuristic*.
 Hadlock realized [cite:@hadlock88detour] that Dijkstra's algorithm can be improved
 upon by using A* [cite:@astar-hart67;@astar-hart67-correction;@pearl1984heuristics], a more /informed/ algorithm that uses a
 /heuristic/ function $h$ that gives a lower bound on the remaining edit distance
@@ -647,12 +659,13 @@ We specifically highlight the papers by Wu et al. [cite:@wu90-O-np] and Papamich
 [cite:@papamichail2009], where the authors' method exactly matches the A* algorithm
 with the gap-heuristic, in combination with diagonal transition (Section [[#diagonal-transition]]).
 
+*Seed heuristic.*
 Much more recently, A*ix [cite:@astarix-1;@astarix-2] introduced the much stronger /seed heuristic/
 for the problem of sequence-to-graph alignment. This heuristic
 splits the sequence $A$ into disjoint k-mers, and uses that at least one edit is
 needed for each remaining k-mer that is not present in sequence $B$.
 
-In A*PA [cite:@astarpa] (Section FIXME) we will improve this into the
+In A*PA [cite:@astarpa] (\cref{ch:astarpa}) we will improve this into the
 /gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
 alignment when the divergence is sufficient low ([[intro]]g).
 
@@ -677,7 +690,7 @@ always [cite:@astar-misconceptions]) expand less vertices. Note that Dijkstra's
 algorithm is equivalent to A* using a heuristic that is always $0$, and that
 both algorithms require non-negative edge costs.
 
-We end our discussion of graph algorithms with a quote:
+We end our discussion of graph algorithms with the following observation,
 as Spouge states [cite:@spouge91 p. 3],
 #+begin_quote
 algorithms exploiting the lattice structure of an alignment graph are usually faster,
@@ -745,16 +758,18 @@ distance to a state is at most $t$ ($\g(\st ij) \leq t$), it requires that
 the best possible cost of a path containing $\st ij$ is sufficiently low.
 
 *Band doubling.*
-Ukkonen also introduces /band doubling/ [cite:@ukkonen85]:
+Ukkonen also introduces /band doubling/ [cite:@ukkonen85].
+The method of Fickett computes all states with distance up to some threshold $t$.
+The idea of band doubling is that
 if it turns out that $t=t_0<s$,
-then it can be doubled to $t_1 = 2t_0$, until a $t_i\geq s$ is found.
+then it can be doubled to $t_1 = 2t_0$, until a $t_k=2^k\geq s$ is found.
 As we already saw, testing $t$ takes $O(nt)$ time.
 Now suppose we test $t_0=1$,
-$t_1=2$, $\dots$, $t_{i-1}=2^{i-1}<s$, up to $t_i=2^i \geq s$. Then the total
+$t_1=2$, $\dots$, $t_{k-1}=2^{k-1}<s$, up to $t_k=2^k \geq s$. Then the total
 cost of this is
 $$
-t_0n + t_1n + \dots + t_i n = 1\cdot n + 2\cdot n + \dots + 2^i \cdot n <
-2^{i+1}\cdot n = 4\cdot 2^{i-1}\cdot n < 4sn.
+t_0n + t_1n + \dots + t_k n = 1\cdot n + 2\cdot n + \dots + 2^k \cdot n <
+2^{k+1}\cdot n = 4\cdot 2^{k-1}\cdot n < 4sn.
 $$
 Thus, band doubling finds an optimal alignment in $O(ns)$ time.
 Note that computed values are not reused between iterations, so that each state
@@ -871,70 +886,6 @@ Similar to Myers [cite:@myers86], BiWFA [cite:@biwfa] applies Hirscherg's
 divide-and-conquer approach [cite:@hirschberg75] to obtain $O(s)$ memory usage
 (on top of the $O(n+m)$ input).
 
-* Subquadratic Methods and Lower Bounds
-
-*Lower bounds.*
-Backurs and Indyk [cite:@no-subquadratic-ed] have shown that unit cost edit distance can not be solved in
-time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
-Exponential Time Hypothesis/ (SETH) is true. Soon after, it was also shown that
-SETH implies that
-LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
-[cite:@no-subquadratic-lcs].
-
-
-#+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
-#+caption: For each block, differences between DP table cells along the top row $R$ and left column $S$ are the /input/, together with the corresponding substrings of $A$ and $B$.
-#+caption: The /output/ are the differences along the bottom row $R'$ and right column $S'$.
-#+caption: For each possible input of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
-#+caption: Red shaded states are not visited.
-#+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
-#+name: fig:four-russians
-#+attr_html: :class inset
-[[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]
-
-*Four Russians method.*
-The so called /four Russians method/ was introduced by [cite:@four-russians].
-It is a general method to speed up DP algorithms from $n^2$ to $n^2 / \log n$,
-provided that entries are integers and all operations are 'local'.
-
-This idea was applied to pairwise alignment by Masek [cite:@four-russians-ed],
-resulting
-in the first subquadratic worst-case algorithm for edit distance.
-It works by partitioning
-the $n\times m$ matrix in blocks of size $r\times r$, for some $r=\log_k n$, as
-shown in figure [[fig:four-russians]]. Consider the differences $R_i$ and $S_i$ between
-adjacent DP cells along the top row ($R_i$) and left column ($S_i$) of
-the block. The core observation is that the differences $R'_i$ and $S'_i$ along
-the bottom row and right column of the block only depend on $R_i$, $S_i$, and
-the substrings $a_i\cdots a_{i+r}$ and $b_j\cdots b_{j+r}$. This means that for
-some value of $k$ depending on the alphabet size $\sigma$, $r=\log_k n$ is small enough so that we can precompute the
-values of $R'$ and $S'$ for all possibilities of $(R, S, a_i\cdots a_{i+r},
-b_j\cdots b_{j+r})$ in $O(n^2/r^2)$ time. In practice, $r$ needs to be quite small.
-
-Using these precomputed values, the DP can be sped up by doing a single $O(1)$
-lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\log^2
-n)$. The runtime was originally reported as $O(n^2/\log n)$, but subsequent
-papers realized that the $r$ differences along each block boundary fit in a
-single machine word, so that lookups are indeed $O(1)$ instead of $O(r)$.
-While this is the only known subquadratic worst-case algorithm, it
-does not break the $O(n^{2-\delta})$ lower bound, since $\log^2 n$ grows subpolynomial.
-
-Masek's method requires a constant size alphabet.
-A first extension to general alphabets increased the time to $O(n^2 (\log \log
-n)^2 / \log^2(n))$ [cite:@four-russians-ed-general-alphabet], and this was later
-improved to $O(n^2 \log \log n / \log^2(n))$ [cite:@grabowski14]. An algorithm
-with similar complexity also works for LCS.
-
-*Applications.*
-Wu et al. provide an implementation of this
-method for approximate string matching [cite:@wu96]. They suggest a block size of $1\times
-r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
-block to the next.
-
-Nowadays, the bit-parallel technique of Myers [cite:@myers99] has
-replaced four Russians, since it can compute up to 64 cells in a single step,
-while not having to wait for (comparatively) slow lookups of the precomputed data.
-
 * Parallelism
 
 So far we have mostly focused on the theoretical time complexity of methods.
@@ -957,7 +908,7 @@ But this decision exactly at the core of most efficient implementations.
 The first technique in this direction is /microparallelism/ [cite:@alpern95],
 nowadays also called SWAR (SIMD within a register),
 where each ($64$ bit) computer word is divided into multiple (e.g. $16$ bit) parts,
-and word-size operations modify all ($4$) parts in parallel.
+and word-size instructions modify all ($4$) parts in parallel.
 This can then applied with /inter-sequence parallelism/ to search a
 given query in multiple reference sequences in parallel
 [cite:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11].
@@ -997,12 +948,12 @@ This is used by for example BSAlign [cite:@bsalign].
 *Bitpacking.*
 An observation that we have not used so far is that for (unit cost) edit
 distance specifically, it can be shown that the distance to adjacent states
-differs by at most 1.
+is always in $\{-1, 0, +1\}$.
 Myers [cite:@myers99] uses this fact to encode $w=64$ adjacent differences into
-two $w$-bit words: one word in which bit $j$ to indicate that the $j$'th difference
+two $w$-bit words: one word in which bit $j$ indicates that the $j$'th difference
 is $+1$, and one word in which bit $j$ indicates that the $j$'th difference is $-1$.
 If we additionally know the difference along the top edge, Myers' method can
-efficiently compute the output of the $1\times w$ rectangle in only $20$ operations.
+efficiently compute the output differences of the $1\times w$ rectangle in only $20$ instructions.
 
 TODO: figure
 
@@ -1019,7 +970,27 @@ complexity of $O(ns/w)$.
 The supplement of
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative scheme for edit
 distance based on a different encoding of the $\{-1,0,+1\}$ values, that also ends up
-using $20$ instructions.
+using $20$ instructions. We show implementations of both Myers' and BitPAl's
+method in \cref{fig:bitpacking}.
+
+#+begin_export latex
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[t]{0.49\linewidth}
+  \rustfile[fontsize=\scriptsize]{code/bitpacking-myers.rs}%
+\vspace{0.4em}
+\caption{Myers' bitpacking\label{myers}}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\linewidth}
+  \rustfile[fontsize=\scriptsize,linenos=false]{code/bitpacking-bitpal.rs}%
+\vspace{-1.5em}
+\caption{Bitpal's bitpacking\label{bitpal}}
+\end{subfigure}
+\vspace{-0.5em}
+\caption{\mybold{Bitpacking} Rust code for SIMD version of Myers' and Bitpal's
+  bitpacking algorithms that both take $20$ instructions.}\label{fig:bitpacking}%
+\end{figure}
+#+end_export
 
 *Profile.*
 The DP recurrence relation depends on the sequences $A$ and $B$ via
@@ -1046,7 +1017,12 @@ bits to store and more of them can be processed in parallel
 [cite:@suzuki-kasahara]. Suzuki and Kasahara introduce this technique to affine-cost
 local alignment, and this has subsequently been used by KSW2 and BSAlign [cite:@bsalign].
 
-TODO: Many packing tools (also based on automata) for text search / semi-global alignment
+*Blocks.*
+A separate improvement is made by
+Block aligner [cite:@block-aligner], an approximate aligner that can also handle
+position-specific scoring matrices. Its main novelty is to divide the
+computation into large blocks. This results in highly predictable code, and
+benefits the execution speed, even though some more (redundant) states may be computed.
 
 * LCS and Contours
 #+caption: Contours as shown by Hirschberg [cite:@hirschberg77]
@@ -1118,8 +1094,13 @@ k-mer matches in the chain.
 # - LEAP: https://www.biorxiv.org/content/10.1101/133157v3
 
 * Some Tools
-We now briefly list a few recent and competitive global alignment tools. For more, we refer to the
-survey of Alser et al. [cite:@alser21].
+There are many aligners that implement $O(nm)$ (semi)-global
+alignment using numerous of the aforementioned implementation
+techniques, such as SeqAn [cite:@seqan], Parasail [cite:@parasail], SWIPE [cite:@rognes11], Opal
+[cite:@opal], libssa [cite:@libssa],  SWPS3 [cite:@swps3], and SSW library [cite:@ssw-library].
+
+Dedicated global alignment implementations implementing band-doubling are much
+rarer, and we list some recent ones here. For more, we refer to the survey of Alser et al. [cite:@alser21].
 
 *KSW2* [cite:@minimap] implements banded alignment using the difference recurrence
 [cite:@suzuki-kasahara] with SIMD, and supports (double) affine costs.
@@ -1132,10 +1113,76 @@ sides towards the middle column, where a state on the shortest path is
 determined. This is recursively applied to the left and right halves until the
 sequences are short enough that quadratic memory can be used.
 
-*WFA* [cite:@wfa] builds on the diagonal transition method
+*WFA* [cite:@wfa] builds on the $O(n+s^2)$ diagonal transition method
 [cite:@ukkonen85;@myers86], and extends it to affine costs using a method
 similar to [cite:@gotoh]. *BiWFA* [cite:@biwfa] is a later version that applies
-divide-and-conquer to reduce to linear memory usage.
+divide-and-conquer [cite:@hirschberg75] to reduce to linear memory usage.
+
+* Subquadratic Methods and Lower Bounds
+We end this chapter with a discussion of some more theoretical methods that have
+a worst case that is slightly better than quadratic.
+
+*Lower bounds.*
+Backurs and Indyk [cite:@no-subquadratic-ed] have shown that unit cost edit distance can not be solved in
+time $O(n^{2-\delta})$ for any $\delta > 0$, on the condition that the /Strong
+Exponential Time Hypothesis/ (SETH) is true. Soon after, it was also shown that
+SETH implies that
+LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
+[cite:@no-subquadratic-lcs].
+
+
+#+caption: In the four Russians method, the $n\times m$ grid is divided into blocks of size $r\times r$.
+#+caption: For each block, differences between DP table cells along the top row $R$ and left column $S$ are the /input/, together with the corresponding substrings of $A$ and $B$.
+#+caption: The /output/ are the differences along the bottom row $R'$ and right column $S'$.
+#+caption: For each possible input of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
+#+caption: Red shaded states are not visited.
+#+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
+#+name: fig:four-russians
+#+attr_html: :class inset
+[[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]
+
+*Four Russians method.*
+The so called /four Russians method/ was introduced by [cite:@four-russians].
+It is a general method to speed up DP algorithms from $n^2$ to $n^2 / \log n$,
+provided that entries are integers and all dependencies are 'local'.
+
+This idea was applied to pairwise alignment by Masek [cite:@four-russians-ed],
+resulting
+in the first subquadratic worst-case algorithm for edit distance.
+It works by partitioning
+the $n\times m$ matrix in blocks of size $r\times r$, for some $r=\log_k n$, as
+shown in figure [[fig:four-russians]]. Consider the differences $R_i$ and $S_i$ between
+adjacent DP cells along the top row ($R_i$) and left column ($S_i$) of
+the block. The core observation is that the differences $R'_i$ and $S'_i$ along
+the bottom row and right column of the block only depend on $R_i$, $S_i$, and
+the substrings $a_i\cdots a_{i+r}$ and $b_j\cdots b_{j+r}$. This means that for
+some value of $k$ depending on the alphabet size $\sigma$, $r=\log_k n$ is small enough so that we can precompute the
+values of $R'$ and $S'$ for all possibilities of $(R, S, a_i\cdots a_{i+r},
+b_j\cdots b_{j+r})$ in $O(n^2/r^2)$ time. In practice, $r$ needs to be quite small.
+
+Using these precomputed values, the DP can be sped up by doing a single $O(1)$
+lookup for each of the $O(n^2/r^2)$ blocks, for a total runtime of $O(n^2/\log^2
+n)$. The runtime was originally reported as $O(n^2/\log n)$, but subsequent
+papers realized that the $r$ differences along each block boundary fit in a
+single machine word, so that lookups are indeed $O(1)$ instead of $O(r)$.
+While this is the only known subquadratic worst-case algorithm, it
+does not break the $O(n^{2-\delta})$ lower bound, since $\log^2 n$ grows subpolynomial.
+
+Masek's method requires a constant size alphabet.
+A first extension to general alphabets increased the time to $O(n^2 (\log \log
+n)^2 / \log^2(n))$ [cite:@four-russians-ed-general-alphabet], and this was later
+improved to $O(n^2 \log \log n / \log^2(n))$ [cite:@grabowski14]. An algorithm
+with similar complexity also works for LCS.
+
+*Applications.*
+Wu et al. provide an implementation of this
+method for approximate string matching [cite:@wu96]. They suggest a block size of $1\times
+r$, for $r=5$ or $r=6$, and provide efficient ways of transitioning from one
+block to the next.
+
+Nowadays, the bit-parallel technique of Myers [cite:@myers99] has
+replaced four Russians, since it can compute up to 64 cells in a single step,
+while not having to wait for (comparatively) slow lookups of the precomputed data.
 
 * Summary
 We summarize most of the papers discussed in this section in chronological order
