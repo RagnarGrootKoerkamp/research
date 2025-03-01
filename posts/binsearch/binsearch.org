@@ -186,9 +186,9 @@ reliably predicted (which here it really can't).[fn::Here's [[https://yarchive.n
 recommended by the Algorithmica post, and make the code effectively branchless.
 
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
-TODO perf here
-It now makes sense that the naive binary search has bumps on the graph. The compiler is capable of making the code partially branchless;
-it replaces the conditional branch with a =cmov=, but it cannot yet make the code take a fixed number of iterations. Whether
+
+Looking at the assembly, we see that the compiler has already done some optimizations for us. The branch is handled using a =cmov= instruction.
+It also makes sense that the naive binary search has bumps on the graph. The compiler is capable of making the code partially branchless, but it cannot yet make the loop take a fixed number of iterations. Whether
 to stop on the final iteration becomes difficult to predict when the array does not have a size of a power of two, and therefore
 the code takes longer to run, as mispredictions are expensive.
 
@@ -236,7 +236,9 @@ Since we do a fixed number of iterations, we can clearly see "stairs" in the gra
 power of two, as the number of instructions is now pretty much a deterministic function of the input size.
 As caches make the whole process much faster at small sizes, there are also steps, but they are much smaller.
 
-But why is the code so much faster than a naive implementation or the standard library version?
+But why is the code so much faster than a naive implementation or the standard library version, even though they should
+be conceptually the same?
+
 TODO perf here
 
 ** Explicit prefetching
