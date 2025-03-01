@@ -52,8 +52,8 @@ $$
 \newcommand{\pr}{\mathbb P}
 \DeclareMathOperator*{\argmin}{argmin}
 \DeclareMathOperator*{\poly}{poly}
-\DeclareMathOperator*{\rc}{rc}
-\DeclareMathOperator*{\sp}{sparsity}
+\DeclareMathOperator*{\revcomp}{rc}
+\DeclareMathOperator*{\sparsity}{sparsity}
 \newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
 \newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
 \newcommand{\c}{\mathrm{c}}
@@ -367,7 +367,7 @@ simply computing the particular density on a sufficiently long random string of,
 for example, 10 million characters.
 
 When $\sigma^{w+k}$, the following theorem forms the basis for computing the density of
-schemes exactly [cite:Lemma 4 @improved-minimizers;@miniception]:
+schemes exactly [cite:@improved-minimizers Lemma 4;@miniception]:
 
 #+begin_definition (Charged) context
 For forward schemes, a /context/ is a string of length $c = w+k$, consisting of
@@ -377,8 +377,7 @@ For a sampling scheme $f$, a context $C$ is /charged/ when two different positio
 are sampled from the first and second window, i.e., $f(C[0..w+k-1)) \neq 1+f(C[1..w+k))$.
 #+end_definition
 
-For a /local/ scheme, a context has length $2w+k-1$ instead [cite:Section 3.1
-@small-uhs;Section 3.2 @sampling-lower-bound], and is charged when
+For a /local/ scheme, a context has length $2w+k-1$ instead [cite:@small-uhs Section 3.1;@sampling-lower-bound Section 3.2], and is charged when
 the last window samples a $k$-mer not sampled by /any/ of the previous contained
 windows. This larger context is necessary because a local scheme can jump
 backwards. In practice, this
@@ -399,7 +398,7 @@ contexts.
 A somewhat more efficient method is to use a De Bruijn sequence instead.
 A De Bruijn sequence of order $c$ is any circular sequence of length
 $\sigma^c$ that contains every sequence of length $c$ exactly once [cite:@debruijnseq].
-We have the following theorem, again by [cite:Lemma 4 @improved-minimizers]:
+We have the following theorem, again by [cite:@improved-minimizers Lemma 4]:
 
 #+begin_theorem Computing density (De Bruijn sequence)
 The density of any forward scheme equals its particular density on an order
@@ -418,7 +417,7 @@ cyclic strings of order $c=w+k$ for forward schemes and $c=2w+k-2$ for local sch
 As a warm-up, we will compute the density of the random minimizer.
 We mostly follow the presentation of [cite/t:@miniception].
 
-We start by analysing when a context is charged [cite:Lemma 1 @miniception].
+We start by analysing when a context is charged [cite:@miniception Lemma 1].
 
 #+begin_theorem Charged contexts of minimizers
 For a minimizer scheme, a context is charged if and only if the smallest $k$-mer
@@ -439,7 +438,7 @@ it is contained in both windows, and both windows will sample it.
 #+end_proof
 
 Before computing the actual density, we need to bound the probability that a
-window contains two identical $k$-mers [cite:Lemma 9 @miniception].
+window contains two identical $k$-mers [cite:@miniception Lemma 9].
 
 #+begin_theorem Duplicate $k$-mers
 For any $\varepsilon > 0$, if $k > (3+\varepsilon) \log_\sigma (c)$, the
@@ -479,7 +478,7 @@ probability $o(1/w)$, so that the overall density is bounded by $2/(w+1) + o(1/w
 Using a more precise analysis, it can be shown that for sufficiently large $k$,
 the random minimizer has, in fact, a density slightly /below/ $2/(w+1)$.
 In [cite/t:@improved-minimizers] this is shown using universal hitting sets.
-In [cite/t:Theorem 4 @random-mini-density], it is shown that the density of the random
+In [cite/t:@random-mini-density Theorem 4], it is shown that the density of the random
 minimizer is less than $2$ for all sufficiently large $k\geq w\geq w_0$, where
 $w_0$ is a constant that may depend on the alphabet size $\sigma$.
 
@@ -506,7 +505,8 @@ surrounding context) whether to sample it or not.
 #+end_definition
 
 There is a tight correspondence between universal hitting
-sets and minimizer schemes [cite:Section 3.3 @improved-minimizers; Section 2.1.5 @asymptotic-optimal-minimizers;@small-uhs]:
+sets and minimizer schemes [cite:@improved-minimizers Section
+3.3;@asymptotic-optimal-minimizers Section 2.1.5;@small-uhs]:
 
 #+begin_definition Compatible minimizer scheme
 Given a universal hitting set $U$ on $k$-mers, a /compatible/ minimizer scheme
@@ -515,7 +515,7 @@ in $U$.
 #+end_definition
 
 The density of a compatible minimizer scheme is closely related to the size of
-the universal hitting set [cite:Lemma 1 @asymptotic-optimal-minimizers].
+the universal hitting set [cite:@asymptotic-optimal-minimizers Lemma 1].
 
 #+begin_theorem Compatible minimizer density
 When a minimizer scheme $f$ is compatible with a UHS $U$, its density satisfies
@@ -544,7 +544,7 @@ leads to better minimizer schemes.
 Lastly, [cite/t:@improved-minimizers] introduces the /sparsity/ of a universal
 hitting set $U$ as the fraction of contexts of $w+k$ characters that contain exactly
 one $k$-mer from $U$. Then, the density of a corresponding minimizer scheme can be
-computed as $(1-\sp(U))\cdot \frac{2}{w+1}$.
+computed as $(1-\sparsity(U))\cdot \frac{2}{w+1}$.
 
 *Minimum decycling set.*
 Where a universal hitting set is a set of $k$-mers such that every length $w+k-1$
@@ -591,7 +591,8 @@ character of the $k$-mer. Then, it samples the $k$-mer for which this sum is max
 
 When $w\to\infty$, minimizer schemes have a big limitation. Since they only
 consider the $k$-mers, when $w\gg \sigma^k$, almost every window will contain the
-smallest $k$-mer. Thus, we obtain [cite/t:theorem 2 @asymptotic-optimal-minimizers]:
+smallest $k$-mer. Thus, we obtain [cite/t:@asymptotic-optimal-minimizers Theorem
+2]:
 
 #+begin_theorem Large-$w$ minimizer scheme
 For any /minimizer/ scheme $f$, the density is at least $1/\sigma^k$, and
@@ -601,8 +602,8 @@ converges to this as $w\to\infty$.
 This implies that as $w\to\infty$, fixed-$k$ minimizer schemes can never reach
 the optimal density of $1/w$.
 On the other hand, this lower bound does not hold for forward and local schemes.
-For forward schemes, we can use the lower bound of [cite:Theorem 1
-@sampling-lower-bound] to get $2/(w+k)$ (see section [[#near-tight-lb]]). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
+For forward schemes, we can use the lower bound of [cite:@sampling-lower-bound
+Theorem 1] to get $2/(w+k)$ (see section [[#near-tight-lb]]). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
 get the bound $1.5/(w+\max(k-2, 1))$.
 
 From the other side, Proposition 7 of [cite/t:@asymptotic-optimal-minimizers] shows
@@ -616,7 +617,7 @@ Consider $k' = \log_\sigma{\sqrt w}$. For sufficiently large $w$ we have $k'
 $w'=w+k-k'\leq w$. Asymptotically, this has density $O(1/\sqrt w)$.
 #+end_proof_sketch
 
-Later, this was improved to [cite:Theorem 2 @small-uhs]:
+Later, this was improved to [cite:@small-uhs Theorem 2]:
 
 #+begin_theorem Forward-density for $w\\to\\infty$ (2)
 There exists a forward scheme with density $O(\ln(w) / w)$ for $k$ fixed and $w\to\infty$.
@@ -636,7 +637,7 @@ guarantee $w'$. We conclude that the density of a compatible minimizer scheme is
 bounded by $O(\ln(k')/k') = O(\ln(w)/w)$.
 #+end_proof_sketch
 
-But this is still not optimal: reduced bd-anchors [cite:Lemma 6 @bdanchors] (see section
+But this is still not optimal: reduced bd-anchors [cite:@bdanchors Lemma 6] (see section
 [[#bd-anchors]]) are a local scheme with $k=1$ and density $O(1/w)$.
 
 We further improve on this using sus-anchors (section [[#sus-anchors]]), which
@@ -678,14 +679,14 @@ Thus, any analysis should be invariant under taking the reverse complement.
 In this case, /canonical minimizers/ can be used.
 #+begin_definition Canonical sampling scheme
 A sampling scheme $f$ is /canonical/ when for all windows $W$ and their reverse
-complement $\rc(W)$, it holds that
+complement $\revcomp(W)$, it holds that
 
-$$f(\rc(W)) = w-1-f(W).$$
+$$f(\revcomp(W)) = w-1-f(W).$$
 #+end_definition
 
 One way to turn any minimizer scheme into a canonical minimizer scheme is by
-using the order $\Ok^{\rc}(x) = \min(\Ok(x), \Ok(\rc(x)))$
-[cite:@minimizers;@nthash] or $\Ok^{\rc}(x) = \Ok(x) + \Ok(\rc(x))$ [cite:@nthash2;@simd-minimizers-preprint].
+using the order $\Ok^{\revcomp}(x) = \min(\Ok(x), \Ok(\revcomp(x)))$
+[cite:@minimizers;@nthash] or $\Ok^{\revcomp}(x) = \Ok(x) + \Ok(\revcomp(x))$ [cite:@nthash2;@simd-minimizers-preprint].
 Still, this leaves the problem of whether to sample the leftmost or rightmost
 occurrence of a $k$-mer in case of ties. This can be solved using the technique of
 the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers-preprint]: ensure that $w+k-1$ is odd,
@@ -786,7 +787,7 @@ optimal schemes found using integer linear programming (Section [[#lower-bound-e
 
 ** Schleimer et al.'s bound
 The first improvement over the trivial lower bound was already given in the
-paper that first introduced minimizers [cite:theorem 1 @winnowing ]:
+paper that first introduced minimizers [cite:@winnowing Theorem 1]:
 
 #+begin_theorem Lower bound when hashing $k$-mers
 Consider a $w$-tuple of uniform random independent hashes of the $k$-mers in a tuple.
@@ -956,7 +957,7 @@ $$
 #+begin_proof
 The density of a forward scheme can be computed as
 the probability that two consecutive windows in a random length $w+k$ context
-sample different $k$-mers [cite:Lemma 4 @improved-minimizers].  From this, it follows that we can also
+sample different $k$-mers [cite:@improved-minimizers Lemma 4].  From this, it follows that we can also
 consider /cyclic strings/ (cycles) of length $w+k$, and compute the expected
 number of sampled $k$-mers along the cycle. The density is then this count divided
 by $w+k$.
@@ -967,7 +968,8 @@ must be sampled in each cycle. After dividing by the number of $k$-mers in the
 cycle, we get the result.
 #+end_proof
 
-The full and more precise version is as follows [cite:Theorem 1 @sampling-lower-bound].
+The full and more precise version is as follows [cite:@sampling-lower-bound
+Theorem 1].
 
 #+begin_theorem Near-tight lower bound (improved)
 Let $M_\sigma(p)$ count the number of aperiodic necklaces of length $p$ over an
@@ -1269,7 +1271,7 @@ The ABB order (brown-red, 0.69), and especially the ABB order
 with tiebreaking (blue) perform /much/ better than the random minimizer.
 ABB+tiebreaking even performs nearly optimal for $3\leq k\leq 5$.
 This is surprising, since the idea was already introduced as a sampling and minimizer scheme
-in 2020 [cite:Fig 4a @minimally-overlapping-words] and appeared more generally
+in 2020 [cite:@minimally-overlapping-words Fig 4a] and appeared more generally
 before in 2015, but somehow never was compared against by other minimizer
 schemes.
 In particular, as we will see later, this scheme outperforms most other schemes
@@ -1479,7 +1481,8 @@ Let $x$ be the position of the smallest $t$-mer in the window according to $\Ot$
 Then, /mod-sampling/ samples the $k$-mer at position $x \bmod w$.
 #+end_newdefinition
 
-As it turns out, this scheme is only forward for some choices of $t$ [cite:Lemma 8 @modmini].
+As it turns out, this scheme is only forward for some choices of $t$
+[cite:@modmini Lemma 8].
 
 #+begin_newtheorem Forward
 Mod-sampling is forward if and only if $t\equiv k\pmod w$ or $t\equiv k+1\pmod w$.
@@ -1514,10 +1517,10 @@ $t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w
 [[file:figs/0-mod-t.svg][file:figs/0-mod-t.svg]]
 
 In [[mod-t]], it can be seen that mod-sampling has local minima in the density when $t\equiv k\pmod
-w$ [cite:Lemma 12 @modmini], thus, we restrict our attention to this case only.
+w$ [cite:@modmini Lemma 12], thus, we restrict our attention to this case only.
 
 Furthermore, we can show that for $t\equiv k \pmod w$, mod-sampling is not only
-forward, but also a minimizer scheme [cite:Lemma 13 @modmini]:
+forward, but also a minimizer scheme [cite:@modmini Lemma 13]:
 
 #+begin_newtheorem Minimizer
 Mod-sampling is a minimizer scheme when $t\equiv k\pmod w$.
@@ -1587,7 +1590,7 @@ minimizer, to obtain the oc-mod-mini.
 *** Theoretical density
 
 When we restrict $f$ to be a /minimizer/ scheme specifically, we can compute the
-density of the extended mod-minimizer [cite:Theorem 1 @oc-modmini].
+density of the extended mod-minimizer [cite:@oc-modmini Theorem 1].
 
 #+begin_newtheorem Extended mod-minimizer density
 Let $w$, $k$, and $t\equiv k\pmod w$ be given parameters, and
@@ -1641,7 +1644,7 @@ $t$-mers is $o(1/\ell)$. Given that $\ell = w+k-1$, $o(1/\ell) \to 0$ for $k\to\
 #+end_newtheorem
 
 From the above two results, we obtain the density of the random mod-minimizer
-[cite:Corollary 17 @modmini;Theorem 2 @oc-modmini].
+[cite:@modmini Corollary 17;@oc-modmini Theorem 2].
 
 #+begin_newtheorem Random mod-minimizer density
 If $t\equiv k\pmod w$ satisfies $t > (3+\varepsilon) \log_\sigma(\ell)$ for some
@@ -1783,7 +1786,8 @@ window by one, we may get =ABAACA=, of which the smallest rotation =AAB...=
 starts at the end. Shifting again to e.g. =BAACAY=, the smallest rotation again
 starts with =AAC...=. Thus, in the middle step, the final =A= was only sampled
 because the string happened to start with an =A= as well at that single step.
-Reduced bd-anchors solve this, although they are still not forward [cite:Definition 2 @bdanchors].
+Reduced bd-anchors solve this, although they are still not forward
+[cite:@bdanchors Definition 2].
 
 #+begin_definition Reduced bidirectional anchor
 Given a parameter $0\leq r< w$, the /reduced bidirectional anchor/ of a window
@@ -1791,7 +1795,7 @@ $W$ of length $w$ is the lexicographic smallest rotation starting at a position
 $i\in [w-r]$.
 #+end_definition
 
-Now, the following theorem can be proven [cite:Lemma 6 @bdanchors].
+Now, the following theorem can be proven [cite:@bdanchors Lemma 6].
 #+begin_theorem Reduced bd-anchor density
 When $r=\ceil{4\log_\sigma w}$, the reduced bd-anchor has density at most $2/(w+1-r) + o(1/w)$.
 #+end_theorem
