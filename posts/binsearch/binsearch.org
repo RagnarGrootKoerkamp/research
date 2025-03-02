@@ -34,15 +34,15 @@ The source code can be found at [[https://github.com/RagnarGrootKoerkamp/suffix-
 if no such element exists.
 
 *Metric*: we optimize throughput. In plots, we always report amortized
-time per query, i.e. not queries/time, but its inverse.
+time per query. That means that in plots, lower is better.
 
 Optimizing for throughput is relevant because for many use-cases,
 e.g. in bioinformatics, the queries are often independent and the
-latency of one is not critical. It also allows for the usage of
+latency is not critical. It also allows for the usage of
 batching, which helps us hide memory latency.
 
-To easily check the implementations against each other,
-we always have the largest possible value in the input array, so that the result always exists.
+To be able to easily check implementations against each other,
+we always have the largest possible value (=u32::MAX=) in the input array, so that the result always exists.
 
 ** Inspiration and background
 This article is inspired by a post in
@@ -58,12 +58,11 @@ my mind on how a good scientific article should look.
 
 ** Benchmarking setup
 The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as ~-C target-cpu=native~.
-This allows the compiler to make use of architectural specifics of the machine the code is compiled on.
+This allows the compiler to make use of architectural specifics of the machine.
 The CPU is an AMD Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
 was locked at 1.7GHz and turbo boost and hyperthreading were disabled.
 
-This post will is built around plenty of performance plots. These all show average time per one query.
-Therefore, in all plots, lower is better. We will benchmark in arrays up to a size of 1GB, well beyond the size of L3 cache,
+This post is built around plenty of performance plots. We will benchmark in arrays up to a size of 1GB, well beyond the size of L3 cache,
 to see effects of going to main memory.
 
 All measurements are done 5 times. The lines in plots follow the median, and we
@@ -73,7 +72,7 @@ The measurements are done at \(1.17^k\) so as to be similar to
 Algorithmica. This also mitigates some artifacts of limited cache set
 associativity which we describe in a later section.
 
-We also allocate the datastructures on 2MB hugepages. This is done so as to reduce
+We also allocate the datastructures on 2MB hugepages. This is done to reduce
 pressure on the TLB.
 
 One thing that I am sorry about are the colors in the plots. In some plots, there will be two lines with the same color;
@@ -117,7 +116,7 @@ version (denoted here by =binary_search_std=):
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-binsearch.svg]]
 
-We can see that our naive version is pretty much the same as the library version, only with the exception of the bumps
+We can see that our naive version is pretty much the same as the library version, only with the exception of some bumps
 on the graph.
 
 Checking out the standard library source code, we can see that their implementation already
@@ -180,17 +179,17 @@ where
 So they do a constant number of iterations instead of early stopping
 when the value is found and they try to use the =cmov= instruction if it
 is available in the [[https://doc.rust-lang.org/std/intrinsics/fn.select_unpredictable.html][=select_unpredictable=]] function. Both these optimizations are done so that the branch
-predictor has an easier time (as mispredictions are expensive). The =cmov=
+predictor has an easier time (mispredictions are expensive). The =cmov=
 instruction is useful when the result of the comparison can't be
 reliably predicted (which here it really can't).[fn::Here's [[https://yarchive.net/comp/linux/cmov.html][Linus talking about it]]] They are also both
 recommended by the Algorithmica post, and make the code effectively branchless.
 
 In addition, they do their accesses to the array without bounds checks, in the same way we do.
 
-Looking at the assembly, we see that the compiler has already done some optimizations for us. The branch is handled using a =cmov= instruction.
-It also makes sense that the naive binary search has bumps on the graph. The compiler is capable of making the code partially branchless, but it cannot yet make the loop take a fixed number of iterations. Whether
+Looking at the assembly of the naive version, we see that the compiler has already done some optimizations for us. The branch is replaced by a =cmov= instruction.
+It also makes sense that the naive binary search has bumps on the graph. The compiler cannot make the loop take a fixed number of iterations. Whether
 to stop on the final iteration becomes difficult to predict when the array does not have a size of a power of two, and therefore
-the code takes longer to run, as mispredictions are expensive.
+the code takes longer to run, as the CPU sometimes mispredicts this.
 
 It is notable that when you don't compile with the =target-cpu= flag, the compiler does not replace the branch with a =cmov=.
 Then, you can replicate the result from the first plot in Algorithmica, where the naive code is much slower on small array sizes
@@ -227,24 +226,23 @@ of the standard library.
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-branchless.svg]]
 
-We can see that we now match the performance of the library version, even surpassing it on large sizes
+We can see that we now surpass the performance of both the naive and the standard library version.
 Since we do a fixed number of iterations, we can also clearly see "stairs" in the graph with every
 power of two, as the number of instructions is now pretty much a deterministic function of the input size.
 As caches make the whole process much faster at small sizes, there are also steps, but they are much smaller.
 
-Now, it makes sense that our branchless code is faster than the naive version; our naive code does not have
+Our branchless code is faster than the naive version; this makes sense, as our naive code does not have
 a fixed number of iterations, so there is potential for a branch misprediction, which can take a long time.
-An interesting question is why the code is faster than the standard library version at large sizes.
-They should be conceptually the same; both do a fixed number of iterations and both use a =cmov= instruction.
+But why is the branchless code faster than the standard library version at large sizes?
+They should be conceptually the same; both do a fixed number of iterations and both use a conditional move.
 
 Looking at the graph, it seems like the difference is one extra memory request
-or one misprediction. Consulting =perf= and the standard library source code, we see that their code has another difficult-to-predict
+or one misprediction. Consulting =perf= and the standard library source code, we see that their code has an extra difficult-to-predict
 condition, e.g. whether the input array actually contains the resulting value or not. Based on that, the return value is either
-an =Err= or an =Ok= value, and the index inside each of those might be different.
+an =Err= or an =Ok= value, and the index packed inside is either the index of the value or the index where the search value could be inserted.
 
-Since our branchless version assumes that the result always exists, we do not have to worry about this and therefore we do away with
-one possible source of mispredictions. That is why our branchless code is faster than both the standard library =binary_search_by=
-or the naive version.
+Since our branchless version assumes that the result always exists, we do not have to worry about the equality and therefore do not suffer
+this possible source of mispredictions. That is why our branchless code is faster.
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
@@ -315,10 +313,11 @@ the search is a memory-bottlenecked operation, we can speed it up many times.
 #+attr_html: :class inset
 [[file:plots/binsearch-branchless-batched.svg]]
 
-When I first thought about this, I figured that explicit prefetching should not be needed.
+Now, is it worthwhile to do explicit prefetching?
+When I first thought about this, I figured that it should not be needed, as modern CPUs are smart and have really good prefetchers.
 But in the S+-tree post, Ragnar found that explicitly prefetching memory that
 was going to be accessed at the next interval size was helpful. We
-therefore add it as well, just to compare. The advantage here is that when batching,
+therefore add it as well, just to compare. The advantage is that when batching,
 we can do the prefetch after doing the comparison, meaning we already know which value
 to prefetch and we don't have to do two memory accesses instead of one. It should therefore
 be essentially free.
@@ -353,7 +352,7 @@ After consulting the array layouts paper and the Algorithmica post, we
 find that the answer is poor cache utilization. The CPU cache sets have
 limited associativity, and when our memory accesses are regularly spaced
 (a multiple of cache size apart from each other), they will tend to kick
-each other out of the cache, leading to more loading from main memory.
+each other out of their cache set, leading to more loading from main memory.
 The article
 [[http://pvk.ca/Blog/2012/07/30/binary-search-is-a-pathological-case-for-caches/][Binary
 Search is a Pathological Case for Caches]] goes more in-depth on this,
@@ -389,9 +388,8 @@ which is well described in Algorithmica, so we will not waste space here
 and will refer the reader there if interested.
 
 So, why should Eytzinger be better?
-The whole problem of array searching is memory bound; it is about how fast can we query memory
-and how many levels of the search can we fit into caches so that we don't have to do many main memory requests.
-In many ways, a normal sorted array and Eytzinger are similar. Eytzinger is very efficient at caching values
+The whole problem of array searching is memory bound; it is about how how many levels of the search can we fit into caches so that we don't have to do many main memory requests.
+Using this lense, in many ways, a normal sorted array and Eytzinger are similar. Eytzinger is very efficient at caching values
 at the top of the tree (one fetched cacheline of 64B contains 4 layers) while sorted array
 is efficient in the same manner at the bottom of the tree. In addition, Eytzinger will allow us to more efficiently prefetch
 all the possible paths up to 4 steps into the future.
@@ -464,8 +462,8 @@ to stop the loop. We will deal with them later.
 The great thing about Eytzinger is that
 prefetching can be super effective. This is due to the fact that if we
 are at index \(i\), the next index is going to be at \(2i\) or
-\(2i + 1\). That means that if we prefetch and the subsequent values are well aligned (which they will be), we can actually prefetch
-both of the possible options within the same cacheline!
+\(2i + 1\). That means that if we prefetch and the subsequent values are well aligned inside a single cache line (which they will be), we can actually prefetch
+both of the possible options at once!
 
 We can make use of this effect up to the effective cache line size. A usual cache line size
 is 64 bytes, meaning that the cache line can fit 16 =u32= values.
@@ -501,7 +499,7 @@ which makes sense, because we're not really doing more work, we're just utilizin
 Now, we will fix the bumpiness in the Eytzinger graph. This is
 caused by branch mispredictions when deciding whether to end the loop; if the array
 size is close to a power of two, the ending is easy to predict, but
-otherwise, it is difficult for the CPU. We proceed as Algorithmica
+otherwise, it is difficult for the CPU to see whether to do one more iteration or not. We proceed as Algorithmica
 suggests, doing a fixed number of iterations and then doing one
 conditional move if still needed. We also still do prefetching:
 
@@ -535,8 +533,7 @@ accept this optimization, as =select_unpredictable= did not quite work.
 #+attr_html: :class inset
 [[file:plots/eytzinger-branchless-prefetching.svg]]
 
-On the performance plot, we see that this helps remove the bumps and also slightly helps
-the performance when the array size is big.
+On the performance plot, we see that this helps remove the bumps, while costing us a bit of runtime at large array sizes.
 
 ** Batched Eytzinger
 Now, let us do batching the same way we did with binary search. We will
@@ -612,8 +609,8 @@ non-prefetched:
 #+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison.svg]]
 
-We see that the non-prefetched version with a large batch size is a few percent faster on large input sizes.
-Therefore, we select it as our best eytzinger version.
+We see that the non-prefetched version with a large batch size is a few percent faster, most likely due to
+utilizing the memory throughput better. Therefore, we select it as our best eytzinger version.
 
 * Eytzinger or BinSearch?
 Now, to compare batched Eytzinger to batched binary search:
@@ -621,45 +618,45 @@ Now, to compare batched Eytzinger to batched binary search:
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion.svg]]
 
-We see that Eytzinger is quite a lot faster for both large and small sizes. The reason for this could be that Eytzinger is a lot more
+We see that Eytzinger is quite a lot faster for both large and small sizes. The reason for this is that Eytzinger is a lot more
 cache-efficient. To investigate this further, I wrote a small Python script simulating the behaviour of both algorithms with respect to caches.
 
 The setup was a single-layer, fixed-size, direct-mapped cache. What I found
-was that when it comes to memory throughput, batched Eytzinger should be more advantageous. This is because the more-accessed top levels of the
+was that when it comes to memory throughput, batched Eytzinger is more advantageous. This is because the more-accessed top levels of the
 tree are more efficiently cached and can be reused between queries. This leads to less cache lines fetched from main memory overall
 compared to binary search.
 
-So, we have come quite a long way! From one query taking roughly 1100ns to just about 100ns a query. That is a speedup of 11x, and it was essentially for free!
+So, we have come quite a long way, from one query taking roughly 1100ns to just about 100ns a query on a 1GB array. That is a speedup of 12x, and it was essentially for free!
+Next, let us look at the multithreaded case where we run the search on many cores.
 
 * Memory efficiency -- parallel search and comparison to S-trees
 Now let us push memory throughput to its limits and compare the layouts when we are allowed to use multiple threads to query.
-Keep in mind that when multithreading gets involved, the results are going to be much more noisy.
+Keep in mind that when multithreading gets involved, the results are going to be much more noisy; the spreads in the graphs reflect that.
 
-The first interesting aspect of this is whether prefetching will help now. Let's first look at binary search:
+The first interesting aspect of this is whether prefetching will help for Eytzinger or binary search. Let's first look at binary search:
 
 #+attr_html: :class inset
 [[file:plots/binsearch-batched-vs-batched-prefetch-multithreaded.svg]]
 
 In the same way as in the single-threaded version, we see that the prefetching helps a bit, as it does not actually add memory
-traffic, it only hints to the CPU where to look.
-In the next plot we see that batching is helpful up to roughly size 32, and then it levels out.
+traffic, it only hints to the CPU where to look. In the next plot we see that batching is helpful up to roughly size 32, and then it levels out.
 
 #+attr_html: :class inset
 [[file:plots/binsearch-branchless-prefetched-batched-multithreaded.svg]]
 
-We will use batch size 32 as a reference.
+We will therefore use batch size 32 as a reference for further comparisons.
 
 As far as Eytzinger goes:
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison-multithreaded.svg]]
-Here we see that prefetching does makes it slightly better. We keep it for the comparison.
+Here we see that prefetching does not make a big difference. We keep it for the comparison.
 
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-prefetched-comparison-multithreaded.svg]]
 
 Here we see that increasing batch size too much hurts performance on small array sizes, and does not improve
-performance much beyond batch size 16. We therefore use batch size 16 as a reference for Eytzinger, as it nicely combines speedup at small and large sizes.
+performance much beyond batch size 16 on large array sizes. We therefore use batch size 16 as a reference for Eytzinger.
 So for the final comparison:
 
 #+attr_html: :class inset
@@ -669,11 +666,11 @@ In the plot, we also include one of the fast S-tree versions coded by Ragnar to 
 are still much much faster than either Eytzinger or binary search. This is to be expected, because S-trees can do essentially four layers of the search in a single
 iteration using one memory query whereas binary search or Eytzinger will need four memory requests.
 
-To get this performance, it is crucial that you compile with ~-C target-cpu=native~. I forgot to do this in some of my tests and S-trees turned out to be much slower
-due to more non-vectorized comparisons compared to both binary search and Eytzinger.
+To get this performance, it is crucial that you compile with ~-C target-cpu=native~. I found out the hard way; I forgot to turn this option on in some of my tests and S-trees turned out to be much slower
+due to more non-vectorized comparisons compared to both binary search and Eytzinger. I wasted quite some time trying to figure out why that was.
 
 We also see that Eytzinger and binsearch are almost equal; Eytzinger is better at the top while binary search is better
-at the bottom of the search, and these advantages are rougly of equal value.
+at the bottom of the search, and these advantages are rougly of equal value in the multithreaded setting.
 
 We can also look at a direct comparison of single and multi-threaded variants:
 
@@ -681,7 +678,7 @@ We can also look at a direct comparison of single and multi-threaded variants:
 [[file:plots/single-vs-multithreaded.svg]]
 
 Overall, the speedup was roughly 4 (at array size 1GB) when using 8 threads. This clearly indicates that we're memory bound. If we wanted to go for more speed and more cache utilization, we could start the first $\lg(n)/2$ layers with the Eytzinger layout and the bottom $\lg(n)/2$ layers
-with a standard sorted array. However, we won't delve into this here; check out Ragnar's post on S-trees!
+with a standard sorted array. However, we won't delve into this here, as there is more efficient stuff one can do; check out Ragnar's post on S-trees!
 Otherwise, if you are curious, the array layouts paper goes quite in-depth on this.
 
 * Interpolation search
@@ -689,8 +686,9 @@ In the static search tree post, Ragnar suggested looking at [[https://en.wikiped
 For completeness, we will implement it here as well to check out how it performs.
 
 The idea behind interpolation search based on the fact if data is drawn from a random uniform distribution, then when we sort it
-and plot the indices on the x-axis and values on the y-axis, we should roughly get a linear function. Using that, when we have the query,
-we can efficiently interpolate ("guess") where values corresponding to the query should be.
+and plot the indices on the x-axis and values on the y-axis, we should roughly get a linear function. Using that, when we have the query and the values
+at the start and end of the array, we can efficiently interpolate ("guess") where values corresponding to the query should be. We can iterate this
+approach, building a search algorithm out of it.
 
 When the input data is nicely evenly distributed, the complexity is $O(\lg \lg n)$ iterations, rather than $O(\lg n)$ for binary search.
 When the data is not well distributed, the worst case complexity is $O(n)$, which is illustrated by the following example. Imagine we're searching for
@@ -711,7 +709,6 @@ in every iteration and end up with a linear time complexity.
 
 Even in non-adversarial settings, like with the human genome, we could get into trouble with non-uniform distribution
 of input data. But let's try it out anyway and see how it goes.
-
 
 #+begin_src rust
 pub fn interpolation_search(&self, q: u32) -> u32 {
@@ -819,7 +816,7 @@ We can see if batching can hide some of this, as it did before:
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched.svg]]
 
-The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes.
+The performance improves a bit and is decent for large array sizes, but still nowhere close to the level of performance of previous schemes like Eytzinger.
 The division is a bottleneck and it is hard to optimize it away. I tried to go around it with SIMD, but there, efficient integer division
 instructions don't really exist either, and the performance gains are minimal.[fn::When reimplementing the batched version with SIMD, I burned myself by thinking that the Rust portable SIMD =clamp()= function would do an element-wise clamp. Watch out, [[https://github.com/rust-lang/rust/issues/94682][it doesn't]], at least not at this time.]
 
@@ -840,8 +837,8 @@ of the genome) but we will avoid the skewed start.
 #+attr_html: :class inset
 [[file:plots/interp-vs-binsearch-batched-human-final.svg]]
 
-We see that the result is noisy, but more as expected. The results are not really too bad; the data seems to be "random enough". But overall, it isn't really enough to make the scheme worthwhile against the other ones.
-We can see the comparison to Eytzinger in the plot.
+We see that the result is noisy, but more as expected. The results are not really too bad; the data seems to be "random enough".
+But overall, it isn't really enough to make the scheme worthwhile against the other ones. We can see the comparison to Eytzinger in the plot.
 For completeness we also show the graph for the multithreaded case:
 
 #+attr_html: :class inset
@@ -855,12 +852,12 @@ Overall, we found that the conclusions from the Algorithmica article and from th
 is the best choice for a simple algorithm that is also very fast. It beats standard binary search due to its better cache use characteristics
 and ease of prefetching. The other major takeaway is of course that batching is essentially free performance and if you can, you should always do it.
 
-For interpolation search, I did not believe the scheme to be too worthwhile; it is difficult to optimize and relies on the characteristics of the data
+For interpolation search, I do not believe the scheme to be too worthwhile; it is difficult to optimize and relies on the characteristics of the data
 for performance. Given there are schemes like Eytzinger or S-trees that are well suited for modern hardware optimizations, I think you should mostly
 use those even though the asymptotics are worse.
 
 When writing this, I was suprised to see that the Rust standard library has some optimizations for binary search already implemented, but not all that are recommended
-by our sources, namely, prefetching is missing. This is suprising, because prefetching arguably does not cost almost anything. Is it due to unavailability of prefetch instructions
-on some platforms?
+by our sources, namely, prefetching is missing. This is suprising, because prefetching arguably does not cost us much anything. Is it due to unavailability of prefetch instructions
+on some platforms? If you know, I'd be glad if you let me know.
 
 Anyway, it was a lot of fun to go a bit into the world of performance engineering. Thanks to Ragnar for the idea & the opportunity!
