@@ -191,8 +191,12 @@ It also makes sense that the naive binary search has bumps on the graph. The com
 to stop on the final iteration becomes difficult to predict when the array does not have a size of a power of two, and therefore
 the code takes longer to run, as the CPU sometimes mispredicts this.
 
-It is notable that when you don't compile with the =target-cpu= flag, the compiler does not replace the branch with a =cmov=.
-Then, you can replicate the result from the first plot in Algorithmica, where the naive code is much slower on small array sizes
+It is notable that when you don't compile with the ~target-cpu=native~ flag, the compiler does not replace the branch with a =cmov=.
+We can see the performance in the following plot:
+
+[[file:plots/binsearch-std-vs-branchless-no-native.svg]]
+
+This replicates the result from the first plot in Algorithmica, where the naive code is much slower on small array sizes
 but faster on large array sizes. The fact that it contains a branch allows the branch predictor to pick one possibility and
 to start to prefetch it. This will then reduce memory latency, as if the branch predictor
 is correct, waiting for this prefetched value will not take such a long time.
