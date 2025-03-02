@@ -57,10 +57,10 @@ for why different schemes behave like they behave. It is worth a read! It change
 my mind on how a good scientific article should look.
 
 ** Benchmarking setup
-The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as ~ -C target-cpu=native~.
+The benchmarking was done using =rustc 1.85.0-nightly= compiled with the =-r= flag as well as ~-C target-cpu=native~.
 This allows the compiler to make use of architectural specifics of the machine the code is compiled on.
 The CPU is an AMD Ryzen 4750U, and the DRAM is DDR4-2666. For reproducibility, clock speed
-was locked at 1.7GHz and turbo boost was disabled.
+was locked at 1.7GHz and turbo boost and hyperthreading were disabled.
 
 This post will is built around plenty of performance plots. These all show average time per one query.
 Therefore, in all plots, lower is better. We will benchmark in arrays up to a size of 1GB, well beyond the size of L3 cache,
@@ -620,18 +620,20 @@ Now, to compare batched Eytzinger to batched binary search:
 
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion.svg]]
-TODO here
 
-To investigate this further, I wrote a small Python script simulating the behaviour of both algorithms with respect to caches.
+We see that Eytzinger is quite a lot faster for both large and small sizes. The reason for this could be that Eytzinger is a lot more
+cache-efficient. To investigate this further, I wrote a small Python script simulating the behaviour of both algorithms with respect to caches.
+
 The setup was a single-layer, fixed-size, direct-mapped cache. What I found
 was that when it comes to memory throughput, batched Eytzinger should be more advantageous. This is because the more-accessed top levels of the
 tree are more efficiently cached and can be reused between queries. This leads to less cache lines fetched from main memory overall
-compared to binary search. However, we do not see this effect here, probably because the better memory efficiency is offset by batching anyway.
+compared to binary search.
+
+So, we have come quite a long way! From one query taking roughly 1100ns to just about 100ns a query. That is a speedup of 11x, and it was essentially for free!
 
 * Memory efficiency -- parallel search and comparison to S-trees
 Now let us push memory throughput to its limits and compare the layouts when we are allowed to use multiple threads to query.
-For this test, I turned off hyperthreading and locked the CPU to 8 cores. Keep in mind that when multithreading
-gets involved, the results are going to be much more noisy.
+Keep in mind that when multithreading gets involved, the results are going to be much more noisy.
 
 The first interesting aspect of this is whether prefetching will help now. Let's first look at binary search:
 
@@ -663,12 +665,12 @@ So for the final comparison:
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion-multithreaded.svg]]
 
-In the plot, we also include one of the fast S-tree versions to have a direct comparison on my machine. We can see that due to the use of SIMD and better use of caches, S-trees
+In the plot, we also include one of the fast S-tree versions coded by Ragnar to have a direct comparison on my machine. We can see that due to the use of SIMD and better use of caches, S-trees
 are still much much faster than either Eytzinger or binary search. This is to be expected, because S-trees can do essentially four layers of the search in a single
 iteration using one memory query whereas binary search or Eytzinger will need four memory requests.
 
-To get this performance, it is crucial that you compile with ~ -C target-cpu=native~. I forgot to do this in some of my tests and S-trees turned out to be much slower
-due to more non-vectorized comparisons compared to both binary search and Eytzinger (which was very suprising).
+To get this performance, it is crucial that you compile with ~-C target-cpu=native~. I forgot to do this in some of my tests and S-trees turned out to be much slower
+due to more non-vectorized comparisons compared to both binary search and Eytzinger.
 
 We also see that Eytzinger and binsearch are almost equal; Eytzinger is better at the top while binary search is better
 at the bottom of the search, and these advantages are rougly of equal value.
