@@ -8,6 +8,9 @@
 #+date: <2025-02-23 Fri>
 
 * Abstract
+:PROPERTIES:
+:EXPORT_FILE_NAME: abstract.tex
+:END:
 
 
 # * Acknowledgements
@@ -15,6 +18,9 @@
 # * TOC
 
 * Introduction
+:PROPERTIES:
+:EXPORT_FILE_NAME: introduction.tex
+:END:
 *Summary.*
 
 ** Objectives
@@ -69,26 +75,121 @@
 ** Personal note
 
 
-* Discussion and conclusion
+* Discussion
+:PROPERTIES:
+:EXPORT_FILE_NAME: discussion.tex
+:END:
 
-[cite:@medvedev-edit-distance]:
+In this thesis, we have worked on optimizing algorithms and implementation for
+several problems in bioinformatics.
+These contributions fall into two categories: for some problems, we focused on
+achieving practical speedups by using highly efficient implementations of
+algorithms that are amenable to this.
+For other problems, we took a more theoretical approach, and tried to reach a
+linear time algorithm, for pairwise alignment, or to reach an optimal density
+minimizer scheme.
+
+Building on an earlier observation of Paul Medvedev [cite:@medvedev-edit-distance], my main thesis is:
+
 #+begin_quote
-Implementation and validation cannot be treated as a separate step of the process.
-...
+Provably optimal software consists of two parts: a provably optimal algorithm,
+and a provably optimal implementation of this algorithm, given the hardware constraints.
+
+This can only be achieved through Algorithm/Implementation co-design, where
+hardware capabilities can influence high-level design choices in the algorithm.
 #+end_quote
 
+
+** Pairwise Alignment
+We first looked at the problem of /pairwise alignment/, where the differences
+(mutations) between two biological are to be found.
+We reviewed many early improvements to theoretical algorithms, and a number of
+techniques for implementing these algorithms efficiently.
+
+Nearly all existing methods are based on some variant dynamic programming.
+In A*PA, we instead use the A* shortest path algorithm, which is a graph-based
+method instead. This allows us to construct a heuristic that can quickly and closely
+``predict'' the edit distance in many cases.
+We additionally introduced /pruning/, which dynamically improves the heuristic
+as the A* search progresses, thereby leading to near-linear runtimes. To my
+knowledge, this is the first heuristic of this type, and this same technique may
+be wider applicable, such as in classic navigation software.
+
+As it turns out, even though A*PA has near-linear complexity, the constant
+overhead is large: each visited state requires a memory access. This makes the
+method completely impractical whenever the scaling is super-linear, for example
+due to noisy regions or gaps in the alignment.
+Thus, in A*PA2 we revert back to a DP-based method, and we incorporate the A*
+heuristic into the band-doubling algorithm. Alongside with additional
+optimizations, this yields up to $19\times$ speedup over previous methods.
+
+A lesson here is that a lot of time was spent on optimizing A*PA, even though
+this an inherently slow algorithm. In hindsight, it would have been more
+efficient to not try too many hacky optimizations, and instead shift focus
+earlier towards the inherently faster DP-based methods.
+
+Future work remains in extending the aligner to both semi-global alignment and
+affine costs.
+
+** Low Density Minimizers
+We then looked at /minimizer schemes/, which are used to sub-sample the $k$-mers
+of a genomic sequence as a form of compressing the sequence. The constraint is
+that at least one $k$-mer must be sampled every $w$ positions, and the goal is
+to minimizer the fraction (/density/) of sampled $k$-mers.
+
+We were able to answer a number of open questions in this field.
+We proved a near-tight lower bound that is the first to show that the density is
+at least $2/(w+1)$ when $k=1$, and generally is near-tight as $k\to\infty$.
+Alongside this, we introduced the mod-minimizer, which matches the
+scaling of the lower bound, making this the first near-optimal scheme for large $k$.
+
+We also started the exploration of optimal schemes for $k=1$, and introduced the
+/anti-lexicographic sus-anchor/, which is nearly optimal in practice. However,
+it is not quite theoretically optimal, and improving this remains an interesting
+open problem. Similarly, experiments suggest that perfectly optimal schemes
+exist for $k=w+1$, but also here no general construction has been found so far.
+On the other hand, for $1<k\leq w$, our lower bound appears to not be tight, and
+it would be interesting to improve it.
+
+Lastly, our analysis focused mostly on /forward/ schemes. /Local/ schemes are a
+more general class of schemes that break the lower bound. In practice, though,
+they are only marginally better, and it remains an open problem to prove this.
+
+** High Throughput Informatics
+Lastly, we optimized two specific applications in bioinformatics to achieve high
+throughput. In the case of PtrHash (\cref{ch:ptrhash}), we were able to achieve throughput within
+$10\%$ of what the hardware is capable of, nearly $4\times$ faster than the
+second fastest alternative. In the cases of both A*PA2 (\cref{ch:astarpa2}) and
+\texttt{simd-minimizers} (\cref{ch:simdmini}), we were able to achieve on the order of $10\times$
+speedups over previous implementations. In all these cases, this was achieved by
+designing the algorithm with the implementation in mind, and by optimizing the
+implementation to fully utilize the capabilities of modern CPU.
+
+Concluding, it seems inconsistent that so many papers start by stating the need
+for faster algorithms, but then never discuss implementation details.
+We reached $10\times$ speedups on multiple applications by closely considering
+the implementation.
+On the other hand, many papers introduce new algorithmic techniques that yield
+significantly smaller speedups. Thus, this raises the suggestion that more
+attention should be given to the implementation of methods, rather than just the
+high level algorithm.
+
 ** Propositions
-- PROPOSITION: Complexity theory was useful, but nowadays the hidden constant is
-  at least as important.
+I will end this thesis with a number of opinionated and provocative /propositions/,
+as is custom in The Netherlands.
 
-- PROPOSITION: Saying we need better algorithms because the amount of data grows faster than
-  Moore's law, but then ignoring the implementation, is contradictory.
-
-- more assumptions on input mean faster code. Fast code must exploit all assumptions.
-
-*Summary.*
-** Overview
-** Future directions
-** Concluding remarks
-
-* Bibliography
+1. Complexity theory's days are numbered. These days the hidden constant is more important.
+2. Succinct data structures are cute, but it's better to use some more space and not
+   be terribly slow.
+3. There is beauty in chasing mathematical perfection.
+4. Too many PhDs are wasted shaving of small factors of complexities that will
+   never be practical.
+5. It is a fallacy to open a paper with "there is too much data, faster methods are needed" and
+   then not say a word about optimizing code for modern hardware.
+6. Fast code must exploit all assumptions on the input.
+7. Fast code puts requirements on the input format, and the input has to adjust.
+8. Optimizing ugly code is a waste of time -- faster pretty methods will replace it.
+9. The fastest code is simple.
+10. Assembly is not scary.
+11. Flat, unstructured text should be avoided at all costs.
+    We research text indices, so index the text you write.
