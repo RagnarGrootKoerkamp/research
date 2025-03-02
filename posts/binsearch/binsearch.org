@@ -234,12 +234,13 @@ As caches make the whole process much faster at small sizes, there are also step
 
 Now, it makes sense that our branchless code is faster than the naive version; our naive code does not have
 a fixed number of iterations, so there is potential for a branch misprediction, which can take a long time.
-An interesting question is why the code is faster than the standard library version at large sizes?
+An interesting question is why the code is faster than the standard library version at large sizes.
 They should be conceptually the same; both do a fixed number of iterations and both use a =cmov= instruction.
+
 Looking at the graph, it seems like the difference is one extra memory request
 or one misprediction. Consulting =perf= and the standard library source code, we see that their code has another difficult-to-predict
 condition, e.g. whether the input array actually contains the resulting value or not. Based on that, the return value is either
-an error or an =Ok= value.
+an =Err= or an =Ok= value, and the index inside each of those might be different.
 
 Since our branchless version assumes that the result always exists, we do not have to worry about this and therefore we do away with
 one possible source of mispredictions. That is why our branchless code is faster than both the standard library =binary_search_by=
@@ -567,7 +568,7 @@ pub fn batch_impl<const P: usize>(&self, qb: &[u32; P]) -> [u32; P] {
 #+attr_html: :class inset
 [[file:plots/eytzinger-batched-comparison.svg]]
 
-Without prefetching, we see gains up until batch size of 16 and then the it levels out.
+Without prefetching, we see gains up until batch size 128. We therefore use that as our baseline for further comparisons.
 
 *** Prefetched
 
@@ -611,7 +612,7 @@ non-prefetched:
 #+attr_html: :class inset
 [[file:plots/eytzinger-best-batching-comparison.svg]]
 
-We see that the prefetched version is a few percent faster on large input sizes.
+We see that the non-prefetched version with a large batch size is a few percent faster on large input sizes.
 Therefore, we select it as our best eytzinger version.
 
 * Eytzinger or BinSearch?
@@ -619,11 +620,7 @@ Now, to compare batched Eytzinger to batched binary search:
 
 #+attr_html: :class inset
 [[file:plots/binsearch-eytzinger-conclusion.svg]]
-
-We see the approaches are very similar, especially at larger array sizes.
-If we compare the two layouts, we know that Eytzinger provides better locality at the top of the search
-while the normal sorted array layout for binary search provides better locality at the bottom of the search.
-Both of these effects are largely offset by batching (because it hides the latency of memory accesses quite well).
+TODO here
 
 To investigate this further, I wrote a small Python script simulating the behaviour of both algorithms with respect to caches.
 The setup was a single-layer, fixed-size, direct-mapped cache. What I found
