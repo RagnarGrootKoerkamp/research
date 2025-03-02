@@ -227,19 +227,23 @@ of the standard library.
 #+attr_html: :class inset
 [[file:plots/binsearch-std-vs-branchless.svg]]
 
-We can see that we now match the performance of the library version, even surpassing it. We
-assume this is due to our function being specialized and not having an
-error condition at the end, leading to it being better by a small
-fraction.
-
-Since we do a fixed number of iterations, we can clearly see "stairs" in the graph with every
+We can see that we now match the performance of the library version, even surpassing it on large sizes
+Since we do a fixed number of iterations, we can also clearly see "stairs" in the graph with every
 power of two, as the number of instructions is now pretty much a deterministic function of the input size.
 As caches make the whole process much faster at small sizes, there are also steps, but they are much smaller.
 
-But why is the code so much faster than a naive implementation or the standard library version, even though they should
-be conceptually the same?
+Now, it makes sense that our branchless code is faster than the naive version; our naive code does not have
+a fixed number of iterations, so there is potential for a branch misprediction, which can take a long time.
+An interesting question is why the code is faster than the standard library version at large sizes?
+They should be conceptually the same; both do a fixed number of iterations and both use a =cmov= instruction.
+Looking at the graph, it seems like the difference is one extra memory request
+or one misprediction. Consulting =perf= and the standard library source code, we see that their code has another difficult-to-predict
+condition, e.g. whether the input array actually contains the resulting value or not. Based on that, the return value is either
+an error or an =Ok= value.
 
-TODO perf here
+Since our branchless version assumes that the result always exists, we do not have to worry about this and therefore we do away with
+one possible source of mispredictions. That is why our branchless code is faster than both the standard library =binary_search_by=
+or the naive version.
 
 ** Explicit prefetching
 To speed the search up for large array sizes, the Algorithmica post recommends explicit prefetching.
