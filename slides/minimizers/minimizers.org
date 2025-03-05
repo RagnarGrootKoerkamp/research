@@ -6,10 +6,15 @@
 # #+toc: depth 2
 #+reveal_theme: white
 #+reveal_extra_css: /css/slide.min.css
+# #+REVEAL_INIT_OPTIONS: transition: default
 #+export_file_name: ../../static/slides/minimizers
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-27 Thu>
 # Export using C-c C-e R R
+#+MACRO: c @@html:<font color="red"><code>$1</code></font>@@
+#+MACRO: color @@html:<font color="$1"><code>$2</code></font>@@
+
+
 
 # Toggle org-hugo-auto-export-mode
 #+begin_export html
@@ -18,6 +23,53 @@
 
 # - slides: [[https://curiouscoding.nl/slides/minimizer.html][curiouscoding.nl/slides/minimizers.html]]
 # - post: [[https://curiouscoding.nl/slides/minimizers][curiouscoding.nl/slides/minimizers]]
+
+* Warming up: A cute prolblem
+:PROPERTIES:
+:CUSTOM_ID: warmup
+:END:
+
+#+attr_reveal: :frag (appear)
+- Given a string, choose one character.
+  - =CABAACBD=
+- Given a rotation, choose one character.
+  - =ACBDCABA=
+- Can we always choose /the same/ character?
+- Yes: e.g. the smallest rotation (bd-anchor):
+  - =CAB=​{{{c(A)}}}​=ACBD=
+  - =ACBDCAB=​{{{c(A)}}}​
+** This talk: what if one character is /hidden/?
+:PROPERTIES:
+:CUSTOM_ID: hidden
+:END:
+#+attr_reveal: :frag (appear)
+- Given a string (length $w$), choose one character.
+  - =CABAACBD=​​{{{color(lightgrey,X)}}}
+- Given a rotation (of the hidden $w+1$ string), choose one character.
+  - =ACBDXCAB=​{{{color(lightgrey,A)}}}
+- Can we always choose /the same/ character?
+- Maybe?
+  - =CAB=​{{{c(A)}}}​=ACBD=
+  - =ACBDXCAB= 🤔
+
+** The answer is no!
+:PROPERTIES:
+:CUSTOM_ID: lb
+:END:
+=C​ABAACBDX= rotations:
+
+- =C​AB=​{{{c(A)}}}​=ACBD........=
+- =.AB=​{{{c(A)}}}​=ACBDX.......=
+- =..B=​{{{c(A)}}}​=ACBDXC......=
+- =...=​{{{c(A)}}}​=ACBDXCA.....=
+- =....ACBDXCAB....= <--- the *=A=* is not here
+- =.....CBDXCAB=​{{{c(A)}}}​=...=
+- =......BDXCAB=​{{{c(A)}}}​=A..=
+- =.......DXCAB=​{{{c(A)}}}​=AC.=
+- =........XCAB=​{{{c(A)}}}​=ACB=
+
+#+attr_reveal: :frag t
+In the $w+1$ rotations, we need at least 2 samples.
 
 
 * /Minimizer/ schemes
@@ -30,29 +82,38 @@ $$\newcommand{\order}{\mathcal{O}}$$
 - Minimizer scheme: Given a window of $w$ k-mers, pick the (leftmost) /smallest/ one
   - according to some order $\order_k$
 - $k=1$, $w=5$:
-  - =BCADF= $\to$ =[B, C, A, D, F]= $\to$ =A=
+  - =C=​{{{c(A)}}}​=BCA=
 - $k=2$, $w=5$:
-  - =CABCAC.....= $\to$ =[CA, AB, BC, CA, AC]= $\to$ =AB=
-  - =.ABCACC....= $\to$ =[AB, BC, CA, AC, CC]= $\to$ =AB=
-  - =..BCACCX...= $\to$ =[BC, CA, AC, CC, CX]= $\to$ =AC= new
-  - =...CACCXY..= $\to$ =[CA, AC, CC, CX, XY]= $\to$ =AC=
-  - =....ACCXYZ.= $\to$ =[AC, CC, CX, XY, YZ]= $\to$ =AC=
-  - =.....CCXYZX= $\to$ =[CC, CX, XY, YZ, XZ]= $\to$ =CC= new
-
-#+reveal: split
-
-#+attr_html: :style width:75% :src /ox-hugo/before.svg
-[[file:before.svg]]
-
-#+reveal: split
+  - =C=​{{{c(AB)}}}​=CAC.....=
+  - =.=​{{{c(AB)}}}​=CACC....=
+  - =..BC=​{{{c(AC)}}}​=CX...=
+  - =...C=​{{{c(AC)}}}​=CXY..=
+  - =....=​{{{c(AC)}}}​=CXYZ.=
+  - =.....=​{{{c(CC)}}}​=XYZX=
+- Density: 3/10
+  - =C=​{{{c(AB)}}}​=C=​{{{c(ACC)}}}​=XYZX=
 
 
-#+attr_html: :style width:75% :src /ox-hugo/overview.svg
-[[file:overview.svg]]
 
-#+reveal: split
+** The situation, 1 year ago
+#+attr_html: :style width:65% :src /ox-hugo/1-before.svg
+[[file:plots/1-before.svg]]
 
-#+attr_html: :style width:75% :src /ox-hugo/greedymini.png
+** The mod-minimizer
+
+#+attr_html: :style width:65% :src /ox-hugo/2-mod.svg
+[[file:plots/2-mod.svg]]
+
+** A near-tight lower bound
+#+attr_html: :style width:65% :src /ox-hugo/3-lb.svg
+[[file:plots/3-lb.svg]]
+
+** The current picture
+#+attr_html: :style width:65% :src /ox-hugo/4-full.svg
+[[file:plots/4-full.svg]]
+
+** Greedymini
+#+attr_html: :style width:65% :src /ox-hugo/greedymini.png
 [[file:greedymini.png]]
 
 # - plot showing bad small k perf
@@ -80,26 +141,20 @@ $$\newcommand{\order}{\mathcal{O}}$$
 :CUSTOM_ID: sampling-schemes
 :END:
 - /Any/ function $f: \Sigma^{w+k-1} \to \{0, \dots, w-1\}$
-- i.e.: pick any k-mer, but more flexible than just the /smallest/.
 - We fix $k=1$ from now: $f: \Sigma^w\to \{0, \dots, w-1\}$
-- E.g., smallest /substring/:
-
-  =BACAB=: We have =AB < AC=, so pick the final =A=:
-
-  =...^.=
 
 ** Bidirectional anchors
 :PROPERTIES:
 :CUSTOM_ID: bd-anchors
 :END:
 - Pick the start of the /smallest rotation/
-  - =EADCAE......=: =.ADCAE......=
-  - =.ADCAEB.....=: =.ADCAEB.....=
-  - =..DCAEBE....=: =....AEBE....= jump
-  - =...CAEBEC...=: =....AEBEC...=
-  - =....AEBECD..=: =....AEBECD..=
-  - =.....EBECDC.=: =......BECDC.= jump
-  - =......BECDCD=: =......BECDCD=
+  - =E=​{{{c(A)}}}​=DCAE......=
+  - =.=​{{{c(A)}}}​=DCAEB.....=
+  - =..DC=​{{{c(A)}}}​=EBE....=
+  - =...C=​{{{c(A)}}}​=EBEC...=
+  - =....=​{{{c(A)}}}​=EBECD..=
+  - =.....E=​{{{c(B)}}}​=ECDC.=
+  - =......=​{{{c(B)}}}​=ECDCD=
 
 
 ** Limitations of bd-anchors
@@ -107,21 +162,21 @@ $$\newcommand{\order}{\mathcal{O}}$$
 :CUSTOM_ID: bd-anchors-limitations
 :END:
 - Lexicographic is bad:
-  - =AAAABCD...=: =AAAABCD...=
-  - =.AAABCDE..=: =.AAABCDE..= jump
-  - =..AABCDEF.=: =..AABCDEF.= jump
-  - =...ABCDEFG=: =...ABCDEFG= jump
+  - {{{c(A)}}}​=AAABCD...=
+  - =.=​{{{c(A)}}}​=AABCDE..=
+  - =..=​{{{c(A)}}}​=ABCDEF.=
+  - =...=​{{{c(A)}}}​=BCDEFG=
 - Comparing rotations is unstable:
-  - =AABACD..=: =AABACD....=
-  - =.ABACDA.=: =......A|AB= jump -> unstable
-  - =..BACDAE=: =...ACDAE..= backwards jump
+  - ​{{{c(A)}}}​=ABACD..=
+  - =.ABACD=​{{{c(A)}}}​=.=
+  - =..B=​{{{c(A)}}}​=CDAE=
 
 - Avoid last $r$ positions.
 
-#+reveal: split
 
-#+attr_html: :style width:75% :src /ox-hugo/bd-anchor.svg
-[[file:bd-anchor.svg]]
+** Bd-anchor density for $k=1$
+#+attr_html: :style width:65% :src /ox-hugo/10-bd-anchor.svg
+[[file:plots/10-bd-anchor.svg]]
 
 
 
@@ -134,105 +189,123 @@ $$\newcommand{\order}{\mathcal{O}}$$
   - We choose =ABA= smaller for stability.
 - =AB= is the /smallest unique substring/.
 - Stable:
-  - =AABACD..=: =AABACD..=
-  - =.ABACDA.=: =.ABACDA.= fwd jump -> bad lexicographic order
-  - =..BACDAE=: =...ACDAE= fwd jump
-
-#+reveal: split
-
-#+attr_html: :style width:75% :src /ox-hugo/sus-lex.svg
-[[file:sus-lex.svg]]
+  - ​{{{c(AA)}}}​=BACD..=
+  - =.=​{{{c(AB)}}}​=ACDA.=
+  - =..B=​{{{c(AC)}}}​=DAE=
 
 
-* Anti-lex: Avoiding consecutive samples
+** Sus-anchor density
+
+#+attr_html: :style width:65% :src /ox-hugo/11-sus.svg
+[[file:plots/11-sus.svg]]
+
+** ABB order
 :PROPERTIES:
-:CUSTOM_ID: anti-lex
+:CUSTOM_ID: abb
 :END:
-- When =AAAA= is the smallest string, it has many small suffixes
+- =AAAA= is BAD:
   - small strings overlap
   - small strings cluster
 - We want the opposite!
-- /Anti-lexicographic order/: =AZZZZZ= is the smallest string
-  - no overlap!
+- /ABB order/:
+
+   =A= followed by many non-=A= is smallest: =ABBBBBBBBB=
+  - no overlap
   - no clustering
 
-#+reveal: split
+** Sus-anchor, ABB order
+#+attr_html: :style width:65% :src /ox-hugo/12-abb.svg
+[[file:plots/12-abb.svg]]
 
-#+attr_html: :style width:75% :src /ox-hugo/sus-anti-lex.svg
-[[file:sus-anti-lex.svg]]
+** Anti-lex
+:PROPERTIES:
+:CUSTOM_ID: anti-lex
+:END:
+- /Anti-lexicographic order/:
 
-#+reveal: split
-#+attr_html: :style width:75% :src /ox-hugo/sus-anti-lex-s2.svg
-[[file:sus-anti-lex-s2.svg]]
+   =A= small, followed by largest possible suffix: =AZZZZZ= is minimal
+  - no overlap
+  - no clustering
+
+** Sus-anchor, anti-lex order
+
+#+attr_html: :style width:65% :src /ox-hugo/13-asus.svg
+[[file:plots/13-asus.svg]]
+
 
 
 * Understanding the lower bound
 :PROPERTIES:
 :CUSTOM_ID: lower-bound-cycles
 :END:
-- The density is at least $2 / (w+1)$:
-- Say $w=4$. Consider a /cyclic/ string of length $w+1=5$, =ABCDE=.
-  - =ABCD....= choose =C=
-  - =.BCDE...=
-  - =..CDEA..=
-  - =...DEAB.= <- =C= isn't here! must be different
-  - =....EABC=
-- At least $2$ samples in the $w+1$ cycle.
 
 - To reach lower bound: /exactly/ 2 samples in /every/ $w+1$ cycle.
 
-#+reveal: split
-#+attr_html: :style width:80% :src /ox-hugo/lower-bound.svg
+
+#+attr_html: :style width:70% :src /ox-hugo/lower-bound.svg
 [[file:../../posts/minimizers/figs/lower-bound.svg]]
 
-** Asus has failure cases
+** Failure mode
 :PROPERTIES:
 :CUSTOM_ID: asus-failure
 :END:
-- =0010101= cycle:
-  - =001010......=: =001010......= 1 =00=
-  - =.010101.....=: =.010101.....= 2 =01010=
-  - =..101010....=: =...01010....= 4 =0101=
-  - =...010100...=: =.......00...= 1 =00=
-  - =....101001..=: =.......001..= 1 =00=
-  - =.....010010.=: =.......0010.= 1 =00=
-  - =......100101=: =.......00101= 1 =00=
+=0010101= cycle:
+- ​{{{c(00)}}}​=1010......=
+- =.=​{{{c(01010)}}}​=1.....=
+- =..1=​{{{c(0101)}}}​=0....=
+- =...0101=​{{{c(00)}}}​=...=
+- =....101=​{{{c(00)}}}​=1..=
+- =.....01=​{{{c(00)}}}​=10.=
+- =......1=​{{{c(00)}}}​=101=
 - The =01010= sus is not /overlap free/
   - Just like how =AAA= is not /overlap free/
+
+#+attr_reveal: :frag t
+Goal: find two *non-overlapping* substrings.
 
 ** Can we design a perfectly optimal scheme?
 :PROPERTIES:
 :CUSTOM_ID: perfect-schemes
 :END:
-- Goal: For every $w+1$ window, find two non-overlapping small strings.
-- Instead of looking for =011...11=, look for =00...0011...11=
+- Goal:
+
+  *For every $w+1$ window, find two non-overlapping small strings.*
+#+attr_reveal: :frag t
+- Instead of =011...11=, search =00...0011...11=
   - Also non-overlapping, and more signal.
   - Still not optimal.
 - Tried *many* things. No general solution found yet.
 
-* Tech-tip: =diskcache=
-:PROPERTIES:
-:CUSTOM_ID: diskcache
-:END:
+* Thanks to my co-authors!
+- Giulio Ermanno Pibiri
+- Bryce Kille
+- Daniel Liu
+- Igor Martayan
 
-#+begin_src python
-from functools import cache
 
-@cache
-def density(tp, text_len, w, k, sigma, **args):
-    return minimizers.density(tp, _text, w, k, sigma, **args)
-#+end_src
+# * Tech-tip: =diskcache=
+# :PROPERTIES:
+# :CUSTOM_ID: diskcache
+# :END:
 
-#+begin_src python
-from diskcache import Cache
-diskcache = Cache("cache")
+# #+begin_src python
+# from functools import cache
 
-@diskcache.memoize(tag="density")
-def density(tp, text_len, w, k, sigma, **args):
-    return minimizers.density(tp, _text, w, k, sigma, **args)
-#+end_src
+# @cache
+# def density(tp, text_len, w, k, sigma, **args):
+#     return minimizers.density(tp, _text, w, k, sigma, **args)
+# #+end_src
 
-- Efficient reuse of values in =.py= files.
-- No need for =.ipynb= notebooks.
-  - No/annoying hot-reloading of (compiled) modules
-  - =@cache= is lost on kernel restarts
+# #+begin_src python
+# from diskcache import Cache
+# diskcache = Cache("cache")
+
+# @diskcache.memoize(tag="density")
+# def density(tp, text_len, w, k, sigma, **args):
+#     return minimizers.density(tp, _text, w, k, sigma, **args)
+# #+end_src
+
+# - Efficient reuse of values in =.py= files.
+# - No need for =.ipynb= notebooks.
+#   - No/annoying hot-reloading of (compiled) modules
+#   - =@cache= is lost on kernel restarts
