@@ -1,0 +1,326 @@
+#+title: MinHash variants
+#+filetags: wip @survey sketching
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_level_offset: 1
+#+hugo_paired_shortcodes: %notice
+# #+toc: headlines 3
+#+date: <2025-03-09 Sun>
+
+$$
+\newcommand{\sketch}{\mathsf{sketch}}
+$$
+
+This is a small survey on mash-based sketching methods, to go along with my
+[[https://github.com/ragnargrootkoerkamp/simd-mash][=simd-sketch=]] library. See also [cite/t:@minhash-survey] for a previous
+small survey.
+
+*Motivation.*
+Suppose we have a large number $r$ of sequences of length around $n$, that we want to quickly compare.
+One way to do this is by /sketching/ each genome into a much smaller
+representation, and then doing the $\Theta(r^2)$ comparison only on the sketches.
+
+* Jaccard similarity
+Instead of comparing input sequences directly, we consider them as a /set/ of
+k-mers [cite:@scalable-fingerprinting]. Then, the /Jaccard similarity/ between
+two sets $A$ and $B$ is [cite:@minhash;@minhash-2]
+$$
+\frac{|A\cap B|}{|A\cup B|}.
+$$
+
+Thus, the goal is to estimate the Jaccard similarity via small sketches.
+
+
+* Hash schemes
+
+** MinHash
+The first step is a simple minhash [cite:@minhash], that hashes all k-mers and selects the
+smallest hash value. The probability (over the random hash function) that sets $A$ and $B$ share the smallest
+k-mer equals the Jaccard similarity.
+
+#+attr_html: :class inset medium
+[[file:single.svg]]
+
+*Algorithm.* This is simple to compute by using a rolling minimum. On random
+data, we expect the minimum to only update $O(\log n)$ times, so the
+branch-predictor can do a good job and this will be fast in practice.
+
+** $s$-mins sketch
+To better approximate the similarity, we can use multiple ($s=4$ here) hash
+functions, and compute the fraction of hashes for which the minimal hash is
+identical [cite:@size-estimation;@flajolet-martin].
+(Note that other papers also use $k$ or $t$ for the size of the sketch, but I will
+stick to $s$ to not confuse this with the k-mer length.)
+
+#+attr_html: :class inset medium
+[[file:multiple.svg]]
+
+*Algorithm.* We run the previous algorithm $s$ times, for $O(ns)$ total time.
+
+#+attr_shortcode: note
+#+begin_notice
+There are (at least) five (!!!) papers attributing this method to [cite/t:@minhash] and
+[cite/t:@minhash-2], and then remark that $O(ns)$ is slow.
+As far as I can see, neither of these two papers ever
+considers using more than one hash function. Instead both of them only talk
+about the fast bottom-$s$ sketch discussed below.
+#+end_notice
+
+** Bottom-$s$ sketch
+A problem with using multiple hash functions is that this is slow to evaluate.
+Instead, bottom-hash can be used, where the smallest $s$ values of a /single/ hash
+function are taken [cite:@scalable-fingerprinting;@minhash;@size-estimation].
+
+The sketch of $A\cup B$ is then given by the smallest $s$ values of the union of
+the sketches of $A$ and $B$, and $|A\cap B|$ is the fraction of those smallest
+$s$ values that are in both $A$ and $B$.
+
+#+attr_shortcode: note
+#+begin_notice
+The sketch of $A\cup B$ is /not/ the /total/ number of distinct elements in the
+union of the sketch of $A$ and the sketch of $B$. When $\sketch(A) = [0,2,4,6]$ and
+$\sketch(B)=[1,3,5,6]$, we have $\sketch(A\cup B) = [0,1,2,3]$ and the size of the
+intersection is $0$.
+#+end_notice
+
+*Mash* is a tool that uses this bottom-$s$ sketch, and they introduce the /mash
+distance/ that estimates the mutation rate based on the Jaccard similarity.
+
+#+attr_html: :class inset medium
+[[file:bottom.svg]]
+
+*Naive algorithm.* This is where things get interesting.
+The usual/naive approach is to incrementally keep a set of the $s$ smallest
+elements seen so far as a priority queue (max-heap).
+Where the rolling minimum gets a total of $\ln n$ updates (in expectation, on random input), the bottom-$s$
+get $s \ln n$ updates in total [cite:@minhash;@minhash-survey]: the $i$'th element has probability $s / i$
+of being in the bottom-$s$, which sums/integrates to $s \ln n$.
+Each update takes $O(\log s)$ time, for overall complexity $O(n + s\log s \ln n)$.
+
+*Better complexity (new?).*
+We can do better by dropping the priority queue! Currently we do a bunch of 'early' insertions into the heap of elements
+that will later be evicted. Instead, we can estimate the size of the largest
+value as $T=s/n \cdot 2^{32}$ (for 32-bit hashes). Then, we can only insert
+elements up to, say, $2T$ (indicated by the dashed yellow line). If there are a lot of duplicate-kmers,
+this may not be sufficient, and we can double the limit until $s$ distinct
+hashes have been found.
+When there are no/few duplicate k-mers, this runs in $O(n + s \log s)$.
+
+*Faster algorithm (new?).*
+In practice, we can speed this up more: first collect all the values up to
+$2T$, which can be done branchless and using SIMD,
+and then sort those in a separate pass. That way, the first loop over all
+$n$ hashes can be completely branchless. See [[*SimdSketch]] for details.
+
+
+** FracMinHash
+This problem of the unpredictable threshold can also be solved by simply fixing
+the threshold (as the solid yellow line), and then taking however many hashes are below it. This is what
+/fracminhash/ does [cite:@fracminhash].
+
+This is also similar to mod-sketch that simply keeps all values
+$0\pmod m$ for some modulus $m$ [cite:@minhash].
+
+#+attr_html: :class inset medium
+[[file:frac.svg]]
+
+
+** Bucket-hash / $s$-partition sketch
+Bottom-$s$-hash and fracminhash have the drawback that computing the similarity between two sketches
+requires a pass of merge-sort, which is hard to make efficient.
+Bucket-hash solves this by splitting the hashes into $s$ buckets and returning
+the smallest hash in each bucket
+[cite:@flajolet-martin;@one-permutation-hashing].
+
+This way, comparing two sketches is again as simple as computing the fraction of
+shared elements in equal positions.
+
+#+attr_shortcode: note
+#+begin_notice
+This scheme was introduced under the name /one permutation hashing/ [cite:@one-permutation-hashing], but I think
+this is a bad name. In particular, the abstract of that paper writes:
+
+#+begin_quote
+Minwise hashing [cite:@minhash] is a standard technique in the context of
+search, for efficiently computing set similarities. [...] A drawback of minwise
+hashing is that it requires a costly preprocessing step, for conducting (e.g.,)
+$s=200\sim 500$ permutations on the data.
+#+end_quote
+However, as far as I can see, [cite/t:@minhash] never considers more than one
+hash function in the first place, and really only talks about bottom-$s$ sketch.
+Indeed, the distinctive property of this /one permutation/ scheme is /not/ the
+fact that it uses only a single permutation, but rather that it uses
+partitions/buckets to extract multiple smallest values.
+
+The earlier paper on $b$-bit MinHash [cite:@b-bit-minhash] makes the
+same mistake.
+
+It seems to me that the $s$-hashes version was never really used for
+sequence similarity estimation?
+#+end_notice
+
+#+attr_html: :class inset medium
+[[file:bucket.svg]]
+
+*Algorithm.* This can be implemented by tracking $s$ bucket values, and for each
+hash, comparing it with the current minimum in its bucket. This now requires $n$
+random memory accesses, and $O(s \log s)$ writes.
+On the other hand, L1 cache can hold 4096 such values, and adjacent iterations
+can be mostly executed in parallel, so it may not be too bad.
+
+*** Densification strategies
+A drawback of this method is that some buckets can be empty
+when $n$ not sufficiently larger than $s$. A
+number of /densification/ strategies have been proposed that ensure these
+buckets do not accidentally compare as equal, by filling them with k-mers from a
+different bucket.
+
+(Side note: I'm not convinced this densification matters all that much in
+practice. Usually when sketching, $n\gg s$, and only very few buckets should
+remain empty?)
+
+*Rotation.* A first option is to replace the value of an empty bucket by the
+(rotationally) next non-empty bucket [cite:@densifying-oph].
+
+*Random rotation direction.* Instead of always picking the value of the next
+bucket, we can also choose between the previous and next bucket, via some fixed
+random variable $q_i\in\{0,1\}$ that indicates the chosen direction [cite:@improved-densification].
+
+Still, for very sparse data the schemes above provide bad variance when there are long runs
+of empty buckets.
+
+*Optimal densification.* A better solution is that every empty bucket $i$ copies
+its value from an independent non-empty bucket $j$. This can be done using a
+hash function $h_i : \mathbb N \to \{0,\dots,s-1\}$ that is iterated until a
+non-empty bucket is found [cite:@optimal-densification].
+
+*Fast densification.* It turns out the ``optimal'' densification strategy can be
+improved by using a slightly different algorithm. Instead of /pulling/ values
+from filled buckets to empty bucket, filled buckets can /push/ values into
+empty buckets [cite:@fast-densification]. The authors shown that $s\lg s$ /rounds/ of pushing values is
+sufficient.
+
+*Multiple rounds.* All the methods so far suffer when, say, all k-mers hash to
+the same (or only very few) buckets. A solution is to use multiple hash
+functions [cite:@fast-sketching]. As long as there are empty buckets, we do up
+to $s$ rounds of re-hashing the input with a new hash $h_i$. This is
+sufficiently fast in expectation, since it's exceedingly rare to have empty buckets.
+If there are still empty buckets, we fall back to $s$ hashes $h'_i$, the $i$th
+of which maps /all/ values into bucket $i$, so that it is guaranteed each bucket
+will eventually be non-empty.
+
+*SuperMinHash* does conceptually the same as the scheme above, but ensures that
+over the first $s$ rounds, every element is mapped to exactly once to each
+bucket [cite:@superminhash]. This is done by explicitly contructing a permutation to control the bucket
+each element is mapped to in each round. However, this has expected runtime $O(n + s
+\log^2 s)$.
+
+*ProbMinHash* improves over SuperMinHash by tracking for each bucket the best
+value seen so far, and ensuring that for each element, the hash-values for each
+bucket are generated in increasing order [cite:@probminhash]. That way, the insertion of an element
+can be stopped early. It also provides a number of different algorithms for both
+unweighted and weighted sketching.
+
+*Skipping empty buckets (new?).* One other option could be to detect when both
+$A$ and $B$ have an empty bucket (i.e., when both store =u32::MAX=),
+and then simply skip such buckets. My feeling
+is that this should give unbiased results.
+
+
+
+** Mod-bucket hash (new?)
+A drawback of bucket-hash is that computing it requires $s$ ``independent''
+minima. It's not quite as bad as computing $s$ hash functions, but it's somewhat
+involved to compute (using SIMD instructions) whether an element is small within its bucket.
+
+To fix this, we change the way we partition the data into buckets. Instead of
+linearly, we can split by the remainder modulo $s$. That way, all selected
+elements will be small. In fact, the largest element will be around $T=O(s \log
+s)$, and so we can pre-filter for elements up to $2T$ (dashed line, again followed by doubling as long as needed).
+
+#+attr_html: :class inset medium
+[[file:mod.svg]]
+
+*Algorithm (new).*
+To implement this efficiently, we can again collect small elements via a
+branchless SIMD implementation. Then we simply make a pass over those elements
+and update the minimum of each bucket.
+
+A drawback is that there could possibly be empty buckets in unlucky cases.
+In that case, the threshold would be doubled until it reaches $2^{32}$, and the
+pre-filter step becomes useless. But this should hopefully be rare.
+
+** TODO SetSketch
+
+[cite/t:@setsketch] seems more complicated and I haven't properly read it yet.
+It incorporates ideas of HyperLogLog into sketching.
+
+
+** Variants
+Instead of hashing all k-mers, it's also possible to only hash the minimizers,
+as done by mashmap [cite:@mashmap] and fastANI [cite:@fastani].
+
+Another variant is to apply the bottom-$s$ sketch to only the k-mers with a hash
+$0\pmod m$ [cite:@minhash].
+
+Another extension is to /weighted/ input sets, e.g.
+[cite:@bagminhash;@probminhash].
+
+
+* $b$-bit MinHash
+So far, we have been storing full 32-bit hash values.
+We typically know the approximate size of the smallest elements, and thus, the
+high bits do not give much information. Thus, we can only store the low $b$ bits
+of each hash value, for example only the bottom 16 bits of each 32 bit value
+[cite:@b-bit-minhash], or even the bottom 1 or 2 bits only. In that case the
+same size has to increase (by e.g. a factor $3$) to ensure the variance is low,
+but overall this then still saves $10\times$ over a 32-bit representation.
+
+Apart from only being smaller, this also allows significantly faster comparison
+of sketches, since less data has to be processed.
+
+To compare arbitrary $b$-bit sketches efficiently, a list of 64 values can be
+transposed and stores as $b$ 64-bit values instead. Then after some xor and
+and/or instructions, a popcount can count the number of equal values.
+
+
+* SimdSketch
+
+SimdSketch currently implements the bottom-$s$ and mod-bucket sketches.
+
+In the implementation, we use the =packed-seq= crate to efficiently iterate over
+8 chunks of a sequence in parallel using SIMD. We reuse parts of the
+=simd-minimizers= crate for efficient ntHashing of the k-mers.
+
+If we have a =u32x8= SIMD element of 8 32-bit hashes, we can compare each
+lane to the threshold $T$. We efficiently append the subset of elements that are
+smaller to a vector using [[https://github.com/lemire/fastmod/blob/master/include/fastmod.h][a technique of Daniel Lemire]].
+
+* Evaluation
+tools:
+- simd-mash bottom/bucket variant
+- bindash-2
+- bindash-rs
+- probminhash
+
+metrics:
+- total sketch size
+- sketch throughput
+- comparison throughput
+
+input:
+- ~1000 few MB bacterial genomes?
+- try both small $s=100$ and large $s=10000$.
+
+* TODO
+- papers
+  - probminhash
+- tools/libs/links:
+  - probminhash: https://github.com/jean-pierreBoth/probminhash
+  - bindash: https://github.com/zhaoxiaofei/bindash
+  - bindash-rs: https://github.com/jianshu93/bindash-rs
+
+- simd-mash issue: https://github.com/RagnarGrootKoerkamp/simd-mash/issues/1#issuecomment-2708628319
+
+
+#+print_bibliography:

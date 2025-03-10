@@ -1,0 +1,3 @@
+export file="figs.ipe":
+    rm -f *.svg
+    grep view {{file}} | grep -o 'name="\w*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -view NAME {{file}} NAME.svg
