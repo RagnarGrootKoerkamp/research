@@ -515,7 +515,6 @@ pub fn search_branchless_prefetch<const L: usize>(&self, q: u32) -> u32 {
     for _ in 0..prefetch_until {
         let jump_to = (q > self.get(idx)) as usize;
         idx = 2 * idx + jump_to;
-        // the extra prefetch is apparently very slow here; why?
         prefetch_index(&self.vals, (1 << L) * idx);
     }
 
