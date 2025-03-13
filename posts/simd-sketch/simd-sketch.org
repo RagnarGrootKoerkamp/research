@@ -1,0 +1,489 @@
+#+title: SimdSketch: a fast bucket sketch
+#+filetags: @survey sketching highlight
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_level_offset: 1
+#+hugo_paired_shortcodes: %notice
+# #+toc: headlines 3
+#+date: <2025-03-09 Sun>
+
+$$
+\newcommand{\sketch}{\mathsf{sketch}}
+$$
+
+This is a small survey on MinHash-based sketching methods, to go along with my
+=simd-sketch= crate ([[https://github.com/RagnarGrootKoerkamp/simd-sketch][github]], [[https://crates.io/crates/simd-sketch][crates.io]], [[https://docs.rs/simd-sketch/latest/simd_sketch/][docs.rs]]). See also [cite/t:@minhash-survey] for a previous
+small survey.
+
+*Motivation.*
+Suppose we have a large number $r$ of sequences of length around $n$, that we want to quickly compare.
+One way to do this is by /sketching/ each genome into a much smaller
+representation, and then doing the $\Theta(r^2)$ comparison only on the sketches.
+
+* Jaccard similarity
+Instead of comparing input sequences directly, we consider them as a /set/ of
+k-mers [cite:@scalable-fingerprinting]. Then, the /Jaccard similarity/ between
+two sets $A$ and $B$ is [cite:@minhash;@minhash-2]
+$$
+\frac{|A\cap B|}{|A\cup B|}.
+$$
+
+Thus, the goal is to estimate the Jaccard similarity via small sketches.
+
+
+* Hash schemes
+
+** MinHash
+The first step is the simple MinHash [cite:@minhash], that hashes all k-mers and selects the
+smallest hash value. The probability (over the random hash function) that sets $A$ and $B$ share the smallest
+k-mer equals the Jaccard similarity.
+
+#+caption: In this and the following figures, the horizontal bar indicates the real number line, and the dots indicate the hashes of the k-mers. The yellow dots are the selected hashes, and their values are shown in a square box. MinHash simply selects the smallest hash.
+#+attr_html: :class inset medium
+[[file:single.svg]]
+
+*Algorithm.* This is simple to compute by using a rolling minimum. On random
+data, we expect the minimum to only update $O(\log n)$ times, so the
+branch-predictor can do a good job and this will be fast in practice.
+
+** $s$-mins sketch
+To better approximate the similarity, we can use multiple ($s=4$ here) hash
+functions, and compute the fraction of hashes for which the minimal hash is
+identical [cite:@size-estimation;@flajolet-martin].
+(Note that other papers also use $k$ or $t$ for the size of the sketch, but I will
+stick to $s$ to not confuse this with the k-mer length.)
+
+#+caption: Here, the $s$-mins sketch uses 4 different hash functions, and samples the smallest value returned by each hash.
+#+attr_html: :class inset medium
+[[file:multiple.svg]]
+
+*Algorithm.* We run the previous algorithm $s$ times, for $O(ns)$ total time.
+
+#+attr_shortcode: note
+#+begin_notice
+There are (at least) five (!!!) papers attributing this method to [cite/t:@minhash] and
+[cite/t:@minhash-2], and then remark that $O(ns)$ is slow.
+As far as I can see, neither of these two papers ever
+considers using more than one hash function. Instead both of them only talk
+about the fast bottom-$s$ sketch discussed below.
+
+As far as I have found, the $s$-mins sketch has never been used for sequence
+similarity sketching. Although it /has/ been used for cardinality estimates [cite:@flajolet-martin].
+#+end_notice
+
+** Bottom-$s$ sketch
+:PROPERTIES:
+:CUSTOM_ID: bottom-s
+:END:
+A problem with using multiple hash functions is that this is slow to evaluate.
+Instead, bottom-hash can be used, where the smallest $s$ values of a /single/ hash
+function are taken [cite:@scalable-fingerprinting;@minhash;@minhash-2;@size-estimation].
+
+The sketch of $A\cup B$ is then given by the smallest $s$ values of the union of
+the sketches of $A$ and $B$, and $|A\cap B|$ is the fraction of those smallest
+$s$ values that are in both $A$ and $B$.
+
+#+caption: The bottom-$s$ sketch samples the $s$ smallest values returned by a single hash function. The dashed line is explained in the text below.
+#+attr_html: :class inset medium
+[[file:bottom.svg]]
+
+#+attr_shortcode: note
+#+begin_notice
+This method is typically attributed to [cite/t:@minhash] and
+[cite/t:@minhash-2], but in fact, as they mention, the idea of sampling the
+bottom $s$ values of a hash already appeared independently a year before in
+[cite/t:@scalable-fingerprinting].
+Compared to that earlier work, the main contribution of [cite/t:@minhash] is the
+formalization of the /resemblance/ and /containment/ metrics, and the formal
+relation to the Jaccard similarity.
+#+end_notice
+
+#+caption: FracMinHash chooses a fixed threshold, and samples all hashes below it.
+#+attr_shortcode: note
+#+begin_notice
+The sketch of $A\cup B$ is /not/ the /total/ number of distinct elements in the
+union of the sketch of $A$ and the sketch of $B$. When $\sketch(A) = [0,2,4,6]$ and
+$\sketch(B)=[1,3,5,6]$, we have $\sketch(A\cup B) = [0,1,2,3]$ (rather than
+$[0,1,2,3,4,5,6]$) and the size of the
+intersection is $0$.
+#+end_notice
+
+*Mash* is a tool that uses this bottom-$s$ sketch, and they introduce the /mash
+distance/ that estimates the mutation rate based on the Jaccard similarity.
+
+*Naive algorithm.* This is where things get interesting.
+The usual/naive approach is to incrementally keep a set of the $s$ smallest
+elements seen so far as a priority queue (max-heap).
+Where the rolling minimum gets a total of $\ln n$ updates (in expectation, on random input), the bottom-$s$
+get $s \ln n$ updates in total [cite:@minhash;@minhash-survey]: the $i$'th element has probability $s / i$
+of being in the bottom-$s$, which sums/integrates to $s \ln n$.
+Each update takes $O(\log s)$ time, for overall complexity $O(n + s\log s \ln n)$.
+
+*Better complexity (new?).*
+We can do better by dropping the priority queue! Currently we do a bunch of 'early' insertions into the heap of elements
+that will later be evicted. Instead, we can estimate the size of the largest
+value as $T=s/n \cdot 2^{32}$ (for 32-bit hashes). Then, we can only insert
+elements up to, say, $2T$ (indicated by the dashed yellow line). If there are a lot of duplicate-kmers,
+this may not be sufficient, and we can double the limit until $s$ distinct
+hashes have been found.
+When there are no/few duplicate k-mers, this runs in $O(n + s \log s)$.
+
+*Faster algorithm (new?).*
+In practice, we can speed this up more: first collect all the values up to
+$2T$, which can be done branchless and using SIMD,
+and then sort those in a separate pass. That way, the first loop over all
+$n$ hashes can be completely branchless. See [[*SimdSketch]] for details.
+
+
+** FracMinHash
+This problem of the unpredictable threshold can also be solved by simply fixing
+the threshold (as the solid yellow line), and then taking however many hashes are below it. This is what
+/fracminhash/ does [cite:@fracminhash].
+
+This is also similar to mod-sketch that simply keeps all values
+$0\pmod m$ for some modulus $m$ [cite:@minhash].
+
+#+attr_html: :class inset medium
+[[file:frac.svg]]
+
+
+** Bucket sketch
+Bottom-$s$-hash and fracminhash have the drawback that computing the similarity between two sketches
+requires a pass of merge-sort, which is hard to make efficient.
+Bucket-hash solves this by splitting the hashes into $s$ buckets and returning
+the smallest hash in each bucket
+[cite:@flajolet-martin;@one-permutation-hashing].
+
+This way, comparing two sketches is again as simple as computing the fraction of
+shared elements in equal positions.
+
+#+caption: The bucket sketch splits the output range of the hash function into $s$ parts, and samples the smallest value in each part.
+#+attr_html: :class inset medium
+[[file:bucket.svg]]
+
+#+attr_shortcode: note
+#+begin_notice
+This scheme was introduced under the name /one permutation hashing/ [cite:@one-permutation-hashing], but I think
+this is a bad name. In particular, the abstract of that paper writes:
+
+#+begin_quote
+Minwise hashing [cite:@minhash] is a standard technique in the context of
+search, for efficiently computing set similarities. [...] A drawback of minwise
+hashing is that it requires a costly preprocessing step, for conducting (e.g.,)
+$s=200\sim 500$ permutations on the data.
+#+end_quote
+However, as far as I can see, [cite/t:@minhash] never considers more than one
+hash function in the first place, and really only talks about bottom-$s$ sketch.
+Indeed, the distinctive property of this /one permutation/ scheme is /not/ the
+fact that it uses only a single permutation, but rather that it uses
+partitions/buckets to extract multiple smallest values.
+
+The earlier paper on $b$-bit MinHash [cite:@b-bit-minhash] makes the
+same mistake.
+#+end_notice
+
+*Algorithm.* This can be implemented by tracking $s$ bucket values, and for each
+hash, comparing it with the current minimum in its bucket. This now requires $n$
+random memory accesses, and $O(s \log s)$ writes.
+On the other hand, L1 cache can hold 4096 such values, and adjacent iterations
+can be mostly executed in parallel, so it may not be too bad.
+
+*** Densification strategies
+A drawback of this method is that some buckets can be empty
+when $n$ not sufficiently larger than $s$. A
+number of /densification/ strategies have been proposed that ensure these
+buckets do not accidentally compare as equal, by filling them with k-mers from a
+different bucket.
+
+(Side note: I'm not convinced this densification matters all that much in
+practice. Usually when sketching, $n\gg s$, and only very few buckets should
+remain empty?)
+
+*Rotation.* A first option is to replace the value of an empty bucket by the
+(rotationally) next non-empty bucket [cite:@densifying-oph].
+
+*Random rotation direction.* Instead of always picking the value of the next
+bucket, we can also choose between the previous and next bucket, via some fixed
+random variable $q_i\in\{0,1\}$ that indicates the chosen direction [cite:@improved-densification].
+
+Still, for very sparse data the schemes above provide bad variance when there are long runs
+of empty buckets.
+
+*Optimal densification.* A better solution is that every empty bucket $i$ copies
+its value from an independent non-empty bucket $j$. This can be done using a
+hash function $h_i : \mathbb N \to \{0,\dots,s-1\}$ that is iterated until a
+non-empty bucket is found [cite:@optimal-densification].
+
+*Fast densification.* It turns out the ''optimal'' densification strategy can be
+improved by using a slightly different algorithm. Instead of /pulling/ values
+from filled buckets to empty bucket, filled buckets can /push/ values into
+empty buckets [cite:@fast-densification]. The authors shown that $\lg s$ /rounds/ of pushing values is
+sufficient, for $s \lg s$ overall time.
+
+*Multiple rounds.* All the methods so far suffer when, say, all k-mers hash to
+the same (or only very few) buckets. A solution is to use multiple hash
+functions [cite:@fast-sketching]. As long as there are empty buckets, we do up
+to $s$ rounds of re-hashing the input with a new hash $h_i$. This is
+sufficiently fast in expectation, since it's exceedingly rare to have empty buckets.
+If there are still empty buckets, we fall back to $s$ hashes $h'_i$, the $i$th
+of which maps /all/ values into bucket $i$, so that it is guaranteed each bucket
+will eventually be non-empty.
+
+*SuperMinHash* does conceptually the same as the scheme above, but ensures that
+over the first $s$ rounds, every element is mapped to exactly once to each
+bucket [cite:@superminhash]. This is done by explicitly contructing a permutation to control the bucket
+each element is mapped to in each round. However, this has expected runtime $O(n + s
+\log^2 s)$.
+
+*ProbMinHash* improves over SuperMinHash by tracking for each bucket the best
+value seen so far, and ensuring that for each element, the hash-values for each
+bucket are generated in increasing order [cite:@probminhash]. That way, the insertion of an element
+can be stopped early. It also provides a number of different algorithms for both
+unweighted and weighted sketching.
+
+*Skipping empty buckets (new?).* One other, much simpler, option could be to detect when both
+$A$ and $B$ have an empty bucket (i.e., when both store =u32::MAX=),
+and then simply skip such buckets. My feeling
+is that this should give unbiased results.
+
+
+
+** Mod-bucket hash (new?)
+A drawback of bucket-hash is that computing it requires $s$ ''independent''
+minima. It's not quite as bad as computing $s$ hash functions, but it's somewhat
+involved to compute (using SIMD instructions) whether an element is small within its bucket.
+
+To fix this, we change the way we partition the data into buckets. Instead of
+linearly, we can split by the remainder modulo $s$. That way, all selected
+elements will be small. In fact, the largest element will be around $T=O(s \log
+s)$, and so we can pre-filter for elements up to $2T$ (dashed line, again followed by doubling as long as needed).
+
+#+attr_html: :class inset medium
+[[file:mod.svg]]
+
+*Algorithm (new).*
+To implement this efficiently, we can again collect small elements via a
+branchless SIMD implementation. Then we simply make a pass over those elements
+and update the minimum of each bucket.
+
+A drawback is that there could possibly be empty buckets in unlucky cases.
+In that case, the threshold would be doubled until it reaches $2^{32}$, and the
+pre-filter step becomes useless. But this should hopefully be rare.
+
+** TODO SetSketch
+
+[cite/t:@setsketch] seems more complicated and I haven't properly read it yet.
+It incorporates ideas of HyperLogLog into sketching. Feel free to reach out to
+give me the summary :)
+
+
+** Variants
+Instead of hashing all k-mers, it's also possible to only hash the minimizers,
+as done by mashmap [cite:@mashmap] and fastANI [cite:@fastani].
+
+Another variant is to apply the bottom-$s$ sketch to only the k-mers with a hash
+$0\bmod m$ [cite:@minhash].
+
+Another extension is to /weighted/ input sets (multisets), e.g.
+[cite/t:@bagminhash;@probminhash], where the number of times a k-mer appears
+affects the similarity.
+
+
+* $b$-bit MinHash
+So far, we have been storing full 32-bit hash values.
+We typically know the approximate size of the smallest elements, and thus, the
+high bits do not give much information. Thus, we can only store the low $b$ bits
+of each hash value [cite:@b-bit-minhash], for example only the bottom 8 bits of
+each 32 bit value,
+or even the bottom 1 or 2 bits only. As we will see, the
+sample size has to increase (by e.g. a factor $3$) to ensure the variance remains low,
+but overall this then still saves $10\times$ over a 32-bit representation.
+
+Apart from only being smaller, this also allows significantly faster comparison
+of sketches, since less data has to be processed.
+
+When $b=1$, simple =popcount= instructions can be used to count the number of
+equal bits in two sketches. When $b\in\{8,16,32\}$, SIMD instructions can be
+used to compare two vectors of integers.
+
+For remaining values like $b\in\{2,4\}$, a list of 64 values can be
+transposed and stored as $b$ 64-bit values instead. Then after some xor and
+and/or instructions, a popcount can again count the number of equal values.
+
+
+* SimdSketch
+
+SimdSketch currently implements the bottom-$s$ and mod-bucket sketches, and
+support $b$-bit hashing for $b\in\{32,16,8, 1\}$. It does not do any kind of densification.
+
+In the implementation, we use the =packed-seq= crate to efficiently iterate over
+8 chunks of a sequence in parallel using SIMD. We reuse parts of the
+=simd-minimizers= crate for efficient ntHashing of the k-mers.
+
+If we have a =u32x8= SIMD element of 8 32-bit hashes, we can compare each
+lane to the threshold $T$. We efficiently append the subset of elements that are
+smaller to a vector using [[https://github.com/lemire/fastmod/blob/master/include/fastmod.h][a technique of Daniel Lemire]].
+
+
+* Evaluation
+** Setup
+*** Tools
+We compare SimdSketch [[https://github.com/zhaoxiaofei/bindash][BinDash]], which implements the bucketed version with
+$b$-bit hashing and optimal densification. It
+also supports multithreading. (The name stands for bin-wise densified minhash.)
+BinDash v2 adds support for additional densification techniques, and uses SIMD
+to speed things up.
+
+We also compare against [[https://github.com/jianshu93/bindash-rs][BinDash-rs]], which wraps the [[https://github.com/jean-pierreBoth/probminhash][probminhash crate]] and
+implements a few of the algorithms of the ProbMinHash paper [cite:@probminhash].
+
+For both BinDash and BinDash-rs, we only use the default densification scheme,
+since in practice (at least for our use-case with $n\gg s$), densification does not matter
+much.
+
+*** Inputs
+We compare tools on 1000 sequences of Streptococcus Pneumoniae, downloaded from
+[[https://zenodo.org/records/4602622][zenodo]] (i.e., the first 1000 sequences in =streptococcus_pneumoniae__01.tar.xz=). Almost
+all of them are close to 2 MB in size, with a few outliers up to 6 MB.
+
+*** Parameters
+We sketch these inputs using the different tools and different methods.
+We vary the size (as in, number of elements) of the sketch as $s\in\{128, 1024,
+8192\}$. We use the bottom-$s$ sketch with $s=65536$ as a baseline for the Jaccard
+similarity, since computing exact k-mer sets is slow.
+The bit-width is $b\in\{32,16,8,1\}$. (TODO: also support $b=4$ and $b=2$.)
+
+For all experiments, we fix $k=31$.
+
+*** Metrics
+We compare methods on a few metrics.
+- Time to sketch all 1000 input sequences.
+- Time for each pairwise comparison, $\binom{1000}2$ in total.
+- The accuracy of the metric, as correlation with the baseline.
+
+# From these, we also infer a crossover point, where the time for $\binom n2$
+# comparisons of sketches starts dominating over the time to sketch the sequences.
+
+We do not compare the size of the sketch in itself, since it shouldn't
+usually be a bottleneck. The main benefit of a small size is faster pairwise comparisons.
+
+Note that we run tools on multiple threads when supported to speed up the
+evaluation, but all numbers are reported as CPU time.
+The CPU is an Intel i7-10750H, with the clock frequency fixed to 2.6 GHz and
+hyperthreading disabled.
+
+** Raw results
+
+#+caption: Raw results when running on $n=1000$ bacterial genomes that are each around 2 MB, for a total of 2 GB, with $k=31$.
+#+caption: The correlation is between the computed distances, and the distances computed by a bottom-$s$ sketch with $s=65536$.
+| Tool       | Sketch type | size $s$ | $b$-bits | Sketching (s) | Distances (s) | Correlation |
+|------------+-------------+----------+----------+---------------+---------------+-------------|
+| BinDash    | bottom      |      128 |       64 |         118.0 |         0.530 |      0.9567 |
+| BinDash    | bottom      |     1024 |       64 |         121.2 |         3.780 |      0.9911 |
+| BinDash    | bottom      |     8192 |       64 |         146.9 |        32.780 |      0.9946 |
+| SimdSketch | bottom      |      128 |       32 |           3.8 |         0.243 |      0.9651 |
+| SimdSketch | bottom      |     1024 |       32 |           3.8 |         1.918 |      0.9965 |
+| SimdSketch | bottom      |     8192 |       32 |           4.2 |        15.499 |      0.9993 |
+| BinDash    | bucket      |      128 |        1 |         124.7 |         0.270 |      0.8996 |
+| BinDash    | bucket      |      128 |        8 |         124.7 |         0.250 |      0.9649 |
+| BinDash    | bucket      |      128 |       32 |         124.6 |         0.240 |      0.9650 |
+| BinDash    | bucket      |     1024 |        1 |         125.2 |         0.260 |      0.9864 |
+| BinDash    | bucket      |     1024 |        8 |         124.9 |         0.300 |      0.9959 |
+| BinDash    | bucket      |     1024 |       32 |         125.1 |         0.350 |      0.9959 |
+| BinDash    | bucket      |     8192 |        1 |         126.4 |         0.370 |      0.9978 |
+| BinDash    | bucket      |     8192 |        8 |         126.7 |         0.600 |      0.9994 |
+| BinDash    | bucket      |     8192 |       32 |         127.1 |         1.740 |      0.9994 |
+| BinDash-rs | bucket      |      128 |       32 |         146.4 |         0.246 |      0.9581 |
+| BinDash-rs | bucket      |     1024 |       32 |         145.8 |         0.353 |      0.9929 |
+| BinDash-rs | bucket      |     8192 |       32 |         147.1 |         1.977 |      0.9988 |
+| SimdSketch | bucket      |      128 |        1 |           3.7 |         0.004 |      0.9238 |
+| SimdSketch | bucket      |      128 |        8 |           3.8 |         0.010 |      0.9674 |
+| SimdSketch | bucket      |      128 |       32 |           3.8 |         0.011 |      0.9675 |
+| SimdSketch | bucket      |     1024 |        1 |           3.8 |         0.009 |      0.9860 |
+| SimdSketch | bucket      |     1024 |        8 |           3.8 |         0.051 |      0.9944 |
+| SimdSketch | bucket      |     1024 |       32 |           3.8 |         0.078 |      0.9943 |
+| SimdSketch | bucket      |     8192 |        1 |           4.1 |         0.038 |      0.9976 |
+| SimdSketch | bucket      |     8192 |        8 |           4.1 |         0.360 |      0.9994 |
+| SimdSketch | bucket      |     8192 |       32 |           4.2 |         0.922 |      0.9994 |
+| SimdSketch | bucket      |    16384 |        1 |           4.4 |         0.067 |      0.9990 |
+| SimdSketch | bucket      |    32768 |        1 |           5.1 |         0.131 |      0.9995 |
+
+The table above compares all tools. Some observations:
+- The time for sketching is mostly independent of the input parameters, since
+  the hashing of k-mers is the bottleneck. (Only the size $s=8192$ sketch is
+  slighly slower at times.)
+- SimdSketch is significantly faster with sketching: both the bottom and bucket
+  variant take around 4 s, while BinDash takes at least 118s ($30\times$ slower) and BinDash-rs
+  at least 145 s ($36\times$ slower).
+- Computing distances is faster when $s$ is small, and faster when $b$ is small,
+  since there is simply less data to process.
+- SimdSketch is around $2\times$ faster than BinDash when comparing bottom
+  sketches. But note that this is slow compared to bucket sketches.
+- BinDash-rs has comparable comparison performance to BinDash.
+- SimdSketch is well over $10\times$ faster at comparisons in most cases.
+  For a part, this is likely due to having all sketches in memory, rather than
+  reading them from disk as BinDash does. But BinDash-rs is also fully in
+  memory, and just slower for some reason.
+- For $b$-bit variants, storing only the 8 bottom bits is as good as storing the
+  full 32 bits, and is faster to compare. Using only the bottom 1 bit is faster
+  still (especially for SimdSketch), but correlation goes down, which would have
+  to be compensated by a larger sketch size.
+
+** Correlation
+
+#+caption: (Click to open in a new tab.) Correlation between the similarity reported by each scheme and the $s=65536$ bottom-sketch. Colours indicate the value of $s$, and legends shown the correlation. Note that this compares purely the estimated Jaccard similarity between k-mer sets. Conversions to reporting ANI or mutation rate have been removed. For $b=1$, a correction is applied to correct for the $50\%$ of accidentally matching bits.
+#+attr_html: :class inset large
+[[file:plots/correlation.png][file:./plots/correlation.png]]
+
+
+
+The top row shows the two bottom variants, and BinDash-rs.
+The middle row shows SimdSketch for varying $b$, and the bottom row shows
+BinDash for varying $b$.
+
+Again some observations:
+- Larger $s$ gives better results: the spread of the green points is much less
+  than orange and blue.
+- BinDash and SimdSketch give very similar results for the bucket hash (middle
+  and bottom row), and also very similar to BinDash-rs (top right).
+- $b=8$ (middle column) looks very similar to $b=32$ (left column). $b=1$ is worse.
+- BinDash's bottom sketch (middle top) seems off. It seems to have a bias to
+  reporting too small values, and is off when the similarity is small. I suspect
+  this is due to a bug[fn::Most likely, [[https://github.com/zhaoxiaofei/bindash/blob/71613b921eb9c766b1599def2ea15a8d1e41c933/src/genome.hpp#L158][this loop]] should terminate as soon as
+  $s$ distinct values have been seen, as noted in Section [[#bottom-s]].] in the computation of the Jaccard similarity, but my
+  attempt at fixing it was not successful.
+
+** Comparison speed
+We now look slightly closer at comparing the speed of comparing sketches, versus
+the correlation this gives.
+
+#+caption: Log-log plot comparing the throughput of comparing sketching (in millions per second, larger/more to the right is better) to how close the correlation is to $1$ (more to the top is better). Colours indicate the tool and variant (bottom soft circles, buckets bright crosses). Larger icons correspond to larger sketches (larger $s$). Solid lines connect data points that only differ in the choice of $s$, and dashed lines connect points that only differ in $b$.
+#+attr_html: :class inset large
+[[file:./plots/comparison.svg]]
+
+We see that bottom sketches are significantly slower to compare than bucket sketches.
+BinDash (blue) is slightly faster than BinDash-rs (black), but SimdSketch (red) is significantly
+faster than both.
+
+The highest throughput is obtained when $b=1$ (the rightmost solid line). Larger
+$s$ give better correlation (higher dashed lines / larger crosses).
+Specifically for $b=1$ we added some data points with even larger $s \in
+\{16384, 32768\}$, and we see that these outperform $(b, s)=(8, 8192)$.
+
+* Discussion
+To summarize, SimdSketch is significantly faster than BinDash and BinDash-rs:
+around $30\times$ for sketching with similar parameters, and at least $4\times$
+faster when comparing sketches at equal correlation, by using $b=1$ and increasing $s$.
+
+When $n$ is small (say $\leq 5000$), one should probably use e.g. $s=8192$ and $b=8$, since
+increasing $s$ up to this point barely affects the time needed for sketching, and comparing
+sequences is not a bottleneck in this case. Storing only the last $b=8$ bits has
+nearly no loss in performance compared to storing the full $b=32$ bits, while
+being $2.5\times$ faster.
+
+When $n$ is large (say $\geq 50\ 000$), it pays off to spend slightly ($20\%$)
+more time on the sketching by using $s=32\ 768$ instead, of which we then only
+store the bottom $b=1$ bit of each hash.
+This way, sketches are much smaller, and comparing sketches is $7\times$ faster than before.
+
+#+print_bibliography:
