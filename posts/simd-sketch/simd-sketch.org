@@ -270,13 +270,6 @@ A drawback is that there could possibly be empty buckets in unlucky cases.
 In that case, the threshold would be doubled until it reaches $2^{32}$, and the
 pre-filter step becomes useless. But this should hopefully be rare.
 
-** TODO SetSketch
-
-[cite/t:@setsketch] seems more complicated and I haven't properly read it yet.
-It incorporates ideas of HyperLogLog into sketching. Feel free to reach out to
-give me the summary :)
-
-
 ** Variants
 Instead of hashing all k-mers, it's also possible to only hash the minimizers,
 as done by mashmap [cite:@mashmap] and fastANI [cite:@fastani].
@@ -288,6 +281,33 @@ Another extension is to /weighted/ input sets (multisets), e.g.
 [cite/t:@bagminhash;@probminhash], where the number of times a k-mer appears
 affects the similarity.
 
+** TODO Further tools
+
+*Setsketch* [cite:@setsketch] seems more complicated and I haven't properly read it yet.
+It incorporates ideas of HyperLogLog into sketching. Feel free to reach out to
+give me the summary :)
+
+*HyperMinHash* [cite:@hyperminhash] (side note: this really is an excellent paper) combines techniques of HyperLogLog
+counters to achieve sketches with buckets of size $O(\log \log n)$, rather than
+$O(\log n)$. It still allows merging sketches and estimating cardinalities, which $b$-bit compression (see
+below) does not. The basic idea is that the probability that the minimum of a
+set is more likely to be small rather than large. If the minimum is large,
+the probability that the next-smallest number is only slightly larger is small,
+and thus, it is sufficient to only store the high order bits of each large
+number.  Specifically, for each bucket one can use a floating point encoding
+with a 6-bit exponent and a 4-bit mantissa.
+
+HyperMinHash is implemented in python in a corresponding [[https://github.com/yunwilliamyu/hyperminhash][github repo]].
+A Go port is [[https://github.com/axiomhq/hyperminhash][here (github)]] (called HyperMinSketch), and a Rust library based on that is
+[[https://github.com/lukaslueg/hyperminhash][here (github)]], which serves as the bases for a binary application, [[https://github.com/jianshu93/hypermash][HyperMash (github)]].
+(The go port was also ported back to [[https://github.com/mbrg/py-hyperminhash][python (github)]].)
+
+*Sourmash* [cite:@sourmash] is a software package that implements FracMinHash.
+
+*Dashing* ([[https://github.com/dnbaker/dashing][v1, github]], [[https://github.com/dnbaker/dashing2][v2, github]]) [cite:@dashing;@dashing-2] is based directly on HyperLogLog counters as well.
+To me, the only difference in the sketch compared to HyperMinHash mentioned above seems to be
+that it only stores the exponent part, and drops the mantissa.
+The authors do cite the HyperMinHash paper, but never explicitly compare against it.
 
 * $b$-bit MinHash
 So far, we have been storing full 32-bit hash values.
@@ -301,6 +321,9 @@ but overall this then still saves $10\times$ over a 32-bit representation.
 
 Apart from only being smaller, this also allows significantly faster comparison
 of sketches, since less data has to be processed.
+
+A drawback is that after compression to the bottom $b$ bits, sketches can not be
+merged, since there is no way to compare the missing high-order bits.
 
 When $b=1$, simple =popcount= instructions can be used to count the number of
 equal bits in two sketches. When $b\in\{8,16,32\}$, SIMD instructions can be
@@ -328,13 +351,14 @@ smaller to a vector using [[https://github.com/lemire/fastmod/blob/master/includ
 * Evaluation
 ** Setup
 *** Tools
-We compare SimdSketch [[https://github.com/zhaoxiaofei/bindash][BinDash]], which implements the bucketed version with
+We compare SimdSketch [[https://github.com/zhaoxiaofei/bindash][BinDash]] [cite:@bindash;@gsearch], which implements the
+bucketed version with
 $b$-bit hashing and optimal densification. It
 also supports multithreading. (The name stands for bin-wise densified minhash.)
 BinDash v2 adds support for additional densification techniques, and uses SIMD
 to speed things up.
 
-We also compare against [[https://github.com/jianshu93/bindash-rs][BinDash-rs]], which wraps the [[https://github.com/jean-pierreBoth/probminhash][probminhash crate]] and
+We also compare against [[https://github.com/jianshu93/bindash-rs][BinDash-rs]] [cite:@bindash-2], which wraps the [[https://github.com/jean-pierreBoth/probminhash][probminhash crate]] and
 implements a few of the algorithms of the ProbMinHash paper [cite:@probminhash].
 
 For both BinDash and BinDash-rs, we only use the default densification scheme,
