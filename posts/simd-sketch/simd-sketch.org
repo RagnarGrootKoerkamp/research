@@ -15,10 +15,20 @@ This is a small survey on MinHash-based sketching methods, to go along with my
 =simd-sketch= crate ([[https://github.com/RagnarGrootKoerkamp/simd-sketch][github]], [[https://crates.io/crates/simd-sketch][crates.io]], [[https://docs.rs/simd-sketch/latest/simd_sketch/][docs.rs]]). See also [cite/t:@minhash-survey] for a previous
 small survey.
 
+*Goal.* SimdSketch should be *fast*. It is and should remain a conceptually
+simple tool, that prefers fast implementations of simple ideas over complex ideas.
+For now, it works well for the simple case of relatively high identity
+sequences. I may implement more algorithmic variants, but also the API should
+remain concise.
+
 *Motivation.*
 Suppose we have a large number $r$ of sequences of length around $n$, that we want to quickly compare.
 One way to do this is by /sketching/ each genome into a much smaller
 representation, and then doing the $\Theta(r^2)$ comparison only on the sketches.
+
+*Acknowledgements.*
+This work was inspired by conversations with Karel Břinda, and improved by
+[[https://github.com/RagnarGrootKoerkamp/simd-sketch/issues/1#issuecomment-2723568553][feedback]] from Jianshu Zhao.
 
 * Jaccard similarity
 Instead of comparing input sequences directly, we consider them as a /set/ of
@@ -499,15 +509,25 @@ To summarize, SimdSketch is significantly faster than BinDash and BinDash-rs:
 around $30\times$ for sketching with similar parameters, and at least $4\times$
 faster when comparing sketches at equal correlation, by using $b=1$ and increasing $s$.
 
-When $n$ is small (say $\leq 5000$), one should probably use e.g. $s=8192$ and $b=8$, since
+When the number of sequences $r$ is small (say $\leq 5000$), one should probably use e.g. $s=8192$ and $b=8$, since
 increasing $s$ up to this point barely affects the time needed for sketching, and comparing
 sequences is not a bottleneck in this case. Storing only the last $b=8$ bits has
 nearly no loss in performance compared to storing the full $b=32$ bits, while
 being $2.5\times$ faster.
 
-When $n$ is large (say $\geq 50\ 000$), it pays off to spend slightly ($20\%$)
+When $r$ is large (say $\geq 50\ 000$), it pays off to spend slightly ($20\%$)
 more time on the sketching by using $s=32\ 768$ instead, of which we then only
 store the bottom $b=1$ bit of each hash.
-This way, sketches are much smaller, and comparing sketches is $7\times$ faster than before.
+This way, sketches are much smaller, and comparing sketches is $4\times$ faster than before.
+
+* TODO / Future work
+- Implement HyperMinSketch, basically storing the exponent and the high $b$ bits of the mantissa of each hash,
+  rather than the low $b$ bits.
+- Implement some densification strategies, just for testing.
+- Implement the 'skip' densification strategy by storing a bit-vector of empty buckets.
+- Benchmark on some low-identity data where the Jaccard similarity is as low as 0.001.
+- Compare against dashing and/or HyperMinHash?
+- Visualize the densification strategies.
+- Visualize the 'reduction' strategies ($b$-bit sketch and HyperMinHash).
 
 #+print_bibliography:
