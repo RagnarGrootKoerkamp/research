@@ -71,14 +71,18 @@ stick to $s$ to not confuse this with the k-mer length.)
 
 #+attr_shortcode: note
 #+begin_notice
-There are (at least) five (!!!) papers attributing this method to [cite/t:@minhash] and
+There are multiple papers attributing this method to [cite/t:@minhash] and
 [cite/t:@minhash-2], and then remark that $O(ns)$ is slow.
-As far as I can see, neither of these two papers ever
+Neither of these two papers ever
 considers using more than one hash function. Instead both of them only talk
-about the fast bottom-$s$ sketch discussed below.
+about the fast bottom-$s$ sketch discussed below, that is much faster.
 
-As far as I have found, the $s$-mins sketch has never been used for sequence
-similarity sketching. Although it /has/ been used for cardinality estimates [cite:@flajolet-martin].
+Instead, using multiple hashes first appeared in [cite/t:@minwise-independent-stoc]
+and the following journal paper [cite/t:@minwise-independent].
+
+Still, I am not yet aware of a bioinformatics tool actually implementing the
+$s$-mins sketch. Although it /has/ been used for cardinality estimates
+[cite:@flajolet-martin].
 #+end_notice
 
 ** Bottom-$s$ sketch
@@ -177,19 +181,16 @@ This scheme was introduced under the name /one permutation hashing/ [cite:@one-p
 this is a bad name. In particular, the abstract of that paper writes:
 
 #+begin_quote
-Minwise hashing [cite:@minhash] is a standard technique in the context of
+Minwise hashing [cite:@minwise-independent-stoc;@minhash-2] is a standard technique in the context of
 search, for efficiently computing set similarities. [...] A drawback of minwise
 hashing is that it requires a costly preprocessing step, for conducting (e.g.,)
 $s=200\sim 500$ permutations on the data.
 #+end_quote
-However, as far as I can see, [cite/t:@minhash] never considers more than one
-hash function in the first place, and really only talks about bottom-$s$ sketch.
+Indeed, the first cited paper introduces the $s$-mins sketch, but the
+bottom-$s$ sketch already uses a single hash function and is much faster to compute.
 Indeed, the distinctive property of this /one permutation/ scheme is /not/ the
-fact that it uses only a single permutation, but rather that it uses
+fact that it uses only a single permutation/hash, but rather that it uses
 partitions/buckets to extract multiple smallest values.
-
-The earlier paper on $b$-bit MinHash [cite:@b-bit-minhash] makes the
-same mistake.
 #+end_notice
 
 *Algorithm.* This can be implemented by tracking $s$ bucket values, and for each
