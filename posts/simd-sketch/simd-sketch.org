@@ -50,7 +50,7 @@ k-mer equals the Jaccard similarity.
 
 #+caption: In this and the following figures, the horizontal bar indicates the real number line, and the dots indicate the hashes of the k-mers. The yellow dots are the selected hashes, and their values are shown in a square box. MinHash simply selects the smallest hash.
 #+attr_html: :class inset medium
-[[file:single.svg]]
+[[file:hash-single.svg]]
 
 *Algorithm.* This is simple to compute by using a rolling minimum. On random
 data, we expect the minimum to only update $O(\log n)$ times, so the
@@ -65,7 +65,7 @@ stick to $s$ to not confuse this with the k-mer length.)
 
 #+caption: Here, the $s$-mins sketch uses 4 different hash functions, and samples the smallest value returned by each hash.
 #+attr_html: :class inset medium
-[[file:multiple.svg]]
+[[file:hash-multiple.svg]]
 
 *Algorithm.* We run the previous algorithm $s$ times, for $O(ns)$ total time.
 
@@ -95,7 +95,7 @@ $s$ values that are in both $A$ and $B$.
 
 #+caption: The bottom-$s$ sketch samples the $s$ smallest values returned by a single hash function. The dashed line is explained in the text below.
 #+attr_html: :class inset medium
-[[file:bottom.svg]]
+[[file:hash-bottom.svg]]
 
 #+attr_shortcode: note
 #+begin_notice
@@ -154,7 +154,7 @@ This is also similar to mod-sketch that simply keeps all values
 $0\pmod m$ for some modulus $m$ [cite:@minhash].
 
 #+attr_html: :class inset medium
-[[file:frac.svg]]
+[[file:hash-frac.svg]]
 
 
 ** Bucket sketch
@@ -169,7 +169,7 @@ shared elements in equal positions.
 
 #+caption: The bucket sketch splits the output range of the hash function into $s$ parts, and samples the smallest value in each part.
 #+attr_html: :class inset medium
-[[file:bucket.svg]]
+[[file:hash-bucket.svg]]
 
 #+attr_shortcode: note
 #+begin_notice
@@ -205,16 +205,29 @@ number of /densification/ strategies have been proposed that ensure these
 buckets do not accidentally compare as equal, by filling them with k-mers from a
 different bucket.
 
+#+caption: Some buckets may be empty. What to do in that case? By default, we would simply store =u32::MAX=.
+#+attr_html: :class inset medium
+[[file:densify-none.svg]]
+
 (Side note: I'm not convinced this densification matters all that much in
 practice. Usually when sketching, $n\gg s$, and only very few buckets should
 remain empty?)
 
+
 *Rotation.* A first option is to replace the value of an empty bucket by the
 (rotationally) next non-empty bucket [cite:@densifying-oph].
+
+#+caption: Copying the value from the first non-empty right neighbour.
+#+attr_html: :class inset medium
+[[file:densify-right.svg]]
 
 *Random rotation direction.* Instead of always picking the value of the next
 bucket, we can also choose between the previous and next bucket, via some fixed
 random variable $q_i\in\{0,1\}$ that indicates the chosen direction [cite:@improved-densification].
+
+#+caption: Copying the value from either the left or right neighbour, determined by a pseudorandom hash of $i$.
+#+attr_html: :class inset medium
+[[file:densify-lr.svg]]
 
 Still, for very sparse data the schemes above provide bad variance when there are long runs
 of empty buckets.
@@ -224,11 +237,19 @@ its value from an independent non-empty bucket $j$. This can be done using a
 hash function $h_i : \mathbb N \to \{0,\dots,s-1\}$ that is iterated until a
 non-empty bucket is found [cite:@optimal-densification].
 
+#+caption: Optimal densification removes the correlation between adjacent empty buckets by letting each bucket have its own search (the dashed arrows) for a non-empty bucket to pull from.
+#+attr_html: :class inset medium
+[[file:densify-optimal.svg]]
+
 *Fast densification.* It turns out the ''optimal'' densification strategy can be
 improved by using a slightly different algorithm. Instead of /pulling/ values
 from filled buckets to empty bucket, filled buckets can /push/ values into
 empty buckets [cite:@fast-densification]. The authors shown that $\lg s$ /rounds/ of pushing values is
 sufficient, for $s \lg s$ overall time.
+
+#+caption: When there are only very few filled buckets, searching for one can be slow. In that case, it's faster to push from filled buckets to empty buckets: each bucket tries copying its value to empty buckets util all are filled.
+#+attr_html: :class inset medium
+[[file:densify-push.svg]]
 
 *Multiple rounds.* All the methods so far suffer when, say, all k-mers hash to
 the same (or only very few) buckets. A solution is to use multiple hash
@@ -239,9 +260,13 @@ If there are still empty buckets, we fall back to $s$ hashes $h'_i$, the $i$th
 of which maps /all/ values into bucket $i$, so that it is guaranteed each bucket
 will eventually be non-empty.
 
+#+caption: Still all these methods have high variance, since they only consider the set of bucket-minimal hashes. Instead, we can use multiple hash functions to fill non-empty buckets.
+#+attr_html: :class inset medium
+[[file:densify-rounds.svg]]
+
 *SuperMinHash* does conceptually the same as the scheme above, but ensures that
 over the first $s$ rounds, every element is mapped to exactly once to each
-bucket [cite:@superminhash]. This is done by explicitly contructing a permutation to control the bucket
+bucket [cite:@superminhash]. This is done by explicitly constructing a permutation to control the bucket
 each element is mapped to in each round. However, this has expected runtime $O(n + s
 \log^2 s)$.
 
@@ -256,6 +281,9 @@ $A$ and $B$ have an empty bucket (i.e., when both store =u32::MAX=),
 and then simply skip such buckets. My feeling
 is that this should give unbiased results.
 
+#+caption: Instead, we can also store a bitmask that indicates the empty buckets.
+#+attr_html: :class inset medium
+[[file:densify-skip.svg]]
 
 
 ** Mod-bucket hash (new?)
@@ -269,7 +297,7 @@ elements will be small. In fact, the largest element will be around $T=O(s \log
 s)$, and so we can pre-filter for elements up to $2T$ (dashed line, again followed by doubling as long as needed).
 
 #+attr_html: :class inset medium
-[[file:mod.svg]]
+[[file:hash-mod.svg]]
 
 *Algorithm (new).*
 To implement this efficiently, we can again collect small elements via a
@@ -312,6 +340,16 @@ A Go port is [[https://github.com/axiomhq/hyperminhash][here (github)]] (called 
 [[https://github.com/lukaslueg/hyperminhash][here (github)]], which serves as the bases for a binary application, [[https://github.com/jianshu93/hypermash][HyperMash (github)]].
 (The go port was also ported back to [[https://github.com/mbrg/py-hyperminhash][python (github)]].)
 
+#+caption: HyperMinHash uses the highest bits of a hash (black) to determine the bucket. It then stores the remainder of the hash in floating point/exponential notation: first the /number/ of leading zeros (dashed arrow, the exponent), and then a few bits following the leading one (solid yellow line, the mantissa).
+#+attr_html: :class inset medium
+[[file:bits-hyper.svg]]
+
+
+#+caption: The same as before, but with mod-buckets: the low $b$ bits are used to determine the bucket, and the value of remaining higher bits is encoded.
+#+attr_html: :class inset medium
+[[file:bits-mod-hyper.svg]]
+
+
 *Sourmash* [cite:@sourmash] is a software package that implements FracMinHash.
 
 *Dashing* ([[https://github.com/dnbaker/dashing][v1, github]], [[https://github.com/dnbaker/dashing2][v2, github]]) [cite:@dashing;@dashing-2] is based directly on HyperLogLog counters as well.
@@ -328,6 +366,15 @@ each 32 bit value,
 or even the bottom 1 or 2 bits only. As we will see, the
 sample size has to increase (by e.g. a factor $3$) to ensure the variance remains low,
 but overall this then still saves $10\times$ over a 32-bit representation.
+
+#+caption: We can use the highest bits (black) to determine the bucket where the hash goes, and the lowest $b$ bits (yellow) to determine the value stored in the bucket.
+#+attr_html: :class inset medium
+[[file:bits-bucket.svg]]
+
+
+#+caption: The same as before, but with mod-buckets we use the lowest bits to determine the bucket and we store the $b$ bits just above that.
+#+attr_html: :class inset medium
+[[file:bits-mod-bucket.svg]]
 
 Apart from only being smaller, this also allows significantly faster comparison
 of sketches, since less data has to be processed.
@@ -527,7 +574,5 @@ This way, sketches are much smaller, and comparing sketches is $4\times$ faster 
 - Implement the 'skip' densification strategy by storing a bit-vector of empty buckets.
 - Benchmark on some low-identity data where the Jaccard similarity is as low as 0.001.
 - Compare against dashing and/or HyperMinHash?
-- Visualize the densification strategies.
-- Visualize the 'reduction' strategies ($b$-bit sketch and HyperMinHash).
 
 #+print_bibliography:
