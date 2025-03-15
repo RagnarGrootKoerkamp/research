@@ -199,8 +199,116 @@ random memory accesses, and $O(s \log s)$ writes.
 On the other hand, L1 cache can hold 4096 such values, and adjacent iterations
 can be mostly executed in parallel, so it may not be too bad.
 
-*** Densification strategies
-A drawback of this method is that some buckets can be empty
+
+
+** Mod-bucket hash (new?)
+A drawback of bucket-hash is that computing it requires $s$ ''independent''
+minima. It's not quite as bad as computing $s$ hash functions, but it's somewhat
+involved to compute (using SIMD instructions) whether an element is small within its bucket.
+
+To fix this, we change the way we partition the data into buckets. Instead of
+linearly, we can split by the remainder modulo $s$. That way, all selected
+elements will be small. In fact, the largest element will be around $T=O(s \log
+s)$, and so we can pre-filter for elements up to $2T$ (dashed line, again followed by doubling as long as needed).
+
+#+attr_html: :class inset medium
+[[file:hash-mod.svg]]
+
+*Algorithm (new).*
+To implement this efficiently, we can again collect small elements via a
+branchless SIMD implementation. Then we simply make a pass over those elements
+and update the minimum of each bucket.
+
+A drawback is that there could possibly be empty buckets in unlucky cases.
+In that case, the threshold would be doubled until it reaches $2^{32}$, and the
+pre-filter step becomes useless. But this should hopefully be rare.
+
+** Variants
+Instead of hashing all k-mers, it's also possible to only hash the minimizers,
+as done by mashmap [cite:@mashmap] and fastANI [cite:@fastani].
+
+Another variant is to apply the bottom-$s$ sketch to only the k-mers with a hash
+$0\bmod m$ [cite:@minhash].
+
+Another extension is to /weighted/ input sets (multisets), e.g.
+[cite/t:@bagminhash;@probminhash], where the number of times a k-mer appears
+affects the similarity.
+
+* Compressing sketches
+
+** $b$-bit hashing
+So far, we have been storing full 32-bit hash values.
+We typically know the approximate size of the smallest elements, and thus, the
+high bits do not give much information. Thus, we can only store the low $b$ bits
+of each hash value [cite:@b-bit-minhash], for example only the bottom 8 bits of
+each 32 bit value,
+or even the bottom 1 or 2 bits only. As we will see, the
+sample size has to increase (by e.g. a factor $3$) to ensure the variance remains low,
+but overall this then still saves $10\times$ over a 32-bit representation.
+
+#+caption: We can use the highest bits (black) to determine the bucket where the hash goes, and the lowest $b$ bits (yellow) to determine the value stored in the bucket.
+#+attr_html: :class inset medium
+[[file:bits-bucket.svg]]
+
+
+#+caption: The same as before, but with mod-buckets we use the lowest bits to determine the bucket and we store the $b$ bits just above that.
+#+attr_html: :class inset medium
+[[file:bits-mod-bucket.svg]]
+
+Apart from only being smaller, this also allows significantly faster comparison
+of sketches, since less data has to be processed.
+
+A drawback is that after compression to the bottom $b$ bits, sketches can not be
+merged, since there is no way to compare the missing high-order bits.
+
+When $b=1$, simple =popcount= instructions can be used to count the number of
+equal bits in two sketches. When $b\in\{8,16,32\}$, SIMD instructions can be
+used to compare two vectors of integers.
+
+For remaining values like $b\in\{2,4\}$, a list of 64 values can be
+transposed and stored as $b$ 64-bit values instead. Then after some xor and
+and/or instructions, a popcount can again count the number of equal values.
+
+
+*** Accounting for collisions
+When $b=1$, we expect half the bucket to match randomly.
+Similarly, when $b=8$ we expect matches for $1/256$ of the buckets.
+
+Suppose the Jaccard similarity is $x$. Then the probability that a bucket has
+matching values in two sketches is
+$$x' := x + (1-x) \cdot 2^{-b}.$$
+We measure $x'$, and would like to compute $x$, so we invert this:
+$$x = (x' - 2^{-b}) / (1-2^{-b}) = (2^b \cdot x - 1) / ( 2^b - 1).$$
+
+
+** HyperMinHash
+HyperMinHash [cite:@hyperminhash] (side note: this really is an excellent paper) combines techniques of HyperLogLog
+counters to achieve sketches with buckets of size $O(\log \log n)$, rather than
+$O(\log n)$. It still allows merging sketches and estimating cardinalities, which $b$-bit compression (see
+below) does not. The basic idea is that the probability that the minimum of a
+set is more likely to be small rather than large. If the minimum is large,
+the probability that the next-smallest number is only slightly larger is small,
+and thus, it is sufficient to only store the high order bits of each large
+number.  Specifically, for each bucket one can use a floating point encoding
+with a 6-bit exponent and a 4-bit mantissa.
+
+HyperMinHash is implemented in python in a corresponding [[https://github.com/yunwilliamyu/hyperminhash][github repo]].
+A Go port is [[https://github.com/axiomhq/hyperminhash][here (github)]] (called HyperMinSketch), and a Rust library based on that is
+[[https://github.com/lukaslueg/hyperminhash][here (github)]], which serves as the bases for a binary application, [[https://github.com/jianshu93/hypermash][HyperMash (github)]].
+(The go port was also ported back to [[https://github.com/mbrg/py-hyperminhash][python (github)]].)
+
+#+caption: HyperMinHash uses the highest bits of a hash (black) to determine the bucket. It then stores the remainder of the hash in floating point/exponential notation: first the /number/ of leading zeros (dashed arrow, the exponent), and then a few bits following the leading one (solid yellow line, the mantissa).
+#+attr_html: :class inset medium
+[[file:bits-hyper.svg]]
+
+
+#+caption: The same as before, but with mod-buckets: the low $b$ bits are used to determine the bucket, and the value of remaining higher bits is encoded.
+#+attr_html: :class inset medium
+[[file:bits-mod-hyper.svg]]
+
+
+* Densification strategies
+A drawback of bucket sketch is that some buckets can be empty
 when $n$ not sufficiently larger than $s$. A
 number of /densification/ strategies have been proposed that ensure these
 buckets do not accidentally compare as equal, by filling them with k-mers from a
@@ -286,112 +394,6 @@ is that this should give unbiased results.
 #+attr_html: :class inset medium
 [[file:densify-skip.svg]]
 
-
-** Mod-bucket hash (new?)
-A drawback of bucket-hash is that computing it requires $s$ ''independent''
-minima. It's not quite as bad as computing $s$ hash functions, but it's somewhat
-involved to compute (using SIMD instructions) whether an element is small within its bucket.
-
-To fix this, we change the way we partition the data into buckets. Instead of
-linearly, we can split by the remainder modulo $s$. That way, all selected
-elements will be small. In fact, the largest element will be around $T=O(s \log
-s)$, and so we can pre-filter for elements up to $2T$ (dashed line, again followed by doubling as long as needed).
-
-#+attr_html: :class inset medium
-[[file:hash-mod.svg]]
-
-*Algorithm (new).*
-To implement this efficiently, we can again collect small elements via a
-branchless SIMD implementation. Then we simply make a pass over those elements
-and update the minimum of each bucket.
-
-A drawback is that there could possibly be empty buckets in unlucky cases.
-In that case, the threshold would be doubled until it reaches $2^{32}$, and the
-pre-filter step becomes useless. But this should hopefully be rare.
-
-** Variants
-Instead of hashing all k-mers, it's also possible to only hash the minimizers,
-as done by mashmap [cite:@mashmap] and fastANI [cite:@fastani].
-
-Another variant is to apply the bottom-$s$ sketch to only the k-mers with a hash
-$0\bmod m$ [cite:@minhash].
-
-Another extension is to /weighted/ input sets (multisets), e.g.
-[cite/t:@bagminhash;@probminhash], where the number of times a k-mer appears
-affects the similarity.
-
-** TODO Further tools
-
-*Setsketch* [cite:@setsketch] seems more complicated and I haven't properly read it yet.
-It incorporates ideas of HyperLogLog into sketching. Feel free to reach out to
-give me the summary :)
-
-*HyperMinHash* [cite:@hyperminhash] (side note: this really is an excellent paper) combines techniques of HyperLogLog
-counters to achieve sketches with buckets of size $O(\log \log n)$, rather than
-$O(\log n)$. It still allows merging sketches and estimating cardinalities, which $b$-bit compression (see
-below) does not. The basic idea is that the probability that the minimum of a
-set is more likely to be small rather than large. If the minimum is large,
-the probability that the next-smallest number is only slightly larger is small,
-and thus, it is sufficient to only store the high order bits of each large
-number.  Specifically, for each bucket one can use a floating point encoding
-with a 6-bit exponent and a 4-bit mantissa.
-
-HyperMinHash is implemented in python in a corresponding [[https://github.com/yunwilliamyu/hyperminhash][github repo]].
-A Go port is [[https://github.com/axiomhq/hyperminhash][here (github)]] (called HyperMinSketch), and a Rust library based on that is
-[[https://github.com/lukaslueg/hyperminhash][here (github)]], which serves as the bases for a binary application, [[https://github.com/jianshu93/hypermash][HyperMash (github)]].
-(The go port was also ported back to [[https://github.com/mbrg/py-hyperminhash][python (github)]].)
-
-#+caption: HyperMinHash uses the highest bits of a hash (black) to determine the bucket. It then stores the remainder of the hash in floating point/exponential notation: first the /number/ of leading zeros (dashed arrow, the exponent), and then a few bits following the leading one (solid yellow line, the mantissa).
-#+attr_html: :class inset medium
-[[file:bits-hyper.svg]]
-
-
-#+caption: The same as before, but with mod-buckets: the low $b$ bits are used to determine the bucket, and the value of remaining higher bits is encoded.
-#+attr_html: :class inset medium
-[[file:bits-mod-hyper.svg]]
-
-
-*Sourmash* [cite:@sourmash] is a software package that implements FracMinHash.
-
-*Dashing* ([[https://github.com/dnbaker/dashing][v1, github]], [[https://github.com/dnbaker/dashing2][v2, github]]) [cite:@dashing;@dashing-2] is based directly on HyperLogLog counters as well.
-To me, the only difference in the sketch compared to HyperMinHash mentioned above seems to be
-that it only stores the exponent part, and drops the mantissa.
-The authors do cite the HyperMinHash paper, but never explicitly compare against it.
-
-* $b$-bit MinHash
-So far, we have been storing full 32-bit hash values.
-We typically know the approximate size of the smallest elements, and thus, the
-high bits do not give much information. Thus, we can only store the low $b$ bits
-of each hash value [cite:@b-bit-minhash], for example only the bottom 8 bits of
-each 32 bit value,
-or even the bottom 1 or 2 bits only. As we will see, the
-sample size has to increase (by e.g. a factor $3$) to ensure the variance remains low,
-but overall this then still saves $10\times$ over a 32-bit representation.
-
-#+caption: We can use the highest bits (black) to determine the bucket where the hash goes, and the lowest $b$ bits (yellow) to determine the value stored in the bucket.
-#+attr_html: :class inset medium
-[[file:bits-bucket.svg]]
-
-
-#+caption: The same as before, but with mod-buckets we use the lowest bits to determine the bucket and we store the $b$ bits just above that.
-#+attr_html: :class inset medium
-[[file:bits-mod-bucket.svg]]
-
-Apart from only being smaller, this also allows significantly faster comparison
-of sketches, since less data has to be processed.
-
-A drawback is that after compression to the bottom $b$ bits, sketches can not be
-merged, since there is no way to compare the missing high-order bits.
-
-When $b=1$, simple =popcount= instructions can be used to count the number of
-equal bits in two sketches. When $b\in\{8,16,32\}$, SIMD instructions can be
-used to compare two vectors of integers.
-
-For remaining values like $b\in\{2,4\}$, a list of 64 values can be
-transposed and stored as $b$ 64-bit values instead. Then after some xor and
-and/or instructions, a popcount can again count the number of equal values.
-
-
 * SimdSketch
 
 SimdSketch currently implements the bottom-$s$ and mod-bucket sketches, and
@@ -409,19 +411,33 @@ smaller to a vector using [[https://github.com/lemire/fastmod/blob/master/includ
 * Evaluation
 ** Setup
 *** Tools
-We compare SimdSketch [[https://github.com/zhaoxiaofei/bindash][BinDash]] [cite:@bindash;@gsearch], which implements the
+We compare SimdSketch [[https://github.com/zhaoxiaofei/bindash][*BinDash*]] [cite:@bindash;@gsearch], which implements the
 bucketed version with
 $b$-bit hashing and optimal densification. It
 also supports multithreading. (The name stands for bin-wise densified minhash.)
 BinDash v2 adds support for additional densification techniques, and uses SIMD
 to speed things up.
 
-We also compare against [[https://github.com/jianshu93/bindash-rs][BinDash-rs]] [cite:@bindash-2], which wraps the [[https://github.com/jean-pierreBoth/probminhash][probminhash crate]] and
+We also compare against [[https://github.com/jianshu93/bindash-rs][*BinDash-rs*]] [cite:@bindash-2], which wraps the [[https://github.com/jean-pierreBoth/probminhash][probminhash crate]] and
 implements a few of the algorithms of the ProbMinHash paper [cite:@probminhash].
 
 For both BinDash and BinDash-rs, we only use the default densification scheme,
 since in practice (at least for our use-case with $n\gg s$), densification does not matter
 much.
+
+Further tools that we do not currently compare against:
+
+*Sourmash* [cite:@sourmash] is a software package that implements FracMinHash.
+
+*Dashing* ([[https://github.com/dnbaker/dashing][v1, github]], [[https://github.com/dnbaker/dashing2][v2, github]]) [cite:@dashing;@dashing-2] is based on HyperLogLog counters.
+To me, the only difference in the sketch compared to HyperMinHash mentioned above seems to be
+that it only stores the exponent part, and drops the mantissa.
+(The authors do cite the HyperMinHash paper, but never explicitly compare
+against it, so I'm not 100% sure.)
+
+*Setsketch* [cite:@setsketch] seems like a more complicated followup on probminhash and I haven't properly read it yet.
+It also incorporates ideas of HyperLogLog into sketching. Feel free to reach out to
+give me the summary :)
 
 *** Inputs
 We compare tools on 1000 sequences of Streptococcus Pneumoniae, downloaded from
@@ -513,7 +529,7 @@ The table above compares all tools. Some observations:
 
 ** Correlation
 
-#+caption: (Click to open in a new tab.) Correlation between the similarity reported by each scheme and the $s=65536$ bottom-sketch. Colours indicate the value of $s$, and legends shown the correlation. Note that this compares purely the estimated Jaccard similarity between k-mer sets. Conversions to reporting ANI or mutation rate have been removed. For $b=1$, a correction is applied to correct for the $50\%$ of accidentally matching bits.
+#+caption: (Click to open in a new tab.) Correlation between the similarity reported by each scheme and the $s=65536$ bottom-sketch. Colours indicate the value of $s$, and legends show the correlation. Note that this compares purely the estimated Jaccard similarity between k-mer sets. Conversions to reporting ANI or mutation rate have been removed.
 #+attr_html: :class inset large
 [[file:plots/correlation.png][file:./plots/correlation.png]]
 
@@ -551,6 +567,66 @@ The highest throughput is obtained when $b=1$ (the rightmost solid line). Larger
 $s$ give better correlation (higher dashed lines / larger crosses).
 Specifically for $b=1$ we added some data points with even larger $s \in
 \{16384, 32768\}$, and we see that these outperform $(b, s)=(8, 8192)$.
+
+** Low-similarity data
+Here we consider a different dataset, with much lower similarities:
+a collection of bacterial genomes (Streptomycetaceae), downloaded using [[https://github.com/pirovc/genome_updater][genome updater]]:
+#+begin_src sh
+./genome_updater.sh -d refseq -T 2062 -M ncbi -f genomic.fna.gz -o output -t 5
+#+end_src
+We use the fist 1072 sequences (of ~11k total). These are around 8Mbp each.
+
+We make a similar plot to before, but now use slightly larger sketch sizes and
+include $b=16$.
+
+#+caption: (Click to open in a new tab.) Log-log plot of correlation between the similarity reported by each scheme and the $s=65536$ bottom-sketch. Colours indicate the value of $s$, and legends show the correlation. Note that this compares purely the estimated Jaccard similarity between k-mer sets. Conversions to reporting ANI or mutation rate have been removed.
+#+attr_html: :class inset large
+[[file:plots/correlation2.png][file:./plots/correlation2.png]]
+
+There is a lot of weird stuff going on here:
+- The SimdSketch bottom sketch has good correlation, as it is benchmarked
+  against itself.
+- SimdSketch bucket sketch:
+  - Good correlation for $b=16$ and $b=32$.
+  - For $b=8$, our bucket sketch is some bias for small similarities. I'm not
+    quite sure what is causing this. It /could/ be that we wrongly correct for the
+    $1/256$ probability of bucket collisions, but I don't think that's the case.
+  - For $b=1$, the results are simply too noisy. But there does not appear to be
+    a bias, unlike for $b=8$.
+- BinDash bottom sketch:
+  - There is again some bias for small similarities.
+    Maybe this is the same bug in BinDash as before, where the merge sort is not
+    stopped early?
+- BinDash-rs also has a similar bias. I'm unsure why.
+- BinDash-rs bucket sketch:
+  - $b=16$ or $b=32$: There really should not be any bias here. I'm so confused
+    why these results differ from SimdSketch.
+  - $b=8$: The bias in the opposite direction (overestimating the similarity) is
+    caused by the lack of correction for colliding buckets.
+  - $b=1$: Again, simply too noisy.
+
+*A bug?* I wonder if there is a mistake in both my bottom and bucket sketch, but that
+would very much surprise me. On the other hand, the BinDash bottom and bucket
+sketches seem to be in agreement with each other as well. Maybe instead I made a
+bug when modifying the code to report Jaccard similarity instead of ANI? But I
+just return the fraction of equal-valued buckets, with the correction applied.
+Or maybe it's because I'm using 32-bit hashes?
+
+*Hypothesis.* For $b=8$, the probability of hash collisions is not actually
+$1/256$, since the distribution of values is not uniform, but rather geometric/exponential.
+This could explain the weird results for $b=8$, but not elsewhere.
+
+As a sanity check, the bottom-$s$ similarity between the $31$-mers of two random
+sequences of length 8 million is around 0.001, while the uncorrected bucket
+similarity is 0.004. After correction, though, that goes down to pretty much 0,
+and sometimes even negative??
+Both these numbers are far off 0.001.
+
+Or maybe the issue is collisions in the 32-bit hashes? We actually expect very
+few (basically no) matches between two random sets of 31-mers, yet this returns 0.001.
+
+To be continued...
+
 
 * Discussion
 To summarize, SimdSketch is significantly faster than BinDash and BinDash-rs:
