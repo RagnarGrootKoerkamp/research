@@ -1,0 +1,289 @@
+#+title: [WIP] Semi-global alignment, mapping, and string searching
+#+filetags: @thesis pairwise-alignment wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2025-03-24 Mon>
+
+In this post, we will look at the problem of /semi-global alignment/, as a next
+step after [[../pairwise-alignment/pairwise-alignment.org][previous]] [[../pairwise-alignment-history/pairwise-alignment-history.org][posts]] on /global alignment/.
+
+In fact, we will quickly see that there is no such thing as ``just'' global
+alignment.
+Rather, there are many variants that have applications in different domains.
+
+Thus, we will survey the /problem/ of semi-global alignment.
+(It seems that this hasn't really been done before.)
+We will briefly mention some existing algorithms and literature, but we'll
+mostly just go ahead and (re)invent some ideas from scratch.
+
+* What is semi-global alignment?
+First: what is /global/ alignment? Answer: finding the edit distance or minimal
+number of mutations between two strings.
+Equivalently, this is the problem of finding a minimal-cost path in the /edit
+graph/ (or /alignment graph/), from the top-left to the bottom-right.
+
+** Global alignment
+
+#+caption: Global alignment goes from top-left (=start) to bot-right (=end).
+#+attr_html: :class inset large
+[[file:global.svg]]
+
+
+** Ends-free alignment
+#+caption: Ends-free alignment as supported by WFA (and Edlib (TODO verify)) can drop some number of chars from either the pattern or the text, as needed.
+#+attr_html: :class inset large
+[[file:ends-free.svg]]
+
+** Semi-global alignment
+- single isolated instance of alignment
+- single result
+- pattern and text of roughly same size
+- Length from 100 to 100k or more
+- eg: pattern was already roughly located in text. Just a final alignment to
+  refine the result.
+#+caption: Semi-global goes from the top-left to bottom-right, but edges along the top and bottom are free.
+#+attr_html: :class inset large
+[[file:semi-global.svg]]
+
+** Text searching
+- find small pattern ($m\leq 100$, or $O(w)$ for word-size $w$) in a long (kB to MB) text.
+- $O(n\lceil m/w\rceil)$ complexity is good enough.
+- Multiple hits possible: 'best hit' doesn't really make sense
+- Return all hits below a fixed threshold
+- eg: search a small string in a file or repository
+- eg: searching tags/barcodes in reads
+#+caption: Text searching goes from the top to the bottom, and can find multiple results.
+#+attr_html: :class inset large
+[[file:search.svg]]
+** Mapping
+- find read (100bp to 50kbp) in a large static reference (MB to GB).
+- Avoid $O(n)$ component in the complexity by indexing the reference
+- Approximate/heuristic methods
+- return all hits below threshold, or those that are close to the best
+- eg: short or long read alignment
+* Algorithms
+** Global alignment
+*** $O(nm)$ NW
+#+caption: $O(nm)$ Needleman-Wunsch algorithm
+#+attr_html: :class inset large
+[[file:global-nm.svg]]
+*** $O(2ns)$ band-doubling: $gap(v_s, u) \leq t$
+#+caption: $O(ns)$ Ukkonen's band-doubling test, or Spouge computation volume.
+#+attr_html: :class inset large
+[[file:global-ns.svg]]
+*** $O(ns)$ band-doubling, improved: $gap(v_s, u) + gap(u, v_t) \leq t$
+#+caption: $O(ns/2)$ Band doubling with gap heuristic
+#+attr_html: :class inset large
+[[file:global-ns-gap.svg]]
+*** $O(ns/2)$ Edlib: $g(u) + gap(u, v_t) \leq t$
+#+caption: $O(ns/2)$ Band doubling with gap heuristic, and using actual distances as Edlib does
+#+attr_html: :class inset large
+[[file:global-ns-g.svg]]
+** Semi-global
+*** $O(nm)$ NW
+#+caption: Filling the entire semi-global matrix
+#+attr_html: :class inset large
+[[file:semi-global-nm.svg]]
+
+*** $O(ns)$
+#+caption: Filling only parts where the total distance can still be $<t$.
+#+attr_html: :class inset large
+[[file:semi-global.ns.svg]]
+*** $O(ns/2)$
+#+caption: Filling only the parts of the matrix where the distnnace $\g(u)$ is below the threshold.
+#+attr_html: :class inset large
+[[file:semi-global-g.svg]]
+** Pattern searching
+*** $O(nm)$ NW
+#+caption: $O(nm)$ pattern search
+#+attr_html: :class inset large
+[[file:search-nm.svg]]
+*** $O(ns)$ doubling
+#+caption: $O(ns)$ pattern search
+#+attr_html: :class inset large
+[[file:search-g.svg]]
+** Mapping
+*** Seed
+#+caption: seeding the map algorightm with k-mer mathces
+#+attr_html: :class inset large
+[[file:map-seed.svg]]
+*** Chain
+#+caption: chaining of seeds
+#+attr_html: :class inset large
+[[file:map-chain.svg]]
+*** Extend
+#+caption: extending seeds into an alignment
+#+attr_html: :class inset large
+[[file:map-extend.svg]]
+*** Naive
+#+caption: simple $O(rnm)$: $O(nm)$ for each of $r$ candidates
+#+attr_html: :class inset large
+[[file:map-nm.svg]]
+*** $O(rms)$
+#+caption: simple $O(rns)$: $O(ns)$ for each of $r$ candidates
+#+attr_html: :class inset large
+[[file:map-ns.svg]]
+* The cost of chaining
+Say we have a match ending in $(i_1, j_1)$ and another match starting in $(i_2,
+j_2)$.
+Set $\Delta_i = i_2-i_1\geq0$ and $\Delta_j=j_2-j_1\geq 0$.
+** max: Anchored edit distance
+Here we pessimistically have to pay for every character not supported by a match:
+$\max(\Delta_i, \Delta_j)$.
+#+caption: anchored-edit distance chaining: max of two deltas, and upper bound on actual distance
+#+attr_html: :class inset medium
+[[file:chain-anchored.svg]]
+** diff: gap-cost
+Here we only pay a lower bound on the cost: $|\Delta_i - \Delta_j|$.
+#+caption: gap-cost: lower bound on distance between diagonals
+#+attr_html: :class inset medium
+[[file:chain-gap.svg]]
+** dist: seed heuristic
+If we are guaranteed to find all seeds of length at least $k$, then we cross $\Delta_i/k$
+seeds without finding a single match, so that there must be at least
+$\Delta_i/k$ errors. For simplicity, we can only consider matches that are
+aligned to $i$ being a multiple of $k$ [cite:@astarpa;@astarix-2].
+
+#+caption: seed-cost: distance between diagonals, always a lower bound on actual distance
+#+attr_html: :class inset medium
+[[file:chain-seed.svg]]
+
+(A /seed/ here is a chunk of $k$ characters of the text/reference, while a
+/match/ is a /seed/ with a matching occurence in the pattern.)
+
+In a way, a match implies that ''alignments that starts here have relative cost strictly below $n'/k$.''
+
+** minimap
+$w/100 \cdot |\Delta_i - \Delta_j| + 0.5\cdot \log_2 |\Delta_i - \Delta_j|$,
+- $w$ is the average length of the seeds/matches.
+- small cost of $w/100$ per char
+- logarithmic cost for some additional concave penalty for small gaps
+- Why $w/100$? Why not $1/w$ which is more equivalent to what the seed heuristic does???
+
+** GCSH: gap-chaining seed heuristic
+- Max of diff and dist
+- transform-theorem:
+  - only chain when cgap<=cseed
+  - only chain when ... formula
+* New: A*Map
+** Text searching
+- Do the full $nm$ matrix
+- Return the bottom row and right column scores, so user can make a decision
+  what to do with this
+- new: $0\leq \alpha\leq 1$ soft-clip cost, generalizing ends-free.
+- new: output format
+- traceback from specific positions on request
+** Mapping
+- build hashmap on chunked k-mers of reference
+- find matches for each pattern
+- transform, radix sort, and then chain using LCP algo
+- say $k=20$, then we have guaranteed matches if divergence $\leq 5\%$.
+- But we want to avoid processing random one-off matches
+- So require at least $10\%$ of the possible matches to be present, for a max
+  divergence of $4.5\%$.
+- Track /dominant/ matches that start a chain of at least length $10\% \cdot
+  m/k$.
+- For each of them, do a semi-global alignment of a slightly buffered region of
+  the text (around length $m + 2\cdot 4.5\%\cdot m$).
+- The alignment can be done using $O(nm)$
+- TODO: Better methods:
+  - $O(ms)$, adapted to semi-global (currently the code only does global)
+  - semi-global version of A*PA
+  - semi-global version of A*PA2
+  - bottom-up match-merging
+
+* Early idea: Bottom-up match-merging (aka BUMMer?)
+One thing that becomes clear with mapping is that we don't quite
+know where exactly to start the semi-global alignments.
+This can be fixed by adding some buffer/padding, but this remains slightly ugly
+and iffy.
+
+Instead, I'm going to attempt to explain a new approach here.
+Some details are still a bit unclear to me on how exactly they'd work, but I
+have good hope it can all be worked out.
+
+** Some previous ideas
+
+Instead, we can use the following approach, which is a natural
+evolution/convergence of a few previous ideas:
+- /pre-pruning/ (or /local-pruning/; I haven't been very consistent with the
+  name)
+
+  The idea here is that a k-mer match gives us information that this seed can be
+  traversed for free. The lack of a match implies cost at least 1.
+  When a match is followed by noise, and thus can not be extended into an
+  alignment of two seeds with cost $<2$, we can discard it, because the promise
+  that there would be a good alignment (ie, relative cost $<1/k$) is not held.
+  - see A*PA2 paper [cite:@astarpa2] ([[file:../../static/papers/astarpa2.pdf][PDF]]) or [[../astarpa2/astarpa2.org][blogpost]]
+- /path-pruning/ ([[file:../speeding-up-astar/speeding-up-astar.org][blogpost]]): if we already know /some/ alignment, which is not
+  necessarily optimal, we can use that to either find a better one or prove
+  optimality:
+  we can find all places at the start of a match where the heuristic is smaller
+  than the actual remaining distance, and remove those matches. Again, these
+  matches ''promise'' that the remainder of the alignment can be done in cost
+  $<1/k$, but we should avoid to over-promise.
+
+  After /path-pruning/ some matches, we run the alignment as usual, until the
+  end of the original path is reached. Either the guessed path is then optimal,
+  or the optimal path will have been found.
+
+- /local-doubling/ ([[../local-doubling/local-doubling.org][blogpost]]): a drawback of path-pruning is that first we must find a
+  path somehow, and then we must run the alignment again with the improved heuristic.
+  /Local-doubling/ attempts to fix this by increasing the band of the alignment
+  locally as needed.
+
+  It gives nice figures, but I never quite got it to work reliably.
+
+** Divide & conquer
+Another common technique for pairwise alignment is Hirschberg's divide & conquer
+approach [cite:@hirschberg75]. This find the distance to the middle column from
+the left and right. There, a splitting point on the optimal alignment is found,
+and we recurse into the two half-sized sub problems.
+
+** Bottom-up match merging (BUMMer)
+Initially, we have a set of many matches, including some spurious ones.
+As we already saw with pre-pruning and path-pruning, if a match covering 1 seed does not into
+an alignment of cost $<2$ covering $2$ seeds, we might as well discard it.
+Then, if it does not extend into an alignment of cost $<4$ covering 4 seeds, we
+can again discard it.
+
+A slightly more principled approach is as follows:
+1. Consider a binary tree on the seeds.
+2. Initially the leafs correspond to a k-mer (seed) of the text, and the matches
+   for that seed.
+3. Then, we go up one level and see if we can merge adjacent matches. If so, we
+   get a new match spanning two seeds, with /margin/ $2$ (because the two
+   matches have cost $0$, which is $2$ below the number of seeds covered).
+
+   Otherwise, it may be possible to extend a match of the left seed to also
+   cover the right seed for cost $1$, creating a match covering the two seeds
+   with margin $1$.
+   Similarly, a right-match might be extended into the left seed.
+4. Because an alignment of $2^{k+1}$ seeds with cost $<2^{k+1}$ must have cost
+   $<2^k$ in either the left or right half, this procedure finds all such
+   $2^{k+1}$-matches by only starting with single k-mer matches.
+5. Eventually we extend our matches into a full alignment of the pattern and
+   we're done.
+
+One core idea here is this: if you have a long run of matches, these build up a
+bunch of margin $a$, that can then be spend by aligning through a region with up
+to $a$ noise. In the end, the complexity will be something like $\sum_a a^2$.
+
+In fact, maybe this ends up exactly similar to A*PA, but faster because it
+doesn't actually do the relatively slow A* bit. But I'm not sure yet; we'll see.
+
+*Tricky bits.* What I haven't figured out yet:
+- We need to efficiently merge matches for consecutive seeds. Maybe a simple
+  lower bound like the seed heuristic (that ignores the $j$ coordinate) is good
+  enough, but it would be interesting to see if we can design some
+  algo/datastructure for efficiently merging matches.
+- Reconstructing traces from output costs: suppose we take a semi global
+  alignment and run it once top-to-bottom and once bottom-to-top. Can we infer
+  from this information the start and end points of all locally-optimal
+  alignment traces?
+
+
+* TODO Benchmarks of simple methods
+
+#+print_bibliography:
