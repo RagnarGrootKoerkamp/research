@@ -3,18 +3,11 @@
 #+HUGO_LEVEL_OFFSET: 1
 #+OPTIONS: ^:{} num:2 H:4
 #+hugo_front_matter_key_replace: author>authors
-#+toc: headlines 3
+# #+toc: headlines 3
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-22 Fri>
 
-#+begin_export html
-This is Chapter 2 of my thesis, to introduce the first part on Pairwise Alignment.
-
----
-#+end_export
-
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 In this chapter, we survey methods for /global pairwise alignment/, which is
 the problem of finding the minimal number of mutations between two genomic sequences.
 
@@ -22,30 +15,17 @@ There is a vast amount of literature on algorithms for pairwise alignment and
 its variants. We start with the classic DP
 algorithm by Needleman and Wunsch and go over a number of improvements, both
 algorithmic and in the implementation.
-We focus on those methods that A*PA and A*PA2 build on.
-#+end_notice
+We focus on those methods that A*PA (\cref{ch:astarpa}) and A*PA2
+(\cref{ch:astarpa2}) build on.
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 This chapter is based on the introductions of the A*PA and A*PA2 papers
 [cite:@astarpa;@astarpa2], and also on unpublished notes on pairwise alignment.
 The A*PA paper has joint first-authorship with Pesho Ivanov, and also the
 unpublished notes are coauthored with Pesho Ivanov.
-#+end_notice
+#+end_attribution
 
-$$
-\newcommand{\g}{g^*}
-\newcommand{\h}{h^*}
-\newcommand{\f}{f^*}
-\newcommand{\cgap}{c_{\mathrm{gap}}}
-\newcommand{\xor}{\ \mathrm{xor}\ }
-\renewcommand{\and}{\ \mathrm{and}\ }
-\renewcommand{\st}[2]{\langle #1, #2\rangle}
-\newcommand{\matches}{\mathcal M}
-\newcommand{\ed}{\operatorname{ed}}
-\renewcommand{\d}{\operatorname{d}}
-\newcommand{\lcp}{\operatorname{LCP}}
-$$
 
 * A Brief History
 The problem of /pairwise alignment/ was originally introduced in genomics in 1970 by
@@ -120,7 +100,7 @@ in a graph. The classic algorithm for this is Dijkstra's algorithm
 [cite:@dijkstra59]. A faster version of it that can use domain-specific
 information is the A* algorithm [cite:@astar-hart67]. It achieves this by using
 a /heuristic/ that estimates the cost of the (remaining) alignment.
-In /A*PA/, we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
+In /A*PA/ (\cref{ch:astarpa}), we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
 starting point and improve it to the /gap-chaining seed heuristic/, similar to
 [cite:@myers-miller-95], and extend it with /inexact matches/. For inputs
 with uniform error rate up to $10\%$, this can estimate the remaining distance
@@ -135,7 +115,7 @@ algorithm, is a relatively cache-inefficient graph algorithm.
 On the other hand, some of the fastest aligners use DP (dynamic programming) with /bitpacking/ to
 very efficiently compute the edit distance between sequences, even though they
 do not have the near-linear scaling of A*PA.
-In /A*PA2/, we
+In /A*PA2/ (\cref{ch:astarpa2}), we
 build a highly optimized aligner.
 It merges the ideas of band-doubling and bit-packing (as already used by Edlib
 [cite:@edlib]) with SIMD and the heuristics developed for A*PA.
@@ -278,7 +258,7 @@ shortest path algorithm,
 which visits states in order of increasing distance, can also be applied here [cite:@dijkstra59]. This
 does require that all edges have non-negative weights.
 An extension of Dijkstra's algorithm is A* [cite:@astar-hart67], which visits
-states in order of increasing ''anticipated total distance''.
+states in order of increasing ``anticipated total distance''.
 
 * Alignment types
 
@@ -685,7 +665,7 @@ for the problem of sequence-to-graph alignment. This heuristic
 splits the sequence $A$ into disjoint k-mers, and uses that at least one edit is
 needed for each remaining k-mer that is not present in sequence $B$.
 
-In A*PA [cite:@astarpa] we will improve this into the
+In A*PA [cite:@astarpa] (\cref{ch:astarpa}) we will improve this into the
 /gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
 alignment when the divergence is sufficient low.
 
@@ -720,7 +700,7 @@ and further [cite:@spouge89 p. 4]:
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-In A*PA2 [cite:@astarpa2],
+In A*PA2 [cite:@astarpa2] (\cref{ch:astarpa2}),
 we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
@@ -997,17 +977,8 @@ complexity of $O(ns/w)$.
 The supplement of
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative scheme for edit
 distance based on a different encoding of the $\{-1,0,+1\}$ values, that also ends up
-using 20 instructions.
-We show implementations of both Myers' and BitPAl's
-method in [[bitpacking-myers]] and [[bitpacking-bitpal]].
-
-#+name: bitpacking-myers
-#+caption: Rust code for SIMD version of Myers' bitpacking algorithm, taking 20 instructions.
-#+include: ./bitpacking-myers.rs src rust
-
-#+name: bitpacking-bitpal
-#+caption: Rust code for SIMD version of Bitpal's bitpacking algorithm, taking 20 instructions.
-#+include: ./bitpacking-bitpal.rs src rust
+using $20$ instructions. We show implementations of both Myers' and BitPAl's
+method in \cref{fig:bitpacking}.
 
 #+begin_export latex
 \begin{figure}[h!]
@@ -1270,5 +1241,3 @@ read-aligners was done by Alser et al. [cite:@alser21].
 #+begin_export latex
 \end{landscape}
 #+end_export
-
-#+print_bibliography:
