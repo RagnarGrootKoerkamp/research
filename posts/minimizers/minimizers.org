@@ -7,16 +7,12 @@
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-21 Tue>
 
-#+begin_export html
-This is Part 2 of my thesis, containing chapters 6 to 9 on Low Density Minimizers.
+* Theory of sampling schemes
+:PROPERTIES:
+:EXPORT_FILE_NAME: theory.tex
+:END:
 
----
-#+end_export
-
-* Theory of Sampling Schemes
-
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 In this chapter, we introduce /minimizers/, and more general /sampling schemes/.
 These are methods to sample a subset of \(k\)-mers from a text in a deterministic
 way, such that at least one \(k\)-mer is sampled from every string of length
@@ -30,39 +26,17 @@ We cover a number of theoretical results from the literature, and explain how th
 minimizer scheme can be computed.
 This will serve as the background for the following two chapters, that go deeper
 into lower bounds on sampling scheme density and practical sampling schemes.
-#+end_notice
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 In this chapter, we survey existing literature on minimizers.
 Small parts of this chapter are loosely based on the background sections of the
 mod-minimizer papers [cite:@modmini;@oc-modmini-preprint], written with Giulio
 Ermanno Pibiri and Daniel Liu, and the density lower bound
 paper [cite:@sampling-lower-bound], written with Bryce Kille and others.
 Specifically some definitions and theorem statements are copied verbatim.
-#+end_notice
+#+end_attribution
 
-
-$$
-\newcommand{\O}{\mathcal O}
-\newcommand{\order}{\mathcal O}
-\newcommand{\Ok}{\mathcal O_k}
-\newcommand{\Ot}{\mathcal O_t}
-\newcommand{\Os}{\mathcal O_s}
-\newcommand{\Dk}{\mathcal D_k}
-\newcommand{\Dtk}{\tilde{\mathcal D}_k}
-\newcommand{\P}{\mathbb P}
-\newcommand{\pr}{\mathbb P}
-\DeclareMathOperator*{\argmin}{argmin}
-\DeclareMathOperator*{\poly}{poly}
-\DeclareMathOperator*{\revcomp}{rc}
-\DeclareMathOperator*{\sparsity}{sparsity}
-\newcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
-\newcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
-\newcommand{\c}{\mathrm{c}}
-\newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
-\newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
-$$
 
 ** Introduction
 
@@ -142,7 +116,7 @@ There are so much bigger gains possible elsewhere.
 Even worse, in practice, most schemes do not (and as we will see, can not) give more than a
 $20\%$ saving in density on top of the very simple random minimizer.
 
-As we will prove in [[#lower-bounds]], when $k\leq w+1$, we can never expect
+As we will prove in \cref{ch:minilb}, when $k\leq w+1$, we can never expect
 more than around $25\%$ lower
 density than the random minimizer, and thus, existing schemes are already
 relatively close to optimal from a practical point of view.
@@ -155,22 +129,22 @@ bounds, and in the many sampling schemes we will review and develop ourselves.
 ** Overview
 This part on minimizers is split into four chapters.
 
-Here, in Chapter [[*Theory of Sampling Schemes]], we review the existing theory of
+Here, in \cref{ch:minitheory}, we review the existing theory of
 sampling schemes. This covers, for example, /local/, /forward/, and /minimizer/
 schemes, the density of the random minimizer, and a number of theoretical
 results on the optimal asymptotic density of schemes as $k\to\infty$ or $w\to\infty$.
 
-In Chapter [[#lower-bounds]], we go over existing lower bounds. We start at the
+In \cref{ch:minilb}, we go over existing lower bounds. We start at the
 original one of [cite/t:@winnowing], that turns out to make overly strong
 assumptions, and end with the new nearly tight lower bound of [cite:@sampling-lower-bound].
 
-Then, in Chapter [[#sampling-schemes]], we summarize and compare existing sampling
+Then, in \cref{ch:sampling}, we summarize and compare existing sampling
 schemes, and introduce two new sampling schemes: the /open-closed/
 minimizer and the general /mod-minimizer/ [cite:@modmini;@oc-modmini-preprint]. The most important result is that the
 mod-minimizer achieves density $1/w$ in the limit where $k\to\infty$, and that
 this convergence is close to optimal.
 
-Lastly, in Chapter [[#selection-schemes]], we consider the special case where $k=1$.
+Lastly, in \cref{ch:selection}, we consider the special case where $k=1$.
 Here, we first introduce the /bd-anchor/, and then improve
 this into the sus-anchor with anti-lexicographic sorting. This has density very
 close to optimal for alphabet size $\sigma=4$, and raises the question whether
@@ -589,7 +563,7 @@ Some of these results will be covered more in-depth later.
 # TODO: Use more precise lower bound for $k\to\infty$: $\ceil{(w+k)/w}/(w+k)$?
 
 When $k\to\infty$, both the rot-minimizer [cite:@asymptotic-optimal-minimizers]
-and the new mod-minimizer (Chapter [[#sampling-schemes]]) achieve optimal density $1/w$.
+and the new mod-minimizer (\cref{ch:sampling}) achieve optimal density $1/w$.
 
 Slightly simplified, the *rot-minimizer* ranks \(k\)-mers by the sum of the
 characters in positions $0\pmod w$, so that for $w=2$, it would sum every other
@@ -608,7 +582,7 @@ This implies that as $w\to\infty$, fixed-$k$ minimizer schemes can never reach
 the optimal density of $1/w$.
 On the other hand, this lower bound does not hold for forward and local schemes.
 For forward schemes, we can use the lower bound of [cite:@sampling-lower-bound
-Theorem 1] to get $2/(w+k)$ (Chapter [[#lower-bounds]]). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
+Theorem 1] to get $2/(w+k)$ (\cref{ch:minilb}). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
 get the bound $1.5/(w+\max(k-2, 1))$.
 
 From the other side, Proposition 7 of [cite/t:@asymptotic-optimal-minimizers] shows
@@ -642,10 +616,9 @@ guarantee $w'$. We conclude that the density of a compatible minimizer scheme is
 bounded by $O(\ln(k')/k') = O(\ln(w)/w)$.
 #+end_proof_sketch
 
-But this is still not optimal: reduced bd-anchors [cite:@bdanchors Lemma 6]
-(Chapter [[#selection-schemes]]) are a local scheme with $k=1$ and density $O(1/w)$.
+But this is still not optimal: reduced bd-anchors [cite:@bdanchors Lemma 6] (\cref{ch:selection}) are a local scheme with $k=1$ and density $O(1/w)$.
 
-We further improve on this using sus-anchors (Chapter [[#selection-schemes]]), which
+We further improve on this using sus-anchors (\cref{ch:selection}), which
 is a forward scheme with density $(2+o(1))/(w+1)$ as $w\to\infty$.
 
 While it may seem from [[asymptotics]] that local schemes are not better than forward
@@ -722,10 +695,11 @@ scheme that orders \(k\)-mers such that rare \(k\)-mers are preferred over more 
 * Lower Bounds on Sampling Scheme Density
 :PROPERTIES:
 :CUSTOM_ID: lower-bounds
+:EXPORT_FILE_NAME: lower_bounds.tex
 :END:
 
-#+attr_shortcode: summary
-#+begin_notice
+
+#+begin_summary
 In this chapter, we look into lower bounds on the density of sampling schemes.
 We first go over previous lower bounds, including Schleimer et al.'s original
 one [cite:@winnowing] and the ''fixed'' version by Marçais et al.
@@ -736,10 +710,9 @@ This new lower bound is the first to show that density $2/(w+1)$ is optimal for
 $k=1$. Additionally, an search for optimal schemes for small parameters using
 integer linear programming (ILP) shows that the lower bound is tight whenever $k\equiv
 1\pmod w$.
-#+end_notice
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 The background in this chapter is newly written, and loosely based on the
 appendix of the mod-minimizer paper [cite:@modmini] that was coauthored with
 Giulio Ermanno Pibiri. The proof of the improved version of the lower bound of
@@ -754,7 +727,7 @@ were independently discovered by Bryce Kille and myself: I discovered the
 simpler version for arbitrary $w$, while Bryce Kille discovered the tighter
 version for $w=2$. A first version of the ILP was also implemented by both of us
 independently, and Bryce Kille optimized this into a faster version.
-#+end_notice
+#+end_attribution
 
 The starting point for this section is the trivial lower bound:
 #+begin_theorem Trivial lower bound
@@ -1139,10 +1112,10 @@ already:
 * Practical Sampling Schemes
 :PROPERTIES:
 :CUSTOM_ID: sampling-schemes
+:EXPORT_FILE_NAME: sampling_schemes.tex
 :END:
 
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 In this chapter, we review existing minimizer schemes and more general sampling schemes.
 The fall into a few categories: they are variants of lexicographic
 minimizers, based on universal-hitting-sets with a greedy construction, or based
@@ -1155,10 +1128,9 @@ minimizer scheme that reaches asymptotic optimal density $1/w$ as $k\to\infty$.
 For large alphabets, the mod-minimizer exactly matches the density of the lower
 bound when $k\equiv 1\pmod w$. Together, these make the mod-minimizer the lowest
 density scheme when $k>w$.
-#+end_notice
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 This chapter is based on two papers. ''The mod-minimizer: A simple and
 efficient sampling algorithm for long \(k\)-mers'' [cite:@modmini] is coauthored
 with Giulio Ermanno Pibiri and introduces the mod minimizer.
@@ -1170,7 +1142,7 @@ The idea for the mod-minimizer is my own.
 The open-closed minimizer was found in close collaboration with Daniel Liu and
 Giulio Ermanno Pibiri. For both papers, the implementation, evaluation, and writing of the paper
 were done in equal parts by Giulio Ermanno Pibiri and myself.
-#+end_notice
+#+end_attribution
 
 We now turn our attention from lower bounds and towards low-density sampling schemes.
 We first consider various existing schemes, that we go over in three groups.
@@ -1477,7 +1449,7 @@ The rot-minimizer [cite:@asymptotic-optimal-minimizers] /does/ converge to
 density $1/w$, but in its original form it only does so very slowly.
 
 Here we present the /mod-minimizer/ [cite:@modmini;@oc-modmini-preprint], which turns out to converge
-to $1/w$ nearly as fast as the lower bound we showed before in [[#lower-bounds]].
+to $1/w$ nearly as fast as the lower bound we showed before in \cref{ch:minilb}.
 
 We start with a slightly more general definition.
 
@@ -1641,7 +1613,7 @@ occurs in a position $y\equiv 0\pmod w$.
 Before we compute the density of the mod-minimizer, we first re-state Lemma 9 of
 [cite:@modmini], which is a slightly
 modified version of Lemma 9 of [cite:@miniception] that we saw earlier in
-Section [[*The density of random minimizers]]. The proof is nearly
+\cref{random-mini-density}. The proof is nearly
 identical.
 
 #+begin_mytheorem Duplicate \(k\)-mers
@@ -1740,10 +1712,10 @@ Is it possible when $\sigma\to\infty$? Or when $w\to\infty$?
 * Towards Optimal Selection Schemes
 :PROPERTIES:
 :CUSTOM_ID: selection-schemes
+:EXPORT_FILE_NAME: selection_schemes.tex
 :END:
 
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 We end this part on minimizers with a look into /selection/ schemes,
 which are sampling schemes with $k=1$. These are interesting, because the lower
 bound appears to tight: for small parameters, the brute force search finds
@@ -1759,14 +1731,13 @@ We end with a discussion on the remaining gap between our scheme and the true
 lower bound, and how this could be closed.
 More generally, we also recap the results on minimizer density we obtained, and
 state some open problems related to this.
-#+end_notice
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 This chapter is based on unpublished notes that are my own work.
 Some of the open problems in the discussion are based on previously written
 discussions [cite:@modmini;@oc-modmini-preprint;@sampling-lower-bound].
-#+end_notice
+#+end_attribution
 
 As we saw for the sampling schemes so far, they do not do well for very small
 $k$. Indeed, they are all minimizer schemes, and these can not achieve density
@@ -2024,6 +1995,3 @@ Additionally, there is the question of how much better general forward schemes
 are compared to minimizer schemes. Of all the schemes in [[summary]], only the
 sus-achor is not a minimizer scheme. So this raises the question: are minimizer
 schemes as good as forward schemes when $k$ is sufficiently large?
-
-
-#+print_bibliography:

@@ -2,8 +2,8 @@
 #+filetags: @thesis pairwise-alignment
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
-#+toc: headlines 3
 #+hugo_paired_shortcodes: %notice
+# #+toc: headlines 3
 #+date: <2025-03-24 Mon>
 
 #+begin_export html
@@ -12,8 +12,7 @@ This is Chapter 5 of my thesis.
 ---
 #+end_export
 
-#+attr_shortcode: summary
-#+begin_notice
+#+begin_summary
 So far, we have considered only algorithms for /global/ alignment.
 In this chapter, we consider /semi-global/ alignment and its variants instead,
 where a pattern (query) is searched in a longer string (reference).
@@ -22,20 +21,19 @@ There are many flavours of semi-global alignment, depending on the
 some common approaches to solve this problem.
 
 We then extend A*PA into A*Map as a new tool to solve these problems.
-#+end_notice
+#+end_summary
 
-#+attr_shortcode: attribution
-#+begin_notice
+#+begin_attribution
 All text in this chapter is my own.
 Some ideas on semi-global alignment are based on early discussions with Pesho Ivanov.
-#+end_notice
+#+end_attribution
 
 $$
 \renewcommand{\st}[2]{\langle #1, #2\rangle}
 $$
 
 In this chapter, we will look at the problem of /semi-global alignment/, as a next
-step after /global alignment/ ([[../pairwise-alignment/pairwise-alignment.org][blog post]]).
+step after /global alignment/ (\cref{ch:pa}).
 In fact, we will quickly see that there is no such thing as ''just'' global
 alignment.
 Rather, there are many variants that have applications in different domains.
@@ -57,7 +55,7 @@ Then we run a separate alignment to find the optimal alignment.
 #+attr_html: :class inset large
 [[file:fig/alignment-modes.svg]]
 
-As we saw in Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog post]]), there are many different types of pairwise alignment ([[types]]).
+As we saw in \cref{ch:astarpa}, there are many different types of pairwise alignment ([[types]]).
 Whereas /global/ alignment is used when two sequences are to be fully aligned,
 when that is not the case, there are many different variants.
 In /semi-global/ alignment, we align a sequence to a subset of a longer sequence.
@@ -94,14 +92,14 @@ In the remaining cases, one of the two sequences (the /text/) is significantly l
 other (the /pattern/).
 When additionally the pattern is short, with a length on
 the order of the machine word size (64 classically, or 256 with SIMD), we
-classify the instance as /approximate[fn::Here, /approximate/ means that we look
-for /inexact/ matches with a number of mutations.] string matching/ or /text searching/.
+classify the instance as /approximate/[fn::Here, /approximate/ means that we look
+for /inexact/ matches with a number of mutations.] /string matching/ or /text searching/.
 Here, we are typically interested in not just one optimal alignment, but in
 finding all sufficiently good alignments, with a cost below some (fixed) threshold.
 One of the reasons we reasons we consider this a separate problem is that there
 is a truly vast amount of literature on optimizing approximate string matching.
 See e.g.
-[cite:@ukkonen85-patterns;@landau-vishkin89;@chang92;@baeza-yates-gonnet92;@wu92;@alpern95;@baeza-yates96;@hyyro05-increased;@rognes11;@leap] for a
+[cite:@ukkonen85-patterns;@landau-vishkin89;@chang92;@baeza-yates-gonnet92;@wu92;@alpern95;@baeza-yates96;@hyyro05-increased;@rognes11] for a
 small selection[fn::See [[https://curiouscoding.nl/posts/approximate-string-matching]] for a longer overview of relevant papers.].
 # TODO: Write some more on the highlights?
 
@@ -149,7 +147,7 @@ small alignments.
 #+attr_html: :class inset large
 [[file:fig/search.svg]]
 
-In A*PA2 ([[../astarpa2/astarpa2.org][blog post]]), we developed a bloc\(k\)-based method for pairwise alignment.
+In A*PA2 (\cref{ch:astarpa2}), we developed a bloc\(k\)-based method for pairwise alignment.
 At the core, these blocks are computed using a fast SIMD-based implementation of the
 bitpacking algorithm of Myers [cite:@myers99;@chang92].
 So far, we have only used this as a building block for global alignment,
@@ -344,7 +342,7 @@ optimal alignments are found.
 There are various strategies for seeding alignments.
 
 *Minimizers.*
-The most popular mapper, minimap2 [cite:@minimap2], uses /minimizers/ ([[../minimizers/minimizers.org][blog]]). By
+The most popular mapper, minimap2 [cite:@minimap2], uses /minimizers/ (\cref{pt:mini}). By
 default, it uses \(k\)-mer size $k$ from 15 to 19 and window size $w$ from 10 to
 19, to extract one out of each $w$ consecutive \(k\)-mers.
 It first finds all minimizers of the reference and builds an index that maps
@@ -470,7 +468,7 @@ only report the location and/or score of the chain.
 A drawback of extending a chain is that the optimal alignment may not completely
 follow the chain, as exemplified in the bottom-left alignment in [[seed-chain-extend]].
 Instead, we can run a semi-global alignment around the chain using any of the
-global alignment methods discussed in Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog]]), such as a plain
+global alignment methods discussed in \cref{ch:astarpa}, such as a plain
 Needleman-Wunsch DP or band doubling.
 Indeed, we can also use A*PA or A*PA2 for this semi-global alignment.
 
@@ -543,7 +541,7 @@ we also need $k>\log_4 n$ to ensure that the number of spurious matches remains 
 # TODO: Some A*Map figures with A*PA, A*PA2
 
 ** Results
-We will compare A*Map against minimap2 on synthetic long read data.
+In \cref{tab:map-results}, we compare A*Map against minimap2 on synthetic long read data.
 We use chromosome 1 as the reference, which has length around 235 Mbp.
 From this, we sample 1000 random reads of length 50 kbp.
 Then, we apply a varying number of uniform random mutations to these strings
@@ -555,12 +553,28 @@ we use A*PA2 with plain band doubling [cite:@ukkonen85] for the semi-global alig
 Experiments are run on an Intel =i7-10750H= with AVX2, running at a fixed CPU frequency of
 2.6 GHz.
 
-#+caption: Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped. The PacBio mode uses homopolymer compression.
-| Divergence | PB k=19,w=10,hpc | ONT k=15,w=10 | HIFI k=19,w=19 | A*Map k=20 | A*Map k=28 |
-|   Indexing |              8.7 |          10.5 |            7.4 |        1.2 | 1.0        |
-|       0.9% |             31.2 |          48.1 |           23.0 |       26.9 | *8.7*      |
-|       2.7% |             31.4 |          50.6 |           23.3 |       24.6 | *12.9*     |
-|       4.4% |             28.8 |          46.6 |         *21.8* |       22.8 | (*)  15.4  |
+#+begin_export latex
+\begin{table}[b]
+\caption{\label{tab:map-results}Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. (*): For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped. The PacBio mode uses homopolymer compression.}
+\centering
+\begin{tabular}{rrrrrr}
+  \toprule
+Divergence &
+\multicolumn{3}{c}{Minimap} &
+\multicolumn{2}{c}{A*Map}  \\
+\cmidrule(lr){2-4}
+\cmidrule(lr){5-6}
+ & PacBio (+hpc) &  ONT & HIFI & & \\
+ & $k=19$, $w=10$ & $k=15$, $w=10$ & $k=w=19$ & $k=20$ & $k=28$\\
+\midrule
+      Indexing &              8.7 &          10.5 &            7.4 &        1.2 & 1.0        \\
+       $0.9\%$ &             31.2 &          48.1 &           23.0 &       26.9 & \textbf{8.7}      \\
+       $2.7\%$ &             31.4 &          50.6 &           23.3 &       24.6 & \textbf{12.9}     \\
+       $4.4\%$ &             28.8 &          46.6 &         \textbf{21.8} &       22.8 & (*)  15.4  \\
+\bottomrule
+\end{tabular}
+\end{table}
+#+end_export
 
 *A*Map analysis.*
 When $k=20$, a bottleneck of A*Map is the large number of \(k\)-mer
@@ -583,7 +597,7 @@ aligning the best scoring chains is still 8 seconds.
 Compared to minimap2, A*Map is significantly faster at indexing the text, since
 it only needs to build a hashtable on every \(k\)'th \(k\)-mer. Minimap2, on the
 other hand, has to compute all minimizers. Nevertheless, minimap2's indexing
-could probably be sped up by using SimdMinimizers ([[../simd-minimizers/simd-minimizers.org][blog]]).
+could probably be sped up by using SimdMinimizers (\cref{ch:simdmini}).
 On this data, minimap2 works best with the HIFI preset, with $k=w=19$. For
 divergence $0.9\%$, A*Map is $2.6\times$ faster, and for divergence $2.7\%$,
 A*Map is $1.8\times$ faster.
