@@ -8,11 +8,9 @@
 #+date: <2025-02-21 Tue>
 
 * Theory of sampling schemes
-:PROPERTIES:
-:EXPORT_FILE_NAME: theory.tex
-:END:
 
-#+begin_summary
+#+attr_shortcode: summary
+#+begin_notice
 In this chapter, we introduce /minimizers/, and more general /sampling schemes/.
 These are methods to sample a subset of $k$-mers from a text in a deterministic
 way, such that at least one $k$-mer is sampled from every string of length
@@ -26,19 +24,19 @@ We cover a number of theoretical results from the literature, and explain how th
 minimizer scheme can be computed.
 This will serve as the background for the following two chapters, that go deeper
 into lower bounds on sampling scheme density and practical sampling schemes.
-#+end_summary
+#+end_notice
 
-#+begin_attribution
+#+attr_shortcode: attribution
+#+begin_notice
 In this chapter, we survey existing literature on minimizers.
 Small parts of this chapter are loosely based on the background sections of the
 mod-minimizer papers [cite:@modmini;@oc-modmini-preprint], written with Giulio
 Ermanno Pibiri and Daniel Liu, and the density lower bound
 paper [cite:@sampling-lower-bound], written with Bryce Kille and others.
 Specifically some definitions and theorem statements are copied verbatim.
-#+end_attribution
+#+end_notice
 
 
-#+begin_export html
 $$
 \newcommand{\O}{\mathcal O}
 \newcommand{\order}{\mathcal O}
@@ -59,7 +57,6 @@ $$
 \newcommand{\boldremuval}{\mathbf{ReM}_{\mathbf{u}}\mathbf{val}}
 \newcommand{\remuval}{\mathrm{ReM}_{\mathrm{u}}\mathrm{val}}
 $$
-#+end_export
 
 ** Introduction
 
@@ -716,12 +713,9 @@ Other works in this direction are
 scheme that orders $k$-mers such that rare $k$-mers are preferred over more common ones.
 
 * Lower bounds
-:PROPERTIES:
-:EXPORT_FILE_NAME: lower_bounds.tex
-:END:
 
-
-#+begin_summary
+#+attr_shortcode: summary
+#+begin_notice
 In this chapter, we look into lower bounds on the density of sampling schemes.
 We first go over previous lower bounds, including Schleimer et al.'s original
 one [cite:@winnowing] and the ``fixed'' version by Marçais et al.
@@ -732,9 +726,10 @@ This new lower bound is the first to show that density $2/(w+1)$ is optimal for
 $k=1$. Additionally, an search for optimal schemes for small parameters using
 integer linear programming (ILP) shows that the lower bound is tight whenever $k\equiv
 1\pmod w$.
-#+end_summary
+#+end_notice
 
-#+begin_attribution
+#+attr_shortcode: attribution
+#+begin_notice
 The background in this chapter is newly written, and loosely based on the
 appendix of the mod-minimizer paper [cite:@modmini] that was coauthored with
 Giulio Ermanno Pibiri. The proof of the improved version of the lower bound of
@@ -749,7 +744,7 @@ were independently discovered by Bryce Kille and myself: I discovered the
 simpler version for arbitrary $w$, while Bryce Kille discovered the tighter
 version for $w=2$. A first version of the ILP was also implemented by both of us
 independently, and Bryce Kille optimized this into a faster version.
-#+end_attribution
+#+end_notice
 
 The starting point for this section is the trivial lower bound:
 #+begin_theorem Trivial lower bound
@@ -854,7 +849,10 @@ to ensure a sample every $w$ positions.
 #+end_proof_sketch
 
 ** Improving and extending Marçais et al.'s bound
-It turns out that [[thm:marcais]] is slightly inefficient. In
+It turns out that
+# FIXME
+# [[thm:marcais]]
+is slightly inefficient. In
 the appendix of the mod-minimizer paper [cite:@modmini], we improve it.
 Also note that the existing proof already
 works for any /local/ scheme.
@@ -1115,7 +1113,10 @@ Or can we bound the improvement that local schemes can make over forward schemes
 #+end_openproblem
 
 *Commentary.*
-Bryce Kille and myself independently discovered the basis of [[thm:tight]] during
+Bryce Kille and myself independently discovered the basis of
+# FIXME
+# [[thm:tight]]
+during
 the summer of 2024. In hindsight, I am very surprised it took this long (over 20
 years!) for this theorem to be found. Minimizers were originally defined in
 2003-2004, and only in 2018 the first improvement (or fix, rather) of Schleimer
@@ -1132,11 +1133,9 @@ already:
   done before by Mykkeltveit [cite:@mykkeltveit].
 
 * Sampling schemes
-:PROPERTIES:
-:EXPORT_FILE_NAME: sampling_schemes.tex
-:END:
 
-#+begin_summary
+#+attr_shortcode: summary
+#+begin_notice
 In this chapter, we review existing minimizer schemes and more general sampling schemes.
 The fall into a few categories: they are variants of lexicographic
 minimizers, based on universal-hitting-sets with a greedy construction, or based
@@ -1149,9 +1148,10 @@ minimizer scheme that reaches asymptotic optimal density $1/w$ as $k\to\infty$.
 For large alphabets, the mod-minimizer exactly matches the density of the lower
 bound when $k\equiv 1\pmod w$. Together, these make the mod-minimizer the lowest
 density scheme when $k>w$.
-#+end_summary
+#+end_notice
 
-#+begin_attribution
+#+attr_shortcode: attribution
+#+begin_notice
 This chapter is based on two papers. ``The mod-minimizer: A simple and
 efficient sampling algorithm for long $k$-mers'' [cite:@modmini] is coauthored
 with Giulio Ermanno Pibiri and introduces the mod minimizer.
@@ -1163,7 +1163,7 @@ The idea for the mod-minimizer is my own.
 The open-closed minimizer was found in close collaboration with Daniel Liu and
 Giulio Ermanno Pibiri. For both papers, the implementation, evaluation, and writing of the paper
 were done in equal parts by Giulio Ermanno Pibiri and myself.
-#+end_attribution
+#+end_notice
 
 We now turn our attention from lower bounds and towards low-density sampling schemes.
 We first consider various existing schemes, that we go over in three groups.
@@ -1731,11 +1731,9 @@ Is it possible when $\sigma\to\infty$? Or when $w\to\infty$?
 #+end_openproblem
 
 * Selection schemes
-:PROPERTIES:
-:EXPORT_FILE_NAME: selection_schemes.tex
-:END:
 
-#+begin_summary
+#+attr_shortcode: summary
+#+begin_notice
 We end this part on minimizers with a look into /selection/ schemes,
 which are sampling schemes with $k=1$. These are interesting, because the lower
 bound appears to tight: for small parameters, the brute force search finds
@@ -1751,13 +1749,14 @@ We end with a discussion on the remaining gap between our scheme and the true
 lower bound, and how this could be closed.
 More generally, we also recap the results on minimizer density we obtained, and
 state some open problems related to this.
-#+end_summary
+#+end_notice
 
-#+begin_attribution
+#+attr_shortcode: attribution
+#+begin_notice
 This chapter is based on unpublished notes that are my own work.
 Some of the open problems in the discussion are based on previously written
 discussions [cite:@modmini;@oc-modmini-preprint;@sampling-lower-bound].
-#+end_attribution
+#+end_notice
 
 As we saw for the sampling schemes so far, they do not do well for very small
 $k$. Indeed, they are all minimizer schemes, and these can not achieve density
