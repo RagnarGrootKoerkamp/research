@@ -25,9 +25,9 @@ of the memory layout.
 
 We also include some general background on benchmarking and optimizing code.
 
-We show these techniques by optimizing parts of the SSHash $k$-mer index.
+We show these techniques by optimizing parts of the SSHash \(k\)-mer index.
 This data structure takes as input a text, and builds a dictionary on its
-$k$-mers. It can then efficiently answer queries whether given $k$-mers occur in
+\(k\)-mers. It can then efficiently answer queries whether given \(k\)-mers occur in
 the input text.
 
 The first step is to compute the minimizers of the text. As the number of
@@ -55,9 +55,10 @@ All text is my own, and at most loosely based on the mentioned papers.
 
 * Introduction
 
+# TODO: Cite Moores law
 The amount of sequenced biological data is growing exponentially.
 For a long time, the performance of computer
-hardware was also growing exponentially (TODO cite Moores law), but over the
+hardware was also growing exponentially, but over the
 last years this has slowed down. As a result, waiting for faster hardware is not
 an solution if one wants to process all current data.
 Thus, there is a need for faster algorithms, and indeed, many papers in
@@ -106,7 +107,7 @@ Even more, we may want to also change the input format to better suit the algori
 In this chapter, we will go over some techniques to optimize code for modern
 CPUs.
 We group them into two categories.
-First, in [[#compute-bound,]] we consider optimizations for compute-bound problems, where the
+First, in [[#compute-bound]], we consider optimizations for compute-bound problems, where the
 execution of the given instructions itself is the bottleneck.
 Then, in [[#memory-bound]], we look at memory-bound setting, where the CPU is mostly waiting for data
 to be read from RAM (or disk).
@@ -138,17 +139,17 @@ genomic reads become more accurate), the proportion of time spent on the
 compression increases, and indeed, this can take a significant portion of the time.
 Thus, we design an optimized implementation to compute random minimizers.
 
-A second application of minimizers is to cluster the $k$-mers of a text, where
-$k$-mers that share the same minimizer are mapped to the same bucket.
+A second application of minimizers is to cluster the \(k\)-mers of a text, where
+\(k\)-mers that share the same minimizer are mapped to the same bucket.
 This is used, for example, by the GGCAT De Bruijn graph construction algorithm
 [cite:@ggcat] in order to build disjoint pieces of the graph in parallel, and
 a similar technique is used by k-mer counting methods such as KMC2 [cite:@kmc2].
 
 The same technique is also used by SSHash [cite:@sshash], which is an
-efficient representation of a static set of $k$-mers. Again, each k-mer is
+efficient representation of a static set of \(k\)-mers. Again, each k-mer is
 first mapped to its minimizer. It then efficiently stores buckets of k-mers
-that share the same minimizer via super-$k$-mers, which are longer strings containing
-multiple adjacent $k$-mers as substrings.
+that share the same minimizer via super-\(k\)-mers, which are longer strings containing
+multiple adjacent \(k\)-mers as substrings.
 Once the data structure is built, a critical step is to efficiently retrieve the
 bucket that corresponds to a minimizer, which is done by building a /minimal
 perfect hash function/.
@@ -196,7 +197,7 @@ is a DNA sequence, and the output is the set of minimizer positions or kmers.
 
 *A*PA2.*
 Most of the techniques mentioned below are also already used in the A*PA2
-pairwise aligner (TODO REF), which is
+pairwise aligner (\cref{ch:astarpa2}), which is
 also compute bound.
 It processes parts of the DP matrix in large blocks, so that the execution is
 very predictable and branch misses are avoided. It also uses SIMD (on top of
@@ -290,7 +291,7 @@ In practice, it is better to read a full 64 bit
 integer at a time, rather than splitting this into 2 32 bit reads.
 
 Still that is not maximally efficient. For DNA, each ASCII character can only
-really be one of four values, $\nuc{ACGT}$. (TODO NUC)
+really be one of four values, $\nuc{ACGT}$.
 Thus, each 8 bit character has 6 wasted bits.
 We can avoid this by first /packing/ the input in a separate linear pass.
 Then, the algorithm itself can read 64 bits at a time from each lane, containing
@@ -361,7 +362,7 @@ A common application of this technique is in B-trees, which are balanced search
 trees holding a set of sorted elements. Classic binary search trees have an
 indirection at every level of the tree. B-trees on the other hand store $B$
 values in each node. This reduces the height of the tree from $\log_2(n)$ to
-$\log_(B+1)(n)$, and efficiently uses a cacheline by reading $B$ values from it
+$\log_{B+1}(n)$, and efficiently uses a cacheline by reading $B$ values from it
 at once, rather than just a single value.
 
 Our MPHF, PtrHash, internally uses Elias-Fano (EF) coding [cite:@elias;@fano] to
@@ -411,20 +412,20 @@ speedup compare to plain for-loops. In particular, using these techniques, each
 iteration only takes just over 8 ns on average, which on my CPU, is very close to the
 maximum random memory throughput each core can have.
 
-* TODO Writing High Performance Code
-We end this introduction to high performance code with some tips on
-benchmarking, profiling, and estimating performance.
-** TODO Benchmarking
+# * TODO Writing High Performance Code
+# We end this introduction to high performance code with some tips on
+# benchmarking, profiling, and estimating performance.
+# ** TODO Benchmarking
 
-** Writing and Optimizing High Performance Code
+# ** Writing and Optimizing High Performance Code
 
-** DROP? Performance Metrics
-We end this section with a summary of useful performance metrics.
-These should all be taken with some margin, as they can vary wildly between
-different CPUs. Still, they should provide a useful starting point for
-back-of-the-envelope performance estimates.
+# ** DROP? Performance Metrics
+# We end this section with a summary of useful performance metrics.
+# These should all be taken with some margin, as they can vary wildly between
+# different CPUs. Still, they should provide a useful starting point for
+# back-of-the-envelope performance estimates.
 
-- TODO
-- memory latency
-- throughput
-- back-of-the-envelope stuff
+# - TODO
+# - memory latency
+# - throughput
+# - back-of-the-envelope stuff

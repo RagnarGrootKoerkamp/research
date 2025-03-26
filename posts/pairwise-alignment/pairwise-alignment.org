@@ -60,7 +60,7 @@ SARS-CoV-2 (COVID) virus can be found this way. Even more, full-genome alignment
 of $3\ 000\ 000\ 000$ bases long human genomes is entering the picture, although
 here approximate rather than exact methods tend to be used.
 
-*Algorithmic improvement.* Along with the increasing length and amount of genomic sequences, alignment
+*Algorithmic improvements.* Along with the increasing length and amount of genomic sequences, alignment
 algorithms have significantly improved since their introduction over 50 years
 ago.
 This started with a significant number of algorithmic improvements from 1970
@@ -81,7 +81,7 @@ and at the core, the best methods conceptually haven't changed much since then [
 *Implementation improvements.* Nevertheless, the amount of genomic data has significantly increased since then, and
 algorithms had to speed up at the same time to keep up.
 As the algorithmic speedups seemed exhausted, starting in roughly 1990, the
-focus shifted more towards more efficient implementations of these methods [cite:@.
+focus shifted more towards more efficient implementations of these methods.
 By 1999, this resulted in the $O(ns/w)$ bitpacking algorithm of Myers [cite:@myers99],
 that provides up to $w=64\times$ speedup by packing 64 adjacent states of the
 internal DP matrix into two 64 bit computer words. With more recent advances
@@ -95,7 +95,9 @@ not guaranteed to find the /minimal/ number of mutations between the two
 sequences. Rather, they sacrifice this /optimality/ guarantee to achieve a
 speedup over exact methods.
 Two common techniques are x-drop [cite:@x-drop] and static banding
-[cite:@minimap] (TODO better citation), that both significantly reduce the region of the DP
+[cite:@minimap],
+# (TODO better citation)
+that both significantly reduce the region of the DP
 matrix ([[edit-graph]]) that needs to be computed to find an alignment.
 
 Before proceeding with the survey, we briefly highlight the contributions A*PA
@@ -159,7 +161,8 @@ At times, we include formal notation for the concepts we introduce, which will
 be useful in later chapters.
 
 We start our survey with a formal problem statement for pairwise alignment
-([[*Problem Statement]]). Then, we list a number of variants of global alignment ([[*Variants of pairwise alignment]]).
+([[*Problem Statement]]). Then, we list a number of variants of global alignment
+([[*Alignment types]], [[*Cost Models]]).
 While these are not our focus, they can help to contextualize other existing methods.
 Then we move on to the classic DP algorithms in [[*The Classic Quadratic DP
 Algorithms]] and the algorithmic improvements in later sections.
@@ -280,12 +283,12 @@ states in order of increasing ``anticipated total distance''.
 * Alignment types
 
 #+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/alignment-types.drawio.svg][source]])
-#+caption: TODO: re-scale image
+# #+caption: TODO: re-scale image
 #+name: alignment-types
 #+attr_html: :class inset
 [[file:pairwise-alignment-history/drawings/alignment-types.drawio.svg]]
 
-TODO: Also put Pesho's 2nd figure?
+# TODO: Also put Pesho's 2nd figure?
 
 There are a few variants of pairwise alignments and edit distance. While the
 focus of this chapter is (unit cost) edit distance, it is helpful to first have
@@ -301,7 +304,7 @@ different settings, see [[alignment-types]].
 - *Semi-global:* Align a full sequence to a substring of a reference.
 - *Global-extension:* Align one sequence to a prefix of the other.
 - *Overlap:* Align two partially overlapping reads against each other.
-- *Ends-free:* /ends-free/ alignment allows one of the sequences on
+- *Ends-free:* /Ends-free/ alignment allows one of the sequences on
   each end to have a (bounded) number of unmatched characters, and generalized
   the methods above [cite:@spouge91].
 - *Extension:* Align a prefix of the two sequences. Similar to
@@ -633,7 +636,7 @@ remarked that this can be solved using Dijkstra's algorithm [cite:@dijkstra59],
 which visits states by increasing distance.
 Ukkonen gave a bound of $O(nm \log (nm))$, whereas Myers' analysis uses the fact
 that there are only $O(ns)$ at distance $\leq s$ (see [[#computational-volumes]]), and thus concludes that the
-algorithms runs in $O(ns)$ ([[intro]]a).
+algorithms runs in $O(ns)$.
 
 However, Myers [cite:@myers86 p. 2] observes that
 #+begin_quote
@@ -653,7 +656,7 @@ frequencies, and also the widely
 used /gap cost heuristic/
 [cite:@ukkonen85;@hadlock88detour;@spouge89;@spouge91;@myers-miller-95].
 This uses the difference in length between two sequences as a lower bound on
-their edit distance ([[intro]]d):
+their edit distance:
 $$
 \cgap(\st ij, \st{i'}{j'}) = |(i-i') - (j-j')|.
 $$
@@ -669,7 +672,7 @@ needed for each remaining k-mer that is not present in sequence $B$.
 
 In A*PA [cite:@astarpa] (\cref{ch:astarpa}) we will improve this into the
 /gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
-alignment when the divergence is sufficient low ([[intro]]g).
+alignment when the divergence is sufficient low.
 
 *Notation.*
 To prepare for the theory on A*PA, we now introduce some formal terminology and
@@ -737,18 +740,55 @@ especially well when $t$ is not too much larger than $s$.
 For example, $t$ can be set as a known upper bound for the
 data being aligned, or as the length of some known suboptimal alignment.
 
-#+name: intro
-#+name: intro
-#+caption: Alignment of two sequences of length $3000$bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation. TODO: Review figs and caption
-#+attr_html: :class equal-width
-| [[file:astarpa2/imgs/intro/2_dijkstra.png]] | [[file:astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:astarpa2/imgs/intro/0_gap-gap.png]] | [[file:astarpa2/imgs/intro/0_bitpacking.png]] | [[file:astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:astarpa2/imgs/intro/7_astarpa2_full.png]] | file:astarpa2/imgs/intro/5_astarpa-prune.png |
-|                                | + DT                                      | + band doubling               | + gap heuristic and bitpacking   | + blocks                              | + GCSH                              | A*                                  |
-| Dijkstra                       | WFA                                       | Ukkonen                       | Edlib                            | A*PA2-simple                          | A*PA2-full                          | A*PA                                |
+# #+name: intro
+# #+name: intro
+# #+caption: Alignment of two sequences of length $3000$ bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation.
+# # #+caption: TODO: Review figs and caption
+# #+attr_html: :class equal-width
+# | [[file:astarpa2/imgs/intro/2_dijkstra.png]] | [[file:astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:astarpa2/imgs/intro/0_gap-gap.png]] | [[file:astarpa2/imgs/intro/0_bitpacking.png]] | [[file:astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:astarpa2/imgs/intro/7_astarpa2_full.png]] | file:astarpa2/imgs/intro/5_astarpa-prune.png |
+# |                                         | + DT                                               | + band doubling                        | + gap heuristic and bitpacking            | + blocks                                       | + GCSH                                       | A*                                           |
+# | Dijkstra                                | WFA                                                | Ukkonen                                | Edlib                                     | A*PA2-simple                                   | A*PA2-full                                   | A*PA                                         |
+
+
+# #+begin_export latex
+# \begin{figure*}[t]
+# \captionsetup[subfloat]{justification=RaggedLeft,singlelinecheck=false}
+# \centering
+# \subfloat[Dijkstra]{\includegraphics[width=.24\linewidth]{imgs/intro/2_dijkstra.png}\label{introa}}
+# \hspace{-24em} \hfill
+# \subfloat[\wfa]{\includegraphics[width=.24\linewidth]{imgs/intro/3_diagonal-transition.png}\label{introb}}
+# \hspace{-24em} \hfill
+# \subfloat[Ukkonen]{\includegraphics[width=.24\linewidth]{imgs/intro/0_gap-gap.png}\label{introc}}
+# \hspace{-24em} \hfill
+# \subfloat[\edlib]{\includegraphics[width=.24\linewidth]{imgs/intro/0_bitpacking.png}\label{introd}}
+# \hspace{-24em} \hfill
+# \subfloat[\textbf{\astarpatwo\\-simple}]{\includegraphics[width=.24\linewidth]{imgs/intro/6_astarpa2_simple.png}\label{introe}}
+# \hspace{-24em} \hfill
+# \subfloat[\textbf{\astarpatwo\\-full}]{\includegraphics[width=.24\linewidth]{imgs/intro/7_astarpa2_full.png}\label{introf}}
+# \hspace{-24em} \hfill
+# \subfloat[\astarpa]{\includegraphics[width=.24\linewidth]{imgs/intro/5_astarpa-prune.png}\label{introg}}
+# \vspace{-0.5em}%
+# \caption{\label{intro}Alignment of two sequences of length $3000\bp$ with $20\%$
+#   divergence using different methods. Coloured pixels correspond to visited
+#   states in the edit graph or dynamic programming matrix, and the blue to red
+#   gradient indicates the order of computation. The black path indicates an optimal alignment.
+#   \protect\subref{introa}~Dijkstra is the classical shortest path algorithm.
+#   \protect\subref{introb}~WFA uses the diagonal transition algorithm.
+#   \protect\subref{introc}~Ukkonen's method uses band doubling.
+#   \protect\subref{introd}~Edlib adds the gap heuristic and bitpacking.
+#   \protect\subref{introe}~\astarpatwo-simple additionally computes blocks of
+#   $256$ columns at a time,
+#   \protect\subref{introf}~\astarpatwo-full applies the heuristics of \astarpa, and
+#   \protect\subref{introg}~\astarpa with the gap-chaining seed heuristic.
+#   % \cref{comparison} in \cref{app-comparison} shows the same methods on a more complicated alignment.
+# }
+# \end{figure*}
+# #+end_export
 
 *Gap heuristic.*
 In parallel, Ukkonen introduced a very similar idea [cite:@ukkonen85], /statically/ bounding the
 computation to only those states that can be contained in a path of length at most $t$
-from the start to the end of the graph ([[intro]]c). In particular, it uses the gap
+from the start to the end of the graph. In particular, it uses the gap
 heuristic: the minimal cost of an alignment
 containing $\st ij$ is
 $$
@@ -789,14 +829,14 @@ Given a bound $t\geq s$, some examples of
 computational volumes are:
 1. $\{u\}$, the entire $(n+1)\times (m+1)$ graph [cite:@nw].
 2. $\{u: \g(u)\leq t\}$, the states at distance $\leq t$, introduced by
-   Fickett [cite:@fickett84] and similar to Dijkstra's algorithm ([[intro]]ab) [cite:@dijkstra59].
+   Fickett [cite:@fickett84] and similar to Dijkstra's algorithm [cite:@dijkstra59].
 3. $\{u: \cgap(v_s, u) + \cgap(u, v_t) \leq t\}$ the /static/ set of states possibly on a path
-   of cost $\leq t$ ([[intro]]c) [cite:@ukkonen85].
-4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib ([[intro]]de) [cite:@edlib;@spouge91;@papamichail2009].
+   of cost $\leq t$ [cite:@ukkonen85].
+4. $\{u: \g(u) + \cgap(u, v_t) \leq t\}$, as used by Edlib [cite:@edlib;@spouge91;@papamichail2009].
 5. $\{u: \g(u) + h(u) \leq t\}$, for any admissible heuristic $h$, which we will
-   use in A*PA2 and is similar to A* ([[intro]]fg).
+   use in A*PA2 and is similar to A*.
 
-TODO: Check figure references.
+# TODO: Check figure references.
 
 * Diagonal Transition
 :PROPERTIES:
@@ -922,7 +962,7 @@ Wozniak [cite:@wozniak97] applied SIMD (single
 instruction, multiple data) instructions for this purpose, which are special CPU instructions
 that operate on multiple (currently up to $8$, for AVX-512) computer words at a time.
 
-TODO: Fig; possibly from [cite:@rognes00].
+# TODO: Fig; possibly from [cite:@rognes00].
 
 *Vertical packing.*
 Rognes et al. [cite:@rognes00 p. 702] also use microparallelism, but use /vertical/
@@ -957,7 +997,7 @@ is $+1$, and one word in which bit $j$ indicates that the $j$'th difference is $
 If we additionally know the difference along the top edge, Myers' method can
 efficiently compute the output differences of the $1\times w$ rectangle in only $20$ instructions.
 
-TODO: figure
+# TODO: figure
 
 We call each consecutive non-overlapping chunk of $64$ rows a /lane/, so that
 there are $\lceil m/64\rceil$ lanes, where the last lane may be padded.
@@ -1117,7 +1157,9 @@ sequences are short enough that quadratic memory can be used.
 
 *WFA* [cite:@wfa] builds on the $O(n+s^2)$ diagonal transition method
 [cite:@ukkonen85;@myers86], and extends it to affine costs using a method
-similar to [cite:@gotoh]. *BiWFA* [cite:@biwfa] is a later version that applies
+similar to [cite:@gotoh].
+
+*BiWFA* [cite:@biwfa] is a later version that applies
 divide-and-conquer [cite:@hirschberg75] to reduce to linear memory usage.
 
 * Subquadratic Methods and Lower Bounds
@@ -1195,55 +1237,65 @@ Smith et al. [cite:@smith81], Kruskal [cite:@kruskal83], Spouge
 survey on LCS algorithms [cite:@lcs-survey].  A more recent review on
 read-aligners was done by Alser et al. [cite:@alser21].
 
-#+caption: Chronological overview of papers related to exact global pairwise alignment. Parameters are sequence lengths $n$ and $m$ with $n\geq $m$. The (edit) distance is $s$. The number of matching characters or k-mers is $r$. The length of the LCS is $p$. $w=64$ is the word size, and lastly we assume a fixed-size alphabet $\Sigma$. Time is worst-case unless noted otherwise, and space usage is to obtain the full alignment. Methods in bold are newly introduced or combined.
+\clearpage
+
+#+begin_export latex
+\begin{landscape}
+\pagestyle{empty}
+#+end_export
+
+#+caption: Chronological overview of papers related to exact global pairwise alignment. Parameters are sequence lengths $n$ and $m$ with $n\geq m$. The (edit) distance is $s$. The number of matching characters or k-mers is $r$. The length of the LCS is $p$. $w=64$ is the word size, and lastly we assume a fixed-size alphabet $\Sigma$. Time is worst-case unless noted otherwise, and space usage is to obtain the full alignment. Methods in bold are newly introduced or combined.
 #+name: table
 #+attr_html: :class full-width
-| Paper                                                | Cost model                                 | Time                                      | Space                       | Method                                                            | Remarks                                                                          |
-| <20>                                                 | <10>                                       |                                           | <10>                        |                                                                   | <30>                                                                             |
-|------------------------------------------------------+--------------------------------------------+-------------------------------------------+-----------------------------+-------------------------------------------------------------------+----------------------------------------------------------------------------------|
-| [cite/text/cf:@vintsyuk68]                           | no deletions                               | $O(nm)$                                   | $O(nm)$                     | DP                                                                | different formulation in a different domain, but conceptually similar            |
-| [cite/text/cf:@nw]                                   | *edit distance* TODO ARBITRARY GAPS??? | $O(n^2m)$                                 | $O(nm)$                     | DP                                                                | solves pairwise alignment in polynomial time                                     |
-| [cite/text/cf:@sankoff]                              | LCS                                        | $\boldsymbol{O(nm)}$                      | $O(nm)$                     | DP                                                                | the first quadratic algorithm                                                    |
-| [cite/text/cf:@sellers] and [cite/text/cf:@wagner74] | edit distance                              | $O(nm)$                                   | $O(nm)$                     | DP                                                                | the quadratic algorithm now known as Needleman-Wunch                             |
-| [cite/text/cf:@hirschberg75]                         | LCS                                        | $O(nm)$                                   | $\boldsymbol{O(n)}$         | divide-and-conque                                                 | introduces linear memory backtracking                                            |
-| [cite/text/cf:@hunt77]                               | LCS                                        | $\boldsymbol{O((r+n)\lg n)}$              | $O(r+n)$                    | thresholds                                                        | distance only                                                                    |
-| [cite/text/cf:@hirschberg77]                         | LCS                                        | $\boldsymbol{O(p(m-p)\lg n)}$             | $\boldsymbol{O(n+(m-p)^2)}$ | contours + band                                                   | for similar sequences                                                            |
-| [cite/text/cf:@four-russians-ed]                     | edit distance                              | $\boldsymbol{O(n\cdot \max(1, m/\lg n))}$ | $O(n^2/\lg^2 n)$            | four-russians                                                     | best known complexity; requires finite alphaet                                   |
-| [cite/text/cf:@smith81]                              | *affine*                                   | -                                         | -                           | -                                                                 | First to suggest affine, in future work.                                         |
-| [cite/text/cf:@gotoh]                                | *affine*                                   | $O(nm)$                                   | $O(nm)$                     | DP                                                                | extends [cite/text:@sellers] to affine                                           |
-| [cite/text/cf:@altschul]                             | affine                                     | $O(nm)$                                   | $O(nm)$                     | DP                                                                | Fixes bug in traceback of [cite:@gotoh]                                          |
-| [cite/text/cf:@nakatsu82]                            | LCS                                        | $\boldsymbol{O(n(m-p))}$                  | $O(n(m-p))$                 | *DP on thresholds*                                                | improves [cite/text:@hirschberg77], subsumed by [cite/text:@myers86]             |
-| [cite/text/cf:@wilbur-lipman-83;@wilbur-lipman-84]   | LCSk                                       | -                                         | -                           | *chaining k-mer matches*                                          | Approximate                                                                      |
-| [cite/text/cf:@fickett84]                            | Edit distance                              | $O(nt)$                                   | $O(nt)$                     | *Bound $\g(u)\leq t$                                              | Assuming $t\geq s$.                                                              |
-| Dijkstra [cite:@dijkstra59;@ukkonen85;@myers86]      | Edit distance                              | $O(ns)$                                   | $O(ns)$                     | *Dijkstra's algorithm*                                            | Implement using $O(1)$ bucket queue                                              |
-| [cite/text/cf:@ukkonen85]                            | edit distance                              | $\boldsymbol{O(ms)}$                      | $O(ns)$                     | band doubling                                                     | first $O(ns)$ algorithm for edit distance                                        |
-| [cite/text/cf:@ukkonen85]                            | edit distance                              | $O(n+s^2)$ expected                       | $\boldsymbol{O(n+s^2)}$     | *diagonal transition*                                             | introduces diagonal transition method, requires fixed indel cost                 |
-| [cite/text/cf:@myers86]                              | LCS                                        | $O(n+s^s)$ expected                       | $O(s)$ working memory       | *diagonal transition*, divide-and-conquer                         | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time          |
-| [cite/text/cf:@myers86]                              | LCS                                        | $\boldsymbol{O(n +s^2)}$                  | $O(n)$                      | suffix tree                                                       | better worst case complexity, but slower in practice                             |
-| [cite/text/cf:@myers88]                              | affine                                     | $O(nm)$                                   | $O(m + \lg n)$              | divide-and-conquer                                                | applies [cite/text:@hirschberg75] to [cite/text:@gotoh] to get linear space      |
-| [cite/text/cf:@spouge89]                             | edit distance                              | -                                         | -                           | *A**, *computational volumes*                                     | Review paper                                                                     |
-| [cite/text/cf:@gotoh90]                              | *double affine/piecewise-linear*           | $O(Lmn)$                                  | $O(nm+Lm)$                  | DP, *$L$ layers in the graph*                                     |                                                                                  |
-| [cite/text/cf:@wu90-O-np]                            | unit cost                                  | $O(n+(s-\vert n-m\vert)s)$ expected       | $O(n)$                      | Diagonal transition, gap-heuristic, divide-and-conquer            |                                                                                  |
-| [cite/text/cf:@sparse-dynamic-programming-1]         | LCSk                                       | $O(n + d \log\log \min(d, nm/d))$         |                             | *sparse-dynamic-programming*, contours                            | $d$ is number of /dominant/ matches                                              |
-| [cite/text/cf:@myers-miller-95]                      | LCSk, edit distance                        | $O(r \log^2 r)$                           | $O(r \log r)$               | *chaining* k-mer matches with *gap-cost*                          | $r$ is number of matches                                                         |
-| [cite/text/cf:@myers99]                              | unit costs                                 | $O(nm/w)$                                 | $O(m\sigma / w)$            | DP, *bitpacking*                                                  |                                                                                  |
-| [cite/text/cf:@papamichail2009]                      | unit costs                                 | $O(n+(s-\vert n-m\vert)s)$                | $O(s)$                      | A*, gap heuristic, diagonal transition                            |                                                                                  |
-| [cite/text/cf:@lcsk-overview]                        | LCS$k$                                     | $O(n + r \log l)$                         | $O(n + \min(r, nl))$        | thresholds                                                        | modifies [cite/text:@hunt77] for LCS$k$                                          |
-| BitPAl [cite/text/cf:@bitpal]                        | Edit distance                              | $O(znm/w)$                                | $O(znm/w)$                  | Bitpacking, *difference recurrence*                               | $z$ depends on edit costs                                                        |
-| [cite/text/cf:@grabowski14]                          | unit cost/LCS                              | $O(nm \log \log n / \log^2 n)$            | $o(n)$ overhead             | Four-russians                                                     | General alphabet                                                                 |
-| Edlib [cite/text/cf:@edlib]                          | unit costs                                 | $O(ns/w)$                                 | $O(n)$                      | Bitpacking, band-doubling, divide-and-conquer                     | extends Myers' bit-packing to global alignment                                   |
-| libgaba [cite/text/cf:@suzuki-kasahara]              | Affine                                     | -                                         | -                           | *SIMD*, *affine difference recurrence relation*                   | Adaptive band; not exact                                                         |
-| KSW2 [cite/text/cf:@minimap2]                        | Affine, Double affine                      | $O(nm/w)$                                 | $O(nm/w)$                   | Implements [cite:@suzuki-kasahara]                                | $w$ SIMD lanes                                                                   |
-| WFA [cite/text/cf:@wfa]                              | affine                                     | $O(n+s^2)$ expected                       | $O(n+s^2)$                  | diagonal-transition                                               | extends diagonal transition to gap affine [cite/text:@gotoh]                     |
-| WFALM [cite/text/cf:@wfalm]                          | affine                                     | $O(n+s^2)$                                | $O(n+s^{3/2})$              | diagonal-transition, square-root-decomposition                    | reduces memory usage of WFA by only storing $1/\sqrt n$ of fronts                |
-| BiWFA [cite/text/cf:@biwfa]                          | affine                                     | $O(n+s^2)$ expected                       | $O(s)$ working memory       | diagonal-transition, divide-and-conquer                           | applies [cite/text:@hirschberg75] to WFA to get linear space                     |
-| Block Aligner [cite/text/cf:@block-aligner]          | Affine; scoring matrix                     |                                           |                             | SIMD, blocks, adaptive band                                       |                                                                                  |
-| TALCO [cite/text/cf:@talco]                          | Affine                                     |                                           |                             | Adaptive band; *traceback convergence*                            | Resolves trace during alignment, saving memory                                   |
-| BSAlign [cite/text/cf:@bsalign]                      | Affine                                     |                                           |                             | striped SIMD, difference recurrence, (adaptive) banded            | First to implement these together                                                |
-| A*PA [cite/text/cf:@astarpa]                         | unit costs                                 | $O(n)$ best case                          | $O(n)$                      | A*, *gap-chaining seed heuristic*, *pruning*, diagonal-transition | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
-| A*PA2 [cite/text/cf:@astarpa2]                       | unit costs                                 | $O(n)$ best case                          |                             | DP, A*, blocks, (incremental) band-doubling, SIMD, bitpacking     |                                                                                  |
+#+attr_latex: :booktabs t :placement [t] :font \tiny :align p{3cm}p{2cm}p{2cm}p{2cm}p{5cm}p{5cm}
+| Paper                                      | Cost model             | Time                                      | Space                       | Method                                                            | Remarks                                                                          |
+|--------------------------------------------+------------------------+-------------------------------------------+-----------------------------+-------------------------------------------------------------------+----------------------------------------------------------------------------------|
+| [cite:@vintsyuk68]                         | no deletions           | $O(nm)$                                   | $O(nm)$                     | DP                                                                | different formulation in a different domain, but conceptually similar            |
+| [cite:@nw]                                 | *arbitrary*            | $O(n^2m)$                                 | $O(nm)$                     | DP                                                                | solves pairwise alignment in polynomial time                                     |
+| [cite:@sankoff]                            | LCS                    | $\boldsymbol{O(nm)}$                      | $O(nm)$                     | DP                                                                | the first quadratic algorithm                                                    |
+| [cite:@sellers] and [cite:@wagner74]       | edit distance          | $O(nm)$                                   | $O(nm)$                     | DP                                                                | the quadratic algorithm now known as Needleman-Wunch                             |
+| [cite:@hirschberg75]                       | LCS                    | $O(nm)$                                   | $\boldsymbol{O(n)}$         | divide-and-conque                                                 | introduces linear memory backtracking                                            |
+| [cite:@hunt77]                             | LCS                    | $\boldsymbol{O((r+n)\lg n)}$              | $O(r+n)$                    | thresholds                                                        | distance only                                                                    |
+| [cite:@hirschberg77]                       | LCS                    | $\boldsymbol{O(p(m-p)\lg n)}$             | $\boldsymbol{O(n+(m-p)^2)}$ | contours + band                                                   | for similar sequences                                                            |
+| [cite:@four-russians-ed]                   | edit distance          | $\boldsymbol{O(n\cdot \max(1, m/\lg n))}$ | $O(n^2/\lg^2 n)$            | four-russians                                                     | best known complexity; requires finite alphaet                                   |
+| [cite:@smith81]                            | *affine*               | -                                         | -                           | -                                                                 | First to suggest affine, in future work.                                         |
+| [cite:@gotoh]                              | *affine*               | $O(nm)$                                   | $O(nm)$                     | DP                                                                | extends [cite:@sellers] to affine                                                |
+| [cite:@altschul]                           | affine                 | $O(nm)$                                   | $O(nm)$                     | DP                                                                | Fixes bug in traceback of [cite:@gotoh]                                          |
+| [cite:@nakatsu82]                          | LCS                    | $\boldsymbol{O(n(m-p))}$                  | $O(n(m-p))$                 | *DP on thresholds*                                                | improves [cite:@hirschberg77], subsumed by [cite:@myers86]                       |
+| [cite:@wilbur-lipman-83;@wilbur-lipman-84] | LCSk                   | -                                         | -                           | *chaining k-mer matches*                                          | Approximate                                                                      |
+| [cite:@fickett84]                          | Edit distance          | $O(nt)$                                   | $O(nt)$                     | *Bound $\g(u)\leq t$                                              | Assuming $t\geq s$.                                                              |
+| Dijkstra [cite:@dijkstra59]                | Edit distance          | $O(ns)$                                   | $O(ns)$                     | *Dijkstra's algorithm*                                            | Implement using $O(1)$ bucket queue                                              |
+| [cite:@ukkonen85]                          | edit distance          | $\boldsymbol{O(ms)}$                      | $O(ns)$                     | band doubling                                                     | first $O(ns)$ algorithm for edit distance                                        |
+| [cite:@ukkonen85]                          | edit distance          | $O(n+s^2)$ expected                       | $\boldsymbol{O(n+s^2)}$     | *diagonal transition*                                             | introduces diagonal transition method, requires fixed indel cost                 |
+| [cite:@myers86]                            | LCS                    | $O(n+s^s)$ expected                       | $O(s)$ working memory       | *diagonal transition*, divide-and-conquer                         | introduces diagonal transition method for LCS, $O(n+s^2)$ expected time          |
+| [cite:@myers86]                            | LCS                    | $\boldsymbol{O(n +s^2)}$                  | $O(n)$                      | suffix tree                                                       | better worst case complexity, but slower in practice                             |
+| [cite:@myers88]                            | affine                 | $O(nm)$                                   | $O(m + \lg n)$              | divide-and-conquer                                                | applies [cite:@hirschberg75] to [cite:@gotoh] to get linear space                |
+| [cite:@spouge89]                           | edit distance          | -                                         | -                           | *A**, *computational volumes*                                     | Review paper                                                                     |
+| [cite:@gotoh90]                            | *double/more affine*   | $O(Lmn)$                                  | $O(nm+Lm)$                  | DP, *$L$ layers in the graph*                                     |                                                                                  |
+| [cite:@wu90-O-np]                          | unit cost              | $O(n+(s-\vert n-m\vert)s)$ exp.           | $O(n)$                      | Diagonal transition, gap-heuristic, divide-and-conquer            |                                                                                  |
+| [cite:@sparse-dynamic-programming-1]       | LCSk                   | $O(n + d \log\log \min(d, nm/d))$         |                             | *sparse-dynamic-programming*, contours                            | $d$ is number of /dominant/ matches                                              |
+| [cite:@myers-miller-95]                    | LCSk, edit distance    | $O(r \log^2 r)$                           | $O(r \log r)$               | *chaining* k-mer matches with *gap-cost*                          | $r$ is number of matches                                                         |
+| [cite:@myers99]                            | unit costs             | $O(nm/w)$                                 | $O(m\sigma / w)$            | DP, *bitpacking*                                                  |                                                                                  |
+| [cite:@papamichail2009]                    | unit costs             | $O(n+(s-\vert n-m\vert)s)$                | $O(s)$                      | A*, gap heuristic, diagonal transition                            |                                                                                  |
+| [cite:@lcsk-overview]                      | LCS$k$                 | $O(n + r \log l)$                         | $O(n + \min(r, nl))$        | thresholds                                                        | modifies [cite:@hunt77] for LCS$k$                                               |
+| BitPAl [cite:@bitpal]                      | Edit distance          | $O(znm/w)$                                | $O(znm/w)$                  | Bitpacking, *difference recurrence*                               | $z$ depends on edit costs                                                        |
+| [cite:@grabowski14]                        | unit cost/LCS          | $O(nm \log \log n / \log^2 n)$            | $o(n)$ overhead             | Four-russians                                                     | General alphabet                                                                 |
+| Edlib [cite:@edlib]                        | unit costs             | $O(ns/w)$                                 | $O(n)$                      | Bitpacking, band-doubling, divide-and-conquer                     | extends Myers' bit-packing to global alignment                                   |
+| libgaba [cite:@suzuki-kasahara]            | Affine                 | -                                         | -                           | *SIMD*, *affine difference recurrence relation*                   | Adaptive band; not exact                                                         |
+| KSW2 [cite:@minimap2]                      | Affine, Double affine  | $O(nm/w)$                                 | $O(nm/w)$                   | Implements [cite:@suzuki-kasahara]                                | $w$ SIMD lanes                                                                   |
+| WFA [cite:@wfa]                            | affine                 | $O(n+s^2)$ expected                       | $O(n+s^2)$                  | diagonal-transition                                               | extends diagonal transition to gap affine [cite:@gotoh]                          |
+| WFALM [cite:@wfalm]                        | affine                 | $O(n+s^2)$                                | $O(n+s^{3/2})$              | diagonal-transition, square-root-decomposition                    | reduces memory usage of WFA by only storing $1/\sqrt n$ of fronts                |
+| BiWFA [cite:@biwfa]                        | affine                 | $O(n+s^2)$ expected                       | $O(s)$ working memory       | diagonal-transition, divide-and-conquer                           | applies [cite:@hirschberg75] to WFA to get linear space                          |
+| Block Aligner [cite:@block-aligner]        | Affine; scoring matrix |                                           |                             | SIMD, blocks, adaptive band                                       |                                                                                  |
+| TALCO [cite:@talco]                        | Affine                 |                                           |                             | Adaptive band; *traceback convergence*                            | Resolves trace during alignment, saving memory                                   |
+| BSAlign [cite:@bsalign]                    | Affine                 |                                           |                             | striped SIMD, difference recurrence, (adaptive) banded            | First to implement these together                                                |
+| A*PA [cite:@astarpa]                       | unit costs             | $O(n)$ best case                          | $O(n)$                      | A*, *gap-chaining seed heuristic*, *pruning*, diagonal-transition | only for random strings with random errors, with $n\ll\vert \Sigma\vert  ^{1/e}$ |
+| A*PA2 [cite:@astarpa2]                     | unit costs             | $O(n)$ best case                          |                             | DP, A*, blocks, (incremental) band-doubling, SIMD, bitpacking     |                                                                                  |
 
 
+#+begin_export latex
+\end{landscape}
+#+end_export
 
 #+begin_export html
 #+print_bibliography:
