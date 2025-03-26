@@ -7,14 +7,10 @@
 #+hugo_paired_shortcodes: %notice
 #+date: <2025-02-23 Fri>
 
-This post contains the abstract, introduction, and conclusion of my thesis.
-Individual chapters are based either on blog posts or papers, and linked from the introduction.
-
----
-
 * Abstract
 :PROPERTIES:
 :UNNUMBERED:
+:EXPORT_FILE_NAME: abstract.tex
 :END:
 
 The amount of sequenced DNA is increasing quickly.
@@ -73,10 +69,17 @@ Thus, my thesis is that optimal software can only be achieved by
 designing algorithms in parallel with their implementation, and that these can
 not be considered independently.
 
----
-This work was funded by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
+# ---
+# This work was funded by ETH Research Grant ETH-1721-1 to Gunnar Rätsch.
+
+# * Acknowledgements
+
+# * TOC
 
 * Introduction
+:PROPERTIES:
+:EXPORT_FILE_NAME: introduction.tex
+:END:
 
 Over the last decades, the field of bioinformatics has grown a lot.
 DNA sequencing is quickly getting faster and cheaper,
@@ -103,11 +106,11 @@ of code solves some problem in the least possible amount of time.
 This typically implies a few things:
 - The algorithm has optimal /complexity/, for example, linear ($O(n)$) instead of
   quadratic ($O(n^2)$).
-- The algorithm has optimal /efficiency/, for example, a low ''hidden constant'' of $n/10$ instead of $100n$.
+- The algorithm has optimal /efficiency/, for example, a low ``hidden constant'' of $n/10$ instead of $100n$.
 - The /implementation/ of the algorithm optimally exploits the given hardware.
 At times, the first two goals are at odds with each other: there may be a very inefficient
 linear solution (a classical example are linked lists), or a very efficient
-quadratic solution (such as dynamic programming).
+quadratic solution (such as dynamic programming, \cref{part1}).
 The last two goals, efficiency and implementation, are related, but slightly
 different. With /efficiency/, we mean the absolute /number/ of (abstract)
 operations the code uses, while an optimal implementation efficiently /executes/
@@ -124,7 +127,7 @@ This thesis is divided into three parts, that each investigate a different probl
 ** Part 1: Pairwise Alignment
 In the first part, we look at the classic problem of /pairwise alignment/.
 Given, for example, two DNA sequences, such as two Sars-CoV-2 (COVID) sequences,
-that consist of around 30 thousand bases (''DNA characters''),
+that consist of around 30 thousand bases (``DNA characters''),
 the task is to find the differences (mutations) between them.
 
 The main challenge here is that as DNA sequencers get better, they output longer
@@ -132,12 +135,12 @@ and longer sequences. While methods that scale quadratically with sequence
 length are fine for sequences up to length 10 thousand, they become slow for
 significantly longer sequences.
 
-*Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog]]): A History of Pairwise Alignment.*
+*\cref{ch:pa}: A History of Pairwise Alignment.*
 We start with a formal problem statement of pairwise alignment.
 Then, we review existing algorithms and techniques to implement them efficiently.
 The focus is on those methods that form the background for our own work.
 
-*Chapter 3 ([[file:../../static/papers/astarpa.pdf][paper PDF]]): A*PA.*
+*\cref{ch:astarpa}: A*PA.*
 In this chapter, we introduce /A* pairwise aligner/.
 The goal of A*PA is to achieve near-linear runtime on a large class of input
 sequences, thereby improving the quadratic complexity of most previous methods.
@@ -154,7 +157,7 @@ This chapter is based on the following paper, which has shared first-authorship 
   with Chaining Seed Heuristic and Match Pruning/, Bioinformatics 2024.
 
 
-*Chapter 4 ([[file:../../static/papers/astarpa2.pdf][paper PDF]]): A*PA2.*
+*\cref{ch:astarpa2}: A*PA2.*
 Unfortunately, A*PA can be slow when run on real data. Specifically in regions
 with a lot of mutations, some local quadratic behaviour is inevitable. Because
 the A* algorithm is quite heavy, requiring many memory accesses,
@@ -174,7 +177,7 @@ This chapter is based on the paper on A*PA2,
 - \hspace{1em} A*PA2 [cite:@astarpa2]: :: Ragnar Groot Koerkamp, /A*PA2: Up to $19\times$ Faster Exact Global
   Alignment/, WABI 2024.
 
-*Chapter 5 ([[../mapping/mapping.org][blog]]): Semi-global alignment and mapping.*
+*\cref{ch:mapping}: Semi-global alignment and mapping.*
 In this last chapter on pairwise alignment, we generalize our method from
 /global/ to /semi-global/ alignment. Instead of aligning two full sequences, we
 now align one sequence to only a (small) part of another sequence.
@@ -202,14 +205,13 @@ consider.  Because of this, most papers touch upon multiple aspects of this
 problem.  We attempt to somewhat untangle this situation, and cover the
 literature and our new contributions one topic at a time.
 
-*Chapter 6 ([[../minimizers/minimizers.org::*Theory of sampling schemes][blog]]): Theory of Sampling Schemes.*
+*\cref{ch:minitheory}: Theory of Sampling Schemes.*
 We start with a formal introduction of /minimizer schemes/, and also the
 slightly more general /sampling schemes/.
 We introduce how the /density/ of these schemes is defined and how it can be
 computed, and review a number of theoretical results around this.
 
-*Chapter 7 ([[../minimizers/minimizers.org::Lower Bounds on Sampling Scheme Density
-][blog]]): Lower Bounds on Density.*
+*\cref{ch:minilb}: Lower Bounds on Density.*
 In this chapter, we review existing lower bounds on the density, that tell us
 something about the maximum possible compression ratio that can be achieved.
 As it turns out, existing lower bounds are not nearly tight. The main result is
@@ -220,7 +222,7 @@ shared first-authorship between Bryce Kille and myself.
   Alan Liu, and Todd J. Treangen, /A Near-Tight Lower Bound on the Density of
   Forward Sampling Schemes/,  Bioinformatics 2024.
 
-*Chapter 8 ([[../minimizers/minimizers.org::Practical Sampling Schemes][blog]]): Sampling Schemes.*
+*\cref{ch:sampling}: Sampling Schemes.*
 We then turn our attention to practical minimizer and sampling schemes.
 We first review existing minimizer schemes, and then introduce the /open-closed
 minimizer/ and the /mod-minimizer/. The main result is that the mod-minimizer
@@ -234,7 +236,7 @@ parameters are large. This work is based on two papers:
   Ermanno Pibiri, /The Open-Closed Mod-Minimizer Algorithm/, accepted to AMB 2025.
 
 
-*Chapter 9 ([[../minimizers/minimizers.org::Towards Optimal Selection Schemes][blog]]): Selection Schemes.*
+*\cref{ch:selection}: Selection Schemes.*
 We end the investigation of minimizers by asking the question: can we construct
 sampling schemes that are not just near-optimal, but /exactly/ optimal?
 As a first step towards this goal, we consider the simple case where $k=1$. We obtain the
@@ -247,13 +249,13 @@ lower bound.
 Lastly, we shift our attention to the efficient implementation of algorithms and
 data structures.
 
-*Chapter 10 ([[../throughput/throughput.org][blog]]): Optimizing Throughput.*
+*\cref{ch:throughput}: Optimizing Throughput.*
 First, we give an overview of techniques that can be used to speed up code.
 These are split into two categories: techniques to improve /compute-bound/ code, where
 the executing the instructions is the bottleneck, and techniques to improve
 /memory-bound/ code, where reading or writing from memory is the bottleneck.
 
-*Chapter 11 ([[../simd-minimizers/simd-minimizers.org][blog]], [[../../static/papers/simd-minimizers-preprint.pdf][paper PDF]]): SimdMinimizers.*
+*\cref{ch:simdmini}: SimdMinimizers.*
 As already seen, minimizers can be used as a way to obtain a smaller
 sketch of some input data. If the compression ratio is high, this means that
 the processing of this sketch can be much faster, so that the sketching in itself
@@ -267,7 +269,7 @@ instructions to process 8 sequences in parallel.
   Igor Martayan, /SimdMinimizers: Computing Random Minimizers, Fast/, SEA 2025.
 
 
-*Chapter 12 ([[../ptrhash/ptrhash.org][blog]], [[../../static/papers/ptrhash.pdf][paper PDF]]): PtrHash.*
+*\cref{ch:ptrhash}: PtrHash.*
 We also investigate the memory-bound application of /minimal perfect hashing/.
 This data structure is an important part of the SSHash /\(k\)-mer dictionary/
 [cite:@sshash], that is used in various applications in bioinformatics.
@@ -283,7 +285,7 @@ space.
   Perfect Hashing at RAM Throughput/, SEA 2025.
 
 
-*Further results ([[../../static/papers/u-index-preprint.pdf][paper PDF]]).* I also briefly mention here one additional paper that closely relates
+*Further results.* I also briefly mention here one additional paper that closely relates
 to this thesis, but that is not otherwise a part of it: the U-index. This is again a data structure based on minimizers,
 that works by building an index on the sketched (compressed) representation of
 the text.
@@ -294,6 +296,9 @@ the text.
   Patterns/, SEA 2025.
 
 * Discussion
+:PROPERTIES:
+:EXPORT_FILE_NAME: discussion.tex
+:END:
 
 In this thesis, we have worked on optimizing algorithms and implementations for
 several problems in bioinformatics.
@@ -321,9 +326,9 @@ We reviewed many early improvements to theoretical algorithms, and a number of
 techniques for implementing these algorithms efficiently.
 
 Nearly all existing methods are based on some variant of dynamic programming.
-In A*PA, we use the A* shortest path algorithm, which is a graph-based
+In A*PA (\cref{ch:astarpa}), we use the A* shortest path algorithm, which is a graph-based
 method instead. This allows us to use a heuristic that can quickly and closely
-''predict'' the edit distance in many cases.
+``predict'' the edit distance in many cases.
 We additionally introduced /pruning/, which dynamically improves the heuristic
 as the A* search progresses, thereby leading to near-linear runtime. To my
 knowledge, this is the first heuristic of this type, and this same technique may
@@ -333,7 +338,7 @@ As it turns out, even though A*PA has near-linear complexity, the constant
 overhead is large: each visited state requires a memory access. This makes the
 method completely impractical whenever the scaling is super-linear, for example
 due to noisy regions or gaps in the alignment.
-Thus, in A*PA2, we revert back to a DP-based method, and we incorporate the A*
+Thus, in A*PA2 (\cref{ch:astarpa2}), we revert back to a DP-based method, and we incorporate the A*
 heuristic into the classic band-doubling algorithm. Alongside additional
 optimizations, this yields up to $19\times$ speedup over previous methods.
 
@@ -347,19 +352,19 @@ semi-global alignment and to affine costs, but a large part of this remains as
 future work.
 
 ** Low Density Minimizers
-We then looked at /minimizer schemes/, which are used to sub-sample the \(k\)-mers
+We then looked at /minimizer schemes/ (\cref{ch:minitheory}), which are used to sub-sample the \(k\)-mers
 of a genomic sequence as a form of compressing the sequence. The constraint is
 that at least one \(k\)-mer must be sampled every $w$ positions, and the goal is
 to minimize the fraction (/density/) of sampled \(k\)-mers.
 
 We were able to answer a number of open questions in this field.
-We proved a near-tight lower bound that is the first to show that the density is
+We proved a near-tight lower bound (\cref{ch:minilb}) that is the first to show that the density is
 at least $2/(w+1)$ when $k=1$, and generally this new bound is near-tight as $k\to\infty$.
-Alongside this, we introduced the mod-minimizer, which matches the
+Alongside this, we introduced the mod-minimizer (\cref{ch:sampling}), which matches the
 scaling of the lower bound, making this the first near-optimal scheme for large $k$.
 
 *Open problems.*
-We also started the exploration of optimal schemes for $k=1$, and introduced the
+We also started the exploration of optimal schemes for $k=1$ (\cref{ch:selection}), and introduced the
 /anti-lexicographic sus-anchor/, which is nearly optimal in practice. However,
 it is not quite theoretically optimal, and improving this remains an interesting
 open problem. Similarly, experiments suggest that perfectly optimal schemes
@@ -373,10 +378,10 @@ they are only marginally better, and it remains an open problem to prove this.
 
 ** High Throughput Bioinformatics
 Lastly, we optimized two specific applications in bioinformatics to achieve high
-throughput. In the case of PtrHash, we were able to achieve throughput within
+throughput. In the case of PtrHash (\cref{ch:ptrhash}), we were able to achieve throughput within
 $10\%$ of what the hardware is capable of, and up to nearly $5\times$ faster than the
-second fastest alternative. In the cases of both A*PA2 and
-\texttt{simd-minimizers}, we were able to achieve on the order of $10\times$
+second fastest alternative. In the cases of both A*PA2 (\cref{ch:astarpa2}) and
+\texttt{simd-minimizers} (\cref{ch:simdmini}), we were able to achieve on the order of $10\times$
 speedups over previous implementations. In all these cases, this was achieved by
 designing the algorithm with the implementation in mind, and by optimizing the
 implementation to fully utilize the capabilities of modern CPUs.
