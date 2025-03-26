@@ -104,7 +104,7 @@ This typically implies a few things:
 - The /implementation/ of the algorithm optimally exploits the given hardware.
 At times, the first two goals are at odds with each other: there may be a very inefficient
 linear solution (a classical example are linked lists), or a very efficient
-quadratic solution (such as dynamic programming, \cref{part1}).
+quadratic solution (such as dynamic programming).
 The last two goals, efficiency and implementation, are related, but slightly
 different. With /efficiency/, we mean the absolute /number/ of (abstract)
 operations the code uses, while an optimal implementation efficiently /executes/
@@ -129,12 +129,12 @@ and longer sequences. While methods that scale quadratically with sequence
 length are fine for sequences up to length 10 thousand, they become slow for
 significantly longer sequences.
 
-*\cref{ch:pa}: A History of Pairwise Alignment.*
+*Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog]]): A History of Pairwise Alignment.*
 We start with a formal problem statement of pairwise alignment.
 Then, we review existing algorithms and techniques to implement them efficiently.
 The focus is on those methods that form the background for our own work.
 
-*\cref{ch:astarpa}: A*PA.*
+*Chapter 3 ([[file:../../static/papers/astarpa.pdf][paper PDF]]): A*PA.*
 In this chapter, we introduce /A* pairwise aligner/.
 The goal of A*PA is to achieve near-linear runtimes on a large class of input
 sequences, thereby improving the quadratic complexity of most previous methods.
@@ -151,7 +151,7 @@ This chapter is based on the following paper, which has shared first-authorship 
   with Chaining Seed Heuristic and Match Pruning/, Bioinformatics 2024.
 
 
-*\cref{ch:astarpa2}: A*PA2.*
+*Chapter 4 ([[file:../../static/papers/astarpa2.pdf][paper PDF]]): A*PA2.*
 Unfortunately, A*PA can be slow when run on real data. Specifically in regions
 with a lot of mutations, some local quadratic behaviour is inevitable. Because
 the A* algorithm is quite heavy, requiring many memory accesses,
@@ -171,7 +171,7 @@ This chapter is based on the paper on A*PA2,
 - A*PA2 [cite:@astarpa2]: :: Ragnar Groot Koerkamp, /A*PA2: Up to $19\times$ Faster Exact Global
   Alignment/, WABI 2024.
 
-*\cref{ch:mapping}: Semi-global alignment and mapping.*
+*Chapter 5 ([[../mapping/mapping.org][blog]]): Semi-global alignment and mapping.*
 In this last chapter on pairwise alignment, we generalize our method from
 /global/ to /semi-global/ alignment. Instead of aligning two full sequences, we
 now align one sequence to only a (small) part of another sequence.
@@ -199,13 +199,14 @@ consider.  Because of this, most papers touch upon multiple aspects of this
 problem.  We attempt to somewhat untangle this situation, and cover the
 literature and our new contributions one topic at a time.
 
-*\cref{ch:minitheory}: Theory of Sampling Schemes.*
+*Chapter 6 ([[../minimizers/minimizers.org::*Theory of sampling schemes][blog]]): Theory of Sampling Schemes.*
 We start with a formal introduction of /minimizer schemes/, and also the
 slightly more general /sampling schemes/.
 We introduce how the /density/ of these schemes is defined and how it can be
 computed, and review a number of theoretical results around this.
 
-*\cref{ch:minilb}: Lower Bounds on Density.*
+*Chapter 7 ([[../minimizers/minimizers.org::Lower Bounds on Sampling Scheme Density
+][blog]]): Lower Bounds on Density.*
 In this chapter, we review existing lower bounds on the density, that tell us
 something about the maximum possible compression ratio that can be achieved.
 As it turns out, existing lower bounds are not nearly tight. The main result is
@@ -216,7 +217,7 @@ shared first-authorship between Bryce Kille and myself.
   Alan Liu, and Todd J. Treangen, /A Near-Tight Lower Bound on the Density of
   Forward Sampling Schemes/,  Bioinformatics 2024.
 
-*\cref{ch:sampling}: Sampling Schemes.*
+*Chapter 8 ([[../minimizers/minimizers.org::Practical Sampling Schemes][blog]]): Sampling Schemes.*
 We then turn our attention to practical minimizer and sampling schemes.
 We first review existing minimizer schemes, and then introduce the /open-closed
 minimizer/ and the /mod-minimizer/. The main result is that the mod-minimizer
@@ -230,7 +231,7 @@ parameters are large. This work is based on two papers:
   Ermanno Pibiri, /The Open-Closed Mod-Minimizer Algorithm/, accepted to AMB 2025.
 
 
-*\cref{ch:selection}: Selection Schemes.*
+*Chapter 9 ([[../minimizers/minimizers.org::Towards Optimal Selection Schemes][blog]]): Selection Schemes.*
 We end the investigation of minimizers by asking the question: can we construct
 sampling schemes that are not just near-optimal, but /exactly/ optimal?
 As a first step towards this goal, we consider the simple case where $k=1$. We obtain the
@@ -243,13 +244,13 @@ lower bound.
 Lastly, we shift our attention to the efficient implementation of algorithms and
 data structures.
 
-*\cref{ch:throughput}: Optimizing Throughput.*
+*Chapter 10 ([[../throughput/throughput.org][blog]]): Optimizing Throughput.*
 First, we give an overview of techniques that can be used to speed up code.
 These are split into two categories: techniques to improve /compute-bound/ code, where
 the executing the instructions is the bottleneck, and techniques to improve
 /memory-bound/ code, where reading or writing from memory is the bottleneck.
 
-*\cref{ch:simdmini}: SimdMinimizers.*
+*Chapter 11 ([[../fast-minimizers/fast-minimizers.org][blog]], [[../../static/papers/simd-minimizers-preprint.pdf][paper PDF]]): SimdMinimizers.*
 As already seen, minimizers can be used as a way to obtain a smaller
 sketch of some input data. If the compression ratio is high, this means that
 the processing of this sketch can be much faster, so that the sketching in itself
@@ -263,7 +264,7 @@ instructions to process 8 sequences in parallel.
   Igor Martayan, /SimdMinimizers: Computing Random Minimizers, Fast/, submitted to SEA 2025.
 
 
-*\cref{ch:ptrhash}: PtrHash.*
+*Chapter 12 ([[../ptrhash/ptrhash.org][blog]], [[../../static/papers/ptrhash-full.pdf][paper PDF]]): PtrHash.*
 We also investigate the memory-bound application of /minimal perfect hashing/.
 This data structure is an important part of the SSHash /\(k\)-mer dictionary/
 [cite:@sshash], that is used in various applications in bioinformatics.
@@ -279,7 +280,7 @@ space.
   Perfect Hashing at RAM Throughput/, submitted to SEA 2025.
 
 
-*U-index.* I also briefly mention here one additional paper that closely relates
+*U-index ([[../../static/papers/u-index-preprint.pdf][paper PDF]]).* I also briefly mention here one additional paper that closely relates
 to this thesis, but that is not otherwise a part of it: the U-index. This is again a data structure based on minimizers,
 that works by building an index on the sketched (compressed) representation of
 the text.
