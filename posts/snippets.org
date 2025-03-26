@@ -92,6 +92,26 @@ unsafe {
 }
 #+end_src
 
+** Sorting
+Use =rdst= ([[https://docs.rs/rdst/latest/rdst/][docs.rs]], [[https://crates.io/crates/rdst][crates.io]]) for fast sorting. Quick benchmark in [[https://github.com/bevyengine/bevy/issues/4291][this bevy
+pr]], where it's $20\times$ faster than standard =sort_unstable=.
+But note that =rdst= is *multithreaded by default*.
+
+#+begin_src rust
+use rdst::RadixSort;
+v.radix_sort_unstable();
+#+end_src
+
+For non-integer keys, implement the =RadixKey= trait.
+
+There's also =radsort= ([[https://docs.rs/rdst/latest/radsort][docs.rs]], [[https://crates.io/crates/radsort][crates.io]]), which seems a bit faster for
+*single threaded* execution.
+
+#+begin_src rust
+radsort::sort(&mut v);
+radsort::sort_by_key(&mut v, |x| x);
+#+end_src
+
 * Python
 ** Export org table
 #+begin_src py
