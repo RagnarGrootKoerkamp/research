@@ -84,9 +84,9 @@
 
 (org-mode)
 
-(defmacro special-block-labels-push (name label)
-  (let ((labels (format "special-block-%s-labels" name))
-        (labels-cdr (format "special-block-%s-labels-cdr" name)))
+(defmacro special-block-labels-push (prefix label)
+  (let ((labels (format "special-block-%s-labels" prefix))
+        (labels-cdr (format "special-block-%s-labels-cdr" prefix)))
     `(let ((label (list (format "%s" ,label))))
        (setq ,(intern labels-cdr)
              (if ,(intern labels-cdr)
@@ -97,8 +97,8 @@
 
 (defmacro defspeciallink (name prefix)
   `(progn
-     (defvar ,(intern (format "special-block-%s-labels" name)) '()) ; to store this theroem labels
-     (defvar ,(intern (format "special-block-%s-labels-cdr" name)) nil)
+     (defvar ,(intern (format "special-block-%s-labels" prefix)) '()) ; to store this theroem labels
+     (defvar ,(intern (format "special-block-%s-labels-cdr" prefix)) nil)
 
      (org-defblock ,prefix (ref nil) ()
                    ,(format "Reference a %s special block." name)
@@ -108,7 +108,7 @@
                       ,(format "\\ref{%s:%%s}" prefix)) ; use standard ref in LateX
                      ((org-export-derived-backend-p org-export-current-backend 'html)
                       ,(format "<a href=\"#%s:%%s\">%%d</a>" prefix))) ; in HTML the number has to be print manually, finding the position of the label in the list
-                    ref (1+ (cl-position (format "%s" ref) ,(intern (format "special-block-%s-labels" name)) :test 'equal)))))) ; sum one because lists are zero based
+                    ref (1+ (cl-position (format "%s" ref) ,(intern (format "special-block-%s-labels" prefix)) :test 'equal)))))) ; sum one because lists are zero based
 
 (defmacro deftheorem (name display-name prefix &optional tcb)
   "Defines a new theorem type called NAME (rendered as DISPLAY-NAME in HTML) which labels start with PREFIX. If TCB is not nil, in LaTeX the tcbtheorem syntax is used.
@@ -123,7 +123,7 @@ As can be seen in [[prefix:lbl]]
 
      (org-defblock ,name (title "TITLE" label nil unnumbered nil)
                    ,(format "Define %s special block." name)
-                   (unless unnumbered (special-block-labels-push ,name label)) ; add label to list
+                   (unless unnumbered (special-block-labels-push ,prefix label)) ; add label to list
                    (cond
                     ((org-export-derived-backend-p org-export-current-backend 'latex)
                      (format
@@ -135,7 +135,7 @@ As can be seen in [[prefix:lbl]]
                     ((org-export-derived-backend-p org-export-current-backend 'html)
                      (format
                       (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\"><span class=\"special-block-number\">%s" prefix name display-name)
-                              (unless unnumbered (format " %d</span>" (length ,(intern (format "special-block-%s-labels" name)))))
+                              (unless unnumbered (format " %d</span>" (length ,(intern (format "special-block-%s-labels" prefix)))))
                               (when title " <span class=\"special-block-name\">") "%s" (when title "</span>") ".</span>"
                               ,(format "%%s</div>"))
                       (or label "") (or title "") contents))
@@ -145,9 +145,37 @@ As can be seen in [[prefix:lbl]]
 (deftheorem definition "Definition" dfn)
 (deftheorem newdefinition "Definition" dfn)
 (deftheorem theorem "Theorem" thm)
-(deftheorem newtheorem "Theorem" thm)
+(deftheorem mytheorem "Theorem" thm)
 (deftheorem problem "Problem" prob)
 (deftheorem openproblem "Open problem" prob)
+(deftheorem conjecture "Conjecture" conj)
+
+;; Reset special-block-{theorem,definition}-labels{-cdr} before export.
+(add-hook 'org-export-before-parsing-functions
+          (lambda (backend)
+            (setq special-block-thm-labels '())
+            (setq special-block-thm-labels-cdr nil)
+            (setq special-block-theorem-labels '())
+            (setq special-block-theorem-labels-cdr nil)
+            (setq special-block-mytheorem-labels '())
+            (setq special-block-mytheorem-labels-cdr nil)
+            (setq special-block-dfn-labels '())
+            (setq special-block-dfn-labels-cdr nil)
+            (setq special-block-definition-labels '())
+            (setq special-block-definition-labels-cdr nil)
+            (setq special-block-newdefinition-labels '())
+            (setq special-block-newdefinition-labels-cdr nil)
+            (setq special-block-prob-labels '())
+            (setq special-block-prob-labels-cdr nil)
+            (setq special-block-problem-labels '())
+            (setq special-block-problem-labels-cdr nil)
+            (setq special-block-openproblem-labels '())
+            (setq special-block-openproblem-labels-cdr nil)
+            (setq special-block-conj-labels '())
+            (setq special-block-conj-labels-cdr nil)
+            (setq special-block-conjecture-labels '())
+            (setq special-block-conjecture-labels-cdr nil)
+            ))
 
 
 ;;;
