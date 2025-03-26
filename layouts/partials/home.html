@@ -23,9 +23,15 @@
         <a
           href="{{ .url | safeURL }}"
           aria-label="{{ .name }}"
-          {{if .rel}}rel="{{ .rel }}" {{end}}
-          {{if .target}}target="{{ .target }}" {{end}}
-          {{if .type}}type="{{ .type }}" {{end}}
+          {{if
+          .rel}}rel="{{ .rel }}"
+          {{end}}
+          {{if
+          .target}}target="{{ .target }}"
+          {{end}}
+          {{if
+          .type}}type="{{ .type }}"
+          {{end}}
         >
           <i class="{{ .icon }}" aria-hidden="true"></i>
         </a>
@@ -35,8 +41,12 @@
         <a
           href="{{ .url | safeURL }}"
           aria-label="{{ .name }}"
-          {{if .rel}}rel="{{ .rel }}" {{end}}
-          {{if .target}}target="{{ .target }}" {{end}}
+          {{if
+          .rel}}rel="{{ .rel }}"
+          {{end}}
+          {{if
+          .target}}target="{{ .target }}"
+          {{end}}
           >{{ .name }}</a
         >
       </li>
@@ -47,28 +57,28 @@
 </section>
 
 <section class="container list">
-  {{ .Content }}
-  {{ range $tag := (slice "wip" "highlight") }}
-    {{ if or hugo.IsServer (eq $tag "highlight") }}
-      {{ if eq $tag "highlight" }}
-        <h2>Highlighted posts</h2>
-      {{else}}
-        <h2>{{$tag | humanize }} posts</h2>
-      {{end}}
-      <ul>
-        {{ range (where site.RegularPages ".Type" "posts") }} {{ if in .Params.Tags $tag }}
-          <li>
-            <span class="date">
-              {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
-            </span>
-            <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
-              >{{ .Title }}</a
-            >
-            {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }} {{end }}
-          </li>
-          {{ end }}
-        {{ end }}
-      </ul>
-      {{ end }}
-  {{ end }}
+  {{ .Content }} {{ range $tag := (slice "wip" "viral" "highlight") }} {{ if or
+  hugo.IsServer (not (eq $tag "wip")) }} {{ if eq $tag "viral" }}
+  <h2>Popular posts</h2>
+  {{ else if eq $tag "highlight" }}
+  <h2>Highlighted posts</h2>
+  {{else}}
+  <h2>{{$tag | humanize }} posts</h2>
+  {{end}}
+  <ul>
+    {{ range (where site.RegularPages ".Type" "posts") }} {{ if in .Params.Tags
+    $tag }}
+    <li>
+      <span class="date">
+        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
+      </span>
+      <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
+        >{{ .Title }}</a
+      >
+      {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
+      {{end }}
+    </li>
+    {{ end }} {{ end }}
+  </ul>
+  {{ end }} {{ end }}
 </section>
