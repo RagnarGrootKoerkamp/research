@@ -165,7 +165,7 @@ We start our survey with a formal problem statement for pairwise alignment
 ([[*Problem Statement]]). Then, we list a number of variants of global alignment
 ([[*Alignment types]], [[*Cost Models]]).
 While these are not our focus, they can help to contextualize other existing methods.
-Then we move on to the classic DP algorithms in [[*The Classic Quadratic DP
+Then we move on to the classic DP algorithms in [[*The Classic DP
 Algorithms]] and the algorithmic improvements in later sections.
 These are also covered in the surveys by Kruskal [cite:@kruskal83] and Navarro [cite:@navarro01].
 
@@ -227,8 +227,8 @@ higher than the divergence, since random errors can cancel each other.
 
 #+name: edit-graph
 #+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite:@sellers]. Solid edges indicate insertion/deletion/substitution edges of cost $1$, while dashed edges indicate matches of cost $0$. All edges are directed from the top-left to the bottom-right. The shortest path of cost $2$ is shown in blue. The right shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state.
-#+attr_html: :class inset
-[[file:astarpa2/edit-graph2.drawio.svg]]
+#+attr_html: :class inset medium
+[[file:edit-graph.svg]]
 
 *Dynamic programming.*
 Pairwise alignment has classically been approached as a dynamic programming (DP)
@@ -283,13 +283,11 @@ states in order of increasing ``anticipated total distance''.
 
 * Alignment types
 
-#+caption: Overview of different alignment types. (CC0 by Pesho Ivanov; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/alignment-types.drawio.svg][source]])
-# #+caption: TODO: re-scale image
+#+caption: Overview of different alignment types.
 #+name: alignment-types
-#+attr_html: :class inset
-[[file:pairwise-alignment-history/drawings/alignment-types.drawio.svg]]
+#+attr_html: :class inset medium
+[[file:alignment-modes.svg]]
 
-# TODO: Also put Pesho's 2nd figure?
 
 There are a few variants of pairwise alignments and edit distance. While the
 focus of this chapter is (unit cost) edit distance, it is helpful to first have
@@ -322,10 +320,10 @@ align many small reads onto a single long reference.
 
 * Cost Models
 
-#+caption: Overview of different cost models. (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/cost-models.drawio.svg][source]])
+#+caption: Overview of different cost models.
 #+name: cost-models
-#+attr_html: :class large
-[[file:pairwise-alignment-history/drawings/cost-models.drawio.svg]]
+#+attr_html: :class inset :width 60%
+[[file:cost-models.svg]]
 
 There are different models to specify the cost of each edit operation
 ([[cost-models]]) [cite:@spouge91]. In particular, in a biological setting the probability of various
@@ -423,7 +421,7 @@ given a scoring model with fixed affine costs $\delta(a, a) = M$, $\delta(a,b) =
 and $w_k = O + E \cdot k$, there is a cost-model (with $\delta(a,a)=0$) that
 yields the same optimal alignment.
 
-* The Classic Quadratic DP Algorithms
+* The Classic DP Algorithms
 :PROPERTIES:
 :CUSTOM_ID: dp
 :END:
@@ -441,8 +439,8 @@ a few years before, although in a different domain.
 
 #+name: fig:nw
 #+caption: The cubic algorithm as shown by Needleman and Wunsch [cite:@nw]. Note that as shown, it works from the bottom right to the top left, and maximizes the LCS score instead of minimizing cost. Consider the outlined 1-cell. It has a score of 1 because the characters in its row and column match. The final score of the cell is this 1, plus the maximum of the remaining outlined cells in the row below and column right of it.
-#+attr_html: :class inset
-[[file:pairwise-alignment-history/screenshots/nw-cubic.png]]
+#+attr_html: :class inset medium
+[[file:dp.svg]]
 
 *Needleman-Wunsch' cubic algorithm.*
 The problem of pairwise alignment of biological sequences was first formalized
@@ -565,12 +563,6 @@ only the last two columns of the DP matrix $D$ (and $P$ and $Q$) are needed at
 any time, so that linear memory suffices.
 
 * Linear Memory using Divide and Conquer
-#+name: myers88
-#+caption: Divide-and-conquer as shown by Myers and Miller [cite:@myers88].
-#+caption: Unlike the main text, in this figure, the recursion is on the middle row, rather than the middle column.
-#+attr_html: :class inset small
-[[file:pairwise-alignment-history/screenshots/myers88.png]]
-
 Hirschberg [cite:@hirschberg75] introduces a divide-and-conquer algorithm to
 compute the LCS of two sequences in linear space.
 Instead of computing the full alignment from
@@ -589,7 +581,7 @@ At this point, we know that the point $(i^\star, j^\star)$ is part of an optimal
 The two resulting subproblems of aligning $A[0, i^\star]$ to $B[0, j^\star]$ and
 $A[i^\star, n]$ to $B[j^\star, m]$ can now be solved recursively using the same
 technique, where again we find the midpoint of the alignment. This recursive
-process is shown in figure [[myers88]].
+process is shown in figure [[algs-1]].
 The recursion stops as soon as the alignment problem becomes trivial, or, in
 practice, small enough to solve with the usual quadratic-memory approach.
 
@@ -709,6 +701,17 @@ lists [of open states] if there is a natural order for vertex expansion.
 In A*PA2 [cite:@astarpa2] (\cref{ch:astarpa2}),
 we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
+
+#+name: algs-1
+#+caption: Schematic overview of global pairwise alignment methods.
+#+attr_html: :class inset large
+[[file:algs-1.svg]]
+
+#+name: algs-2
+#+caption: Worked example of each algorithm, based on [cite:@sellers].
+#+attr_html: :class inset large
+[[file:algs-2.svg]]
+
 
 * Computational Volumes and Band Doubling
 :PROPERTIES:
@@ -843,11 +846,6 @@ computational volumes are:
 :PROPERTIES:
 :CUSTOM_ID: diagonal-transition
 :END:
-
-#+caption: Farthest reaching points for LCS by Myers [cite:@myers86].
-#+name: farthest-reaching
-#+attr_html: :class inset
-[[file:pairwise-alignment-history/screenshots/furthest-reaching.png]]
 
 Around 1985, the /diagonal transition/ algorithm was independently discovered by
 Ukkonen [cite:@ukkonen83;@ukkonen85] (for edit distance) and Myers
@@ -1068,11 +1066,6 @@ computation into large blocks. This results in highly predictable code, and
 benefits the execution speed, even though some more (redundant) states may be computed.
 
 * LCS and Contours
-#+caption: Contours as shown by Hirschberg [cite:@hirschberg77]
-#+name: contours
-#+attr_html: :class inset
-[[file:pairwise-alignment-history/screenshots/contours.png]]
-
 So far, all pairwise alignment methods we looked at are based on the alignment graph. The
 longest common subsequence problem also admits different solutions. See e.g.
 [cite:@lcs-survey] for a survey.
@@ -1098,7 +1091,7 @@ While this is slow in general, when there are only few ($r\approx n$) matches,
 as may be the case when comparing lines of code, this algorithm is much faster
 than previous quadratic methods.
 
-*Contours.* The regions of equal $S$ create a set of /contours/ ([[contours]]), where contour $\ell$ is the
+*Contours.* The regions of equal $S$ create a set of /contours/ ([[algs-2]]j), where contour $\ell$ is the
 boundary between the regions with $S(u)\geq \ell$ and $S(u) < \ell$.
 Each contour is determined by a set of /dominant/ matches
 $a_i=b_j$ for which $S(i+1,j+1)$ is larger than both $S(i, j+1)$ and $S(i+1,j)$.
