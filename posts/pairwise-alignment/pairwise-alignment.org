@@ -22,8 +22,7 @@ There is a vast amount of literature on algorithms for pairwise alignment and
 its variants. We start with the classic DP
 algorithm by Needleman and Wunsch and go over a number of improvements, both
 algorithmic and in the implementation.
-We focus on those methods that A*PA (\cref{ch:astarpa}) and A*PA2
-(\cref{ch:astarpa2}) build on.
+We focus on those methods that A*PA and A*PA2 build on.
 #+end_notice
 
 #+attr_shortcode: attribution
@@ -121,7 +120,7 @@ in a graph. The classic algorithm for this is Dijkstra's algorithm
 [cite:@dijkstra59]. A faster version of it that can use domain-specific
 information is the A* algorithm [cite:@astar-hart67]. It achieves this by using
 a /heuristic/ that estimates the cost of the (remaining) alignment.
-In /A*PA/ (\cref{ch:astarpa}), we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
+In /A*PA/, we take the /seed heuristic/ of A*ix [cite:@astarix-1;@astarix-2] as a
 starting point and improve it to the /gap-chaining seed heuristic/, similar to
 [cite:@myers-miller-95], and extend it with /inexact matches/. For inputs
 with uniform error rate up to $10\%$, this can estimate the remaining distance
@@ -136,7 +135,7 @@ algorithm, is a relatively cache-inefficient graph algorithm.
 On the other hand, some of the fastest aligners use DP (dynamic programming) with /bitpacking/ to
 very efficiently compute the edit distance between sequences, even though they
 do not have the near-linear scaling of A*PA.
-In /A*PA2/ (\cref{ch:astarpa2}), we
+In /A*PA2/, we
 build a highly optimized aligner.
 It merges the ideas of band-doubling and bit-packing (as already used by Edlib
 [cite:@edlib]) with SIMD and the heuristics developed for A*PA.
@@ -663,7 +662,7 @@ for the problem of sequence-to-graph alignment. This heuristic
 splits the sequence $A$ into disjoint k-mers, and uses that at least one edit is
 needed for each remaining k-mer that is not present in sequence $B$.
 
-In A*PA [cite:@astarpa] (\cref{ch:astarpa}) we will improve this into the
+In A*PA [cite:@astarpa] we will improve this into the
 /gap-chaining seed heuristic/ and add /pruning/, which results in near-linear
 alignment when the divergence is sufficient low.
 
@@ -698,7 +697,7 @@ and further [cite:@spouge89 p. 4]:
 This suggests a radical approach to A* search complexities: dispense with the
 lists [of open states] if there is a natural order for vertex expansion.
 #+end_quote
-In A*PA2 [cite:@astarpa2] (\cref{ch:astarpa2}),
+In A*PA2 [cite:@astarpa2],
 we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
@@ -743,51 +742,6 @@ This can be much faster than $O(nm)$ when $s$ and $t$ are both small, and works
 especially well when $t$ is not too much larger than $s$.
 For example, $t$ can be set as a known upper bound for the
 data being aligned, or as the length of some known suboptimal alignment.
-
-# #+name: intro
-# #+name: intro
-# #+caption: Alignment of two sequences of length $3000$ bp with 20% divergence using different algorithms. Coloured pixels correspond to visited states in the edit graph or dynamic programming matrix, and the blue to red gradient indicates the order of computation.
-# # #+caption: TODO: Review figs and caption
-# #+attr_html: :class equal-width
-# | [[file:astarpa2/imgs/intro/2_dijkstra.png]] | [[file:astarpa2/imgs/intro/3_diagonal-transition.png]] | [[file:astarpa2/imgs/intro/0_gap-gap.png]] | [[file:astarpa2/imgs/intro/0_bitpacking.png]] | [[file:astarpa2/imgs/intro/6_astarpa2_simple.png]] | [[file:astarpa2/imgs/intro/7_astarpa2_full.png]] | file:astarpa2/imgs/intro/5_astarpa-prune.png |
-# |                                         | + DT                                               | + band doubling                        | + gap heuristic and bitpacking            | + blocks                                       | + GCSH                                       | A*                                           |
-# | Dijkstra                                | WFA                                                | Ukkonen                                | Edlib                                     | A*PA2-simple                                   | A*PA2-full                                   | A*PA                                         |
-
-
-# #+begin_export latex
-# \begin{figure*}[t]
-# \captionsetup[subfloat]{justification=RaggedLeft,singlelinecheck=false}
-# \centering
-# \subfloat[Dijkstra]{\includegraphics[width=.24\linewidth]{imgs/intro/2_dijkstra.png}\label{introa}}
-# \hspace{-24em} \hfill
-# \subfloat[\wfa]{\includegraphics[width=.24\linewidth]{imgs/intro/3_diagonal-transition.png}\label{introb}}
-# \hspace{-24em} \hfill
-# \subfloat[Ukkonen]{\includegraphics[width=.24\linewidth]{imgs/intro/0_gap-gap.png}\label{introc}}
-# \hspace{-24em} \hfill
-# \subfloat[\edlib]{\includegraphics[width=.24\linewidth]{imgs/intro/0_bitpacking.png}\label{introd}}
-# \hspace{-24em} \hfill
-# \subfloat[\textbf{\astarpatwo\\-simple}]{\includegraphics[width=.24\linewidth]{imgs/intro/6_astarpa2_simple.png}\label{introe}}
-# \hspace{-24em} \hfill
-# \subfloat[\textbf{\astarpatwo\\-full}]{\includegraphics[width=.24\linewidth]{imgs/intro/7_astarpa2_full.png}\label{introf}}
-# \hspace{-24em} \hfill
-# \subfloat[\astarpa]{\includegraphics[width=.24\linewidth]{imgs/intro/5_astarpa-prune.png}\label{introg}}
-# \vspace{-0.5em}%
-# \caption{\label{intro}Alignment of two sequences of length $3000\bp$ with $20\%$
-#   divergence using different methods. Coloured pixels correspond to visited
-#   states in the edit graph or dynamic programming matrix, and the blue to red
-#   gradient indicates the order of computation. The black path indicates an optimal alignment.
-#   \protect\subref{introa}~Dijkstra is the classical shortest path algorithm.
-#   \protect\subref{introb}~WFA uses the diagonal transition algorithm.
-#   \protect\subref{introc}~Ukkonen's method uses band doubling.
-#   \protect\subref{introd}~Edlib adds the gap heuristic and bitpacking.
-#   \protect\subref{introe}~\astarpatwo-simple additionally computes blocks of
-#   $256$ columns at a time,
-#   \protect\subref{introf}~\astarpatwo-full applies the heuristics of \astarpa, and
-#   \protect\subref{introg}~\astarpa with the gap-chaining seed heuristic.
-#   % \cref{comparison} in \cref{app-comparison} shows the same methods on a more complicated alignment.
-# }
-# \end{figure*}
-# #+end_export
 
 *Gap heuristic.*
 In parallel, Ukkonen introduced a very similar idea [cite:@ukkonen85], /statically/ bounding the
@@ -1011,8 +965,17 @@ complexity of $O(ns/w)$.
 The supplement of
 BitPAl [cite:@bitpal;@bitpal-cpm] introduces an alternative scheme for edit
 distance based on a different encoding of the $\{-1,0,+1\}$ values, that also ends up
-using $20$ instructions. We show implementations of both Myers' and BitPAl's
-method in \cref{fig:bitpacking}.
+using $20$ instructions.
+We show implementations of both Myers' and BitPAl's
+method in [[bitpacking-myers]] and [[bitpacking-bitpal]].
+
+#+name: bitpacking-myers
+#+caption: Rust code for SIMD version of Myers' bitpacking algorithm, taking 20 instructions.
+#+include: ./bitpacking-myers.rs src rust
+
+#+name: bitpacking-bitpal
+#+caption: Rust code for SIMD version of Bitpal's bitpacking algorithm, taking 20 instructions.
+#+include: ./bitpacking-bitpal.rs src rust
 
 #+begin_export latex
 \begin{figure}[h!]
