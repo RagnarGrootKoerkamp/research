@@ -321,7 +321,7 @@ We reviewed many early improvements to theoretical algorithms, and a number of
 techniques for implementing these algorithms efficiently.
 
 Nearly all existing methods are based on some variant dynamic programming.
-In A*PA (\cref{ch:astarpa}), we use the A* shortest path algorithm, which is a graph-based
+In A*PA, we use the A* shortest path algorithm, which is a graph-based
 method instead. This allows us to use a heuristic that can quickly and closely
 ``predict'' the edit distance in many cases.
 We additionally introduced /pruning/, which dynamically improves the heuristic
@@ -333,7 +333,7 @@ As it turns out, even though A*PA has near-linear complexity, the constant
 overhead is large: each visited state requires a memory access. This makes the
 method completely impractical whenever the scaling is super-linear, for example
 due to noisy regions or gaps in the alignment.
-Thus, in A*PA2 (\cref{ch:astarpa2}), we revert back to a DP-based method, and we incorporate the A*
+Thus, in A*PA2, we revert back to a DP-based method, and we incorporate the A*
 heuristic into the classic band-doubling algorithm. Alongside additional
 optimizations, this yields up to $19\times$ speedup over previous methods.
 
@@ -346,19 +346,19 @@ Future work remains in extending the aligner to both semi-global alignment and
 to affine costs.
 
 ** Low Density Minimizers
-We then looked at /minimizer schemes/ (\cref{ch:minitheory}), which are used to sub-sample the \(k\)-mers
+We then looked at /minimizer schemes/, which are used to sub-sample the \(k\)-mers
 of a genomic sequence as a form of compressing the sequence. The constraint is
 that at least one \(k\)-mer must be sampled every $w$ positions, and the goal is
 to minimize the fraction (/density/) of sampled \(k\)-mers.
 
 We were able to answer a number of open questions in this field.
-We proved a near-tight lower bound (\cref{ch:minilb}) that is the first to show that the density is
+We proved a near-tight lower bound that is the first to show that the density is
 at least $2/(w+1)$ when $k=1$, and generally the bound is near-tight as $k\to\infty$.
-Alongside this, we introduced the mod-minimizer (\cref{ch:sampling}), which matches the
+Alongside this, we introduced the mod-minimizer, which matches the
 scaling of the lower bound, making this the first near-optimal scheme for large $k$.
 
 *Open problems.*
-We also started the exploration of optimal schemes for $k=1$ (\cref{ch:selection}), and introduced the
+We also started the exploration of optimal schemes for $k=1$, and introduced the
 /anti-lexicographic sus-anchor/, which is nearly optimal in practice. However,
 it is not quite theoretically optimal, and improving this remains an interesting
 open problem. Similarly, experiments suggest that perfectly optimal schemes
@@ -372,10 +372,10 @@ they are only marginally better, and it remains an open problem to prove this.
 
 ** High Throughput Bioinformatics
 Lastly, we optimized two specific applications in bioinformatics to achieve high
-throughput. In the case of PtrHash (\cref{ch:ptrhash}), we were able to achieve throughput within
+throughput. In the case of PtrHash, we were able to achieve throughput within
 $10\%$ of what the hardware is capable of, nearly $4\times$ faster than the
-second fastest alternative. In the cases of both A*PA2 (\cref{ch:astarpa2}) and
-\texttt{simd-minimizers} (\cref{ch:simdmini}), we were able to achieve on the order of $10\times$
+second fastest alternative. In the cases of both A*PA2 and
+\texttt{simd-minimizers}, we were able to achieve on the order of $10\times$
 speedups over previous implementations. In all these cases, this was achieved by
 designing the algorithm with the implementation in mind, and by optimizing the
 implementation to fully utilize the capabilities of modern CPUs.
