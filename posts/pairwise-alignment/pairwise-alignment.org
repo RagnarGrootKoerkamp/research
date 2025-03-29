@@ -284,7 +284,7 @@ states in order of increasing ''anticipated total distance''.
 
 #+caption: Overview of different alignment types.
 #+name: alignment-types
-#+attr_html: :class inset medium
+#+attr_html: :class inset large
 [[file:fig/alignment-modes.svg]]
 
 There are a few variants of pairwise alignments and edit distance. While the
@@ -303,20 +303,28 @@ different settings, see [[alignment-types]].
   and global-alignment algorithms still work.
 - *Semi-global:* Align a full sequence to a substring of a reference, e.g., when
   /mapping/ a read onto a larger genome.
-- *Overlap:* Align two partially overlapping reads against each other.
 - *Extension:* Align one sequence to a prefix of the other.
+- *Overlap:* Align two partially overlapping reads against each other.
 - *Local-extension:* Align a prefix of the two sequences. Unlike all previous
   methods, this alignment can end /anywhere/ in the edit graph.
   This requires a cost model that trades off matching aligned characters with
   not matching characters at all.
 - *Local:* Local alignment takes this a step further and aligns a substring of
   $A$ to a substring of $B$.
-  This is somewhat like ends-free, but now we may skip the start/end of both
+  This is somewhat like ends-free, but now we may skip the start/end of /both/
   sequences at the same time.
   The increased freedom in the location of the alignment prevents the faster
   global-alignment algorithms from working well.
+- *Clipping:* Clipping is a mix of semi-global and local alignment.
+  In principle, a semi-global alignment is done, but the read (shorter sequence)
+  that is being aligned may be /clipped/. This means that any number of
+  characters at the start or end of the read can be skipped for a fixed cost.
+  As with local alignment, this usually requires maximizing a score, with a
+  bonus for matches.
 
 In this chapter, we only consider global alignment and corresponding algorithms.
+These methods also work for ends-free alignment when the number of characters
+that may be skipped is relatively small.
 Later, in [[../mapping/mapping.org][Chapter 5]], we look deeper into semi-global alignment and its variants.
 
 * Cost Models
@@ -378,6 +386,9 @@ We list some of them here, from simple to more complicated.
 In practice, most methods for global alignment use a match cost $\delta(a,a) = 0$, fixed mismatch
 cost $\delta(a,b) = X>0$ for $a\neq b$, and fixed indel cost
 $\delta(a,\varepsilon) = \delta(\varepsilon,b) = I$.
+
+In the chapter on semi-global alignment and mapping ([[../mapping/mapping.org][blog]]), we discuss
+additional cost models used when the alignment mode is not global.
 
 ** Minimizing Cost versus Maximizing Score
 
@@ -441,7 +452,7 @@ a few years before, although in a different domain.
 #+name: fig:nw
 #+caption: The cubic algorithm as introduced by Needleman and Wunsch [cite:@nw]. Consider the highlighted cell. In the cubic algorithm, we first compute the cost between the two preceding characters, which are both =B= and thus create a match. Then, we consider all earlier cells in the the preceding row and column, and consider all gaps of arbitrary length $k$ and cost $w_k=k$.
 #+caption: The quadratic algorithm does not support arbitrary gap costs, but relies on $w_k=k$. This allows it to only consider three neighbouring states.
-#+attr_html: :class inset medium
+#+attr_html: :class inset :width 80%
 [[file:fig/dp.svg]]
 
 *Needleman-Wunsch' cubic algorithm.*

@@ -31,7 +31,7 @@ Some ideas on semi-global alignment are based on early discussions with Pesho Iv
 #+end_notice
 
 In this chapter, we will look at the problem of /semi-global alignment/, as a next
-step after [[../pairwise-alignment/pairwise-alignment.org][previous]] [[../pairwise-alignment-history/pairwise-alignment-history.org][posts]] on /global alignment/.
+step after /global alignment/ ([[../pairwise-alignment/pairwise-alignment.org][blog]]).
 
 In fact, we will quickly see that there is no such thing as ''just'' global
 alignment.
@@ -42,23 +42,25 @@ Thus, we will survey the /problem/ of semi-global alignment.
 We will briefly mention some existing algorithms and literature, but we'll
 mostly just go ahead and (re)invent some ideas from scratch.
 
-* What is semi-global alignment?
+* Alignment types, revisited
 First: what is /global/ alignment? Answer: finding the edit distance or minimal
 number of mutations between two strings.
 Equivalently, this is the problem of finding a minimal-cost path in the /edit
 graph/ (or /alignment graph/), from the top-left to the bottom-right.
 
-** Global alignment
-
 #+caption: Global alignment goes from top-left (=start) to bot-right (=end).
 #+attr_html: :class inset large
-[[file:global.svg]]
+[[file:fig/alignment-modes.svg]]
 
+- global
+- semi-global
+- ends-free
+- clipping
 
-** Ends-free alignment
-#+caption: Ends-free alignment as supported by WFA (and Edlib (TODO verify)) can drop some number of chars from either the pattern or the text, as needed.
-#+attr_html: :class inset large
-[[file:ends-free.svg]]
+#+caption: Global alignment goes from top-left (=start) to bot-right (=end).
+#+attr_html: :class inset :width 70%
+[[file:fig/dimentions.svg]]
+
 
 ** Semi-global alignment
 - single isolated instance of alignment
@@ -67,9 +69,6 @@ graph/ (or /alignment graph/), from the top-left to the bottom-right.
 - Length from 100 to 100k or more
 - eg: pattern was already roughly located in text. Just a final alignment to
   refine the result.
-#+caption: Semi-global goes from the top-left to bottom-right, but edges along the top and bottom are free.
-#+attr_html: :class inset large
-[[file:semi-global.svg]]
 
 ** Text searching
 - find small pattern ($m\leq 100$, or $O(w)$ for word-size $w$) in a long (kB to MB) text.
@@ -78,115 +77,59 @@ graph/ (or /alignment graph/), from the top-left to the bottom-right.
 - Return all hits below a fixed threshold
 - eg: search a small string in a file or repository
 - eg: searching tags/barcodes in reads
-#+caption: Text searching goes from the top to the bottom, and can find multiple results.
-#+attr_html: :class inset large
-[[file:search.svg]]
 ** Mapping
 - find read (100bp to 50kbp) in a large static reference (MB to GB).
 - Avoid $O(n)$ component in the complexity by indexing the reference
 - Approximate/heuristic methods
 - return all hits below threshold, or those that are close to the best
 - eg: short or long read alignment
-* Algorithms
-** Global alignment
-*** $O(nm)$ NW
-#+caption: $O(nm)$ Needleman-Wunsch algorithm
-#+attr_html: :class inset large
-[[file:global-nm.svg]]
-*** $O(2ns)$ band-doubling: $gap(v_s, u) \leq t$
-#+caption: $O(ns)$ Ukkonen's band-doubling test, or Spouge computation volume.
-#+attr_html: :class inset large
-[[file:global-ns.svg]]
-*** $O(ns)$ band-doubling, improved: $gap(v_s, u) + gap(u, v_t) \leq t$
-#+caption: $O(ns/2)$ Band doubling with gap heuristic
-#+attr_html: :class inset large
-[[file:global-ns-gap.svg]]
-*** $O(ns/2)$ Edlib: $g(u) + gap(u, v_t) \leq t$
-#+caption: $O(ns/2)$ Band doubling with gap heuristic, and using actual distances as Edlib does
-#+attr_html: :class inset large
-[[file:global-ns-g.svg]]
-** Semi-global
-*** $O(nm)$ NW
-#+caption: Filling the entire semi-global matrix
-#+attr_html: :class inset large
-[[file:semi-global-nm.svg]]
 
-*** $O(ns)$
-#+caption: Filling only parts where the total distance can still be $<t$.
+* Semi-global alignment
+As before, specifically for ends-free
+
+* Text searching
+#+caption: TODO
 #+attr_html: :class inset large
-[[file:semi-global.ns.svg]]
-*** $O(ns/2)$
-#+caption: Filling only the parts of the matrix where the distnnace $\g(u)$ is below the threshold.
-#+attr_html: :class inset large
-[[file:semi-global-g.svg]]
-** Pattern searching
-*** $O(nm)$ NW
-#+caption: $O(nm)$ pattern search
-#+attr_html: :class inset large
-[[file:search-nm.svg]]
-*** $O(ns)$ doubling
-#+caption: $O(ns)$ pattern search
-#+attr_html: :class inset large
-[[file:search-g.svg]]
-** Mapping
-*** Seed
+[[file:fig/search.svg]]
+
+* Mapping
 #+caption: seeding the map algorightm with k-mer mathces
-#+attr_html: :class inset large
-[[file:map-seed.svg]]
-*** Chain
-#+caption: chaining of seeds
-#+attr_html: :class inset large
-[[file:map-chain.svg]]
-*** Extend
-#+caption: extending seeds into an alignment
-#+attr_html: :class inset large
-[[file:map-extend.svg]]
-*** Naive
-#+caption: simple $O(rnm)$: $O(nm)$ for each of $r$ candidates
-#+attr_html: :class inset large
-[[file:map-nm.svg]]
-*** $O(rms)$
-#+caption: simple $O(rns)$: $O(ns)$ for each of $r$ candidates
-#+attr_html: :class inset large
-[[file:map-ns.svg]]
-* The cost of chaining
+#+attr_html: :class inset medium
+[[file:fig/seed-chain-extend.svg]]
+
+** The cost of chaining
+#+caption: gap-cost: lower bound on distance between diagonals
+#+attr_html: :class inset medium :width 80%
+[[file:fig/chaining.svg]]
+
+
 Say we have a match ending in $(i_1, j_1)$ and another match starting in $(i_2,
 j_2)$.
 Set $\Delta_i = i_2-i_1\geq0$ and $\Delta_j=j_2-j_1\geq 0$.
-** max: Anchored edit distance
+*** max: Anchored edit distance
 Here we pessimistically have to pay for every character not supported by a match:
 $\max(\Delta_i, \Delta_j)$.
-#+caption: anchored-edit distance chaining: max of two deltas, and upper bound on actual distance
-#+attr_html: :class inset medium
-[[file:chain-anchored.svg]]
-** diff: gap-cost
+*** diff: gap-cost
 Here we only pay a lower bound on the cost: $|\Delta_i - \Delta_j|$.
-#+caption: gap-cost: lower bound on distance between diagonals
-#+attr_html: :class inset medium
-[[file:chain-gap.svg]]
-** dist: seed heuristic
+*** dist: seed heuristic
 If we are guaranteed to find all seeds of length at least $k$, then we cross $\Delta_i/k$
 seeds without finding a single match, so that there must be at least
 $\Delta_i/k$ errors. For simplicity, we can only consider matches that are
 aligned to $i$ being a multiple of $k$ [cite:@astarpa;@astarix-2].
-
-#+caption: seed-cost: distance between diagonals, always a lower bound on actual distance
-#+attr_html: :class inset medium
-[[file:chain-seed.svg]]
 
 (A /seed/ here is a chunk of $k$ characters of the text/reference, while a
 /match/ is a /seed/ with a matching occurence in the pattern.)
 
 In a way, a match implies that ''alignments that starts here have relative cost strictly below $n'/k$.''
 
-** minimap
+*** minimap
 $w/100 \cdot |\Delta_i - \Delta_j| + 0.5\cdot \log_2 |\Delta_i - \Delta_j|$,
 - $w$ is the average length of the seeds/matches.
 - small cost of $w/100$ per char
 - logarithmic cost for some additional concave penalty for small gaps
 - Why $w/100$? Why not $1/w$ which is more equivalent to what the seed heuristic does???
 
-** GCSH: gap-chaining seed heuristic
+*** GCSH: gap-chaining seed heuristic
 - Max of diff and dist
 - transform-theorem:
   - only chain when cgap<=cseed
