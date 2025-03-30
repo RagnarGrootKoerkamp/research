@@ -282,7 +282,7 @@ states in order of increasing ''anticipated total distance''.
 
 * Alignment types
 
-#+caption: Overview of different alignment types.
+#+caption: Different types of pairwise alignment. Bold vertices and edges indicate where each type of alignment may start and end. Local-extension alignment can end anywhere, whereas local alignment can also start anywhere. Like clipping, these modes require a /score/ for matching characters, while in other cases, a /cost model/ (with cost-0 matches) suffices. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+name: alignment-types
 #+attr_html: :class inset large
 [[file:fig/alignment-modes.svg]]
@@ -308,19 +308,21 @@ different settings, see [[alignment-types]].
 - *Local-extension:* Align a prefix of the two sequences. Unlike all previous
   methods, this alignment can end /anywhere/ in the edit graph.
   This requires a cost model that trades off matching aligned characters with
-  not matching characters at all.
+  not matching characters at all, and thus gives a positive /score/ to the
+  matching bases.
 - *Local:* Local alignment takes this a step further and aligns a substring of
   $A$ to a substring of $B$.
   This is somewhat like ends-free, but now we may skip the start/end of /both/
   sequences at the same time.
   The increased freedom in the location of the alignment prevents the faster
   global-alignment algorithms from working well.
-- *Clipping:* Clipping is a mix of semi-global and local alignment.
-  In principle, a semi-global alignment is done, but the read (shorter sequence)
-  that is being aligned may be /clipped/. This means that any number of
-  characters at the start or end of the read can be skipped for a fixed cost.
-  As with local alignment, this usually requires maximizing a score, with a
-  bonus for matches.
+- *Clipping:* When a sequence (read) is aligned onto a longer sequence
+  (reference), it can happen that the read has, say, around 100 bp of noise at
+  the ends that can not be aligned. When doing a local alignment, these
+  characters will simply not be matched. It can be desirable to add an
+  additional fixed-cost /clipping penalty/ that is applied whenever the start or
+  end of the read indeed has unaligned bases, so that effectively, an affine
+  cost is paid for this.
 
 In this chapter, we only consider global alignment and corresponding algorithms.
 These methods also work for ends-free alignment when the number of characters
@@ -329,7 +331,7 @@ Later, in [[../mapping/mapping.org][Chapter 5]], we look deeper into semi-global
 
 * Cost Models
 
-#+caption: Overview of different cost models.
+#+caption: Overview of different cost models. The highlighted edge indicates the cost of matching characters, while all remaining edges indicate the cost of mismatch or indel edges. The longest common subsequence (LCS) is a /score/ rather than a /cost/, and counts the maximal number of matching characters. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+name: cost-models
 #+attr_html: :class inset medium
 [[file:fig/cost-models.svg]]
@@ -723,12 +725,12 @@ we follow this advice and replace the plain A* search in A*PA with a much
 more efficient approach based on /computational volumes/ that merges DP and A*.
 
 #+name: a1
-#+caption: Schematic overview of global pairwise alignment methods.
+#+caption: Schematic overview of global pairwise alignment methods. The shaded areas indicate states computed by each method, and darker shades indicate states that are computed multiple times. In practice, diagonal transition only computes a very sparse set of states, as indicated by lines rather than an area.
 #+attr_html: :class inset large
 [[file:fig/algs-1.svg]]
 
 #+name: a2
-#+caption: Worked example of each algorithm, based on [cite:@sellers].
+#+caption: A detailed example of each method shown in [[a1]]. Shaded areas indicate computed values, and darker shades states are computed more than once. The yellow path indicates the optimal alignment. For diagonal transition (DT), the wavefronts are indicates by black lines, and this grey lines indicate a best path to each state. The top right (j) shows contours for the longest common subsequence.
 #+attr_html: :class inset large
 [[file:fig/algs-2.svg]]
 
@@ -1154,7 +1156,6 @@ LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
 #+caption: The /output/ are the differences along the bottom row $R'$ and right column $S'$.
 #+caption: For each possible input of a block, the corresponding /output/ is precomputed, so that the DP table can be filled by using lookups only.
 #+caption: Red shaded states are not visited.
-#+caption: (CC0; [[https://github.com/RagnarGrootKoerkamp/research/blob/master/posts/pairwise-alignment/drawings/four-russians.drawio.svg][source]])
 #+name: fig:four-russians
 #+attr_html: :class inset
 [[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]

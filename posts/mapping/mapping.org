@@ -14,8 +14,8 @@ This is Chapter 5 of my thesis.
 
 #+attr_shortcode: summary
 #+begin_notice
-So far, we have considered only algorithms /global/ alignment.
-In this chapter, we consider /semi-global/ alignment instead,
+So far, we have considered only algorithms for /global/ alignment.
+In this chapter, we consider /semi-global/ alignment and its variants instead,
 where a pattern (query) is searched in a longer string (reference).
 There are many flavours of semi-global alignment, depending on the
 (relative) sizes of the inputs. We list these variants, and introduce
@@ -30,69 +30,232 @@ All text in this chapter is my own.
 Some ideas on semi-global alignment are based on early discussions with Pesho Ivanov.
 #+end_notice
 
-In this chapter, we will look at the problem of /semi-global alignment/, as a next
-step after /global alignment/ ([[../pairwise-alignment/pairwise-alignment.org][blog]]).
+$$
+\renewcommand{\st}[2]{\langle #1, #2\rangle}
+$$
 
+In this chapter, we will look at the problem of /semi-global alignment/, as a next
+step after /global alignment/ ([[../pairwise-alignment/pairwise-alignment.org][blog post]]).
 In fact, we will quickly see that there is no such thing as ''just'' global
 alignment.
 Rather, there are many variants that have applications in different domains.
 
-Thus, we will survey the /problem/ of semi-global alignment.
-(It seems that this hasn't really been done before.)
-We will briefly mention some existing algorithms and literature, but we'll
-mostly just go ahead and (re)invent some ideas from scratch.
+In [[#semi-global-variants]] we survey the different types of semi-global alignment.
+Then, in [[#text-searching]], we adapt the bitpacking and SIMD method of A*PA2 for
+$O(nm)$ text searching. In [[#mapping]], we extend the gap-chaining seed heuristic
+of A*PA for semi-global alignment and hence mapping. We use this as the
+/seeding/ and /chaining/ parts of the classic /seed-chain-extend/ framework.
+Then we run a separate alignment to find the optimal alignment.
 
-* Alignment types, revisited
-First: what is /global/ alignment? Answer: finding the edit distance or minimal
-number of mutations between two strings.
-Equivalently, this is the problem of finding a minimal-cost path in the /edit
-graph/ (or /alignment graph/), from the top-left to the bottom-right.
 
-#+caption: Global alignment goes from top-left (=start) to bot-right (=end).
+* Variants of semi-global alignment
+:PROPERTIES:
+:CUSTOM_ID: semi-global-variants
+:END:
+#+name: types
+#+caption: Different types of pairwise alignment. Bold vertices and edges indicate where each type of alignment may start and end. Local-extension alignment can end anywhere, whereas local alignment can also start anywhere. Like clipping, these modes require a /score/ for matching characters, while in other cases, a /cost model/ (with cost-0 matches) suffices. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+attr_html: :class inset large
 [[file:fig/alignment-modes.svg]]
 
-- global
-- semi-global
-- ends-free
-- clipping
+As we saw in Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog post]]), there are many different types of pairwise alignment ([[types]]).
+Whereas /global/ alignment is used when two sequences are to be fully aligned,
+when that is not the case, there are many different variants.
+In /semi-global/ alignment, we align a sequence to a subset of a longer sequence.
+While theoretically speaking this captures the full problem, in practice, there
+are many variants of semi-global alignment that admit different algorithms.
+In particular, solutions to the problem depend a lot on the absolute and
+relative size of the two sequences being aligned.
 
-#+caption: Global alignment goes from top-left (=start) to bot-right (=end).
+#+caption: Depending on the absolute and relative size of the two sequences, instances of semi-global alignment fall into three categories: pairwise alignment, text searching, and mapping.
 #+attr_html: :class inset :width 70%
 [[file:fig/dimentions.svg]]
 
+*Pairwise semi-global alignment.*
+In this chapter, we will use /(pairwise) semi-global alignment/ to refer to
+instances where the two sequences to be aligned have comparable length.
+In this case, the number of skipped characters at the start and end of the
+longer sequence should be small, and not much more than the edit distance
+between the two sequences. In this case, we assume that the alignment is /one-off/, i.e., that the
+both sequences are only aligned once, and that only a single best alignment is
+needed.
+Instances of this problem can have length anywhere from 100bp to 100kbp.
+Pairwise semi-global alignment is especially useful when a pattern has already
+been approximately located in a text, and a final alignment is done to obtain
+the precise alignment.
 
-** Semi-global alignment
-- single isolated instance of alignment
-- single result
-- pattern and text of roughly same size
-- Length from 100 to 100k or more
-- eg: pattern was already roughly located in text. Just a final alignment to
-  refine the result.
+Since the two sequences have similar length, the DP matrix is nearly square, and
+it suffices to compute states near ''the'' diagonal.
+Thus, semi-global alignment is similar to /ends-free/ and global alignment,
+and the classic methods for global alignment can be applied.
 
-** Text searching
-- find small pattern ($m\leq 100$, or $O(w)$ for word-size $w$) in a long (kB to MB) text.
-- $O(n\lceil m/w\rceil)$ complexity is good enough.
-- Multiple hits possible: 'best hit' doesn't really make sense
-- Return all hits below a fixed threshold
-- eg: search a small string in a file or repository
-- eg: searching tags/barcodes in reads
-** Mapping
-- find read (100bp to 50kbp) in a large static reference (MB to GB).
-- Avoid $O(n)$ component in the complexity by indexing the reference
-- Approximate/heuristic methods
-- return all hits below threshold, or those that are close to the best
-- eg: short or long read alignment
 
-* Semi-global alignment
-As before, specifically for ends-free
+*Approximate string matching (text searching).*
+In the remaining cases, one of the two sequences (the /text/) is significantly longer than the
+other (the /pattern/).
+When additionally the pattern is short, with a length on
+the order of the machine word size (64 classically, or 256 with SIMD), we
+classify the instance as /approximate[fn::Here, /approximate/ means that we look
+for /inexact/ matches with a number of mutations.] string matching/ or /text searching/.
+Here, we are typically interested in not just one optimal alignment, but in
+finding all sufficiently good alignments, with a cost below some (fixed) threshold.
+One of the reasons we reasons we consider this a separate problem is that there
+is a truly vast amount of literature on optimizing approximate string matching.
+See e.g.
+[cite:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11] for a
+small selection[fn::See [[https://curiouscoding.nl/posts/approximate-string-matching]] for a longer overview of relevant papers.].
 
-* Text searching
-#+caption: TODO
+Initial solutions for this problem include computing the full matrix ($O(nm)$)
+and using various types of bitpacking ($O(n\lceil m/w\rceil)$) and parallellization. Additionally,
+when patterns with up to $k$ errors are to be found, only a subset of the matrix
+has to be computed and $O(n\lceil k/w\rceil)$ expected time is sufficient
+[cite:@myers99] ([[text-searching]]).
+
+One characteristic of nearly all methods for text searching is that they scan
+the entire text on each search, and thus require at least $\Omega(n)$ time.
+Typical applications are searching for a text in a set of files (as can be done
+by =grep=), and extracting tags and/or barcodes from multiplexed ONT (Oxford Nanopore Technologies) reads.
+
+*Mapping.*
+The primary characteristic of /mapping/ when compared to approximate string
+matching is that for mapping, many strings are searched in a single text. Thus,
+$\Omega(n)$ time per search is not sufficient, especially when the reference has
+a size anywhere from megabytes to gigabytes.
+Often, patterns are /long reads/ with a length on the order of 50kbp, but also
+/short reads/ of length 100bp can be mapped.
+To avoid the $\Omega(n)$ per search, the reference is /indexed/, so that regions
+similar to the pattern can efficiently be identified.
+Usually, this leads to /approximate/ methods, where the reported
+alignments are not guaranteed to have a minimal cost.
+
+As with approximate string searching, one way to use mapping is by asking for
+all alignments with cost below some threshold.
+Another option is to ask only for the few best alignments. In practice, another
+mode is to first find the cost $s$ of the best alignment (assuming its cost is below some
+threshold), and then find all alignments up to e.g. cost $s' = 1.1 \cdot s$.
+
+The classic method applied here is /seed-chain-extend/ [cite:@minimap2].
+This first finds matches between the sequences, then finds /chains/ of these
+matches, and then fills the gaps in between consecutive matches using relatively
+small alignments.
+
+* Fast text searching
+:PROPERTIES:
+:CUSTOM_ID: text-searching
+:END:
+
+#+name: text-searching
+#+caption: Text searching is the problem of finding a typically short (length $O(w)$) pattern in a longer text. The left shows how the classical Needleman-Wunsch algorithm fills the entire matrix column by column. On the right (adapted from [cite:@myers99]), we search for all alignments with cost $\leq k$, and states at distance $\leq k$ are highlighted. The block-based approach only computes blocks that contain at least one state at distance $\leq k$, and takes $O(n \lceil k/w\rceil)$ time in expectation on random strings.
 #+attr_html: :class inset large
 [[file:fig/search.svg]]
 
-* Mapping
+In A*PA2 ([[../astarpa2/astarpa2.org][blog post]]), we developed a block-based method for pairwise alignment.
+At the core, these blocks are computed using a fast SIMD-based implementation of the
+bitpacking algorithm of Myers [cite:@myers99].
+So far, we have only used this as a building block for global alignment,
+but now we will use this to directly support $O(n\lceil m/w\rceil)$ text searching.
+
+In the basis, this requires two changes.
+First, we ensure that the alignment can start anywhere in the text by changing the
+horizontal differences along the top row of the matrix from $1$ (as used by
+global alignment) to $0$, as indicated by the bold lines in [[text-searching]].
+
+Secondly, the alignment may end anywhere, and the user may be interested more
+than just a single best alignment.
+To support this, we do not only report the score in the bottom right of the DP
+matrix, but we return a list of all scores along the bottom row.
+Based on this, the user can decide which scores are sufficiently low to find a
+full alignment.
+
+*Tracing.*
+Once the user decides which scores at the bottom of the matrix are sufficiently
+low, a traceback be started from those positions.
+To save time and memory, the initial computation of the matrix only returns the output scores and does
+not store all $nm$ values.
+Thus, to find an alignment ending in column $i$, we recompute the matrix from column
+$i-2m$ to column $i$ and store all values for each column.
+We then do a usual trace through this matrix from $\st im$ until we reach the
+top row ($j=0$).
+
+** Skip-cost for overlap alignments
+
+#+name: skip-cost
+#+caption: By default, global alignment uses a cost of 1 along all edges of the matrix, while semi-global alignment and overlap/ends-free/extension variants have a cost of 0 along some edge.
+#+caption: When a pattern only partially overlaps the text, as shown on the left, it may be preferable to have a /skip-cost/ $\alpha$ for each unmatched character that is in between $0$ and $1$. This can also be applied to global alignment (replacing ends-free alignment), and can be an alternative to local alignment.
+#+attr_html: :class inset medium
+[[file:fig/skip-cost.svg]]
+
+In some applications, it may happen that the pattern is present, but cut off at
+either its start or end, as shown on the left in [[skip-cost]].
+For example when a read was cut short, or when aligning reads against an
+incomplete assembly [cite:@Abramova_2024].
+In a classical
+semi-global alignment, the unmatched start of the pattern would incur a cost of
+1 per unmatched character, but this may make the total cost of the pattern go
+above the threshold. Instead, overlap alignment could be used
+([[types]]), but this requires a bonus for matches, since otherwise the cheapest way
+to align the pattern could be to skip nearly all of its characters. Ends-free
+alignment solves this by only allowing a limited number of characters to be
+skipped. Still, this is suboptimal: when the pattern matches once in full, and
+once at the start of the sequence with $50\%$ overlap, the scores of these two
+alignments are not directly comparable. In fact, the overlapping alignment
+has a benefit because it only pays for mismatches in half its length.
+
+To solve this, we introduce the skip cost[fn::I would not be surprised if this
+has been done before. There are many tools applying similar techniques (either
+via local alignment or a clipping cost), but as far as I am aware, the technique
+as stated here has not been applied before.] $0\leq \alpha \leq 1$, which is the cost paid for each
+character at the start and/or end of the pattern that is not aligned because it
+extends outside the text.
+This concept can also be applied to global-alignment variants such as ends-free
+and overlap ([[skip-cost]], middle), so that skipping characters in both sequences
+has a (not necessarily equal) cost.
+
+In practice, it is not practical to handle fractional costs, especially in the
+case of edit distance where the distance between adjacent states must be 0 or 1.
+To avoid this, we can initialize the first and last column (and row, for global
+alignment) with a mix of zeros and ones, so that the /fraction/ of ones is
+approximately $\alpha$, as shown in [[skip-cost-example]] for $\alpha=0.5$.
+
+#+name: skip-cost-example
+#+caption: Example of computing a semi-global alignment with a skip-cost of $\alpha = 1/2$. In the first column the graph, edges of cost 1 and 0 alternate. On the bottom, the graph is extended with matches until a multiple of the block size is reached. On the right, the final score in row $j$ is increased by $\lceil \alpha(m-j)\rceil = \lceil (m-j)/2\rceil$ to obtain the score including skip-cost. Three alignments are highlighted and shown, with edits highlighted. Only half of the skipped characters (rounded up) incurs a cost.
+#+attr_html: :class inset medium
+[[file:fig/skip-cost-example.svg]]
+
+*Applying the skip-cost.*
+In [[skip-cost-plot]], we show an example output when using a skip-cost of
+$\alpha\in\{0, 0.5, 1\}$ for the alignment as shown in [[skip-cost-setup]].
+Using $\alpha = 1$ corresponds to classical semi-global alignment (green), and
+we see that this correctly detects that the pattern matches in the middle of the
+sequence, ending at position 300, with a cost around 20. However, the
+occurrences overlapping the start and end of the text are completely missed.
+Overlap alignment, which corresponds to $\alpha=0$ (blue) /does/ have local
+minima at position 50 and 650 (indicating the pattern extends 50 characters
+beyond the text). The drawback of these minima is that there are also
+/global/ minima at positions 0 and 700 where the pattern is completely disjoint
+from the text, so that some additional logic is needed to separate these cases.
+We see that in regions where the pattern does not match, the alignment has a
+score around 50, or $0.5$ per character. Thus, we choose $\alpha=0.5$ per
+skipped character. Using this (orange), we recover clear local minima at
+positions 50 and 650, while the cost converges back to 50 as the overlap shrinks
+to 0.
+
+
+#+name: skip-cost-plot
+#+caption: Example of the output of the skip-cost alignment when aligning a length-100 pattern onto a length-600 text (as shown in [[skip-cost-setup]]). Graphs are shown for $\alpha=1$, corresponding to classical semi-global alignment, $\alpha=0.5$, corresponding to the skip-cost introduced here, and $\alpha=0$, corresponding to an overlap alignment. Vertical lines indicate the region inside of which the pattern fully matches within the text, and where the cost of the alignment does not depend on the skip-cost $\alpha$.
+#+attr_html: :class inset medium
+[[file:skip-cost/skip-cost-plot.svg]]
+
+#+name: skip-cost-setup
+#+caption: The setup of the alignment results shown in [[skip-cost-plot]]. A random pattern of length 100 is generated and overlaid on a length 600 text 3 times:
+#+caption: once in the middle, and twice with an 50 base overlap at the start/end of the sequence. Before inserting the pattern into the text, a different number of mutations is applied to the full length-100 pattern.
+#+attr_html: :class inset medium
+[[file:fig/skip-cost-setup.svg]]
+
+* A*Map:
+:PROPERTIES:
+:CUSTOM_ID: mapping
+:END:
+
 #+caption: seeding the map algorightm with k-mer mathces
 #+attr_html: :class inset medium
 [[file:fig/seed-chain-extend.svg]]
