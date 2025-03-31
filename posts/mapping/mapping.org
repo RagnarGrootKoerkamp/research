@@ -487,7 +487,8 @@ avoided by replacing the role of the pattern and reference, and splitting the
 pattern into $m/k$ seeds, but that turns out to be inefficient when it comes to
 indexing all \(k\)-mers. By splitting the reference into \(k\)-mers, we only need to
 index $1/k$ of its \(k\)-mers, so that this index is much smaller.
-(TODO figure.)
+
+# (TODO figure.)
 
 Secondly, in A*PA and A*PA2 we filter away
 all matches for which the their gap cost to the end ($\st nm$) is /larger/ than
@@ -539,9 +540,81 @@ In this case, $k=20$ would be a good choice.
 Generally, smaller $k$ is preferred to improve the quality of the heuristic, but
 we also need $k>\log_4 n$ to ensure that the number of spurious matches remains limited.
 
+# TODO: Some A*Map figures with A*PA, A*PA2
+
 ** Results
-*** Mapping using A*PA
-*** Mapping using A*PA2
-*** A*Map
+We will compare A*Map against minimap2 on synthetic long read data.
+We use chromosome 1 as the reference, which has length around 235 Mbp.
+From this, we sample 1000 random reads of length 50 kbp.
+Then, we apply a varying number of uniform random mutations to these strings
+$1\%$, $3\%$, and $5\%$, to obtain divergences of $0.9\%$, $2.7\%$, and $4.4\%$.
+
+We run both methods on a single thread. For minimap2, we run with default
+parameters, and with =-x map-pb=, =-x map-ont=, and =-x map-hifi=. For A*Map,
+we use A*PA2 with plain band doubling [cite:@ukkonen85] for the semi-global alignments.
+
+Experiments are run on an Intel =i7-10750H= with AVX2, running at a fixed CPU frequency of
+2.6 GHz.
+
+#+caption: Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped.
+| Divergence | minimap2 default, k=15,w=10 | PB k=19,w=10,hpc | ONT k=15,w=10 | HIFI k=19,w=19 | A*Map k=20 | A*Map k=28 |
+|   Indexing |                        10.5 |              8.7 |          10.5 |            7.4 |        1.2 | 1.0        |
+|       0.9% |                        48.2 |             31.2 |          48.1 |           23.0 |       26.9 | *8.7*      |
+|       2.7% |                        50.7 |             31.4 |          50.6 |           23.3 |       24.6 | *12.9*     |
+|       4.4% |                        46.7 |             28.8 |          46.6 |         *21.8* |       22.8 | (*)  15.4  |
+
+*A*Map analysis.*
+When $k=20$, a bottleneck of A*Map is the large number of \(k\)-mer
+matches: 200000 on average per mapped read. For divergence $2.7\%$, 3 seconds are spent collecting matches, 4.5
+seconds are needed to sort them, and 5 seconds to chain them.
+Aligning the most likely chain for each read takes a total of 8 seconds. On
+average, there are 2.6 candidate chains per pattern. It appears that this is
+mostly due to reads falling into highly repetitive regions (e.g. in the
+centromere), where many overlapping starting positions for the semi-global
+alignment are considered. These (on average) 1.6 additional alignments per read
+take a total of 3.8 seconds.
+
+When $k=28$, the number of matches is significantly reduced, to only 30000 per
+read. This reduces the time spent sorting matches to 0.6 s, and the time for
+building contours to 0.8 s. Also, the number of candidate chains drops from 2.6
+to 1.4 per read, since the larger $k$ increases sensitivity. The total time for
+aligning the best scoring chains is still 8 seconds.
+
+*Comparison.*
+Compared to minimap2, A*Map is significantly faster at indexing the text, since
+it only needs to build a hashtable on every \(k\)'th \(k\)-mer. Minimap2, on the
+other hand, has to compute all minimizers. Nevertheless, minimap2's indexing
+could probably be sped up by using SimdMinimizers ([[../simd-minimizers/simd-minimizers.org][blog]]).
+On this data, minimap2 works best with the HIFI preset, with $k=w=19$. For
+divergence $0.9\%$, A*Map is $2.6\times$ faster, and for divergence $2.7\%$,
+A*Map is $1.8\times$ faster.
+To put these results into perspective, on data with $<1\%$ divergence, mapquick
+[cite:@mapquick] was shown to be more than an order of magnitude faster than
+minimap2.
+
+Nevertheless, the main feature of A*Map is that it is able to guarantee exact
+results, where one can prove that no alignment below the threshold is missed.
+In cases where this is important, A*Map is a viable alternative to minimap2.
+
+*Future work.*
+Currently, there are a few limitations.
+First, the semi-global alignment is independent of the preceding chaining. It could be
+beneficial to reuse the chains to build a heuristic, to reduce the size of the
+subsequent alignment. However, initial experiments show that the overhead of
+evaluating the heuristic quickly grows compared to simply computing more states.
+Alternatively, it may be possible to develop an exact alignment method that is
+/bottom-up/ (like the usual extending) by building on ideas such as /local
+pruning/ introduced by A*PA2.
+
+A second issue is the large number of matches, and the time needed to query /all/
+\(k\)-mers of the read. One way to speed this up is to swap the roles of the
+query and the reference, so that only every $k$'th query has to be looked up.
+However, that comes at the cost of a $k\times$ larger index.
+Alternatively, fine-tuning the value of $k$ so that it is small enough for the
+given error rate and as large as possible to reduce false positive matches could
+also help.
+In parallel, it may be possible to build an efficient index on inexact
+matches of length $2k$, so that there are simply fewer resulting matches that
+have to be sorted and chained.
 
 #+print_bibliography:
