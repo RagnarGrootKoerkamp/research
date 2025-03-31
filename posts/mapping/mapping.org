@@ -252,13 +252,16 @@ to 0.
 [[file:fig/skip-cost-setup.svg]]
 
 ** Results
+:PROPERTIES:
+:CUSTOM_ID: search-results
+:END:
 
-#+name: search-results
+#+name: search-results-plot
 #+caption: Log-log plot of the time to align a pattern of length $m$ against a text of length 50 kbp, in nanoseconds per base of the text. Only the time needed to compute the minimal distance is reported, excluding alignment/traceback. Our SIMD search method (yellow) always computes the entire matrix. Edlib, on the other hand, by default uses a band doubling approach (solid lines). Disabling this via a fixed high threshold is shown dashed.
 #+attr_html: :class inset medium
 [[file:search-results/search-plot.svg]]
 
-We benchmark the throughput of the search function in [[search-results]], where we
+We benchmark the throughput of the search function in [[search-results-plot]], where we
 measure how long it takes (per text character) to align a pattern against
 a text. For Edlib [cite:@edlib], we use the /infix/ method for semi-global alignment and ask
 it to report the distance only, and likewise for our method, we measure only the
@@ -290,7 +293,8 @@ For patterns of length 128 to 256, our method ends up around $1.7\times$ to $2.0
 than Edlib.
 In practical terms, this implies that a pattern of length up to 256 bp can
 be found in a 1 kbp read in 13 μs (75000 searches per second) or in a
-50 kbp text in 440 μs (2200 searches per second).
+50 kbp text in 440 μs (2200 searches per second). Or alternatively, in one
+second, nearly 100 Mbp of text can be searched.
 
 *Future work.*
 Currently, we only implement a naive $O(n\lceil m/w\rceil)$ method that always
@@ -298,16 +302,85 @@ computes the entire matrix. For sequences of length greater than 256, most of
 the matrix below the first 256 rows can likely be skipped, and this should
 provide a significant speedup.
 
-* A*Map:
+* Mapping using A*Map
 :PROPERTIES:
 :CUSTOM_ID: mapping
 :END:
 
-#+caption: seeding the map algorightm with k-mer mathces
+#+name: seed-chain-extend
+#+caption: An example of the /seed-chain-extend/ method for mapping. First, /seeds/ (black diagonals) are found, which are short matches between the two sequences. Then, these seeds are /chained/ into /chains/ (dashed lines). Each seed and each chain is scored based on the number of seeds in the chain and their relative positions. The chains with the highest scores are selected as candidate alignments. Then, short alignments are done to fill the gaps between the seeds and /extend/ the chain into a full alignment. A drawback of seed-chain-extend is that it may not return optimal alignments. Instead, a full semi-global alignment could be done around the chain to obtain an exact alignment, leading to /seed-chain-align/.
 #+attr_html: :class inset medium
 [[file:fig/seed-chain-extend.svg]]
 
-** The cost of chaining
+The problem of /mapping/ differs from text searching considered so far in a few
+ways.
+First, the text (/reference/) is fixed and is reused for many alignments. It can
+be anywhere from megabases to gigabases in size.
+Secondly, the patterns (/reads/) being mapped can have length 100 bp (/short
+reads/) up to 50 kbp (/long reads/).
+To enable efficient mapping, most tools build an /index/ on the reference, and
+then query this for each read to be mapped. In practice, such methods are often
+/approximate/, in that they are not guaranteed to find a minimal-cost alignment.
+They work using /seed-chain-extend/: /seeds/ (usually \(k\)-mer matches) are
+found via the index. Then these are joined into /chains/, and the best chains
+are /extended/ into a full alignment, as shown in [[seed-chain-extend]].
+
+In the remainder of this section, we briefly review strategies for the three parts,
+/seeding/, /chaining/, and /extending/.
+
+A*Map builds on the same paradigm, and we review how A*PA's /gap-chaining seed
+heuristic/ can be applied here, and how A*PA and A*PA2 can be modified for
+/exact/ mapping and semi-global alignment.
+Note that in A*Map, we replace the usual /extend/ phase by a more thorough semi-global
+alignment that covers the full chain at once. This way, we can guarantee that
+optimal alignments are found.
+
+** Seeding
+There are various strategies for seeding alignments.
+
+*Minimizers.*
+The most popular mapper, minimap2 [cite:@minimap2], uses /minimizers/ ([[../minimizers/minimizers.org][blog]]). By
+default, it uses \(k\)-mer size $k$ from 15 to 19 and window size $w$ from 10 to
+19, to extract one out of each $w$ consecutive $k$-mers.
+It first finds all minimizers of the reference and builds an index that maps
+each k-mer to the locations where it occurs as a minimizer.
+Then, the minimizer k-mers for each query are determined, and these are looked
+up in the index to find the k-mer matches that seed the alignment.
+
+*\(k\)-min-mers.* A different approach is taken by mapquick [cite:@mapquick], which
+is a mapper designed for highly similar sequences. Here, /k-min-mers/ are used to
+seed the alignment. These are chains of 2 to 15 consecutive 31-mers. This way,
+each k-min-mer spans a much larger portion of the sequence, and fewer matches
+are needed to recover sufficiently good chains.
+
+
+*\(k\)-mers.* In the /seed heuristic/ in A*ix [cite:@astarix-2] and A*PA
+[cite:@astarpa] (TODO chapter), plain k-mer matches are used. A drawback of this
+approach is that it creates more matches, since there are more $k$-mers than
+minimizers. The main benefit, on the other hand, is that it leads to an /exact/
+algorithm. For other seeding methods, a lack of matches does not imply a (good)
+lower bound on the minimal edit distance between consecutive matches, as we will
+see in [[#chaining]].
+
+*Maximal-exact-matches.* /Maximal-exact-matches/ are a variant where $k$-mer
+matches are extended on either side as long as the two sequences match. This is
+similar to the seeding used by BLAST [cite:@blast].
+
+*Maximal-unique-matches.* Yet another method is to seed the alignment using
+/maximal-unique-matches/, also known as MUMs. These are substrings of the query
+and reference that occur exactly once in each string, and that can not be
+extended into a longer matching substring. Thus, these matches consider global
+information, rather than just considering local matches.
+This technique is used by MUMmer [cite:@mummer-1;@mummer-4];
+
+TODO When using /all/ k-mer matches as seeds, we are guaranteed that the
+distance is at least ...
+
+** Chaining
+:PROPERTIES:
+:CUSTOM_ID: chaining
+:END:
+
 #+caption: gap-cost: lower bound on distance between diagonals
 #+attr_html: :class inset medium :width 80%
 [[file:fig/chaining.svg]]
@@ -344,14 +417,16 @@ $w/100 \cdot |\Delta_i - \Delta_j| + 0.5\cdot \log_2 |\Delta_i - \Delta_j|$,
 - transform-theorem:
   - only chain when cgap<=cseed
   - only chain when ... formula
+
+** Aligning
+
+** Results
+-
+*** Mapping using A*PA
+*** Mapping using A*PA2
+*** A*Map
+
 * New: A*Map
-** Text searching
-- Do the full $nm$ matrix
-- Return the bottom row and right column scores, so user can make a decision
-  what to do with this
-- new: $0\leq \alpha\leq 1$ soft-clip cost, generalizing ends-free.
-- new: output format
-- traceback from specific positions on request
 ** Mapping
 - build hashmap on chunked k-mers of reference
 - find matches for each pattern
