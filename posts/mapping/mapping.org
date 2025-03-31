@@ -321,7 +321,11 @@ reads/) up to 50 kbp (/long reads/).
 To enable efficient mapping, most tools build an /index/ on the reference, and
 then query this for each read to be mapped. In practice, such methods are often
 /approximate/, in that they are not guaranteed to find a minimal-cost alignment.
-They work using /seed-chain-extend/: /seeds/ (usually \(k\)-mer matches) are
+They work using /seed-chain-extend/: /seeds/[fn::We somewhat interchangeably use
+/seeds/ and /matches/ here. To me, a /seed/ is a conceptual anchor that can be
+extended into an alignment. A /match/ is the specific type of anchor we use: our
+seeds are usually matches between \(k\)-mers.]
+(usually \(k\)-mer matches) are
 found via the index. Then these are joined into /chains/, and the best chains
 are /extended/ into a full alignment, as shown in [[seed-chain-extend]].
 
@@ -381,44 +385,78 @@ distance is at least ...
 :CUSTOM_ID: chaining
 :END:
 
-#+caption: gap-cost: lower bound on distance between diagonals
+#+name: chain-models
+#+caption: There are different models to give costs and scores to chains. Here we show three possible costs that can be given to the connection between
 #+attr_html: :class inset medium :width 80%
 [[file:fig/chaining.svg]]
 
+After finding all the seed matches, the next step is to find candidate regions
+where the query could align. This is done by finding /chains/ consisting of multiple
+matches, and giving each chain a cost or score. Specifically, a chain
+is a sequence of seeds that can occur together in an alignment.
 
-Say we have a match ending in $(i_1, j_1)$ and another match starting in $(i_2,
-j_2)$.
-Set $\Delta_i = i_2-i_1\geq0$ and $\Delta_j=j_2-j_1\geq 0$.
-*** max: Anchored edit distance
-Here we pessimistically have to pay for every character not supported by a match:
-$\max(\Delta_i, \Delta_j)$.
-*** diff: gap-cost
-Here we only pay a lower bound on the cost: $|\Delta_i - \Delta_j|$.
-*** dist: seed heuristic
-If we are guaranteed to find all seeds of length at least $k$, then we cross $\Delta_i/k$
-seeds without finding a single match, so that there must be at least
-$\Delta_i/k$ errors. For simplicity, we can only consider matches that are
-aligned to $i$ being a multiple of $k$ [cite:@astarpa;@astarix-2].
+As for seeding, there are many different methods to score chains.
 
-(A /seed/ here is a chunk of $k$ characters of the text/reference, while a
-/match/ is a /seed/ with a matching occurence in the pattern.)
+*LCS\(k\).* A simple method of scoring chains is to assume that the seeds are
+disjoint k-mer matches, and simply maximize the number of k-mers in the chain.
+This is also known as the LCS\(k\) metric. [cite:@lcsk]. Like the plain LCS,
+this score focuses only on matches, and disregards the mismatches and indels in between.
 
-In a way, a match implies that ''alignments that starts here have relative cost strictly below $n'/k$.''
+*LCS\(k{+}{+}\).* An extension of LCS\(k\) is LCS\(k{+}{+}\) [cite:@lcsk++]. This method allows
+matches of arbitrary length, and maximizes the total length of the matches.
 
-*** minimap
-$w/100 \cdot |\Delta_i - \Delta_j| + 0.5\cdot \log_2 |\Delta_i - \Delta_j|$,
-- $w$ is the average length of the seeds/matches.
-- small cost of $w/100$ per char
-- logarithmic cost for some additional concave penalty for small gaps
-- Why $w/100$? Why not $1/w$ which is more equivalent to what the seed heuristic does???
+*Anchored edit distance.* As with edit distance, we can consider a /cost/
+equivalent of the /score/ given by the LCS\(k{+}{+}\) metric. This is the
+/anchored edit distance/, where the focus in again on the mismatches and indels
+rather than the matches. As shown in [[chain-models]], the cost of joining two seeds is the maximum of
+the horizontal and vertical gap between them. (TODO citation)
 
-*** GCSH: gap-chaining seed heuristic
-- Max of diff and dist
-- transform-theorem:
-  - only chain when cgap<=cseed
-  - only chain when ... formula
+*Gap cost.* We already saw that the gap cost [cite:@ukkonen85].
+is used a lot for pairwise alignment, and it is also useful as a cost for chaining matches:
+we can lower bound the cost of the alignment between two consecutive matches by
+the minimal number of horizontal or vertical steps needed to join them ([[chain-models]]).
+Indeed, minimap2 [cite:@minimap2] also uses a chaining score based on the gap
+cost. In fact, minimap2 uses a concave function of the size of the gap as actual
+distance, so that longer gaps are penalized relatively less than short gaps, to
+admit e.g. splicing alignments.
+
+*Seed heuristic.* The /seed heuristic/, introduced by A*ix [cite:@astarix-2;@astarpa], provides a
+second, independent lower bound on the edit distance between two matches.
+We first find /all/ k-mer matches. Then, say that there is a gap
+of $\Delta_i \times \Delta_j$ bases between two matches in our chain.
+Assuming that there no in-between matches, we know that there is no k-mer match
+in the path joining the two matches. Thus, we must incur an error at least every
+$k$ steps, for at least $\max(\lfloor \Delta_i/k\rfloor,
+\lfloor\Delta_j/k\rfloor)$ errors. (If we assume that the two initial matches
+are already maximally extended, we could replace the $\lfloor\cdot\rfloor$ by a
+$\lceil \cdot \rceil$.)
+In practice, the seed heuristic is implemented by splitting the reference
+sequence into adjacent disjoint k-mers, and only matches of those k-mers are
+found. Then, the distance between consecutive matches is always a multiple of
+$k$, and the minimal cost to join them is simply the number of skipped k-mers,
+as shown in [[chain-models]].
+
+*Gap-chaining seed heuristic.* In A*PA, we extended the seed heuristic into the
+gap-chaining seed heuristic. Conceptually, this simply takes the maximum of the
+gap-cost and the seed heuristic cost, since the maximum of two lower bounds is
+still a lower bound.
+The main theoretical result of A*PA (Theorem 5, Lemma 7) is the following:
+#+begin_quote
+In an optimal path, two matches can only be chained if the gap cost between them is at most the
+value of the seed heuristic between them.
+#+end_quote
+Thus, two matches that are $d$ diagonals apart may only be chained if there are
+at least $k\cdot d$ columns between them. This puts a strong limitation on how
+far chains can ''stray away'' from their diagonal.
+In A*PA, we provide an efficient $r \lg r$ algorithm for chaining $r$ matches
+that is equivalent to the solution for LCS [cite:@hirschberg77]. It works by
+first applying a suitable /transformation/ to the coordinates of the matches,
+followed by a plain LCS algorithm.
+
+
 
 ** Aligning
+Most methods
 
 ** Results
 -

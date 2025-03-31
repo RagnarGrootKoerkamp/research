@@ -372,8 +372,8 @@ We list some of them here, from simple to more complicated.
 
 - *Dual affine:*
   Affine costs are not sufficient to capture all biological
-  processes: the gap-cost can give a too large penalty to very long indels of
-  length 100 to 1000. To fix this, a /second/ gap-cost can be introduced
+  processes: the gap cost can give a too large penalty to very long indels of
+  length 100 to 1000. To fix this, a /second/ gap cost can be introduced
   with separate parameters $(o_2, e_2)$, with for example an offset of $o=1000$
   and an extend cost of $e=0.5$.
   The cost of a gap of length $k$ is now given by $w_k = \min(o_1 + k\cdot e_1, o_2 + k\cdot e_2)$.
@@ -382,7 +382,7 @@ We list some of them here, from simple to more complicated.
 - *Concave:* Even more general, we can give gaps of length $k$ a cost $w_k$, where $w_k$ is a
   concave function of $k$, where longer gaps become relatively
   less expensive. Double-affine costs are an example of a concave gap cost.
-- *Arbitrary:* Even more general, we can merge the concave gap-costs with
+- *Arbitrary:* Even more general, we can merge the concave gap costs with
   arbitrary substitution costs $\delta(a,b)$ for (mis)matches.
 
 In practice, most methods for global alignment use a match cost $\delta(a,a) = 0$, fixed mismatch
@@ -1248,7 +1248,7 @@ read-aligners was done by Alser et al. [cite:@alser21].
 | [cite:@gotoh90]                            | *double/more affine*   | $O(Lmn)$                                  | $O(nm+Lm)$                  | DP, *$L$ layers in the graph*                                     |                                                                                  |
 | [cite:@wu90-O-np]                          | unit cost              | $O(n+(s-\vert n-m\vert)s)$ exp.           | $O(n)$                      | Diagonal transition, gap-heuristic, divide-and-conquer            |                                                                                  |
 | [cite:@sparse-dynamic-programming-1]       | LCSk                   | $O(n + d \log\log \min(d, nm/d))$         |                             | *sparse-dynamic-programming*, contours                            | $d$ is number of /dominant/ matches                                              |
-| [cite:@myers-miller-95]                    | LCSk, edit distance    | $O(r \log^2 r)$                           | $O(r \log r)$               | *chaining* k-mer matches with *gap-cost*                          | $r$ is number of matches                                                         |
+| [cite:@myers-miller-95]                    | LCSk, edit distance    | $O(r \log^2 r)$                           | $O(r \log r)$               | *chaining* k-mer matches with *gap cost*                          | $r$ is number of matches                                                         |
 | [cite:@myers99]                            | unit costs             | $O(nm/w)$                                 | $O(m\sigma / w)$            | DP, *bitpacking*                                                  |                                                                                  |
 | [cite:@papamichail2009]                    | unit costs             | $O(n+(s-\vert n-m\vert)s)$                | $O(s)$                      | A*, gap heuristic, diagonal transition                            |                                                                                  |
 | [cite:@lcsk-overview]                      | LCS$k$                 | $O(n + r \log l)$                         | $O(n + \min(r, nl))$        | thresholds                                                        | modifies [cite:@hunt77] for LCS$k$                                               |
