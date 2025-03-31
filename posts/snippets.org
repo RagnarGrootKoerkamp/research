@@ -113,13 +113,41 @@ radsort::sort_by_key(&mut v, |x| x);
 #+end_src
 
 * Python
-** Export org table
-#+begin_src py
-import tabulate
-print(tabulate.tabulate(df, headers=df.columns, tablefmt="orgtbl", floatfmt=".1f"))
-#+end_src
 ** Pretty plots
 Much nicer/softer colours with
 #+begin_src py
 plt.style.use('ggplot')?
+#+end_src
+
+** Json to pivot table to org table
+#+begin_src py
+#!/usr/bin/env python3
+import pandas as pd
+import tabulate
+
+# cols:
+# pattern_len, text_len, search, edlib
+df = pd.read_json("search.json")
+
+df["search"] = df["search"] / df["text_len"]
+df["edlib"] = df["edlib"] / df["text_len"]
+
+p = df.pivot_table(
+    index=["pattern_len"],
+    columns=["text_len"],
+    values=["search", "edlib"],
+)
+
+p = p.swaplevel(0, 1, axis=1).sort_index(axis=1)
+
+print(
+    tabulate.tabulate(
+        p, headers=p.columns, tablefmt="orgtbl", floatfmt=".1f", showindex=True
+    )
+)
+#+end_src
+
+#+begin_src org
+#+attr_latex: :booktabs t :placement [t] :align r|rrr
+<table>
 #+end_src
