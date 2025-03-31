@@ -101,14 +101,15 @@ finding all sufficiently good alignments, with a cost below some (fixed) thresho
 One of the reasons we reasons we consider this a separate problem is that there
 is a truly vast amount of literature on optimizing approximate string matching.
 See e.g.
-[cite:@alpern95;@baeza-yates-gonnet92;@wu92;@hyyro05-increased;@rognes11] for a
+[cite:@ukkonen85-patterns;@landau-vishkin89;@chang92;@baeza-yates-gonnet92;@wu92;@alpern95;@baeza-yates96;@hyyro05-increased;@rognes11;@leap] for a
 small selection[fn::See [[https://curiouscoding.nl/posts/approximate-string-matching]] for a longer overview of relevant papers.].
+# TODO: Write some more on the highlights?
 
 Initial solutions for this problem include computing the full matrix ($O(nm)$)
 and using various types of bitpacking ($O(n\lceil m/w\rceil)$) and parallellization. Additionally,
 when patterns with up to $k$ errors are to be found, only a subset of the matrix
 has to be computed and $O(n\lceil k/w\rceil)$ expected time is sufficient
-[cite:@myers99] ([[text-searching]]).
+[cite:@ukkonen85-patterns;@chang92;@myers99] ([[text-searching]]).
 
 One characteristic of nearly all methods for text searching is that they scan
 the entire text on each search, and thus require at least $\Omega(n)$ time.
@@ -144,13 +145,13 @@ small alignments.
 :END:
 
 #+name: text-searching
-#+caption: Text searching is the problem of finding a typically short (length $O(w)$) pattern in a longer text. The left shows how the classical Needleman-Wunsch algorithm fills the entire matrix column by column. On the right (adapted from [cite:@myers99]), we search for all alignments with cost $\leq k$, and states at distance $\leq k$ are highlighted. The block-based approach only computes blocks that contain at least one state at distance $\leq k$, and takes $O(n \lceil k/w\rceil)$ time in expectation on random strings.
+#+caption: Text searching is the problem of finding a typically short (length $O(w)$) pattern in a longer text. The left shows how the classical Needleman-Wunsch algorithm fills the entire matrix column by column. On the right (adapted from [cite:@myers99]), we search for all alignments with cost $\leq k$, and states at distance $\leq k$ are highlighted. The bloc\(k\)-based approach only computes blocks that contain at least one state at distance $\leq k$, and takes $O(n \lceil k/w\rceil)$ time in expectation on random strings [cite:@chang92].
 #+attr_html: :class inset large
 [[file:fig/search.svg]]
 
-In A*PA2 ([[../astarpa2/astarpa2.org][blog post]]), we developed a block-based method for pairwise alignment.
+In A*PA2 ([[../astarpa2/astarpa2.org][blog post]]), we developed a bloc\(k\)-based method for pairwise alignment.
 At the core, these blocks are computed using a fast SIMD-based implementation of the
-bitpacking algorithm of Myers [cite:@myers99].
+bitpacking algorithm of Myers [cite:@myers99;@chang92].
 So far, we have only used this as a building block for global alignment,
 but now we will use this to directly support $O(n\lceil m/w\rceil)$ text searching.
 
@@ -308,7 +309,7 @@ provide a significant speedup.
 :END:
 
 #+name: seed-chain-extend
-#+caption: An example of the /seed-chain-extend/ method for mapping. First, /seeds/ (black diagonals) are found, which are short matches between the two sequences. Then, these seeds are /chained/ into /chains/ (dashed lines). Each seed and each chain is scored based on the number of seeds in the chain and their relative positions. The chains with the highest scores are selected as candidate alignments. Then, short alignments are done to fill the gaps between the seeds and /extend/ the chain into a full alignment. A drawback of seed-chain-extend is that it may not return optimal alignments. Instead, a full semi-global alignment could be done around the chain to obtain an exact alignment, leading to /seed-chain-align/.
+#+caption: An example of the /seed-chain-extend/ method for mapping. First, /seeds/ (black diagonals) are found, which are short matches between the two sequences. Then, these seeds are /chained/ into /chains/ (dashed lines). Each seed and each chain is scored based on the number of seeds in the chain and their relative positions. The chains with the highest scores are selected as candidate alignments. Then, short alignments are done to fill the gaps between the seeds and /extend/ the chain into a full alignment. A drawback of seed-chain-extend is that it may not return optimal alignments. Instead, a full semi-global alignment could be done around the chain to obtain an exact alignment, leading to /seed-chain-align/. The bottom left shows a semi-global alignment using Needleman-Wunsch, and the bottom-right showh a semi-global alignment using band-doubling.
 #+attr_html: :class inset medium
 [[file:fig/seed-chain-extend.svg]]
 
@@ -345,28 +346,28 @@ There are various strategies for seeding alignments.
 *Minimizers.*
 The most popular mapper, minimap2 [cite:@minimap2], uses /minimizers/ ([[../minimizers/minimizers.org][blog]]). By
 default, it uses \(k\)-mer size $k$ from 15 to 19 and window size $w$ from 10 to
-19, to extract one out of each $w$ consecutive $k$-mers.
+19, to extract one out of each $w$ consecutive \(k\)-mers.
 It first finds all minimizers of the reference and builds an index that maps
-each k-mer to the locations where it occurs as a minimizer.
-Then, the minimizer k-mers for each query are determined, and these are looked
-up in the index to find the k-mer matches that seed the alignment.
+each \(k\)-mer to the locations where it occurs as a minimizer.
+Then, the minimizer \(k\)-mers for each query are determined, and these are looked
+up in the index to find the \(k\)-mer matches that seed the alignment.
 
 *\(k\)-min-mers.* A different approach is taken by mapquick [cite:@mapquick], which
-is a mapper designed for highly similar sequences. Here, /k-min-mers/ are used to
+is a mapper designed for highly similar sequences. Here, /\(k\)-min-mers/ are used to
 seed the alignment. These are chains of 2 to 15 consecutive 31-mers. This way,
-each k-min-mer spans a much larger portion of the sequence, and fewer matches
+each \(k\)-min-mer spans a much larger portion of the sequence, and fewer matches
 are needed to recover sufficiently good chains.
 
 
 *\(k\)-mers.* In the /seed heuristic/ in A*ix [cite:@astarix-2] and A*PA
-[cite:@astarpa] (TODO chapter), plain k-mer matches are used. A drawback of this
-approach is that it creates more matches, since there are more $k$-mers than
+[cite:@astarpa] (TODO chapter), plain \(k\)-mer matches are used. A drawback of this
+approach is that it creates more matches, since there are more \(k\)-mers than
 minimizers. The main benefit, on the other hand, is that it leads to an /exact/
 algorithm. For other seeding methods, a lack of matches does not imply a (good)
 lower bound on the minimal edit distance between consecutive matches, as we will
 see in [[#chaining]].
 
-*Maximal-exact-matches.* /Maximal-exact-matches/ are a variant where $k$-mer
+*Maximal-exact-matches.* /Maximal-exact-matches/ are a variant where \(k\)-mer
 matches are extended on either side as long as the two sequences match. This is
 similar to the seeding used by BLAST [cite:@blast].
 
@@ -376,9 +377,6 @@ and reference that occur exactly once in each string, and that can not be
 extended into a longer matching substring. Thus, these matches consider global
 information, rather than just considering local matches.
 This technique is used by MUMmer [cite:@mummer-1;@mummer-4];
-
-TODO When using /all/ k-mer matches as seeds, we are guaranteed that the
-distance is at least ...
 
 ** Chaining
 :PROPERTIES:
@@ -398,7 +396,7 @@ is a sequence of seeds that can occur together in an alignment.
 As for seeding, there are many different methods to score chains.
 
 *LCS\(k\).* A simple method of scoring chains is to assume that the seeds are
-disjoint k-mer matches, and simply maximize the number of k-mers in the chain.
+disjoint \(k\)-mer matches, and simply maximize the number of \(k\)-mers in the chain.
 This is also known as the LCS\(k\) metric. [cite:@lcsk]. Like the plain LCS,
 this score focuses only on matches, and disregards the mismatches and indels in between.
 
@@ -420,23 +418,23 @@ cost. In fact, minimap2 uses a concave function of the size of the gap as actual
 distance, so that longer gaps are penalized relatively less than short gaps, to
 admit e.g. splicing alignments.
 
-*Seed heuristic.* The /seed heuristic/, introduced by A*ix [cite:@astarix-2;@astarpa], provides a
+*Seed heuristic (SH).* The /seed heuristic/, introduced by A*ix [cite:@astarix-2;@astarpa], provides a
 second, independent lower bound on the edit distance between two matches.
-We first find /all/ k-mer matches. Then, say that there is a gap
+We first find /all/ \(k\)-mer matches. Then, say that there is a gap
 of $\Delta_i \times \Delta_j$ bases between two matches in our chain.
-Assuming that there no in-between matches, we know that there is no k-mer match
+Assuming that there no in-between matches, we know that there is no \(k\)-mer match
 in the path joining the two matches. Thus, we must incur an error at least every
 $k$ steps, for at least $\max(\lfloor \Delta_i/k\rfloor,
 \lfloor\Delta_j/k\rfloor)$ errors. (If we assume that the two initial matches
 are already maximally extended, we could replace the $\lfloor\cdot\rfloor$ by a
 $\lceil \cdot \rceil$.)
 In practice, the seed heuristic is implemented by splitting the reference
-sequence into adjacent disjoint k-mers, and only matches of those k-mers are
+sequence into adjacent disjoint \(k\)-mers, and only matches of those \(k\)-mers are
 found. Then, the distance between consecutive matches is always a multiple of
-$k$, and the minimal cost to join them is simply the number of skipped k-mers,
+$k$, and the minimal cost to join them is simply the number of skipped \(k\)-mers,
 as shown in [[chain-models]].
 
-*Gap-chaining seed heuristic.* In A*PA, we extended the seed heuristic into the
+*Gap-chaining seed heuristic (GCSH).* In A*PA, we extended the seed heuristic into the
 gap-chaining seed heuristic. Conceptually, this simply takes the maximum of the
 gap-cost and the seed heuristic cost, since the maximum of two lower bounds is
 still a lower bound.
@@ -453,52 +451,97 @@ that is equivalent to the solution for LCS [cite:@hirschberg77]. It works by
 first applying a suitable /transformation/ to the coordinates of the matches,
 followed by a plain LCS algorithm.
 
+The main benefit of the GCSH is that it gives mathematical guarantees.
+Suppose we are doing a global alignment between two sequences of length $n$ (the
+one that is split into $\ell = \lfloor n/k\rfloor$ \(k\)-mer /seeds/) and $m$.
+If there is an alignment of cost $s$, then we know for sure that there is
+also a chain of cost $\leq s$. Thus, to find all alignments of cost up to $s$,
+we only have to consider all chains with cost up to $s$.
 
 
 ** Aligning
-Most methods
+After all matches have been chained and sufficiently good candidate chains have
+been determined, this chain can be extended into an alignment. Minimap2 uses the
+KSW2 algorithm [cite:@suzuki-kasahara] to do an approximate (banded) alignment
+to fill the gaps between matches.
+Other methods such as mapquick completely the alignment phase completely and
+only report the location and/or score of the chain.
+
+A drawback of extending a chain is that the optimal alignment may not completely
+follow the chain, as exemplified in the bottom-left alignment in [[seed-chain-extend]].
+Instead, we can run a semi-global alignment around the chain using any of the
+global alignment methods discussed in Chapter 2 ([[../pairwise-alignment/pairwise-alignment.org][blog]]), such as a plain
+Needleman-Wunsch DP or band doubling.
+Indeed, we can also use A*PA or A*PA2 for this semi-global alignment.
+
+*Updating GCSH for semi-global alignment.*
+For global alignment we can simply count the number of seeds that is still to be
+covered to get to the end of the first sequence (the reference).
+In particular, when $x=n-i$ characters of the first remain, we need to still
+cross and pay for $x/k -O(1)$ seeds.
+With
+semi-global alignment, we can end the alignment anywhere, and avoid crossing all
+seeds. If there are still $y$ bases of the /pattern/ remaining, it turns out this will need a
+cost of at least $y/(k+1)-O(1)$. This division by $k+1$ rather than $k$ could be
+avoided by replacing the role of the pattern and reference, and splitting the
+pattern into $m/k$ seeds, but that turns out to be inefficient when it comes to
+indexing all \(k\)-mers. By splitting the reference into \(k\)-mers, we only need to
+index $1/k$ of its \(k\)-mers, so that this index is much smaller.
+(TODO figure.)
+
+Secondly, in A*PA and A*PA2 we filter away
+all matches for which the their gap cost to the end ($\st nm$) is /larger/ than
+the seed heuristic cost to the end, since these can provably never be part of a
+chain. With semi-global alignment, chains can end anywhere, and thus this filter
+does not apply anymore.
+
+*Semi-global alignment using A*PA and A*PA2.*
+We additionally make some modifications to A*PA and A*PA2.
+First, the alignment can start anywhere along the top of the grid, and so we do
+not only push the root state $\st 00$ on the A*PA priority queue, but we push all
+states along the top row for which the heuristic has a local minima.
+From there,
+we expand sideways as needed, both to the right /and to the left/.
+For A*PA2, we similarly make sure to cover all start positions with sufficiently
+low value of the heuristic.
+
+Similarly, the alignment may end anywhere on the bottom row, and so the
+termination condition is changed accordingly. Also during the traceback, we
+ensure that this is stopped as soon as the top row is reached, rather than the
+top-left state.
+
+** A*Map
+
+While it would be possible to using A*PA or A*PA2 directly as a mapping
+algorithm, this is inefficient because the index on reference \(k\)-mers is not
+reused between alignments.
+Thus, we develop A*Map as a dedicated mapper. As discussed, this consists of
+three components:
+- Seeding using \(k\)-mer matches: a static index is built containing exactly
+  every $k$'th \(k\)-mer of the reference, and all query \(k\)-mers are looked up in
+  this to find their matches in the reference. Matches are sorted using an
+  efficient radix sort.
+- Chaining using the gap-chaining seed heuristic (GCSH):
+  all $r$ matches are transformed as done by A*PA, and then an efficient
+  implementation of the $r \lg r$ LCS chaining algorithm is used.
+  All chains with a cost below some fixed threshold $t$ are candidates for alignment.
+- Candidate chains are semi-global aligned using A*PA2 with band doubling.
+  The best score is tracked and returned.
+  To ensure the alignment is contained in the subsequence of the reference that
+  is semi-globally aligned, a small buffer is added before the first match and
+  after the last match, as shown in [[seed-chain-extend]].
+
+When the goal is to find all alignments with divergence up to $d=4\%$, one must use
+a value of $k$ somewhat below $0.9(1/d-1)=0.9(1/4\%-1) = 21.6$ to accommodate spurious
+matches, and to ensure that candidate chains contain at least one tenth of the
+maximum possible number of matches (i.e., chains should have length at least $0.1 \cdot m/k$).
+In this case, $k=20$ would be a good choice.
+Generally, smaller $k$ is preferred to improve the quality of the heuristic, but
+we also need $k>\log_4 n$ to ensure that the number of spurious matches remains limited.
 
 ** Results
--
 *** Mapping using A*PA
 *** Mapping using A*PA2
 *** A*Map
-
-* New: A*Map
-** Mapping
-- build hashmap on chunked k-mers of reference
-- find matches for each pattern
-- transform, radix sort, and then chain using LCP algo
-- say $k=20$, then we have guaranteed matches if divergence $\leq 5\%$.
-- But we want to avoid processing random one-off matches
-- So require at least $10\%$ of the possible matches to be present, for a max
-  divergence of $4.5\%$.
-- Track /dominant/ matches that start a chain of at least length $10\% \cdot
-  m/k$.
-- For each of them, do a semi-global alignment of a slightly buffered region of
-  the text (around length $m + 2\cdot 4.5\%\cdot m$).
-- The alignment can be done using $O(nm)$
-- TODO: Better methods:
-  - $O(ms)$, adapted to semi-global (currently the code only does global)
-  - semi-global version of A*PA
-  - semi-global version of A*PA2
-  - bottom-up match-merging
-
-
-# ** TODO Semi-global highlight
-# - [cite:@landau-vishkin89]
-# - [cite:@myers99]
-# - [cite:@chang92]: shows that ukkonens idea (Finding approximate patterns in
-#   strings, also '85) runs in $O(nk)$
-#   expected time for $k$-approximate string matching, when the reference is a
-#   random string.
-# - [cite:@wu96]: Efficient four russians in combination with 'ukkonens zone'
-#   $O(kn/\lg s)$ when $O(s)$ space is available for lookup.
-# - Baeza-Yates Gonnet 92
-# - Baeza-Yates Navarro 96
-# - LEAP: https://www.biorxiv.org/content/10.1101/133157v3
-
-
-* TODO Benchmarks of simple methods
 
 #+print_bibliography:
