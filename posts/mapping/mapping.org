@@ -549,19 +549,18 @@ From this, we sample 1000 random reads of length 50 kbp.
 Then, we apply a varying number of uniform random mutations to these strings
 $1\%$, $3\%$, and $5\%$, to obtain divergences of $0.9\%$, $2.7\%$, and $4.4\%$.
 
-We run both methods on a single thread. For minimap2, we run with default
-parameters, and with =-x map-pb=, =-x map-ont=, and =-x map-hifi=. For A*Map,
+We run both methods on a single thread. For minimap2, we run with =-x map-pb=, =-x map-ont= (default), and =-x map-hifi=. For A*Map,
 we use A*PA2 with plain band doubling [cite:@ukkonen85] for the semi-global alignments.
 
 Experiments are run on an Intel =i7-10750H= with AVX2, running at a fixed CPU frequency of
 2.6 GHz.
 
-#+caption: Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped.
-| Divergence | minimap2 default, k=15,w=10 | PB k=19,w=10,hpc | ONT k=15,w=10 | HIFI k=19,w=19 | A*Map k=20 | A*Map k=28 |
-|   Indexing |                        10.5 |              8.7 |          10.5 |            7.4 |        1.2 | 1.0        |
-|       0.9% |                        48.2 |             31.2 |          48.1 |           23.0 |       26.9 | *8.7*      |
-|       2.7% |                        50.7 |             31.4 |          50.6 |           23.3 |       24.6 | *12.9*     |
-|       4.4% |                        46.7 |             28.8 |          46.6 |         *21.8* |       22.8 | (*)  15.4  |
+#+caption: Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped. The PacBio mode uses homopolymer compression.
+| Divergence | PB k=19,w=10,hpc | ONT k=15,w=10 | HIFI k=19,w=19 | A*Map k=20 | A*Map k=28 |
+|   Indexing |              8.7 |          10.5 |            7.4 |        1.2 | 1.0        |
+|       0.9% |             31.2 |          48.1 |           23.0 |       26.9 | *8.7*      |
+|       2.7% |             31.4 |          50.6 |           23.3 |       24.6 | *12.9*     |
+|       4.4% |             28.8 |          46.6 |         *21.8* |       22.8 | (*)  15.4  |
 
 *A*Map analysis.*
 When $k=20$, a bottleneck of A*Map is the large number of \(k\)-mer
