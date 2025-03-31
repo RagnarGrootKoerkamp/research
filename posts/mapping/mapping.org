@@ -224,32 +224,79 @@ approximately $\alpha$, as shown in [[skip-cost-example]] for $\alpha=0.5$.
 *Applying the skip-cost.*
 In [[skip-cost-plot]], we show an example output when using a skip-cost of
 $\alpha\in\{0, 0.5, 1\}$ for the alignment as shown in [[skip-cost-setup]].
-Using $\alpha = 1$ corresponds to classical semi-global alignment (green), and
+Using $\alpha = 1$ corresponds to classical semi-global alignment (thin black), and
 we see that this correctly detects that the pattern matches in the middle of the
 sequence, ending at position 300, with a cost around 20. However, the
 occurrences overlapping the start and end of the text are completely missed.
-Overlap alignment, which corresponds to $\alpha=0$ (blue) /does/ have local
+Overlap alignment, which corresponds to $\alpha=0$ (bold black) /does/ have local
 minima at position 50 and 650 (indicating the pattern extends 50 characters
 beyond the text). The drawback of these minima is that there are also
 /global/ minima at positions 0 and 700 where the pattern is completely disjoint
 from the text, so that some additional logic is needed to separate these cases.
 We see that in regions where the pattern does not match, the alignment has a
 score around 50, or $0.5$ per character. Thus, we choose $\alpha=0.5$ per
-skipped character. Using this (orange), we recover clear local minima at
+skipped character. Using this (yellow), we recover clear local minima at
 positions 50 and 650, while the cost converges back to 50 as the overlap shrinks
 to 0.
 
 
 #+name: skip-cost-plot
 #+caption: Example of the output of the skip-cost alignment when aligning a length-100 pattern onto a length-600 text (as shown in [[skip-cost-setup]]). Graphs are shown for $\alpha=1$, corresponding to classical semi-global alignment, $\alpha=0.5$, corresponding to the skip-cost introduced here, and $\alpha=0$, corresponding to an overlap alignment. Vertical lines indicate the region inside of which the pattern fully matches within the text, and where the cost of the alignment does not depend on the skip-cost $\alpha$.
-#+attr_html: :class inset medium
+#+attr_html: :class inset large
 [[file:skip-cost/skip-cost-plot.svg]]
 
 #+name: skip-cost-setup
 #+caption: The setup of the alignment results shown in [[skip-cost-plot]]. A random pattern of length 100 is generated and overlaid on a length 600 text 3 times:
-#+caption: once in the middle, and twice with an 50 base overlap at the start/end of the sequence. Before inserting the pattern into the text, a different number of mutations is applied to the full length-100 pattern.
+#+caption: once in the middle, and twice with a 50 base overlap at the start/end of the sequence. Before inserting the pattern into the text, a different number of mutations is applied to the full length-100 pattern.
 #+attr_html: :class inset medium
 [[file:fig/skip-cost-setup.svg]]
+
+** Results
+
+#+name: search-results
+#+caption: Log-log plot of the time to align a pattern of length $m$ against a text of length 50 kbp, in nanoseconds per base of the text. Only the time needed to compute the minimal distance is reported, excluding alignment/traceback. Our SIMD search method (yellow) always computes the entire matrix. Edlib, on the other hand, by default uses a band doubling approach (solid lines). Disabling this via a fixed high threshold is shown dashed.
+#+attr_html: :class inset medium
+[[file:search-results/search-plot.svg]]
+
+We benchmark the throughput of the search function in [[search-results]], where we
+measure how long it takes (per text character) to align a pattern against
+a text. For Edlib [cite:@edlib], we use the /infix/ method for semi-global alignment and ask
+it to report the distance only, and likewise for our method, we measure only the
+time needed to compute the output distances.
+Experiments are run on an Intel =i7-10750H= with AVX2, running at a fixed CPU frequency of
+2.6 GHz.
+
+As can be seen, both methods take as long for pattern length 32 as for 64, since
+they pad to 64 bit values.
+Our SIMD-based method has constant performance up to patterns of length 256, and
+then grows linearly with the pattern length.
+Edlib starts to grow at its word size $w=64$ instead. On very divergent
+sequences (black), indeed the growth is linear, and even slightly worse because
+of redundant band doubling. For more similar sequences (grey), when the pattern
+is present in the text with a small divergence, band doubling
+reduces the part of the matrix that needs to be computed.
+Especially when the pattern can be found with a divergence of 1%, this makes the
+performance nearly independent of the pattern length, as also predicted by
+Myers' complexity of $O(n \lceil k/w\rceil)=O(n\lceil 0.01 m/64\rceil)=O(n\lceil m/6400\rceil)$ [cite:@myers99] and shown in [[text-searching]].
+
+For shorter texts, on the order of the pattern length (not shown), there is an
+additional 50% to 100% overhead on the time per character that is spent on
+preprocessing the pattern.
+
+When also tracing the optimal alignment, Edlib needs another 5-10% of time,
+while our method needs an additional 10-20%.
+
+For patterns of length 128 to 256, our method ends up around $1.7\times$ to $2.0\times$ faster
+than Edlib.
+In practical terms, this implies that a pattern of length up to 256 bp can
+be found in a 1 kbp read in 13 μs (75000 searches per second) or in a
+50 kbp text in 440 μs (2200 searches per second).
+
+*Future work.*
+Currently, we only implement a naive $O(n\lceil m/w\rceil)$ method that always
+computes the entire matrix. For sequences of length greater than 256, most of
+the matrix below the first 256 rows can likely be skipped, and this should
+provide a significant speedup.
 
 * A*Map:
 :PROPERTIES:

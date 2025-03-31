@@ -13,7 +13,23 @@ comment = ["semi-global", "skip-cost", "overlap"]
 for i in range(len(lines) - 1, -1, -1):
     v = eval(lines[i])
     l = len(v)
-    plt.plot(v, label=f"skip-cost={alphas[i]:.1f}, {comment[i]}")
+    a = alphas[i]
+    z = 0
+    lw = 1
+    ls = "-"
+    if a == 0.0:
+        c = "black"
+        lw = 1.5
+        z = -1
+    if a == 0.5:
+        c = "#ffc107"
+        lw = 2
+        # z = 2
+    if a == 1.0:
+        c = "black"
+        # ls = "--"
+        lw = 0.5
+    plt.plot(v, label=f"skip-cost={a:.1f}, {comment[i]}", c=c, zorder=z, lw=lw, ls=ls)
 plt.ylim(0, 100)
 plt.xlim(0, l)
 plt.axvline(x=plen, color="black", linewidth=0.5)
