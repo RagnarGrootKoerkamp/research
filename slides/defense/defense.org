@@ -1,123 +1,1122 @@
-#+title: Optimal throughput bioinformatics
+#+title: Optimal Throughput Bioinformatics
+#+subtitle: PhD Defense
+#+author: Ragnar {Groot Koerkamp}
 #+hugo_section: slides
 #+filetags: @slides
-#+OPTIONS: ^:{} num: num:t toc:nil
+#+OPTIONS: ^:{} num: num:0 toc:nil
 #+hugo_front_matter_key_replace: author>authors
 # #+toc: depth 2
 #+reveal_theme: white
 #+reveal_extra_css: /css/slide.min.css
-#+export_file_name: ../static/defense
+#+reveal_init_options: width:1920, height:1080, margin: 0.04, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+#+reveal_reveal_js_version: 4
+#+export_file_name: ../../static/defense/index.html
 #+hugo_paired_shortcodes: %notice
-#+date: <2024-08-09 Fri>
+#+date: <2025-04-10>
 # Export using C-c C-e R R
+# Enable auto-export using :toggle-org-reveal-export-on-save
 
-* High performance +computing+ *bioinformatics*
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+#+REVEAL_TITLE_SLIDE: <h1 class="title" style="margin-top:-10%%">%t</h1>
+#+REVEAL_TITLE_SLIDE: <p class="subtitle" style="color:grey">%s</p>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0">%a</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:smaller;font-weight:normal;color:grey">April 10, 2025</h2>
+#+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/bmilab.svg" style="position:absolute;bottom:6.5%%;left:2%%;width:30%%"></img>
+#+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%%;right:33%%;width:30%%"></img>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/defense" style="position:absolute;bottom:6.8%%;right:1%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/defense</a>
+
+#+attr_html: :style display:none
+[[file:ethz.svg]]
+#+attr_html: :style display:none
+[[file:bmilab.svg]]
+
+* What is _bio_​informatics?
 :PROPERTIES:
-:CUSTOM_ID: part1
-:END:
-** What is bioinformatics?
-:PROPERTIES:
-:CUSTOM_ID: bioinformatics
-:END:
-** A*PA
-:PROPERTIES:
-:CUSTOM_ID: AstarPA
+:CUSTOM_ID: bioinformatics-1
 :END:
 
-** A*PA2
+** For today: DNA
 :PROPERTIES:
-:CUSTOM_ID: AstarPA2
-:END:
-* +High+ *Optimal* performance bioinformatics
-:PROPERTIES:
-:CUSTOM_ID: part2
+:CUSTOM_ID: dna
 :END:
 
-#+reveal: split
-#+attr_shortcode: proposition
-#+begin_notice
-/Optimal/ does not mean anything.
-#+end_notice
+#+attr_html: :class large :style height:1000px :src /ox-hugo/dna.gif
+[[file:dna.gif]]
 
-** Optimal?
+#+attr_html: :class full-caption attribution
+Zephyris, CC BY-SA 3.0 [[https://commons.wikimedia.org/w/index.php?curid=2118354][Wikipedia]]
+
+** Also DNA
+:PROPERTIES:
+:CUSTOM_ID: dna-chromosome
+:END:
+
+#+attr_html: :class large :src /ox-hugo/chromosomes.png
+[[file:chromosomes.png]]
+
+#+attr_html: :class full-caption
+Human chromosomes
+
+** DNA, according to me
+:PROPERTIES:
+:CUSTOM_ID: dna-alph
+:END:
+
+#+attr_html: :style font-size:400px;text-align:center;position:relative;top:10%
+A C G T
+
+#+attr_html: :style font-size:200px;text-align:center;word-spacing:70px;padding-top:70px;color:lightgrey
+00 01 10 11
+
+** Covid
+:PROPERTIES:
+:CUSTOM_ID: virus
+:END:
+
+#+attr_html: :class full :src /ox-hugo/covid-virus.png
+[[file:covid-virus.png]]
+
+#+attr_html: :class full-caption
+A virus: SARS-CoV-2, aka COVID-19
+
+#+begin_notes
+covid vs sars-cov-2
+#+end_notes
+
+* Why bio​_informatics_?
+:PROPERTIES:
+:CUSTOM_ID: bioinformatics-2
+:END:
+
+** 1800-1980: Punch cards - 80 B - Protein size :noexport_reveal:
+:PROPERTIES:
+:CUSTOM_ID: punchcard
+:END:
+
+#+attr_html: :class large :style max-width:880px;left:25% :src /ox-hugo/punchcard.jpg
+[[file:punchcard.jpg]]
+
+#+attr_html: :class full-caption attribution left
+Punchcard\\
+Pete Birkinshaw, CC BY 2.0, [[https://commons.wikimedia.org/w/index.php?curid=49758093][Wikipedia]]
+
+#+attr_html: :class large :style max-height:750px;max-width:880px;left:75% :src /ox-hugo/beta-hemoglobin.png
+[[file:beta-hemoglobin.png]]
+
+#+attr_html: :class full-caption attribution
+β-hemoglobin (1963)\\
+Emw, CC BY-SA 3.0, [[https://commons.wikimedia.org/w/index.php?curid=8814752][Wikipedia]]
+
+** 1970-2000: Floppy disks - MB - Bacteria
+:PROPERTIES:
+:CUSTOM_ID: floppy
+:END:
+
+#+attr_html: :class large :style max-height:750px;max-width:880px;left:25% :src /ox-hugo/floppy.jpg
+[[file:floppy.jpg]]
+
+#+attr_html: :class full-caption attribution left
+Floppy
+
+#+attr_html: :class large :style max-height:750px;max-width:880px;left:75% :src /ox-hugo/e-coli.jpg
+[[file:e-coli.jpg]]
+
+#+attr_html: :class full-caption attribution
+/E. coli/ bacteria (1997)
+
+** 2000-2020: USB stick - GB - Human Genome
+:PROPERTIES:
+:CUSTOM_ID: usb
+:END:
+
+#+attr_html: :class large :style max-height:750px;max-width:880px;left:25% :src /ox-hugo/usb-stick.jpg
+[[file:usb-stick.jpg]]
+
+#+attr_html: :class full-caption attribution left
+USB stick
+
+#+attr_html: :class large :style max-height:750px;max-width:880px;left:75% :src /ox-hugo/chromosomes.png
+[[file:chromosomes.png]]
+
+#+attr_html: :class full-caption attribution
+Human genome (2001)
+
+** 2010-2020: Hard Drive - TB - RefSeq
+:PROPERTIES:
+:CUSTOM_ID: harddrive
+:END:
+
+#+attr_html: :class large :style height:750px;max-height:1080px;max-width:1920px;left:20% :src /ox-hugo/harddrive.jpg
+[[file:harddrive.jpg]]
+
+#+attr_html: :class full-caption attribution left
+Hard drive
+
+#+attr_html: :class large :style max-height:750px;max-width:1150px;left:70%;top:25% :src /ox-hugo/refseq.png
+[[file:refseq.png]]
+
+#+attr_html: :class large :style max-height:550px;max-width:1150px;left:70%;top:65% :src /ox-hugo/animals.png
+[[file:animals.png]]
+
+#+attr_html: :class full-caption attribution
+RefSeq
+
+
+** 2025: Data Center - PB - SRA
+:PROPERTIES:
+:CUSTOM_ID: datacenter
+:END:
+
+#+attr_html: :class large :style width:960;pxmax-height:750px;left:20% :src /ox-hugo/datacenter.jpg
+[[file:datacenter.jpg]]
+
+#+attr_html: :class full-caption attribution left
+Data Center\\
+PhonlamaiPhoto | istockphoto.com
+
+#+attr_html: :class large :style height:850px;max-height:1000px;max-width:1400px;left:70% :src /ox-hugo/sra-marked.png
+[[file:sra-marked.png]]
+
+#+attr_html: :class full-caption attribution
+Growth of [[https://www.ncbi.nlm.nih.gov/sra/docs/sragrowth/][SRA]]
+
+* Goal:@@html:<br/>@@ _Fast_ code
+:PROPERTIES:
+:CUSTOM_ID: fast
+:END:
+* Goal:@@html:<br/>@@ High _throughput_ code
+:PROPERTIES:
+:CUSTOM_ID: throughput
+:END:
+* Goal:@@html:<br/>@@ _Optimal_ throughput code
 :PROPERTIES:
 :CUSTOM_ID: optimal
 :END:
-- Which metric?
-  - Space?
-  - Time?
-  - Theory? Practice?
-- How optimal?
-  - Within some constant factor? ($O(n)$)
-  - Sublinear space overhead? ($o(n)$)
-  - Within $2×$?
-
-** Big-$O$
+** What is high troughput code?
 :PROPERTIES:
-:CUSTOM_ID: big-o
+:CUSTOM_ID: complexity
 :END:
 
-#+attr_shortcode: proposition
-#+begin_notice
-Big-$O$ was nice, but does not align with modern hardware.
-- If you /have/ the memory, use it!
-- CPUs are not turing machines.
-#+end_notice
+#+attr_reveal: :frag (appear)
+1. /Complexity/
+   - /Few/ operations:
 
-- SDSL is /succinct/ in theory: $o(n)$ overhead on theoretical minimum space.
-  - ... but practice is hard,
-  - ... and also up to $1000\times$ slower to query!
-  - Using $10\%$ extra space is /fine/, and can avoid all the slowdown.
-- Not all $O(1)$ are equal:
-  - one =100ns= cache miss per character? (FM-index, /cough/)
-  - one =0.003ns= comparison per character?
-  - $O(\log n)$ or even $O(\sqrt n)$ fast steps is better than $O(1)$ slow steps!
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em
+     $\quad O(n^2)\quad\longleftrightarrow\quad O(n)$
+2. /Efficiency/
+   - /Fast/ operations:
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em;font-size:smaller
+     memory read, 100 ns $\quad\longleftrightarrow\quad$ 0.1 ns, addition
+3. /Implementation/
+   - /Parallel/ operations:
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em;font-size:smaller
+     SIMD, instruction-level parallelism
+
+* Papers
+:PROPERTIES:
+:CUSTOM_ID: publications
+:END:
+
+#+attr_html: :style position:fixed;right:10px;top:11%;font-size:40px
+Part 1: Pairwise Alignment
+
+#+attr_html: :style position:fixed;right:10px;top:31%;font-size:40px
+Part 2: Minimizers
+
+#+attr_html: :style position:fixed;right:10px;top:61%;font-size:40px
+Part 3: Optimal Throughput
+
+#+attr_html: :style position:fixed;right:10px;top:81%;font-size:40px
+Additional
+
+- [1] *A*PA*: /Exact Global Alignment Using A* with Chaining Seed Heuristic and Match Pruning./\\
+  RGK and Pesho Ivanov, Bioinformatics 2024.
+- [2] /*A*PA2*: Up to 19x Faster Exact Global Alignment./\\
+  RGK. WABI 2024.
+-----
+- [3] /The *Mod-Minimizer*: A Simple and Efficient Sampling Algorithm for Long k-mers./\\
+  RGK and Giulio Ermanno Pibiri. WABI 2024.
+- [4] /Forward Sampling Scheme *Density Lower Bound*./\\
+  Bryce Kille, RGK, et al. Bioinformatics 2024.
+- [5] /The *Open-Closed Mod-Minimizer* Algorithm./\\
+  RGK, Daniel Liu, and Giulio Ermanno Pibiri. AMB 2025.
+-----
+- [6] /*SimdMinimizers*: Computing Random Minimizers, Fast./\\
+  RGK and Igor Martayan. SEA 2025.
+- [7] /*PtrHash*: Minimal Perfect Hashing at RAM Throughput./\\
+  RGK. SEA 2025.
+-----
+- [8] /*U-index*: A Universal Indexing Framework for Matching Long Patterns./\\
+  Lorraine Ayad, Gabriele Fici, RGK, Rob Patro, Giulio Ermanno Pibiri, and Solon Pissis. SEA 2025.
+
+#+begin_notes
+Throughput is not in presentation, but in part 3 of the thesis
+#+end_notes
+
+* Problem 1: Pairwise Alignment
+:PROPERTIES:
+:CUSTOM_ID: pairwise-alignment-title
+:END:
+
+** Covid -- $\alpha$, December 2020
+:PROPERTIES:
+:CUSTOM_ID: covid-alpha
+:END:
+
+# https://viralzone.expasy.org/9556
+
+#+attr_html: :class full :src /ox-hugo/covid-alpha-highlight.png
+[[file:covid-alpha-highlight.png]]
+
+#+attr_html: :class full-caption
+Sars-CoV-2, alpha variant, December 2020
+
+** Covid -- $\omicron$, December 2021
+:PROPERTIES:
+:CUSTOM_ID: covid-omicron
+:END:
+
+#+attr_html: :class full :src /ox-hugo/covid-omicron-highlight-marked.png
+[[file:covid-omicron-highlight-marked.png]]
+
+#+attr_html: :class full-caption
+Sars-CoV-2, omicron variant, December 2021
+
+** Pairwise alignment
+:PROPERTIES:
+:CUSTOM_ID: pairwise-alignment
+:END:
+- Find the mutations between two sequences
+
+#+attr_html: :class large :style width:1500px;padding-top:100px :src /ox-hugo/edit-graph.svg
+[[file:fig/edit-graph.svg]]
+
+** Dynamic programming
+:PROPERTIES:
+:CUSTOM_ID: dp-1
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/dp-1.svg
+[[file:fig/dp-1.svg]]
+
+** Dynamic programming
+:PROPERTIES:
+:CUSTOM_ID: dp-2
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/dp-2.svg
+[[file:fig/dp-2.svg]]
+
+** Dynamic programming
+:PROPERTIES:
+:CUSTOM_ID: dp-3
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/dp-3.svg
+[[file:fig/dp-3.svg]]
+
+** Dynamic programming
+:PROPERTIES:
+:CUSTOM_ID: dp-4
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/dp-4.svg
+[[file:fig/dp-4.svg]]
+
+** Dynamic programming
+:PROPERTIES:
+:CUSTOM_ID: dp-5
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/dp-5.svg
+[[file:fig/dp-5.svg]]
+
+** Needleman-Wunsch -- Quadratic $O(n^2)$
+:PROPERTIES:
+:CUSTOM_ID: nw
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-nw.svg
+[[file:fig/alg-nw.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/0_nw.gif
+[[file:gif/0_nw.gif]]
 
 
-** Minimizers
+** Dijkstra -- $O(ns)$
+:PROPERTIES:
+:CUSTOM_ID: dijkstra
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-dijkstra.svg
+[[file:fig/alg-dijkstra.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/2_dijkstra.gif
+[[file:gif/2_dijkstra.gif]]
+
+#+begin_notes
+Fewer states is better
+#+end_notes
+
+** Diagonal transition -- $O(n + s^2)$
+:PROPERTIES:
+:CUSTOM_ID: dt
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-dt.svg
+[[file:fig/alg-dt.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/3_diagonal_transition.gif
+[[file:gif/3_diagonal_transition.gif]]
+
+#+begin_notes
+Complexity is in expectation
+#+end_notes
+
+** A*PA${}^{1}$ -- near-linear, $3\times$ faster on similar seqs
+:PROPERTIES:
+:CUSTOM_ID: astarpa
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-astarpa.svg
+[[file:fig/alg-astarpa.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/5_astarpa.gif
+[[file:gif/5_astarpa.gif]]
+
+
+#+attr_html: :class citation
+[1] /Exact Global Alignment Using A* with Chaining Seed Heuristic and Match Pruning./\\
+RGK and Pesho Ivanov, Bioinformatics 2024.
+
+#+begin_notes
+Worst-case vs avg-case complexity
+#+end_notes
+
+# ** Highlight: seed heuristic?
+# ** Highlight: pruning?
+
+
+** A*PA${}^{1}$ -- not quite linear
+:PROPERTIES:
+:CUSTOM_ID: astarpa-bad
+:END:
+
+#+attr_html: :class large :style height:800px;left:50% :src /ox-hugo/5_astarpa_noisy.gif
+[[file:gif/5_astarpa_noisy.gif]]
+
+#+attr_html: :class citation
+[1] /Exact Global Alignment Using A* with Chaining Seed Heuristic and Match Pruning./\\
+RGK and Pesho Ivanov, Bioinformatics 2024.
+
+* A*PA: Great complexity -- terrible efficiency
+:PROPERTIES:
+:CUSTOM_ID: astarpa-conclusion
+:END:
+
+** Band Doubling -- $O(ns)$
+:PROPERTIES:
+:CUSTOM_ID: doubling
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-doubling.svg
+[[file:fig/alg-doubling.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/1_edlib.gif
+[[file:gif/1_edlib.gif]]
+
+** A*PA2${}^{2}$ -- good efficiency: up to $19\times$ faster
+:PROPERTIES:
+:CUSTOM_ID: astarpa2
+:END:
+
+#+attr_html: :class large :style height:800px;left:25% :src /ox-hugo/alg-astarpa2.svg
+[[file:fig/alg-astarpa2.svg]]
+
+#+attr_html: :class large :style height:800px;left:75% :src /ox-hugo/6_astarpa2.gif
+[[file:gif/6_astarpa2.gif]]
+
+#+attr_html: :class citation
+[2] /A*PA2: Up to 19x Faster Exact Global Alignment./\\
+RGK. WABI 2024.
+
+#+begin_notes
+mention throughput
+#+end_notes
+
+* Problem 2: Minimizers -- lossy compression
 :PROPERTIES:
 :CUSTOM_ID: minimizers
 :END:
 
-** Minimizers: a lower bound
+** Lossy compression
 :PROPERTIES:
-:CUSTOM_ID: minimizer-bound
-:END:
-** Mod-minimizers: a near-optimal scheme
-:PROPERTIES:
-:CUSTOM_ID: mod-mini
-:END:
-** Outlook:: future schemes
-:PROPERTIES:
-:CUSTOM_ID: minimizers-outlook
-:END:
-* Optimal +performance+ *throughput* bioinformatics
-:PROPERTIES:
-:CUSTOM_ID: part3
+:CUSTOM_ID: lossy-1
 :END:
 
-#+reveal: split
-#+attr_shortcode: proposition
-#+begin_notice
-Most bioinformatics applications need /throughput/, not latency.
-#+end_notice
+#+attr_html: :class full :src /ox-hugo/100.png
+[[file:lossy/100.png]]
 
-** Why throughput?
-:PROPERTIES:
-:CUSTOM_ID: throughput
-:END:
-- /Performance/ can be anything!
-- /Throughput/, not /latency/!
+#+attr_html: :class full-caption
+original
 
-** Fast minimizers
+
+** Lossy compression
 :PROPERTIES:
-:CUSTOM_ID: fast-minimizers
+:CUSTOM_ID: lossy-2
 :END:
-** Fast binary search
+
+#+attr_html: :class full :src /ox-hugo/50.png
+[[file:lossy/50.png]]
+
+#+attr_html: :class full-caption
+50%
+
+** Lossy compression
 :PROPERTIES:
-:CUSTOM_ID: binary-search
+:CUSTOM_ID: lossy-3
 :END:
-** PtrHash
+
+#+attr_html: :class full :src /ox-hugo/25.png
+[[file:lossy/25.png]]
+
+#+attr_html: :class full-caption
+25%
+
+** Lossy compression
 :PROPERTIES:
-:CUSTOM_ID: ptrhash
+:CUSTOM_ID: lossy-4
 :END:
+
+#+attr_html: :class full :src /ox-hugo/12.png
+[[file:lossy/12.png]]
+
+#+attr_html: :class full-caption
+12%
+
+** Lossy compression
+:PROPERTIES:
+:CUSTOM_ID: lossy-5
+:END:
+
+#+attr_html: :class full :src /ox-hugo/6.png
+[[file:lossy/6.png]]
+
+#+attr_html: :class full-caption
+6%
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-1
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-1000.png
+[[file:kmers/10-1000.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=1000$
+
+#+begin_notes
+w=1000 looses too much information
+#+end_notes
+
+** Minimizer definition
+:PROPERTIES:
+:CUSTOM_ID: minimizer-dfn
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-dfn.svg
+[[file:fig/mini-dfn.svg]]
+
+#+attr_html: :style position:absolute;top:30%;right:10px;font-size:45px
+\(k\)-mer size: $k=3$ \\
+/Window guarantee/: $w=4$ \\
+Length $w+k-1=6$ window of $w$ \(k\)-mers \\
+\\
+Minimizer scheme:
+$$
+f: \Sigma^{w+k-1} \mapsto \{0, 1, 2, \dots, w-1\}.
+$$
+\\
+Used for compression and hashing.
+
+#+begin_notes
+Find f that minimizes density
+
+leftmost vs alphabetical
+
+usage in
+#+end_notes
+
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-1
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-1.svg
+[[file:fig/mini-1.svg]]
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-2
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-2.svg
+[[file:fig/mini-2.svg]]
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-3
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-3.svg
+[[file:fig/mini-3.svg]]
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-4
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-4.svg
+[[file:fig/mini-4.svg]]
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-5
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-5.svg
+[[file:fig/mini-5.svg]]
+** Minimizer example
+:PROPERTIES:
+:CUSTOM_ID: minimizer-6
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-6.svg
+[[file:fig/mini-6.svg]]
+** Minimizer density
+:PROPERTIES:
+:CUSTOM_ID: minimizer-dens
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/mini-density.svg
+[[file:fig/mini-density.svg]]
+
+#+attr_html: :style position:absolute;top:45%;left:300px;text-align:center
+Density: expected fraction of sampled \(k\)-mers.\\
+Here: $3/9=0.33$
+
+
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-2
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-500.png
+[[file:kmers/10-500.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=500$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-3
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-250.png
+[[file:kmers/10-250.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=250$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-4
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-100.png
+[[file:kmers/10-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=100$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-5
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-50.png
+[[file:kmers/10-50.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=50$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-6
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-25.png
+[[file:kmers/10-25.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=25$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-7
+:END:
+
+#+attr_html: :class full :src /ox-hugo/10-100.png
+[[file:kmers/10-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=10$, $w=100$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-8
+:END:
+
+#+attr_html: :class full :src /ox-hugo/11-100.png
+[[file:kmers/11-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=11$, $w=100$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-9
+:END:
+
+#+attr_html: :class full :src /ox-hugo/12-100.png
+[[file:kmers/12-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=12$, $w=100$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-10
+:END:
+
+#+attr_html: :class full :src /ox-hugo/20-100.png
+[[file:kmers/20-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=20$, $w=100$
+
+** Sampling k-mers
+:PROPERTIES:
+:CUSTOM_ID: sampling-kmers-11
+:END:
+
+#+attr_html: :class full :src /ox-hugo/30-100.png
+[[file:kmers/30-100.png]]
+
+#+attr_html: :class full-caption :style background-color:white
+$k=30$, $w=100$
+
+* Goal: Minimize the number of sampled \(k\)-mers
+:PROPERTIES:
+:CUSTOM_ID: mini-goal
+:END:
+
+** Density plots -- before ($w=24$)
+:PROPERTIES:
+:CUSTOM_ID: density-old
+:END:
+#+attr_html: :class plot :src /ox-hugo/defense-1-before.svg
+[[file:plots/defense-1-before.svg]]
+
+
+** The Mod-Minimizer${}^{3}$
+:PROPERTIES:
+:CUSTOM_ID: density-mod
+:END:
+#+attr_html: :class plot :src /ox-hugo/defense-2-mod.svg
+[[file:plots/defense-2-mod.svg]]
+
+#+attr_html: :class citation
+[3] /The Mod-Minimizer: A Simple and Efficient Sampling Algorithm for Long k-mers./
+RGK and Giulio Ermanno Pibiri. WABI 2024.
+
+** A Near-Tight Lower Bound${}^{4}$
+:PROPERTIES:
+:CUSTOM_ID: density-lb
+:END:
+#+attr_html: :class plot :src /ox-hugo/defense-3-lb.svg
+[[file:plots/defense-3-lb.svg]]
+
+#+attr_html: :class citation
+[4] /Forward sampling scheme density lower bound./
+Bryce Kille, RGK, et al. Bioinformatics 2024.
+
+** Near-optimal schemes for small $k$
+:PROPERTIES:
+:CUSTOM_ID: density-new
+:END:
+#+attr_html: :class plot :src /ox-hugo/defense-4-small-k.svg
+[[file:plots/defense-4-small-k.svg]]
+
+#+attr_html: :class citation
+(Unpublished)
+
+** Extended mod-minimizer${}^{5}$
+:PROPERTIES:
+:CUSTOM_ID: density-new
+:END:
+#+attr_html: :class plot :src /ox-hugo/defense-5-ext-mod.svg
+[[file:plots/defense-5-ext-mod.svg]]
+
+#+attr_html: :class citation
+[5] /The Open-closed mod-minimizer Algorithm./
+RGK, Daniel Liu, and Giulio Ermanno Pibiri. AMB 2025.
+
+
+** Proving The Lower Bound
+:PROPERTIES:
+:CUSTOM_ID: lb-proof
+:END:
+- Suppose $k=1$, and consider a /cycle/ of $w+1$ characters. \\
+  Eg for $w=4$:
+
+  #+attr_html: :style text-align:center
+  ABCDEABCDEABCDE
+
+- Suppose we only sample 1 character:
+
+  #+attr_html: :style text-align:center
+  AB​_C_​DEAB​_C_​DEAB​_C_​DE
+
+  The distance between samples is $5 > w$!
+
+- Thus, we need at least two samples.
+- Conclusion: the density is at least $2/(w+1)$.
+
+# ** Simd-Minimizers${}^{6}$: 5x Faster Minimizers
+# :PROPERTIES:
+# :CUSTOM_ID: simd-mini
+# :END:
+
+# Computing random minimizers using
+# - SIMD
+# - Instruction Level Parallellism
+# - Highly predictable (branch-free) code
+
+# #+attr_html: :class citation
+# [6] /*SimdMinimizers*: Computing Random Minimizers, Fast./\\
+# RGK and Igor Martayan. SEA 2025.
+
+** Conclusion: high troughput code matters!
+:PROPERTIES:
+:CUSTOM_ID: conclusion
+:END:
+
+#+attr_reveal: :frag (appear)
+1. /Complexity/
+   - /Few/ operations:
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em
+     A*PA: $\quad O(n^2)\quad \mapsto\quad \ ``O(n)\text{''}$
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em;padding-top:0.5em
+     Provably near-optimal minimizer schemes.
+2. /Efficiency/
+   - /Fast/ operations:
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em;font-size:smaller
+     A*PA2 is up to 500x more efficient than A*PA; up to 19x faster than other methods.
+3. /Implementation/
+   - /Parallel/ operations:
+
+     #+attr_html: :style text-align:center;width:1920px;margin:0em -3em;font-size:smaller
+     A*PA2 uses SIMD and instruction-level parallelism.
+
+
+* Outlook
+- Optimize all the code.
+- Minimizers are not yet a fully solved problem.
+- Proving optimality is hard.
+
+* Thanks!
+:PROPERTIES:
+:CUSTOM_ID: thanks
+:END:
+
+* Propositions
+:PROPERTIES:
+:CUSTOM_ID: propositions
+:END:
+1. Complexity theory's days are numbered.
+2. $\log \log n \leq 6$
+3. Succinct data structures are overrated.
+4. There is beauty in mathematical perfection.
+5. Too many PhDs are wasted shaving of small factors of complexities that will
+   never be practical.
+6. If a paper starts with "faster methods are needed", it must talk about the implementation.
+7. Fast code must exploit assumptions on the input.
+8. Fast code puts requirements on the input format.
+9. Optimizing ugly code is a waste of time.
+10. Assembly is not scary.
+
+
+* Extra: Pairwise alignment
+:PROPERTIES:
+:CUSTOM_ID: extra-pa
+:END:
+
+** A*PA: comparison
+:PROPERTIES:
+:CUSTOM_ID: pa-comparison
+:END:
+#+attr_html: :class large :style max-height:900px :src /ox-hugo/pa-comparison.png
+[[file:pa-comparison.png]]
+
+** A*PA heuristics
+:PROPERTIES:
+:CUSTOM_ID: heuristics
+:END:
+
+#+attr_html: :class large :style width:100% :src /ox-hugo/df-heuristics.png
+[[file:df-heuristics.png]]
+
+** A*PA: seed heuristic
+:PROPERTIES:
+:CUSTOM_ID: astarpa-sh
+:END:
+#+attr_html: :class large :style height:900px :src /ox-hugo/layers-sh.gif
+[[file:gif/layers-sh.gif]]
+
+** A*PA: gap-chaining seed heuristic
+:PROPERTIES:
+:CUSTOM_ID: astarpa-gcsh
+:END:
+#+attr_html: :class large :style height:900px :src /ox-hugo/layers.gif
+[[file:gif/layers.gif]]
+
+** A*PA: contours
+:PROPERTIES:
+:CUSTOM_ID: astarpa-contours
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/astarpa-contours.png
+[[file:astarpa-contours.png]]
+** A*PA2: pre-pruning
+:PROPERTIES:
+:CUSTOM_ID: prepruning
+:END:
+
+#+attr_html: :class large :style width:100% :src /ox-hugo/df-prepruning.png
+[[file:df-prepruning.png]]
+
+** A*PA2: results (real data)
+:PROPERTIES:
+:CUSTOM_ID: astarpa2-results-real
+:END:
+#+attr_html: :class large :style max-width:100%;width:100% :src /ox-hugo/real-summary.svg
+[[file:a.svg]]
+
+** A*PA2: results (synthetic)
+:PROPERTIES:
+:CUSTOM_ID: astarpa2-results-synthetic
+:END:
+#+attr_html: :class large :style width:45%;left:25% :src /ox-hugo/scaling_n_e0.05.labels.svg
+[[file:a.svg]]
+#+attr_html: :class large :style width:45%;left:75% :src /ox-hugo/scaling_e.labels.svg
+[[file:a.svg]]
+
+# ** Affine-cost alignment
+# :PROPERTIES:
+# :CUSTOM_ID: affine-cost
+# :END:
+
+# TODO
+
+** Alignment modes
+:PROPERTIES:
+:CUSTOM_ID: alignment-modes
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/alignment-modes.svg
+[[file:a.svg]]
+
+** Cost models
+:PROPERTIES:
+:CUSTOM_ID: cost-models
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/cost-models.svg
+[[file:a.svg]]
+
+** Semi-global variants
+:PROPERTIES:
+:CUSTOM_ID: semi-global
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/dimentions.svg
+[[file:a.svg]]
+
+** Text searching
+:PROPERTIES:
+:CUSTOM_ID: text-searching
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/search.svg
+[[file:a.svg]]
+
+** Skip-cost
+:PROPERTIES:
+:CUSTOM_ID: skip-cost
+:END:
+
+#+attr_html: :class large :style height:900px :src /ox-hugo/skip-cost.svg
+[[file:a.svg]]
+
+
+** Skip-cost
+:PROPERTIES:
+:CUSTOM_ID: skip-cost-2
+:END:
+
+#+attr_html: :class large :style height:700px;top:40% :src /ox-hugo/skip-cost-plot.svg
+[[file:a.svg]]
+#+attr_html: :class large :style height:215px;top:80%;left:46% :src /ox-hugo/skip-cost-setup.svg
+[[file:a.svg]]
+
+** Block-computation results
+#+attr_html: :class large :style height:900px :src /ox-hugo/search-plot.svg
+[[file:a.svg]]
+** Semi-global A*PA
+:PROPERTIES:
+:CUSTOM_ID: semi-global-astarpa
+:END:
+#+attr_html: :class large :style width:100% :src /ox-hugo/semi-global.gif
+[[file:gif/semi-global.gif]]
+
+** Seed-chain-extend
+#+attr_html: :class large :style height:900px :src /ox-hugo/seed-chain-extend.svg
+[[file:a.svg]]
+
+** A*PA: table
+:PROPERTIES:
+:CUSTOM_ID: pa-table
+:END:
+#+attr_html: :class large :style max-height:900px :src /ox-hugo/table.png
+[[file:table.png]]
+* Extra: Minimizers
+:PROPERTIES:
+:CUSTOM_ID: extra-mini
+:END:
+
+** Minimizer schemes
+- Lexicographic: choose lexicographic smallest \(k\)-mer
+- Random mini: choose \(k\)-mer with smallest hash
+- ABB: choose A, followed by most non-A
+- ABB+: break ties via random hash
+- Sus-anchor: choose the position of the smallest unique suffix
+  - "smallest": where the first character is inverted.
+
+** Large alphabet
+
+#+attr_html: :class plot :src /ox-hugo/defense-6-large-sigma.svg
+[[file:plots/defense-6-large-sigma.svg]]
+
+** Lower bound
+:PROPERTIES:
+:CUSTOM_ID: lb
+:END:
+
+#+attr_html: :class large :style height:85% :src /ox-hugo/df-lb-tight.png
+[[file:df-lb-tight.png]]
+
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini
+:END:
+#+attr_html: :class large :src /ox-hugo/modmini.png
+[[file:modmini.png]]
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini-1
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/modmini-1.svg
+[[file:fig/modmini-1.svg]]
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini-2
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/modmini-2.svg
+[[file:fig/modmini-2.svg]]
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini-3
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/modmini-3.svg
+[[file:fig/modmini-3.svg]]
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini-4
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/modmini-4.svg
+[[file:fig/modmini-4.svg]]
+** Mod-minimizer
+:PROPERTIES:
+:CUSTOM_ID: modmini-5
+:END:
+#+attr_html: :class large :style height:80%;top:580px;left:750px :src /ox-hugo/modmini-5.svg
+[[file:fig/modmini-5.svg]]
+
+** Selection schemes
+:PROPERTIES:
+:CUSTOM_ID: selection
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/23-scramble.svg
+[[file:a.png]]
+
+* Extra: PtrHash
+:PROPERTIES:
+:CUSTOM_ID: extra-ptrhash
+:END:
+
+** PtrHash: overview
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-overview
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/overview.drawio.svg
+[[file:a.png]]
+** PtrHash: Cacheline Elias Fano
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-clef
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/cacheline-ef.drawio.svg
+[[file:a.png]]
+** PtrHash: Bucket Functions
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-bf
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/bucket_fn_stats.svg
+[[file:a.png]]
+** PtrHash: Construction
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-construction
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/size.svg
+[[file:a.png]]
+** PtrHash: Results
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-results
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/ptrhash-results.png
+[[file:ptrhash-results.png]]
+** PtrHash: Optimal Throughput
+:PROPERTIES:
+:CUSTOM_ID: ptrhash-throughput
+:END:
+#+attr_html: :class large :style height:80% :src /ox-hugo/query_throughput.svg
+[[file:a.svg]]
+
+* TODO :noexport_reveal:
+- minis:
+  - every w'th kmer
+  - why is the lower bound hard to reach
+
+- extra:
+  - affine cost layers
+
+- Last minute:
+  - update cursor size in sway
