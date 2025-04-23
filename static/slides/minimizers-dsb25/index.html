@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Near-optimal sampling schemes</title>
+<meta name="author" content="Ragnar Groot Koerkamp"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+.underline { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.css"/>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/theme/white.css" id="theme"/>
+
+<link rel="stylesheet" href="/css/slide.min.css"/>
+
+<!-- If the query includes 'print-pdf', include the PDF print sheet -->
+<script>
+    if( window.location.search.match( /print-pdf/gi ) ) {
+        var link = document.createElement( 'link' );
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = 'https://cdn.jsdelivr.net/npm/reveal.js/css/print/pdf.css';
+        document.getElementsByTagName( 'head' )[0].appendChild( link );
+    }
+</script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section id="sec-title-slide"><h1 class="title">Near-optimal sampling schemes</h1><p class="subtitle"></p>
+<h2 class="author">Ragnar Groot Koerkamp</h2><h2 class="date">2025-02-27 Thu 00:00</h2><p class="date">Created: 2025-04-23 Wed 15:27</p>
+</section>
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+<section id="slide-warmup">
+<h2 id="warmup"><span class="section-number-2">1.</span> Warming up: A cute prolblem</h2>
+<ul>
+<li class="fragment appear">Given a string, choose one character.
+<ul>
+<li><code>CABAACBD</code></li>
+
+</ul></li>
+<li class="fragment appear">Given a rotation, choose one character.
+<ul>
+<li><code>ACBDCABA</code></li>
+
+</ul></li>
+<li class="fragment appear">Can we always choose <i>the same</i> character?</li>
+<li class="fragment appear">Yes: e.g. the smallest rotation (bd-anchor):
+<ul>
+<li><code>CAB</code>​<font color="red"><code>A</code></font>​<code>ACBD</code></li>
+<li><code>ACBDCAB</code>​<font color="red"><code>A</code></font>​</li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-hidden">
+<h3 id="hidden"><span class="section-number-3">1.1.</span> This talk: what if one character is <i>hidden</i>?</h3>
+<ul>
+<li class="fragment appear">Given a string (length \(w\)), choose one character.
+<ul>
+<li><code>CABAACBD</code>​​<font color="lightgrey"><code>X</code></font></li>
+
+</ul></li>
+<li class="fragment appear">Given a rotation (of the hidden \(w+1\) string), choose one character.
+<ul>
+<li><code>ACBDXCAB</code>​<font color="lightgrey"><code>A</code></font></li>
+
+</ul></li>
+<li class="fragment appear">Can we always choose <i>the same</i> character?</li>
+<li class="fragment appear">Maybe?
+<ul>
+<li><code>CAB</code>​<font color="red"><code>A</code></font>​<code>ACBD</code></li>
+<li><code>ACBDXCAB</code> 🤔</li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-lb">
+<h3 id="lb"><span class="section-number-3">1.2.</span> The answer is no!</h3>
+<p>
+<code>C​ABAACBDX</code> rotations:
+</p>
+
+<ul>
+<li><code>C​AB</code>​<font color="red"><code>A</code></font>​<code>ACBD........</code></li>
+<li><code>.AB</code>​<font color="red"><code>A</code></font>​<code>ACBDX.......</code></li>
+<li><code>..B</code>​<font color="red"><code>A</code></font>​<code>ACBDXC......</code></li>
+<li><code>...</code>​<font color="red"><code>A</code></font>​<code>ACBDXCA.....</code></li>
+<li><code>....ACBDXCAB....</code> &lt;&#x2014; the <b><code>A</code></b> is not here</li>
+<li><code>.....CBDXCAB</code>​<font color="red"><code>A</code></font>​<code>...</code></li>
+<li><code>......BDXCAB</code>​<font color="red"><code>A</code></font>​<code>A..</code></li>
+<li><code>.......DXCAB</code>​<font color="red"><code>A</code></font>​<code>AC.</code></li>
+<li><code>........XCAB</code>​<font color="red"><code>A</code></font>​<code>ACB</code></li>
+
+</ul>
+
+<p class="fragment">
+In the \(w+1\) rotations, we need at least 2 samples.
+</p>
+</section>
+<section id="slide-minimizers">
+<h2 id="minimizers"><span class="section-number-2">2.</span> <i>Minimizer</i> schemes</h2>
+<p style="display:none">
+\[\newcommand{\order}{\mathcal{O}}\]
+</p>
+
+<ul>
+<li>Minimizer scheme: Given a window of \(w\) k-mers, pick the (leftmost) <i>smallest</i> one
+<ul>
+<li>according to some order \(\order_k\)</li>
+
+</ul></li>
+<li>\(k=1\), \(w=5\):
+<ul>
+<li><code>C</code>​<font color="red"><code>A</code></font>​<code>BCA</code></li>
+
+</ul></li>
+<li>\(k=2\), \(w=5\):
+<ul>
+<li><code>C</code>​<font color="red"><code>AB</code></font>​<code>CAC.....</code></li>
+<li><code>.</code>​<font color="red"><code>AB</code></font>​<code>CACC....</code></li>
+<li><code>..BC</code>​<font color="red"><code>AC</code></font>​<code>CX...</code></li>
+<li><code>...C</code>​<font color="red"><code>AC</code></font>​<code>CXY..</code></li>
+<li><code>....</code>​<font color="red"><code>AC</code></font>​<code>CXYZ.</code></li>
+<li><code>.....</code>​<font color="red"><code>CC</code></font>​<code>XYZX</code></li>
+
+</ul></li>
+<li>Density: 3/10
+<ul>
+<li><code>C</code>​<font color="red"><code>AB</code></font>​<code>C</code>​<font color="red"><code>ACC</code></font>​<code>XYZX</code></li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-orgcae25cd">
+<h3 id="orgcae25cd"><span class="section-number-3">2.1.</span> The situation, 1 year ago</h3>
+
+<div id="orgc74df8a" class="figure">
+<p><img src="/ox-hugo/1-before.svg" alt="1-before.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-orge087340">
+<h3 id="orge087340"><span class="section-number-3">2.2.</span> The mod-minimizer</h3>
+
+<div id="org6aa0d55" class="figure">
+<p><img src="/ox-hugo/2-mod.svg" alt="2-mod.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-orgc31717c">
+<h3 id="orgc31717c"><span class="section-number-3">2.3.</span> A near-tight lower bound</h3>
+
+<div id="org71e0379" class="figure">
+<p><img src="/ox-hugo/3-lb.svg" alt="3-lb.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-org0aa34fa">
+<h3 id="org0aa34fa"><span class="section-number-3">2.4.</span> The current picture</h3>
+
+<div id="org3c45aac" class="figure">
+<p><img src="/ox-hugo/4-full.svg" alt="4-full.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-org3876113">
+<h3 id="org3876113"><span class="section-number-3">2.5.</span> Greedymini</h3>
+
+<div id="org1aac2af" class="figure">
+<p><img src="/ox-hugo/greedymini.png" alt="greedymini.png" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-density-lower-bound">
+<h3 id="density-lower-bound"><span class="section-number-3">2.6.</span> Minimizer density lower bound</h3>
+<ul>
+<li><p>
+Density of minimizer scheme is \(\geq 1/\sigma^k\):
+</p>
+
+<p>
+sample exactly every <code>AAA</code> k-mer, and nothing else.
+</p></li>
+
+<li>\(k=1\): density at least \(1/\sigma = 1/4\).</li>
+
+</ul>
+</section>
+<section id="slide-sampling-schemes">
+<h2 id="sampling-schemes"><span class="section-number-2">3.</span> <i>Sampling</i> schemes: more general</h2>
+<ul>
+<li><i>Any</i> function \(f: \Sigma^{w+k-1} \to \{0, \dots, w-1\}\)</li>
+<li>We fix \(k=1\) from now: \(f: \Sigma^w\to \{0, \dots, w-1\}\)</li>
+
+</ul>
+</section>
+<section id="slide-bd-anchors">
+<h3 id="bd-anchors"><span class="section-number-3">3.1.</span> Bidirectional anchors</h3>
+<ul>
+<li>Pick the start of the <i>smallest rotation</i>
+<ul>
+<li><code>E</code>​<font color="red"><code>A</code></font>​<code>DCAE......</code></li>
+<li><code>.</code>​<font color="red"><code>A</code></font>​<code>DCAEB.....</code></li>
+<li><code>..DC</code>​<font color="red"><code>A</code></font>​<code>EBE....</code></li>
+<li><code>...C</code>​<font color="red"><code>A</code></font>​<code>EBEC...</code></li>
+<li><code>....</code>​<font color="red"><code>A</code></font>​<code>EBECD..</code></li>
+<li><code>.....E</code>​<font color="red"><code>B</code></font>​<code>ECDC.</code></li>
+<li><code>......</code>​<font color="red"><code>B</code></font>​<code>ECDCD</code></li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-bd-anchors-limitations">
+<h3 id="bd-anchors-limitations"><span class="section-number-3">3.2.</span> Limitations of bd-anchors</h3>
+<ul>
+<li>Lexicographic is bad:
+<ul>
+<li><font color="red"><code>A</code></font>​<code>AAABCD...</code></li>
+<li><code>.</code>​<font color="red"><code>A</code></font>​<code>AABCDE..</code></li>
+<li><code>..</code>​<font color="red"><code>A</code></font>​<code>ABCDEF.</code></li>
+<li><code>...</code>​<font color="red"><code>A</code></font>​<code>BCDEFG</code></li>
+
+</ul></li>
+<li>Comparing rotations is unstable:
+<ul>
+<li>​<font color="red"><code>A</code></font>​<code>ABACD..</code></li>
+<li><code>.ABACD</code>​<font color="red"><code>A</code></font>​<code>.</code></li>
+<li><code>..B</code>​<font color="red"><code>A</code></font>​<code>CDAE</code></li>
+
+</ul></li>
+
+<li>Avoid last \(r\) positions.</li>
+
+</ul>
+</section>
+<section id="slide-org3142b4c">
+<h3 id="org3142b4c"><span class="section-number-3">3.3.</span> Bd-anchor density for \(k=1\)</h3>
+
+<div id="orgaab7923" class="figure">
+<p><img src="/ox-hugo/10-bd-anchor.svg" alt="10-bd-anchor.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-sus-anchors">
+<h2 id="sus-anchors"><span class="section-number-2">4.</span> Smallest-unique-substring anchors</h2>
+<ul>
+<li>Idea: instead of smallest rotation: smallest suffix.</li>
+<li>What about <code>CABA</code>: is <code>ABA</code> or <code>A</code> smaller?
+<ul>
+<li>We choose <code>ABA</code> smaller for stability.</li>
+
+</ul></li>
+<li><code>AB</code> is the <i>smallest unique substring</i>.</li>
+<li>Stable:
+<ul>
+<li>​<font color="red"><code>AA</code></font>​<code>BACD..</code></li>
+<li><code>.</code>​<font color="red"><code>AB</code></font>​<code>ACDA.</code></li>
+<li><code>..B</code>​<font color="red"><code>AC</code></font>​<code>DAE</code></li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-orgf8cffc7">
+<h3 id="orgf8cffc7"><span class="section-number-3">4.1.</span> Sus-anchor density</h3>
+
+<div id="org07eac67" class="figure">
+<p><img src="/ox-hugo/11-sus.svg" alt="11-sus.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-abb">
+<h3 id="abb"><span class="section-number-3">4.2.</span> ABB order</h3>
+<ul>
+<li><code>AAAA</code> is BAD:
+<ul>
+<li>small strings overlap</li>
+<li>small strings cluster</li>
+
+</ul></li>
+<li>We want the opposite!</li>
+<li><p>
+<i>ABB order</i>:
+</p>
+
+<p>
+<code>A</code> followed by many non-<code>A</code> is smallest: <code>ABBBBBBBBB</code>
+</p>
+<ul>
+<li>no overlap</li>
+<li>no clustering</li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-orgd290ad9">
+<h3 id="orgd290ad9"><span class="section-number-3">4.3.</span> Sus-anchor, ABB order</h3>
+
+<div id="orgab6e499" class="figure">
+<p><img src="/ox-hugo/12-abb.svg" alt="12-abb.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-anti-lex">
+<h3 id="anti-lex"><span class="section-number-3">4.4.</span> Anti-lex</h3>
+<ul>
+<li><p>
+<i>Anti-lexicographic order</i>:
+</p>
+
+<p>
+<code>A</code> small, followed by largest possible suffix: <code>AZZZZZ</code> is minimal
+</p>
+<ul>
+<li>no overlap</li>
+<li>no clustering</li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-org279f8db">
+<h3 id="org279f8db"><span class="section-number-3">4.5.</span> Sus-anchor, anti-lex order</h3>
+
+<div id="orgd710d61" class="figure">
+<p><img src="/ox-hugo/13-asus.svg" alt="13-asus.svg" class="org-svg" style="width:65%" />
+</p>
+</div>
+</section>
+<section id="slide-lower-bound-cycles">
+<h2 id="lower-bound-cycles"><span class="section-number-2">5.</span> Understanding the lower bound</h2>
+<ul>
+<li>To reach lower bound: <i>exactly</i> 2 samples in <i>every</i> \(w+1\) cycle.</li>
+
+</ul>
+
+
+
+<div id="orgbf689c5" class="figure">
+<p><img src="/ox-hugo/lower-bound.svg" alt="lower-bound.svg" class="org-svg" style="width:70%" />
+</p>
+</div>
+</section>
+<section id="slide-asus-failure">
+<h3 id="asus-failure"><span class="section-number-3">5.1.</span> Failure mode</h3>
+<p>
+<code>0010101</code> cycle:
+</p>
+<ul>
+<li>​<font color="red"><code>00</code></font>​<code>1010......</code></li>
+<li><code>.</code>​<font color="red"><code>01010</code></font>​<code>1.....</code></li>
+<li><code>..1</code>​<font color="red"><code>0101</code></font>​<code>0....</code></li>
+<li><code>...0101</code>​<font color="red"><code>00</code></font>​<code>...</code></li>
+<li><code>....101</code>​<font color="red"><code>00</code></font>​<code>1..</code></li>
+<li><code>.....01</code>​<font color="red"><code>00</code></font>​<code>10.</code></li>
+<li><code>......1</code>​<font color="red"><code>00</code></font>​<code>101</code></li>
+<li>The <code>01010</code> sus is not <i>overlap free</i>
+<ul>
+<li>Just like how <code>AAA</code> is not <i>overlap free</i></li>
+
+</ul></li>
+
+</ul>
+
+<p class="fragment">
+Goal: find two <b>non-overlapping</b> substrings.
+</p>
+</section>
+<section id="slide-perfect-schemes">
+<h3 id="perfect-schemes"><span class="section-number-3">5.2.</span> Can we design a perfectly optimal scheme?</h3>
+<ul>
+<li><p>
+Goal:
+</p>
+
+<p>
+<b>For every \(w+1\) window, find two non-overlapping small strings.</b>
+</p></li>
+
+</ul>
+<ul class="fragment">
+<li>Instead of <code>011...11</code>, search <code>00...0011...11</code>
+<ul>
+<li>Also non-overlapping, and more signal.</li>
+<li>Still not optimal.</li>
+
+</ul></li>
+<li>Tried <b>many</b> things. No general solution found yet.</li>
+
+</ul>
+</section>
+<section id="slide-org8133855">
+<h2 id="org8133855"><span class="section-number-2">6.</span> Thanks to my co-authors!</h2>
+<ul>
+<li>Giulio Ermanno Pibiri</li>
+<li>Bryce Kille</li>
+<li>Daniel Liu</li>
+<li>Igor Martayan</li>
+
+</ul>
+
+<p>
+Slides:
+<a href="https://curiouscoding.nl/slides/minimizers.html">curiouscoding.nl/slides/minimizers.html</a>
+</p>
+
+<p>
+Blog
+<a href="https://curiouscoding.nl/slides/minimizers">curiouscoding.nl/slides/minimizers</a>
+</p>
+</section>
+</section>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.js"></script>
+
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+transition:'none', slideNumber:'c/t', width:1920, height:1080, controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000,
+
+// Optional libraries used to extend on reveal.js
+dependencies: [
+ { src: 'https://cdn.jsdelivr.net/npm/reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: 'https://cdn.jsdelivr.net/npm/reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: 'https://cdn.jsdelivr.net/npm/reveal.js/plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+ { src: 'https://cdn.jsdelivr.net/npm/reveal.js/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }]
+
+});
+
+</script>
+</body>
+</html>
