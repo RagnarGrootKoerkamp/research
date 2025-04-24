@@ -78,8 +78,9 @@
 ;;; org-special-blocks-extra
 ;;;
 (use-package org-special-block-extras
-  :ensure t
-  :hook (org-mode . org-special-block-extras-mode)
+  ;; :ensure t
+  ;; Do not load a bunch of bloat.
+  ;; :hook (org-mode . org-special-block-extras-mode)
   )
 
 (org-mode)
