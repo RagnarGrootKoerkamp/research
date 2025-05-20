@@ -127,8 +127,13 @@ every $w$'th \(k\)-mer must be sampled.
 
 The most common practical scheme is the /random minimizer/
 [cite:@minimizers;@winnowing], which hashes all \(k\)-mers in the window, and
-chooses the smallest one. This has a density of $2/(w+1)$, roughly twice as
+chooses the smallest one, as shown in [[minimizer-example]]. This has a density of $2/(w+1)$, roughly twice as
 large as the trivial lower bound.
+
+#+name: minimizer-example
+#+caption: An example of the random minimizer. First all \(k\)-mers of length $k=5$ are hashed using a random hash function, as shown by the black lines with their hash written above them. Then, in each window of $w=4$ consecutive \(k\)-mer hashes, as e.g. the window highlighted in yellow, the (position of) the smallest \(k\)-mer hash is recorded. Then, the (positions of) the smallest \(k\)-mers in all windows form the set of minimizers. This figure is taken from [cite:@simd-minimizers-preprint] and made in collaboration with Igor Martayan.
+#+attr_latex: :placement [t] :scale 1.3
+[[file:figs/minimizer.svg]]
 
 Now, you may ask whether it's worth the effort to /at best/ save a factor two of
 memory and speed, and you would not be alone. I asked myself this same question
@@ -136,14 +141,14 @@ long before becoming interested in minimizers (at RECOMB 2022):
 #+begin_quote
 Why would we even care about better minimizer? We have this simple and fast
 random minimizer that's only at most $2\times$ away from optimal. Why would
-anyone invest time in optimizing this by maybe 25\%?
+anyone invest time in optimizing this by maybe 25%?
 There are so much bigger gains possible elsewhere.
 #+end_quote
 Even worse, in practice, most schemes do not (and as we will see, can not) give more than a
-20\% saving in density on top of the very simple random minimizer.
+20% saving in density on top of the very simple random minimizer.
 
 As we will prove in [[#lower-bounds]], when $k\leq w+1$, we can never expect
-more than around 25\% lower
+more than around 25% lower
 density than the random minimizer, and thus, existing schemes are already
 relatively close to optimal from a practical point of view.
 Given this new lower bound, maybe the answer is that, indeed, we should stop searching for further
@@ -152,10 +157,10 @@ schemes.
 Nevertheless, there is a lot of pretty maths to be found, both in the lower
 bounds, and in the many sampling schemes we will review and develop ourselves.
 Furthermore, as we will see with the mod-minimizer, when $k>w$, we can often
-achieve this 25\% lower density using only slightly more code, so nearly for
+achieve this 25% lower density using only slightly more code, so nearly for
 free. Likewise, for smaller $k\geq w$, we will see that choosing a specific
 order of the alphabet can improve the density of the random minimizer by over
-10\%, while /simplifying/ the code.
+10%, while /simplifying/ the code.
 Thus, even though improvements may seem small, searching for simple sampling schemes with
 near-optimal density is a fruitfull research area.
 
@@ -351,7 +356,7 @@ We can also ask what happens when $w\to
 \infty$ (for $k$ fixed), or when $k\to\infty$ (for $w$ fixed)?
 And how does this depend on the alphabet size?
 Or maybe we can not quite make schemes that /exactly/ match the lower bound, but we /can/ make schemes
-that are within $1\%$ of the lower bound, or that are asymptotically a factor
+that are within 1% of the lower bound, or that are asymptotically a factor
 $1+o(1)$ away.
 
 There are also different parameter regimes to consider: small $k=1$ or
@@ -604,7 +609,7 @@ Some of these results will be covered more in-depth later.
 When $k\to\infty$, both the rot-minimizer [cite:@asymptotic-optimal-minimizers]
 and the new mod-minimizer (Chapter [[#sampling-schemes]]) achieve optimal density $1/w$.
 
-Slightly simplified, the *rot-minimizer* ranks \(k\)-mers by the sum of the
+Slightly simplified, the /rot-minimizer/ ranks \(k\)-mers by the sum of the
 characters in positions $0\pmod w$, so that for $w=2$, it would sum every other
 character of the \(k\)-mer. Then, it samples the \(k\)-mer for which this sum is maximal.
 
@@ -882,21 +887,21 @@ works for any /local/ scheme.
 
 #+begin_mytheorem Improved lower bound
 The density of any /local/ scheme $f$ satisfies
-
 $$
 d(f) \geq \frac{1.5}{w+k-0.5}.
 $$
 #+end_mytheorem
 
-# FIXME TODO
-# #+name: lowerbound
-# #+caption: The lower bound setting from \cref{thm:newbound}. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled \(k\)-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
-# \includegraphics[width=0.7\linewidth]{imgs/lowerbound_setting.pdf}
+#+name: lowerbound-fig
+#+caption: Setting used in proving the lower bound. In this example, we use $w=k=3$, so $\ell=w+k-1=5$. Red boxes indicate the sampled \(k\)-mer in windows $W$, $W'$, and $W''$ that are highlighted with a ticker stroke.
+#+attr_latex: :width 0.7\linewidth :placement [t]
+[[file:figs/lowerbound_setting.pdf]]
+
 
 #+begin_proof
 We assume the input is an infinitely long random string $S$ over $\Sigma$.
-# The proof makes use of the setting illustrated in TODO CREF [lowerbound],
-# which is as follows.
+The proof makes use of the setting illustrated in [[lowerbound-fig]],
+which is as follows.
 We partition the windows of $S$ in consecutive groups of $2\ell+1$ windows.
 Let one such group of windows start at position $i$, and
 consider windows $W$ and $W'$ starting at positions $i$ and $i':= i+\ell$
@@ -906,16 +911,16 @@ thus starting at position $i'' =i+2\ell+1 = i'+\ell+1$.
 Note that there is no gap between the end of window $W$ and the
 beginning of window $W'$, whereas there is a gap of a single character between the end of $W'$ and
 the beginning of $W''$.
-# (shown as the gray shaded area in [lowerbound]).
+(shown as the gray shaded area in [[lowerbound-fig]]).
 These three windows are disjoint and hence the random variables $X$, $X'$, and $X''$
 indicating $f(W)$, $f(W')$, and $f(W'')$ respectively are
 independent and identically distributed. (But note that we do not assume they
 are uniformly distributed, as that depends on the choice of the sampling function $f$.)
-# In [lowerbound], we have $X=1$ and $X'=X''=2$.
+In [[lowerbound-fig]], we have $X=1$ and $X'=X''=2$.
 
 Since the three windows $W$, $W'$, and $W''$ are disjoint, they sample
 \(k\)-mers at distinct positions.
-# (indicated by the red boxes in [lowerbound]).
+(indicated by the red boxes in [[lowerbound-fig]]).
 The proof consists in computing a lower bound on the
 expected number of sampled \(k\)-mers in the range $[i+X, i''+X'')$.
 Note that for non-forward schemes, it is possible that windows before
@@ -1094,6 +1099,7 @@ the lower bound, and hence can finish quickly.
 #+name: lower-bounds
 #+caption: Comparison of forward scheme lower bounds and optimal densities for small $w$, $k$, and $\sigma$. Optimal densities were obtained via ILP and are shown as black circles that are solid when their density matches the lower bound $g'_\sigma$, and hollow otherwise. Each column corresponds to a parameter being fixed to the lowest non-trivial value, i.e., $\sigma=2$ in the first column, $w=2$ in the second column, and $k=1$ in the third columns. Note that the x-axis in the third column corresponds to $w$, not $k$. This figure appeared before in [cite:@sampling-lower-bound] and was made in collaboration with Bryce Kille. The ILP implementation is also his.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 [[file:figs/lower-bound.svg]]
 
 In [[lower-bounds]] we compare the lower bounds to optimal schemes for small parameters.
@@ -1279,6 +1285,7 @@ In this order, the smallest string is =AZZZZ...=.
 #+name: lex
 #+caption: Comparison of the density of variants of lexicographic minimizers, for alphabet size $\sigma=4$, $w=24$, and varying $k$. The $g'$ lower bound is shown in red and the trivial $1/w$ lower bound in shown in black. The solid lines indicate the best density up to $k$, which for the random minimizer happens to be best for $k=4$ due to the selected random hash function. ABB+ indicates the ABB order with lexicographic tiebreaking.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/1-lex.svg
 
 
@@ -1466,6 +1473,7 @@ far from the boundaries to induce an open syncmer.
 #+name: oc
 #+caption: Comparison of the density of pure minimizer schemes, for alphabet size $\sigma=4$, $w=24$, and varying $k$. The solid lines indicate the best density up to $k$. The open-closed minimizer has the OC label, and the O and C labels correspond to preferring open or closed syncmers before falling back to a random order. We use $s=4$ for the syncmer-based schemes.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/2-ext.svg
 
 In [[oc]], we compare all pure schemes seen so far.
@@ -1537,6 +1545,7 @@ $t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w
 #+name: mod-t
 #+caption: The density of the random minimizer and mod-sampling for varying $t$, for $w=24$ and $k=60$. The random mod-minimizer has local minima in the density at $t=12$ and $t=36$, where $t\equiv k\equiv 12\pmod w$. There is also a local minimum at $t=3$, which is the first $t$ that is large enough to avoid duplicate \(k\)-mers. Based on this, we choose $t$ to be the least number at least some lower bound $r$ that satisfies $t\equiv k\pmod w$. This figure is based on Figure 4 of [cite:@modmini] which was made by Giulio Ermanno Pibiri.
 #+attr_html: :class inset
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/0-mod-t.svg
 
 In [[mod-t]], it can be seen that mod-sampling has local minima in the density when $t\equiv k\pmod
@@ -1713,6 +1722,7 @@ $$
 #+name: mod
 #+caption: Comparison of the density of extended mod-minimizer schemes, for alphabet size $\sigma=4$, $w=24$, $r=4$, and varying $k$. The solid lines indicate the best density up to $k$. Versions without mod-mini are shown dimmed.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/3-mod.svg
 
 In [[mod]], we compare the mod-minimizer version of the best schemes so far against
@@ -1940,6 +1950,7 @@ Sus-anchors with anti-lexicographic sort order have density $(2+o(1))/(w+1)$.
 #+name: selection-s4
 #+caption: Comparison of the density of selection schemes, for alphabet size $\sigma=4$, $k=1$, and varying $w$. Bd-anchors are shown for various $r$, and the sus-anchor is shown with various underlying orders. The sus-anchor with anti lexicographic order is best, and nearly as good as the lower bound.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/4-selection.svg
 
 We compare bd-anchors with various $r$ and sus-anchors with various underlying
@@ -1964,6 +1975,7 @@ characters, and hence, sorting by non-A and sorting in reverse are the same.
 #+name: selection-s2
 #+caption: Comparison of the density of selection schemes for alphabet size $\sigma=2$. In this case, ABB and anti-lexicographic order perform the same (ABB is hidden behind the thick blue line), but neither reaches the lower bound for $w\approx 10$.
 #+attr_html: :class inset
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/5-selection-s2.svg
 
 # ** TODO Towards Optimal schemes?
@@ -2024,6 +2036,7 @@ lower bound $g'$?
 #+name: summary
 #+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$ and $w=24$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
 #+attr_html: :class inset large
+#+attr_latex: :width \linewidth :placement [t]
 file:figs/6-small-k.svg
 
 *Sampling schemes.*
