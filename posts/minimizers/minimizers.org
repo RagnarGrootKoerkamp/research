@@ -457,14 +457,14 @@ window contains two identical \(k\)-mers [cite:@miniception Lemma 9].
 For any $\varepsilon > 0$, if $k > (3+\varepsilon) \log_\sigma (c)$, the
 probability that a random context of $c$ \(k\)-mers contains two identical \(k\)-mers is $o(1/c)$.
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 For any two non-overlapping \(k\)-mers in the window, the probability that they are
 equal is $\sigma^{-k} \leq 1/c^{3+\varepsilon} = o(1/c^3)$.
 It can be seen that the same holds when two \(k\)-mers overlap by $d>0$ characters.
 
 There are $c^2$ pairs of \(k\)-mers, so by the union bound, the probability that any
 two \(k\)-mers are equal is $o(1/c)$.
-#+end_proof_sketch
+#+end_proofsketch
 
 In practice, $k > (2+\varepsilon) \log_\sigma(c)$ seems to be
 sufficient, but this has not been proven yet. Even stronger, for most
@@ -535,7 +535,7 @@ $$
 d(f) \leq |U|/\sigma^k.
 $$
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 Consider a De Bruijn sequence of order $c=w+k$. This contains each \($c\)-mer
 exactly once, and each \(k\)-mer exactly $\sigma^w$ times.
 Thus, the number of \(k\)-mers in $U$ in the De Bruijn sequence is $|U| \cdot \sigma^w$.
@@ -547,7 +547,7 @@ sampled \(k\)-mers,
 $$
 d(f) = s / \sigma^c \leq |U| \cdot \sigma^w / \sigma^{w+k} = |U| / \sigma^k.
 $$
-#+end_proof_sketch
+#+end_proofsketch
 
 From this, it follows that creating smaller universal hitting sets typically
 leads to better minimizer schemes.
@@ -627,18 +627,18 @@ that:
 #+begin_theorem Forward-density for $w\\to\\infty$ (1)
 There exists a forward scheme with density $O(1/\sqrt w)$ for $k$ fixed and $w\to\infty$.
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 Consider $k' = \log_\sigma{\sqrt w}$. For sufficiently large $w$ we have $k'
 \geq k$ and we consider any minimizer scheme on \(k'\)-mers with window size
 $w'=w+k-k'\leq w$. Asymptotically, this has density $O(1/\sqrt w)$.
-#+end_proof_sketch
+#+end_proofsketch
 
 Later, this was improved to [cite:@small-uhs Theorem 2]:
 
 #+begin_theorem Forward-density for $w\\to\\infty$ (2)
 There exists a forward scheme with density $O(\ln(w) / w)$ for $k$ fixed and $w\to\infty$.
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 Let $w' = k' =  w/2$, so that $w'+k'-1 = w-1 \leq w+k-1$. We'll build a UHS on
 \(k'\)-mers with window guarantee $w'$.
 Set $d = \floor{\log_\sigma(k'/\ln k'))}-1$.
@@ -651,7 +651,7 @@ first $w'$ positions, or else the length-$k'=w'$
 prefix does not contain $0^d$ and is in $U$. Thus, $U$ is a UHS with window
 guarantee $w'$. We conclude that the density of a compatible minimizer scheme is
 bounded by $O(\ln(k')/k') = O(\ln(w)/w)$.
-#+end_proof_sketch
+#+end_proofsketch
 
 But this is still not optimal: reduced bd-anchors [cite:@bdanchors Lemma 6]
 (Chapter [[#selection-schemes]]) are a /local/ scheme with $k=1$ and density $(2+o(1))/(w+1)$
@@ -817,7 +817,7 @@ d(S) \geq \frac{1.5 + \frac{1}{2w}}{w+1}.
 $$
 #+end_theorem
 
-#+begin_proof_sketch
+#+begin_proofsketch
 Let $W_i$ and $W_{i+w+1}$ be the windows of $w$ \(k\)-mers starting at positions $i$
 and $i+w+1$ in a long uniform random string.
 Since $W_i$ and $W_{i+w+1}$ do not share any \(k\)-mers, the hashes of the \(k\)-mers in
@@ -831,7 +831,7 @@ additional \(k\)-mer must be sampled in this gap. It is easy to see that $\P[X\l
 X'] \geq 1/2$, and using Cauchy-Schwartz this can be improved to $\P[X\leq X']\geq
 1/2 + 1/(2w)$. Thus, out of the expected $w+1$ \(k\)-mers from position $i+X$ to $i+w+1+X'$
 (exclusive), we sample at least $1 + 1/2 + 1/(2w)$ in expectation, giving the result.
-#+end_proof_sketch
+#+end_proofsketch
 
 Unfortunately, this lower-bound assumes that \(k\)-mers are hashed before being processed
 them further using a potentially ''smart'' algorithm $S$. This class of schemes
@@ -853,7 +853,7 @@ d(f) \geq \frac{1.5 + \max\left(0, \left\lfloor\frac{k-w}{w}\right\rfloor\right)
 \frac 1{2w}}{w+k}.
 $$
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 The proof is very comparable to the one of Schleimer et al. [cite:@winnowing].
 Again, we consider two windows in a long uniform random string.
 This time, however, we put them $w+k+1$ positions
@@ -869,7 +869,7 @@ $1.5+1/(2w)$ term arises as before. The additional $\left\lfloor
 \frac{k-w}{w}\right\rfloor$ term arises from the fact that when $k$ is large,
 just sampling one additional \(k\)-mer in between $s_1$ and $s_2$ is not sufficient
 to ensure a sample every $w$ positions.
-#+end_proof_sketch
+#+end_proofsketch
 
 ** Improving and extending Marçais et al.'s bound
 It turns out that Marçais et al.'s bound is slightly inefficient. In
@@ -1003,7 +1003,7 @@ $$
 
 where the middle inequality is strict when $w>1$.
 #+end_theorem
-#+begin_proof_sketch
+#+begin_proofsketch
 The core of this result is to refine the proof given above.
 While indeed we know that each cycle will have at least $\ceil{(w+k)/w}$
 sampled \(k\)-mers, that lower bound may not be tight. For example, if the cycle
@@ -1031,7 +1031,7 @@ d(f)
 $$
 
 The remaining inequalities follow by simple arithmetic.
-#+end_proof_sketch
+#+end_proofsketch
 
 As can be seen in [[lower-bounds]], this lower bound jumps up at values $k\equiv 1 \pmod w$.
 In practice, if some density $d$ can be achieved for parameters $(w,k)$, it can
@@ -1835,12 +1835,12 @@ Now, the following theorem can be proven [cite:@bdanchors Lemma 6].
 When $r=\ceil{4\log_\sigma w}$, the reduced bd-anchor has density at most $2/(w+1-r) + o(1/w)$.
 #+end_theorem
 
-#+begin_proof_sketch
+#+begin_proofsketch
 Because of the choice of $r$, the probability that the smallest \(r\)-mer is
 not unique is small, and thus, we can simply find the smallest \(r\)-mer.
 Then, the probability that two consecutive windows have a different smallest
 \(r\)-mer is $2/(w+1-r)$, similar to the random minimizer.
-#+end_proof_sketch
+#+end_proofsketch
 
 This parameter $r$ is slightly unfortunate: while plain bd-anchors are
 parameter-free, the $r$ acts very similar to $k-1$ for minimizer schemes.
