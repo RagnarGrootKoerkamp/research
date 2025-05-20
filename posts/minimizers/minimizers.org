@@ -168,7 +168,7 @@ schemes, the density of the random minimizer, and a number of theoretical
 results on the optimal asymptotic density of schemes as $k\to\infty$ or $w\to\infty$.
 
 In Chapter [[#lower-bounds]], we go over existing lower bounds. We start at the
-original one of [cite/t:@winnowing], that turns out to make overly strong
+original one of Schleimer et al. [cite:@winnowing], that turns out to make overly strong
 assumptions, and end with the new nearly tight lower bound of [cite:@sampling-lower-bound].
 
 Then, in Chapter [[#sampling-schemes]], we summarize and compare existing sampling
@@ -190,16 +190,16 @@ scheme. These results are thus split over the applicable sections.
 *Previous reviews.*
 This chapter is written from a relatively theoretical perspective, and focuses
 on the design of low-density sampling schemes.
-The review [cite/t:@minimizer-sketches] takes a more practical approach and
+The review of Zheng et al. [cite:@minimizer-sketches] takes a more practical approach and
 compares applications, implementations, and metrics other than just the density.
 It limits itself to /minimizers/, rather than more general local or forward schemes.
-A second review, [cite/t:@minimizer-review-2], focuses specifically on
+A second review of Ndiaye et al. [cite:@minimizer-review-2] focuses specifically on
 applications, and details how minimizers are used in various tools and domains
 of bioinformatics.
 
 ** Theory of sampling schemes
 The theory of minimizer schemes started with two independent papers proposing
-roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite/t:@minimizers] in 2004.
+roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite:@minimizers] in 2004.
 At the core, the presented ideas are very similar: to deterministically sample a \(k\)-mer out of each
 window of w consecutive \(k\)-mers by choosing the ''smallest'' one, according to
 either a random of lexicographic order.
@@ -292,7 +292,7 @@ The /random minimizer/ is the minimizer scheme with a uniform random total
 order $\Ok$.
 #+end_definition
 
-Following [cite/t:@small-uhs], we also define a /selection/ scheme, as opposed
+Following [cite:@small-uhs], we also define a /selection/ scheme, as opposed
 to a /sampling/ scheme. Note though that this distinction is not usually made in
 other literature.
 
@@ -389,8 +389,8 @@ the last window samples a \(k\)-mer not sampled by /any/ of the previous contain
 windows. This larger context is necessary because a local scheme can jump
 backwards. In practice, this
 
-As a small variant on this, in [cite/t:@winnowing], a /window/ is charged when it
-is the first window to sample a \(k\)-mer.
+As a small variant on this a /window/ is charged when it
+is the first window to sample a \(k\)-mer [cite:@winnowing].
 
 #+begin_theorem Computing density using contexts
 The density of a forward scheme equals the probability that,
@@ -425,7 +425,7 @@ cyclic strings of order $c=w+k$ for forward schemes and $c=2w+k-2$ for local sch
 :CUSTOM_ID: random-mini-density
 :END:
 As a warm-up, we will compute the density of the random minimizer.
-We mostly follow the presentation of [cite/t:@miniception].
+We mostly follow the presentation of [cite:@miniception].
 
 We start by analysing when a context is charged [cite:@miniception Lemma 1].
 
@@ -468,7 +468,7 @@ sufficient, but this has not been proven yet. Even stronger, for most
 applications of the lemma, $k>(1+\varepsilon)\log_\sigma(c)$ appears sufficient.
 
 This leads us to the density of the random minimizer [cite:@miniception Theorem 3], which is a more refined version of the simple density of
-$2/(w+1)$ computed in both [cite/t:@winnowing] and [cite/t:@minimizers].
+$2/(w+1)$ that was obtained in [cite:@winnowing] and [cite:@minimizers].
 
 #+begin_theorem Random minimizer density
 For $k>(3+\varepsilon)\log_\sigma(w+1)$, the density of the random minimizer is
@@ -486,8 +486,8 @@ probability $o(1/w)$, so that the overall density is bounded by $2/(w+1) + o(1/w
 
 Using a more precise analysis, it can be shown that for sufficiently large $k$,
 the random minimizer has, in fact, a density slightly /below/ $2/(w+1)$.
-In [cite/t:@improved-minimizers] this is shown using universal hitting sets.
-In [cite/t:@random-mini-density Theorem 4], it is shown that the density of the random
+Marçais et al. [cite:@improved-minimizers] show this using universal hitting sets.
+Golan and Shur [cite:@random-mini-density Theorem 4] show that the density of the random
 minimizer is less than $2$ for all sufficiently large $k\geq w\geq w_0$, where
 $w_0$ is a constant that may depend on the alphabet size $\sigma$.
 
@@ -549,7 +549,7 @@ $$
 From this, it follows that creating smaller universal hitting sets typically
 leads to better minimizer schemes.
 
-Lastly, [cite/t:@improved-minimizers] introduces the /sparsity/ of a universal
+Lastly, Marçais et al. [cite:@improved-minimizers] introduce the /sparsity/ of a universal
 hitting set $U$ as the fraction of contexts of $w+k$ characters that contain exactly
 one \(k\)-mer from $U$. Then, the density of a corresponding minimizer scheme can be
 computed as $(1-\sparsity(U))\cdot \frac{2}{w+1}$.
@@ -618,7 +618,7 @@ For forward schemes, we can use the lower bound of [cite:@sampling-lower-bound
 Theorem 1] to get $2/(w+k)$ (Chapter [[#lower-bounds]]). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
 get the bound $1.5/(w+\max(k-2, 1))$.
 
-From the other side, Proposition 7 of [cite/t:@asymptotic-optimal-minimizers] shows
+From the other side, Proposition 7 of [cite:@asymptotic-optimal-minimizers] shows
 that:
 #+begin_theorem Forward-density for $w\\to\\infty$ (1)
 There exists a forward scheme with density $O(1/\sqrt w)$ for $k$ fixed and $w\to\infty$.
@@ -703,14 +703,15 @@ Still, this leaves the problem of whether to sample the leftmost or rightmost
 occurrence of a \(k\)-mer in case of ties. This can be solved using the technique of
 the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers-preprint]: ensure that $w+k-1$ is odd,
 and pick the strand with the highest count of =GT= bases.
-A way to encode canonical \(k\)-mers that saves one bit is presented in [cite/t:@encoding-canonical-kmers].
-Lastly, [cite/t:@knonical-reverse-complements] provides a way to turn
+Wittler [cite:@encoding-canonical-kmers] shows
+a way to encode canonical \(k\)-mers that saves one bit.
+Lastly, Marçais et al. [cite:@knonical-reverse-complements] provide a way to turn
 context-free methods into a canonical version.
 
 The /conservation/ of a scheme
-is the expected fraction of bases covered by sampled \(k\)-mers [cite/t:@syncmers].
-In [cite/t:@local-kmer-selection],
-sampling schemes are generalized to /\(k\)-mer selection methods/ that are allowed to sample /any
+is the expected fraction of bases covered by sampled \(k\)-mers [cite:@syncmers].
+Shaw and Yu [cite:@local-kmer-selection]
+generalize sampling schemes to /\(k\)-mer selection methods/ that allow to sample /any
 subset/ of \(k\)-mers from the input string, and /local selection methods/ that
 return any /subset/ of \(k\)-mers from a window.
 Both these papers focus on context-free schemes, as such \(k\)-mers are
@@ -722,7 +723,8 @@ For example, some works change the order of the =ACGT= DNA alphabet to make =C= 
 smallest character, as it is often occurs less frequently in DNA sequences
 [cite:@minimizers].
 Other works in this direction are
-[cite/t:@deepminimizer], [cite/t:@polar-set-minimizers], and
+DeepMinimizer
+[cite:@deepminimizer], minimizers based on polar sets [cite:@polar-set-minimizers], and
 [cite:@debruijngraph-representation], the last of which presents a minimizer
 scheme that orders \(k\)-mers such that rare \(k\)-mers are preferred over more common ones.
 
@@ -778,7 +780,7 @@ Marçais et al. [cite:@asymptotic-optimal-minimizers] give a weaker version that
 et al.'s bound]]). At the core, it considers two windows spaced apart by $w+k$
 positions. The first window than has a minimizer, and with probability $1/2$, a
 second additional minimizer is needed to 'bridge the gap' to the second window.
-In the appendix of [cite/t:@modmini], Groot Koerkamp and Pibiri improve this
+In the appendix of [cite:@modmini], Groot Koerkamp and Pibiri improve this
 further to $1.5/(w+k-0.5)$ by using a slightly more precise analysis ([[*Improving and extending Marçais et al.'s bound]]). Because of the similarity of these three proofs, we
 only provide sketches of the first two, followed by a full proof of the strongest
 version.
@@ -957,7 +959,7 @@ independent, nor is it easy to analyse a probability such as $\P[X \leq X''-k]$.
 :PROPERTIES:
 :CUSTOM_ID: near-tight-lb
 :END:
-In [cite/t:@sampling-lower-bound], we prove a nearly tight lower bound on the
+Together with Kille et al., in [cite:@sampling-lower-bound] we prove a nearly tight lower bound on the
 density of /forward/ schemes.
 We start with a slightly simplified version.
 
@@ -1083,7 +1085,7 @@ the lower bound, and hence can finish quickly.
 :END:
 
 #+name: lower-bounds
-#+caption: Comparison of forward scheme lower bounds and optimal densities for small $w$, $k$, and $\sigma$. Optimal densities were obtained via ILP and are shown as black circles that are solid when their density matches the lower bound $g'_\sigma$, and hollow otherwise. Each column corresponds to a parameter being fixed to the lowest non-trivial value, i.e., $\sigma=2$ in the first column, $w=2$ in the second column, and $k=1$ in the third columns. Note that the x-axis in the third column corresponds to $w$, not $k$. This figure appeared before in [cite/t:@sampling-lower-bound] and was made in collaboration with Bryce Kille. The ILP implementation is also his.
+#+caption: Comparison of forward scheme lower bounds and optimal densities for small $w$, $k$, and $\sigma$. Optimal densities were obtained via ILP and are shown as black circles that are solid when their density matches the lower bound $g'_\sigma$, and hollow otherwise. Each column corresponds to a parameter being fixed to the lowest non-trivial value, i.e., $\sigma=2$ in the first column, $w=2$ in the second column, and $k=1$ in the third columns. Note that the x-axis in the third column corresponds to $w$, not $k$. This figure appeared before in [cite:@sampling-lower-bound] and was made in collaboration with Bryce Kille. The ILP implementation is also his.
 #+attr_html: :class inset large
 [[file:figs/lower-bound.svg]]
 
@@ -1131,7 +1133,7 @@ the tight lower bound during
 the summer of 2024. In hindsight, I am very surprised it took this long (over 20
 years!) for this theorem to be found. Minimizers were originally defined in
 2003-2004, and only in 2018 the first improvement (or fix, rather) of Schleimer
-et al.'s original bound was found in [cite/t:@asymptotic-optimal-minimizers].
+et al.'s original bound was found by Marçais et al. [cite:@asymptotic-optimal-minimizers].
 Specifically, all ingredients for the proof have been around for quite some time
 already:
 - The density of the random minimizer is $2/(w+1)$, which
