@@ -139,7 +139,7 @@ The focus is on those methods that form the background for our own work.
 
 *Chapter 3 ([[file:../../static/papers/astarpa.pdf][paper PDF]]): A*PA.*
 In this chapter, we introduce /A* pairwise aligner/.
-The goal of A*PA is to achieve near-linear runtimes on a large class of input
+The goal of A*PA is to achieve near-linear runtime on a large class of input
 sequences, thereby improving the quadratic complexity of most previous methods.
 The main technique we use is, as the name suggests, the A* shortest path
 algorithm. The benefit of this method is that it can use a /heuristic/ that
@@ -283,7 +283,7 @@ space.
   Perfect Hashing at RAM Throughput/, submitted to SEA 2025.
 
 
-*U-index ([[../../static/papers/u-index-preprint.pdf][paper PDF]]).* I also briefly mention here one additional paper that closely relates
+*Further results ([[../../static/papers/u-index-preprint.pdf][paper PDF]]).* I also briefly mention here one additional paper that closely relates
 to this thesis, but that is not otherwise a part of it: the U-index. This is again a data structure based on minimizers,
 that works by building an index on the sketched (compressed) representation of
 the text.
@@ -295,7 +295,7 @@ the text.
 
 * Discussion
 
-In this thesis, we have worked on optimizing algorithms and implementation for
+In this thesis, we have worked on optimizing algorithms and implementations for
 several problems in bioinformatics.
 These contributions fall into two categories: for some problems, we focused on
 achieving practical speedups by using highly efficient implementations of
@@ -320,14 +320,14 @@ We first looked at the problem of /pairwise alignment/, where the differences
 We reviewed many early improvements to theoretical algorithms, and a number of
 techniques for implementing these algorithms efficiently.
 
-Nearly all existing methods are based on some variant dynamic programming.
+Nearly all existing methods are based on some variant of dynamic programming.
 In A*PA, we use the A* shortest path algorithm, which is a graph-based
 method instead. This allows us to use a heuristic that can quickly and closely
 ''predict'' the edit distance in many cases.
 We additionally introduced /pruning/, which dynamically improves the heuristic
-as the A* search progresses, thereby leading to near-linear runtimes. To my
+as the A* search progresses, thereby leading to near-linear runtime. To my
 knowledge, this is the first heuristic of this type, and this same technique may
-be wider applicable, such as in classic navigation software.
+have wider applications, such as in classic navigation software.
 
 As it turns out, even though A*PA has near-linear complexity, the constant
 overhead is large: each visited state requires a memory access. This makes the
@@ -342,8 +342,9 @@ this an inherently slow algorithm. In hindsight, it would have been more
 efficient to not try too many hacky optimizations, and instead shift focus
 towards the inherently faster DP-based methods earlier.
 
-Future work remains in extending the aligner to both semi-global alignment and
-to affine costs.
+In \cref{ch:mapping}, a start has been made to extend the aligner to both
+semi-global alignment and to affine costs, but a large part of this remains as
+future work.
 
 ** Low Density Minimizers
 We then looked at /minimizer schemes/, which are used to sub-sample the \(k\)-mers
@@ -353,7 +354,7 @@ to minimize the fraction (/density/) of sampled \(k\)-mers.
 
 We were able to answer a number of open questions in this field.
 We proved a near-tight lower bound that is the first to show that the density is
-at least $2/(w+1)$ when $k=1$, and generally the bound is near-tight as $k\to\infty$.
+at least $2/(w+1)$ when $k=1$, and generally this new bound is near-tight as $k\to\infty$.
 Alongside this, we introduced the mod-minimizer, which matches the
 scaling of the lower bound, making this the first near-optimal scheme for large $k$.
 
@@ -373,7 +374,7 @@ they are only marginally better, and it remains an open problem to prove this.
 ** High Throughput Bioinformatics
 Lastly, we optimized two specific applications in bioinformatics to achieve high
 throughput. In the case of PtrHash, we were able to achieve throughput within
-$10\%$ of what the hardware is capable of, nearly $4\times$ faster than the
+$10\%$ of what the hardware is capable of, and up to nearly $5\times$ faster than the
 second fastest alternative. In the cases of both A*PA2 and
 \texttt{simd-minimizers}, we were able to achieve on the order of $10\times$
 speedups over previous implementations. In all these cases, this was achieved by
@@ -405,6 +406,6 @@ I will end this thesis with a number of opinionated /propositions/.
 7. Fast code must exploit all assumptions on the input.
 8. Fast code puts requirements on the input format, and the input has to adjust.
 9. Optimizing ugly code is a waste of time -- prettier methods will replace it.
-10. Assembly is not scary.
-11. Flat, unstructured text should be avoided at all costs.
+10. Flat, unstructured text should be avoided at all costs.
     We research text indices, so index the text you write.
+11. Assembly is not scary.
