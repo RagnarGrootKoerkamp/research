@@ -136,14 +136,14 @@ long before becoming interested in minimizers (at RECOMB 2022):
 #+begin_quote
 Why would we even care about better minimizer? We have this simple and fast
 random minimizer that's only at most $2\times$ away from optimal. Why would
-anyone invest time in optimizing this by maybe $25\%$?
+anyone invest time in optimizing this by maybe 25\%?
 There are so much bigger gains possible elsewhere.
 #+end_quote
 Even worse, in practice, most schemes do not (and as we will see, can not) give more than a
-$20\%$ saving in density on top of the very simple random minimizer.
+20\% saving in density on top of the very simple random minimizer.
 
 As we will prove in [[#lower-bounds]], when $k\leq w+1$, we can never expect
-more than around $25\%$ lower
+more than around 25\% lower
 density than the random minimizer, and thus, existing schemes are already
 relatively close to optimal from a practical point of view.
 Given this new lower bound, maybe the answer is that, indeed, we should stop searching for further
@@ -151,6 +151,13 @@ schemes.
 
 Nevertheless, there is a lot of pretty maths to be found, both in the lower
 bounds, and in the many sampling schemes we will review and develop ourselves.
+Furthermore, as we will see with the mod-minimizer, when $k>w$, we can often
+achieve this 25\% lower density using only slightly more code, so nearly for
+free. Likewise, for smaller $k\geq w$, we will see that choosing a specific
+order of the alphabet can improve the density of the random minimizer by over
+10\%, while /simplifying/ the code.
+Thus, even though improvements may seem small, searching for simple sampling schemes with
+near-optimal density is a fruitfull research area.
 
 ** Overview
 This part on minimizers is split into four chapters.
@@ -795,7 +802,7 @@ The first improvement over the trivial lower bound was already given in the
 paper that first introduced minimizers [cite:@winnowing Theorem 1]:
 
 #+begin_theorem Lower bound when hashing \(k\)-mers
-Consider a $w$-tuple of uniform random independent hashes of the \(k\)-mers in a tuple.
+Consider a \(w\)-tuple of uniform random independent hashes of the \(k\)-mers in a tuple.
 Now let $S$ be any function that samples a \(k\)-mer based on these $w$ hashes.
 Then, $S$ has density at least
 
@@ -1274,7 +1281,7 @@ The lexicographic order (dim blue) is significantly worse at 0.89.
 The alternating order (orange, 0.78) is slightly better, and the anti-lex order
 (green, 0.76) is slightly better again.
 
-The ABB order (brown-red, 0.69), and especially the ABB order
+The ABB order (red-purple, 0.69), and especially the ABB order
 with tiebreaking (blue) perform /much/ better than the random minimizer.
 ABB+tiebreaking even performs nearly optimal for $3\leq k\leq 5$.
 This is surprising, since the idea was already introduced as a sampling and minimizer scheme
@@ -1431,7 +1438,7 @@ bound [cite:@syncmers], i.e., any two open syncmers are at least
 $\floor{(k-s)/2}+1$ positions apart. This is in contrast to closed syncmers,
 that do not obey a similar guarantee (but instead have an /upper/ bound on the
 distance between them). As it turns out, by looking at [[oc]], the distance lower bound of open
-syncmers (O, brown) gives rise to lower densities than the upper bound of closed
+syncmers (O, red-purple) gives rise to lower densities than the upper bound of closed
 syncmers (C=miniception, green).
 
 In the full paper [cite:@oc-modmini-preprint], we give a polynomial algorithm to compute the
@@ -1457,7 +1464,7 @@ We see that miniception (green) performs slightly better than the ABB+tiebreak
 order when $k$ is sufficiently large. The decycling-set based orders (grey and
 black) significantly outperform the miniception, especially for $k$ just below $w$.
 Surprisingly, just changing the closed syncmers of miniception for open syncmers
-(O, brown) yields a better scheme, although not as good as decycling. The
+(O, red-purple) yields a better scheme, although not as good as decycling. The
 combination (OC, purple) does reach the same density as double decycling, and
 improves over it for $w\leq k\leq 2w$. Interestingly, the O and OC curves look
 similar to the decycling and double decycling curves, but slightly shifted to
@@ -1519,7 +1526,7 @@ $t=k-qw$ or $t=k-qw+1$, i.e., when $t \equiv k \pmod w$ or $t \equiv k+1 \pmod w
 #+end_proof
 
 #+name: mod-t
-#+caption: The density of the random minimizer and random mod-minimizer for varying $t$, for $w=24$ and $k=60$. The random mod-minimizer has local minima in the density at $t=12$ and $t=36$, where $t\equiv k\equiv 12\pmod w$. There is also a local minimum at $t=3$, which is the first $t$ that is large enough to avoid duplicate \(k\)-mers. Based on this, we choose $t$ to be the least number at least some lower bound $r$ that satisfies $t\equiv k\pmod w$. This figure is based on Figure 4 of [cite:@modmini] which was made by Giulio Ermanno Pibiri.
+#+caption: The density of the random minimizer and mod-sampling for varying $t$, for $w=24$ and $k=60$. The random mod-minimizer has local minima in the density at $t=12$ and $t=36$, where $t\equiv k\equiv 12\pmod w$. There is also a local minimum at $t=3$, which is the first $t$ that is large enough to avoid duplicate \(k\)-mers. Based on this, we choose $t$ to be the least number at least some lower bound $r$ that satisfies $t\equiv k\pmod w$. This figure is based on Figure 4 of [cite:@modmini] which was made by Giulio Ermanno Pibiri.
 #+attr_html: :class inset
 file:figs/0-mod-t.svg
 
@@ -1724,12 +1731,12 @@ the next section, we will investigate forward schemes that /do/ achieve good
 density for such small $k$.
 
 # TODO: Add greedymini to plot
-Secondly, when $k=w+1$ or slightly smaller, the current schemes do not achieve
-optimal density, while we expect such schemes to exist based on the ILP results
-for small parameters. Indeed, the greedy minimizer (not shown) appears to
-be near-optimal for k close to $w$. Nevertheless, for roughly $w/6 < k < \frac
-23 w$, no schemes are close to the lower bound. Specifically at $k = w/3$, the
-''deepest'' point of the lower bound,
+Secondly, when $\sigma=4$ and $k\leq w$ or slightly smaller, the current schemes do not achieve
+near-optimal density, while we do expect such schemes to exist based on the ILP results
+for small parameters. Indeed, the greedy minimizer appears to
+be near-optimal for $k$ close to $w$. Nevertheless, for roughly $w/6 < k < \frac
+23 w$, no schemes are close to the lower bound, and specifically at $k = w/3$, the
+''deepest'' point of the lower bound, the gap is large.
 
 #+begin_openproblem Pure optimal schemes
 Is there a pure forward sampling scheme with density close or equal to the lower bound $g'_\sigma$ for
@@ -1746,9 +1753,9 @@ Is it possible when $\sigma\to\infty$? Or when $w\to\infty$?
 #+begin_notice
 We end this part on minimizers with a look into /selection/ schemes,
 which are sampling schemes with $k=1$. These are interesting, because the lower
-bound appears to tight: for small parameters, the brute force search finds
+bound appears to be tight: for small parameters, the brute force search finds
 exactly optimal schemes. Thus, we ask ourselves whether we can construct
-''pure'' optimal schemes that are simple to understand and analyxe.
+''pure'' optimal schemes that are simple to understand and analyze.
 
 We first review /bidirectional anchors/ (bd-anchors) [cite:@bdanchors-esa].
 Then, we newly introduce /smallest-unique-substring/ anchors, or /sus-anchors/.
@@ -1770,9 +1777,19 @@ discussions [cite:@modmini;@oc-modmini-preprint;@sampling-lower-bound].
 
 As we saw for the sampling schemes so far, they do not do well for very small
 $k$. Indeed, they are all minimizer schemes, and these can not achieve density
-below $1/\sigma^k$. Here, we explore the $k=1$ case, where the window size is $\ell=w+k-1=w$. We first introduce
+below $1/\sigma^k$.
+More generally, when $w\to\infty$, /any/ fixed finite $k$ at some point becomes less
+than $\log_\sigma(w)$ and thus too small to result in a good minimizer scheme.
+At that point, we instead have to consider more general /sampling/ schemes to
+still be able to achieve density close to the lower bound.
+Here, we take this to the limit and explore the $k=1$ case,
+which are also called /selection/ schemes.
+In this case, the window size is $\ell=w+k-1=w$, and thus, the task is to select
+any of the $w$ characters in a window of length $w$.
+
+We first introduce
 bidirectional anchors [cite:@bdanchors-esa] in [[*Bidirectional anchors]], and then
-we improve these into smallest-unique-substring anchors [[*Sus-anchors]], which is
+we improve these into smallest-unique-substring anchors in [[*Sus-anchors]], which is
 unpublished work of myself.
 
 ** Bidirectional anchors
@@ -1820,7 +1837,7 @@ Then, the probability that two consecutive windows have a different smallest
 
 This parameter $r$ is slightly unfortunate: while plain bd-anchors are
 parameter-free, the $r$ acts very similar to $k-1$ for minimizer schemes.
-And since $r$ is $4\log_\sigma(2)$, in practice, the reduced bd-anchors usually
+And since $r$ is $4\log_\sigma(w)$, in practice, the reduced bd-anchors usually
 just sample a length-$r$ lexicographic minimizer. This still has the drawbacks
 of lexicographic sorting, while not providing the benefit of an actual parameter
 free scheme.
@@ -1865,6 +1882,8 @@ lexicographic sorting.
 To fix this, we consider two variants of sus-anchors: with anti-lexicographic
 sorting (where =AZZZZ...= is minimal) and with =ABB= sorting, where the smallest
 string is an =A= followed by any non-=A= characters.
+Since we only compare suffixes of different lengths, that are thus already
+distinct, there is no need to use the =ABB+= sorting that includes tie-breaking.
 
 Both these orders avoid the issue of sampling consecutive positions in runs of
 ~A~s, specifically by preferring a /transition/ from =A= to some other character.
@@ -1919,7 +1938,7 @@ $r$.
 Still, even with the best $r$, bd-anchors do not get too close to the density
 lower bound for $w\leq 20$.
 
-Lexicographic sus-anchors (brown) perform around the same or slightly better
+Lexicographic sus-anchors (red-purple) perform around the same or slightly better
 than bd-anchors, but still do not hit the lower bound. We saw that the ABB order
 works great as a low-density minimizer scheme, and also here this improves the
 density.
@@ -1928,10 +1947,12 @@ in this case it turns out to be better, and surprisingly, it reaches density
 indistinguishable from (but not quite equal to) the lower bound!
 
 If we look at the same plot for alphabet size $\sigma=2$, [[selection-s2]], we see that indeed
-there is still some room for improvement.
+there is still some room for improvement. In this case, ABB and
+anti-lexicographic perform exactly the same, since there are only two
+characters, and hence, sorting by non-A and sorting in reverse are the same.
 
 #+name: selection-s2
-#+caption: Comparison of the density of selection schemes for alphabet size $\sigma=2$. In this case, ABB and anti-lexicographic order perform the same, but neither reaches the lower bound for $w\approx 10$.
+#+caption: Comparison of the density of selection schemes for alphabet size $\sigma=2$. In this case, ABB and anti-lexicographic order perform the same (ABB is hidden behind the thick blue line), but neither reaches the lower bound for $w\approx 10$.
 #+attr_html: :class inset
 file:figs/5-selection-s2.svg
 
@@ -1991,7 +2012,7 @@ lower bound $g'$?
 
 
 #+name: summary
-#+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
+#+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$ and $w=24$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
 #+attr_html: :class inset large
 file:figs/6-small-k.svg
 
