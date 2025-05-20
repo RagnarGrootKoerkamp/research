@@ -201,8 +201,8 @@ of bioinformatics.
 The theory of minimizer schemes started with two independent papers proposing
 roughly the same idea: winnowing [cite:@winnowing] in 2003 and minimizers [cite:@minimizers] in 2004.
 At the core, the presented ideas are very similar: to deterministically sample a \(k\)-mer out of each
-window of w consecutive \(k\)-mers by choosing the ''smallest'' one, according to
-either a random of lexicographic order.
+window of $w$ consecutive \(k\)-mers by choosing the ''smallest'' one, according to
+either a random or lexicographic order.
 The /window guarantee/ is a core property of minimizers: it guarantees that
 consecutive minimizers are never too far away from each other.
 Further, these
@@ -247,7 +247,9 @@ Given a window $W$, it /samples/ the \(k\)-mer $W[f(W)..f(W)+k)$.
 #+end_definition
 
 In practice, we usually require $w\geq 2$ and $k\geq 1$, as some theorems break
-down at either $w=1$ or $k=0$.
+down at either $w=1$ or $k=0$ (even though theoretically those parameters make
+sense: we can either sample every position when $w=1$, or for $k=0$ sample the
+empty substring following the final character).
 When $k \geq w$, such a scheme ensures that every single character in the input
 is covered by at least one sampled \(k\)-mer.
 
@@ -344,7 +346,7 @@ providing a scheme that has density equal to this lower bound, ideally for all
 parameters, but otherwise for a subset.
 We can also ask what happens when $w\to
 \infty$ (for $k$ fixed), or when $k\to\infty$ (for $w$ fixed)?
-And can how does this depend on the alphabet size?
+And how does this depend on the alphabet size?
 Or maybe we can not quite make schemes that /exactly/ match the lower bound, but we /can/ make schemes
 that are within $1\%$ of the lower bound, or that are asymptotically a factor
 $1+o(1)$ away.
@@ -373,7 +375,7 @@ on an infinitely long string. In practice, we can approximate it closely by
 simply computing the particular density on a sufficiently long random string of,
 for example, 10 million characters.
 
-When $\sigma^{w+k}$, the following theorem forms the basis for computing the density of
+The following theorem forms the basis for computing the density of
 schemes exactly [cite:@improved-minimizers Lemma 4][cite:@miniception]:
 
 #+begin_definition (Charged) context
@@ -384,7 +386,7 @@ For a sampling scheme $f$, a context $C$ is /charged/ when two different positio
 are sampled from the first and second window, i.e., $f(C[0..w+k-1)) \neq 1+f(C[1..w+k))$.
 #+end_definition
 
-For a /local/ scheme, a context has length $2w+k-1$ instead [cite:@small-uhs Section 3.1;@sampling-lower-bound Section 3.2], and is charged when
+For a /local/ scheme, a context has length $2w+k-1$ instead [cite:@small-uhs Section 3.1][cite:@sampling-lower-bound Section 3.2], and is charged when
 the last window samples a \(k\)-mer not sampled by /any/ of the previous contained
 windows. This larger context is necessary because a local scheme can jump
 backwards. In practice, this
@@ -395,9 +397,10 @@ is the first window to sample a \(k\)-mer [cite:@winnowing].
 #+begin_theorem Computing density using contexts
 The density of a forward scheme equals the probability that,
 in a uniform random context of length $c=w+k$, two different \(k\)-mers are sampled
-from the two windows.
+from the two windows, i.e., the probability that the context is charged.
 
-Thus, the density can be computed exactly by iterating over all $\sigma^{w+k}$ contexts.
+Thus, the density can be computed exactly as the fraction of all $\sigma^{w+k}$
+contexts that is charged.
 #+end_theorem
 
 We can also approximate the density by sampling sufficiently many random
@@ -582,16 +585,16 @@ minimizer, forward, and local schemes as $k\to\infty$ or $w\to\infty$.
 Some of these results will be covered more in-depth later.
 
 #+name: asymptotics
-#+caption: Summary of asymptotic density results.
+#+caption: Summary of asymptotic density results. The $k\to\infty$ column shows that the best density in this case is $1/w$. This was previously achieved by the rot-minimizer  [cite:@asymptotic-optimal-minimizers], but the new mod-minimizer converges much faster. When $w\to\infty$, bd-anchors [cite:@bdanchors] are a close-to-optimal local scheme. The sus-anchors we introduce are /forward/ and conjectured to have this same asymptotic density.
 #+ATTR_LATEX: :booktabs t
-| Class     | $k\to\infty$    | $w\to\infty$ lower bound | $w\to\infty$ best                  |
-|-----------+-----------------+--------------------------+------------------------------------|
-| Minimizer | $1/w$, rot-mini | $1/\sigma^k$             | $1/\sigma^k$                       |
-| \quad new  | mod-mini        |                          |                                    |
-| Forward   | $1/w$, rot-mini | $1/w$                    | $O(\ln(w)/w)$                      |
-| \quad new  | mod-mini        | $2/(w+k)$                | $(2+o(1))/(w+1)$                   |
-| Local     | $1/w$, rot-mini | $1/w$                    | $2/(w+1-4\log_\sigma(w)) + o(1/w)$ |
-| \quad new  | mod-mini        | $1.5/(w+\max(k-2, 1))$   | $(2+o(1))/(w+1)$                   |
+| Class     | $k\to\infty$    | $w\to\infty$, lower bound | $w\to\infty$, best            |
+|-----------+-----------------+---------------------------+-------------------------------|
+| Minimizer | $1/w$, rot-mini | $1/\sigma^k$              | $1/\sigma^k$                  |
+| \quad new | mod-mini        |                           |                               |
+| Forward   | $1/w$, rot-mini | $1/w$                     | $O(\ln(w)/w)$                 |
+| \quad new | mod-mini        | $2/(w+k)$                 | $(2+o(1))/(w+1)$, conjectured |
+| Local     | $1/w$, rot-mini | $1/w$                     | $(2+o(1))/(w+1)$              |
+| \quad new | mod-mini        | $1.5/(w+\max(k-2, 1))$    |                               |
 
 # TODO: Use more precise lower bound for $k\to\infty$: $\ceil{(w+k)/w}/(w+k)$?
 
@@ -606,7 +609,7 @@ When $w\to\infty$, minimizer schemes have a big limitation. Since they only
 consider the \(k\)-mers, when $w\gg \sigma^k$, almost every window will contain the
 smallest \(k\)-mer. Thus, we obtain [cite:@asymptotic-optimal-minimizers Theorem 2]:
 
-#+begin_theorem Large-$w$ minimizer scheme
+#+begin_theorem Large-$w$ minimizer scheme :label minidensity
 For any /minimizer/ scheme $f$, the density is at least $1/\sigma^k$, and
 converges to this as $w\to\infty$.
 #+end_theorem
@@ -615,7 +618,8 @@ This implies that as $w\to\infty$, fixed-$k$ minimizer schemes can never reach
 the optimal density of $1/w$.
 On the other hand, this lower bound does not hold for forward and local schemes.
 For forward schemes, we can use the lower bound of [cite:@sampling-lower-bound
-Theorem 1] to get $2/(w+k)$ (Chapter [[#lower-bounds]]). For local schemes, Remark 7 applies and with $k' = \max(k,3)$ we
+Theorem 1] to get $2/(w+k)$ (Chapter [[#lower-bounds]]). For local schemes,
+[cite:@sampling-lower-bound Remark 7] applies and with $k' = \max(k,3)$ we
 get the bound $1.5/(w+\max(k-2, 1))$.
 
 From the other side, Proposition 7 of [cite:@asymptotic-optimal-minimizers] shows
@@ -650,10 +654,10 @@ bounded by $O(\ln(k')/k') = O(\ln(w)/w)$.
 #+end_proof_sketch
 
 But this is still not optimal: reduced bd-anchors [cite:@bdanchors Lemma 6]
-(Chapter [[#selection-schemes]]) are a local scheme with $k=1$ and density $O(1/w)$.
+(Chapter [[#selection-schemes]]) are a /local/ scheme with $k=1$ and density $(2+o(1))/(w+1)$
 
 We further improve on this using sus-anchors (Chapter [[#selection-schemes]]), which
-is a forward scheme with density $(2+o(1))/(w+1)$ as $w\to\infty$.
+is a /forward/ scheme, we conjecture, also has density $(2+o(1))/(w+1)$ as $w\to\infty$.
 
 While it may seem from [[asymptotics]] that local schemes are not better than forward
 schemes, there /are/ parameters for which local schemes achieve strictly better
@@ -904,11 +908,11 @@ These three windows are disjoint and hence the random variables $X$, $X'$, and $
 indicating $f(W)$, $f(W')$, and $f(W'')$ respectively are
 independent and identically distributed. (But note that we do not assume they
 are uniformly distributed, as that depends on the choice of the sampling function $f$.)
-In [lowerbound], we have $X=1$ and $X'=X''=2$.
+# In [lowerbound], we have $X=1$ and $X'=X''=2$.
 
 Since the three windows $W$, $W'$, and $W''$ are disjoint, they sample
 \(k\)-mers at distinct positions.
-#(indicated by the red boxes in [lowerbound]).
+# (indicated by the red boxes in [lowerbound]).
 The proof consists in computing a lower bound on the
 expected number of sampled \(k\)-mers in the range $[i+X, i''+X'')$.
 Note that for non-forward schemes, it is possible that windows before
@@ -1660,7 +1664,7 @@ probability that a random window of $\ell-t+1$ \(t\)-mers contains two identical
 #+end_mytheorem
 
 From the above two results, we obtain the density of the random mod-minimizer
-[cite:@modmini Corollary 17;@oc-modmini-preprint Theorem 2].
+[cite:@modmini Corollary 17][cite:@oc-modmini-preprint Theorem 2].
 
 #+begin_mytheorem Random mod-minimizer density
 If $t\equiv k\pmod w$ satisfies $t > (3+\varepsilon) \log_\sigma(\ell)$ for some
@@ -1728,7 +1732,8 @@ touch lower bound when $k\equiv 1\pmod w$.
 :END:
 Looking at [[mod]], there are still some regions where we do not yet have
 near-optimal sampling schemes. First, when $k \leq 2$, all schemes have poor
-density, as minimizer schemes can not do well when $k\leq \log_\sigma(w)$. In
+density, as minimizer schemes generally can not do well when $k\leq
+\log_\sigma(w)$ ([[thm:minidensity]]). In
 the next section, we will investigate forward schemes that /do/ achieve good
 density for such small $k$.
 
