@@ -32,8 +32,8 @@ of the memory layout.
 
 We also include some general background on benchmarking and optimizing code.
 
-We show these techniques by optimizing parts of the SSHash \(k\)-mer index.
-This data structure takes as input a text, and builds a dictionary on its
+We show these techniques by using the SSHash \(k\)-mer index as an example application.
+This data structure takes as input a text (without duplicate \(k\)-mers), and builds a dictionary on its
 \(k\)-mers. It can then efficiently answer queries whether given \(k\)-mers occur in
 the input text.
 
@@ -63,7 +63,6 @@ All text is my own, and at most loosely based on the mentioned papers.
 
 * Introduction
 
-# TODO: Cite Moores law
 The amount of sequenced biological data is growing exponentially.
 For a long time, the performance of computer
 hardware was also growing exponentially, but over the
@@ -76,7 +75,7 @@ bioinformatics use this remark as their motivation.
 Unfortunately, the performance of a piece of code does not /just/ depend on the
 theoretical runtime complexity of the algorithm used [cite:@medvedev-edit-distance]. For example, the /hidden
 constant/ can have a large influence on the actual running time.
-For example, summing a list of $n$ integers is $O(n)$, and can be done
+For example, summing a vector of $n$ integers is $\Theta(n)$, and can be done
 very efficiently using SIMD instructions at a speed of 0.1 ns per value (or
 4 values per CPU cycle).
 On the other hand, reading $n$ values from random memory addresses is also
@@ -91,11 +90,14 @@ One way to capture this is by using the IO model, where the number of memory
 This also somewhat captures the intuitive simplicity of an algorithm: it is well
 known that dynamic programming algorithms that simply do linear loops over an
 array are much faster than IO-bound data structures.
+More generally, this is an instance of the Von Neumann bottleneck
+[cite:@von-neumann-bottleneck]: all reading and writing of memory is limited by the
+memory bus, while simple operations are orders of magnitude faster.
 
 *Implementation.*
 Lastly, we come to the most practical part, which is the implementation of the
 algorithm.
-While Moore's law may not quite apply anymore, modern CPUs are vastly complex
+While Moore's law [cite:@moore-law] may not quite apply anymore, modern CPUs are vastly complex
 machines, with increasingly more optimizations and heuristics to squeeze everything out of
 the code they execute.
 We, the programmer, should be aware of these things, and write our code in such a way
@@ -114,20 +116,25 @@ Even more, we may want to also change the input format to better suit the algori
 ** Overview
 In this chapter, we will go over some techniques to optimize code for modern
 CPUs.
+Many works have been written on this topic, such as Ulrich Drepper's book on
+CPU memory [cite:@know-about-memory], Denis Bakhvalov's book on optimizing
+performance on modern CPUs [cite:@perf-book], and Agner Fog's resources on
+instruction latency and more [cite:@agner-fog].
+Thus, in this chapter we simply
+highlight some techniques that are particularly relevant for the following chapters.
 We group them into two categories.
-First, in [[#compute-bound]], we consider optimizations for compute-bound problems, where the
-execution of the given instructions itself is the bottleneck.
-Then, in [[#memory-bound]], we look at memory-bound setting, where the CPU is mostly waiting for data
-to be read from RAM (or disk).
 
-In this chapter, we give examples of each optimization based on two
-applications, that are covered in more detail in the following two chapters.
-The first, is \texttt{simd-minimizers}, which is an
-efficient compute-bound implementation of an algorithm to compute random minimizers.
-We have also already seen a number of compute-bound optimizations being applied to A*PA2.
+The first category are optimizations for compute-bound problems.
+In [[#compute-bound]], we have a look at
+\texttt{simd-minimizers}, which is an
+efficient implementation of an algorithm to compute random minimizers.
+We have also already seen a number of compute-bound optimizations being applied to A*PA2
+in \cref{ch:astarpa2}.
 
-Then, in PtrHash, we consider a memory-bound application: minimal
-perfect hashing. Here, the problem is to build a data structure that, given a
+Then, in [[#memory-bound]], we consider a memory-bound application, where the CPU
+is mostly waiting for data to be read from RAM (or disk): minimal
+perfect hashing.
+Here, the problem is to build a data structure that, given a
 fixed input set $S$ of $n$ elements, efficiently maps each element to a unique
 integer in $\{0, \dots, n-1\}$.
 
@@ -327,7 +334,7 @@ Specifically, we optimize for throughput, i.e., to answer as many independent
 queries per second as possible.
 When the number of keys (minimizers) is large, say $10^9$, the MPHF data structure
 will not fit in L3 cache, and hence, most of the queries will need to access
-main memory. Thus, this problem is memory-bound.
+main memory. Thus, like most data structures, this problem is memory-bound.
 
 We note that code can be memory bound in two ways: by memory /latency/, where it
 is usually waiting for one read to come through, or by
@@ -379,21 +386,22 @@ in a single cache line. That way, we can still compress the data, while not
 paying with more memory accesses.
 
 ** Interleaving Memory Accesses
-As already discussed, CPU pipelines can execute many instructions ahead.
-This also means that the CPU will already fetch memory for upcoming instructions
+As already discussed, CPU pipelines can execute many instructions at the same time.
+This means that the CPU will already fetch memory for upcoming instructions
 whenever it can. For example, in a for-loop where each iteration reads a
 single independent memory address, the CPU can fetch memory a number of
 iterations ahead.
-ahead.
 
-More precisely, each core in the CPU has a number (12, for me) of /line fill
-buffers/. Each time the core requests a new cache line to be read from memory,
+More precisely, each core in the CPU has a number (12, in case of the hardware
+used for the experiments in this thesis) of /line fill buffers/.
+Each time the core requests a new cache line to be read from memory,
 it reserves one of these buffers so that the result can be stored there when it
 is available. Thus, the latency of each individual access can be hidden by doing
 around 10 reads in parallel. The result is then 10 times higher memory throughput.
 
-This can be used by clustering independent memory accesses, so that they indeed
-occur in parallel. Additionally, it can help to have as little code as possible
+One way to achieve this is by clustering independent memory accesses, so that
+they are automatically executed in parallel.
+More generally, it can help to have as little code as possible
 in between consecutive reads, so that the CPU can look relatively more
 iterations ahead.
 
