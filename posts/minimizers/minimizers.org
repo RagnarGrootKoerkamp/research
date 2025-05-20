@@ -1310,6 +1310,13 @@ large $k$.
 
 
 ** UHS-inspired schemes
+We first have a look at minimizer schemes that build on universal hitting sets.
+Of these schemes, all but the decycling minimizer use a bruteforce search to
+search small universal hitting sets, or minimizers schemes directly for GreedyMini.
+This means that those schemes are limited to cases where $k$ and $w$ are
+sufficiently small that this bruteforce search can finish in reasonable time.
+For DOCKS, $\boldremuval$, and PASHA, (double) decycling is better in practice,
+and thus we omit them from comparisons.
 
 *DOCKS.* Orenstein et al. [cite:@docks-wabi;@docks] introduce an algorithm to generate
 small universal hitting sets. It works in two steps.
@@ -1385,6 +1392,8 @@ w$. This raises the question whether it is also optimal for other $k$, where the
 lower bound may not be tight yet.
 A drawback is that this scheme is not pure: it must explicitly store the chosen
 order of \(k\)-mers.
+In particular, our choice of $w=24$ is much larger than the parameters for which
+precomputed schemes are provided, and so we omit it from the comparison in [[oc]].
 
 ** Syncmer-based schemes
 As we saw, universal hitting sets belong to a more general class of context-free
@@ -2034,7 +2043,7 @@ lower bound $g'$?
 
 
 #+name: summary
-#+caption: Comparison of the density of selection schemes for alphabet size $\sigma=4$ and $w=24$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
+#+caption: Comparison of the density of sampling schemes for alphabet size $\sigma=4$ and $w=24$, including sus-anchors. Sus-anchors use $r=1$ for the mod-minimizer.
 #+attr_html: :class inset large
 #+attr_latex: :width \linewidth :placement [t]
 file:figs/6-small-k.svg
