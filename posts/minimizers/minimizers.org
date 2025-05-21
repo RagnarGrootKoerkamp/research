@@ -36,7 +36,7 @@ into lower bounds on sampling scheme density and practical sampling schemes.
 #+begin_notice
 In this chapter, we survey existing literature on minimizers.
 Small parts of this chapter are loosely based on the background sections of the
-mod-minimizer papers [cite:@modmini;@oc-modmini-preprint], written with Giulio
+mod-minimizer papers [cite:@modmini;@oc-modmini], written with Giulio
 Ermanno Pibiri and Daniel Liu, and the density lower bound
 paper [cite:@sampling-lower-bound], written with Bryce Kille and others.
 Specifically some definitions and theorem statements are copied verbatim.
@@ -178,7 +178,7 @@ assumptions, and end with the new nearly tight lower bound of [cite:@sampling-lo
 
 Then, in Chapter [[#sampling-schemes]], we summarize and compare existing sampling
 schemes, and introduce two new sampling schemes: the /open-closed/
-minimizer and the general /mod-minimizer/ [cite:@modmini;@oc-modmini-preprint]. The most important result is that the
+minimizer and the general /mod-minimizer/ [cite:@modmini;@oc-modmini]. The most important result is that the
 mod-minimizer achieves density $1/w$ in the limit where $k\to\infty$, and that
 this convergence is close to optimal.
 
@@ -274,19 +274,16 @@ that for $x,y\in \Sigma^k$, $x\leq _{\Ok} y$ if and only if $\Ok(x) \leq \Ok(y)$
 #+begin_definition Minimizer scheme
 A /minimizer scheme/ is defined by a total order $\Ok$ on \(k\)-mer and samples the
 leftmost minimal \(k\)-mer in a window $W$, which is called the /minimizer/:
-
 $$
 f(W) := \argmin_{i\in [w]} \Ok(W[i..i+k)).
 $$
 #+end_definition
 
 Minimizer schemes are always forward, and thus we have the following hierarchy
-
 $$
 \textrm{minimizer schemes} \subseteq \textrm{forward schemes} \subseteq
 \textrm{local schemes}.
 $$
-
 There are two particularly common minimizer schemes, the /lexicographic/
 minimizer [cite:@minimizers] and the /random/ minimizer [cite:@winnowing].
 
@@ -483,7 +480,6 @@ $2/(w+1)$ that was obtained in [cite:@winnowing] and [cite:@minimizers].
 
 #+begin_theorem Random minimizer density
 For $k>(3+\varepsilon)\log_\sigma(w+1)$, the density of the random minimizer is
-
 $$
 \frac{2}{w+1} + o(1/w).
 $$
@@ -538,7 +534,6 @@ the universal hitting set [cite:@asymptotic-optimal-minimizers Lemma 1].
 
 #+begin_theorem Compatible minimizer density
 When a minimizer scheme $f$ is compatible with a UHS $U$, its density satisfies
-
 $$
 d(f) \leq |U|/\sigma^k.
 $$
@@ -551,7 +546,6 @@ Thus, the number of \(k\)-mers in $U$ in the De Bruijn sequence is $|U| \cdot \s
 Suppose the minimizer scheme samples $s$ distinct \(k\)-mers in the De Bruijn sequence. Since $U$ is
 an UHS, $s \leq |U| \cdot \sigma^w$. The density of $f$ is the fraction of
 sampled \(k\)-mers,
-
 $$
 d(f) = s / \sigma^c \leq |U| \cdot \sigma^w / \sigma^{w+k} = |U| / \sigma^k.
 $$
@@ -704,7 +698,6 @@ In this case, /canonical minimizers/ can be used.
 #+begin_definition Canonical sampling scheme
 A sampling scheme $f$ is /canonical/ when for all windows $W$ and their reverse
 complement $\revcomp(W)$, it holds that
-
 $$f(\revcomp(W)) = w-1-f(W).$$
 #+end_definition
 
@@ -819,7 +812,6 @@ paper that first introduced minimizers [cite:@winnowing Theorem 1]:
 Consider a \(w\)-tuple of uniform random independent hashes of the \(k\)-mers in a tuple.
 Now let $S$ be any function that samples a \(k\)-mer based on these $w$ hashes.
 Then, $S$ has density at least
-
 $$
 d(S) \geq \frac{1.5 + \frac{1}{2w}}{w+1}.
 $$
@@ -855,7 +847,6 @@ Marçais et al. [cite:@asymptotic-optimal-minimizers] give a weaker variant of
 the theorem of Schleimer et al. [cite:@winnowing] that /does/ hold for all forward schemes:
 #+begin_theorem Lower bound for forward schemes :label marcais
 Any forward scheme $f$ has density at least
-
 $$
 d(f) \geq \frac{1.5 + \max\left(0, \left\lfloor\frac{k-w}{w}\right\rfloor\right) +
 \frac 1{2w}}{w+k}.
@@ -940,12 +931,9 @@ ${1+\pr[X < X'] + 1 + \pr[X'\leq X'']}$.
 Since $X$, $X'$, and $X''$ are i.i.d., we have that
 $\pr[X'\leq X''] = \pr[X'\leq X] = 1 - \pr[X < X']$,
 and hence
-
 $$ 1+\pr[X < X'] + 1 + \pr[X'\leq X''] = 3. $$
-
 Since there are $2\ell+1$ windows in each group, by linearity
 of expectation, we obtain density at least
-
 $$
 \frac{3}{2\ell+1} = \frac{1.5}{w+k-0.5}.
 $$
@@ -977,7 +965,6 @@ We start with a slightly simplified version.
 
 #+begin_mytheorem Near-tight lower bound (simple) :label simple
 Any forward scheme $f$ has a density at least
-
 $$
 d(f) \geq \frac{\ceil{\frac{w+k}{w}}}{w+k}.
 $$
@@ -1003,12 +990,10 @@ Theorem 1].
 Let $M_\sigma(p)$ count the number of aperiodic necklaces of length $p$ over an
 alphabet of size $\sigma$. Then, the density of any forward sampling scheme $f$ is
 at least
-
 $$
 d(f) \geq g_\sigma(w,k) :=  \frac{1}{\sigma^{w+k}} \sum_{p | (w+k)} M_\sigma(p) \left\lceil \frac
 pw\right\rceil \geq \frac{\left\lceil\frac{w+k}{w}\right\rceil}{w+k} \geq \frac 1w,
 $$
-
 where the middle inequality is strict when $w>1$.
 #+end_theorem
 #+begin_proofsketch
@@ -1031,13 +1016,11 @@ the probability that a uniform random cycle has period $p$ is $p\cdot M_\sigma(p
 \sigma^{w+k}$, where the multiplication by $p$ accounts for the fact that each pattern
 $P$ gives rise to $p$ equivalent cycles that are simply rotations of each other.
 Thus, the overall density is simply the sum over all $p\mid (w+k)$:
-
 $$
 d(f)
 \geq \sum_{p | (w+k)} \frac{p\cdot M_\sigma(p)}{\sigma^{w+k}}\cdot \frac{1}{p} \left\lceil \frac pw\right\rceil
 =\frac 1{\sigma^{w+k}} \sum_{p | (w+k)} M_\sigma(p)  \left\lceil \frac pw\right\rceil.
 $$
-
 The remaining inequalities follow by simple arithmetic.
 #+end_proofsketch
 
@@ -1049,13 +1032,11 @@ corollary.
 
 #+begin_theorem Near-tight lower bound (monotone)
 Any forward scheme $f$ has density at least
-
 $$
 d(f)
 \geq g'_\sigma(w,k) := \max\big(g_\sigma(w,k), g_\sigma(w,k')\big)
 \geq \max\left(\frac 1{w+k}\ceil{\frac{w+k}w}, \frac1{w+k'}\ceil{\frac{w+k'}w}\right),
 $$
-
 where $k'$ is the smallest integer $\geq k$ such that $k' \equiv 1 \pmod w$.
 #+end_theorem
 
@@ -1167,10 +1148,10 @@ already:
 #+begin_notice
 In this chapter, we review existing minimizer schemes and more general sampling schemes.
 The fall into a few categories: they are variants of lexicographic
-minimizers, based on universal-hitting-sets with a greedy construction, or based
+minimizers, based on universal hitting sets with a greedy construction, or based
 on syncmers.
 
-We then introduce the /open-closed minimizer/ [cite:@oc-modmini-preprint], which is a small variant of
+We then introduce the /open-closed minimizer/ [cite:@oc-modmini], which is a small variant of
 /miniception/ that not only uses /closed syncmers/, but also /open syncmers/.
 Then, we introduce the /(extended) mod-minimizer/ [cite:@modmini], which is a practical
 minimizer scheme that reaches asymptotic optimal density $1/w$ as $k\to\infty$.
@@ -1185,7 +1166,7 @@ This chapter is based on two papers. ''The mod-minimizer: A simple and
 efficient sampling algorithm for long \(k\)-mers'' [cite:@modmini] is coauthored
 with Giulio Ermanno Pibiri and introduces the mod minimizer.
 The followup preprint ''The open-closed mod-minimizer algorithm''
-[cite:@oc-modmini-preprint] was written with Giulio Ermanno Pibiri and Daniel
+[cite:@oc-modmini] was written with Giulio Ermanno Pibiri and Daniel
 Liu and introduces the open-closed minimizer and the extended mod-minimizer.
 
 The idea for the mod-minimizer is my own.
@@ -1206,13 +1187,13 @@ Then, in Section [[*Syncmer-based schemes]], we cover some schemes based on
 syncmers.
 
 We end with two new schemes.
-First, the /open-closed minimizer/ [cite:@oc-modmini-preprint] (Section [[*Open-closed minimizer]]), which extends
+First, the /open-closed minimizer/ [cite:@oc-modmini] (Section [[*Open-closed minimizer]]), which extends
 the miniception by first preferring the smallest open syncmer, falling back to
 the smallest closed syncmer, and then falling back to the smallest \(k\)-mer
 overall. This simple scheme achieves near-best density for $k\leq w$.
 
 Second, we introduce the /(extended) mod-minimizer/ and the /open-closed
-mod-mini/ [cite:@modmini;@oc-modmini-preprint]. These schemes significantly
+mod-mini/ [cite:@modmini;@oc-modmini]. These schemes significantly
 improve over all other schemes when $k>w$ and converge to density $1/w$ as
 $k\to\infty$. Additionally, we show that they have optimal density when $k\equiv
 1\pmod w$ and the alphabet is large.
@@ -1447,7 +1428,7 @@ w$.
 ** Open-closed minimizer
 As we saw, Miniception samples the smallest \(k\)-mer that is a closed syncmer.
 The open-closed minimizer is a natural extension of this
-[cite:@oc-modmini-preprint]:
+[cite:@oc-modmini]:
 
 
 #+begin_newdefinition Open-closed minimizer
@@ -1466,7 +1447,7 @@ distance between them). As it turns out, by looking at [[oc]], the distance lowe
 syncmers (O, red-purple) gives rise to lower densities than the upper bound of closed
 syncmers (C=miniception, green).
 
-In the full paper [cite:@oc-modmini-preprint], we give a polynomial algorithm to compute the
+In the full paper [cite:@oc-modmini], we give a polynomial algorithm to compute the
 exact density of the open-closed minimizer scheme, assuming that no duplicate
 \(k\)-mers occur. At a high level, this works by considering the
 position of the smallest \(s\)-mer in the window, and then recursing on the
@@ -1509,7 +1490,7 @@ infinity.
 The rot-minimizer [cite:@asymptotic-optimal-minimizers] /does/ converge to
 density $1/w$, but in its original form it only does so very slowly.
 
-Here we present the /mod-minimizer/ [cite:@modmini;@oc-modmini-preprint], which turns out to converge
+Here we present the /mod-minimizer/ [cite:@modmini;@oc-modmini], which turns out to converge
 to $1/w$ nearly as fast as the lower bound we showed before in [[#lower-bounds]].
 
 We start with a slightly more general definition.
@@ -1616,7 +1597,7 @@ r+((k-r)\bmod w)$ in combination with a uniform random order $\Ot$ gives /the mo
 #+end_newdefinition
 
 It turns out this definition can be extended to wrap /any/ sampling scheme,
-rather than just random minimizers [cite:@oc-modmini-preprint].
+rather than just random minimizers [cite:@oc-modmini].
 
 #+begin_newdefinition Extended mod-minimizer
 Let $w$, $k$, and $t\equiv k\pmod w$ be given parameters, and
@@ -1631,7 +1612,7 @@ minimizer, to obtain the oc-mod-mini.
 *** Theoretical density
 
 When we restrict $f$ to be a /minimizer/ scheme specifically, we can compute the
-density of the extended mod-minimizer [cite:@oc-modmini-preprint Theorem 1].
+density of the extended mod-minimizer [cite:@oc-modmini Theorem 1].
 
 #+begin_mytheorem Extended mod-minimizer density
 Let $w$, $k$, and $t\equiv k\pmod w$ be given parameters, and
@@ -1685,17 +1666,15 @@ probability that a random window of $\ell-t+1$ \(t\)-mers contains two identical
 #+end_mytheorem
 
 From the above two results, we obtain the density of the random mod-minimizer
-[cite:@modmini Corollary 17][cite:@oc-modmini-preprint Theorem 2].
+[cite:@modmini Corollary 17][cite:@oc-modmini Theorem 2].
 
 #+begin_mytheorem Random mod-minimizer density
 If $t\equiv k\pmod w$ satisfies $t > (3+\varepsilon) \log_\sigma(\ell)$ for some
 $\varepsilon > 0$, the
 density of the random mod-minimizer is
-
 $$
 \frac{2+\frac{k-t}{w}}{w+k-t+1} + o(1/(w+k-1)).
 $$
-
 When $w$ is fixed and $k\to\infty$, this density tends to $1/w$.
 #+end_mytheorem
 
@@ -1801,7 +1780,7 @@ state some open problems related to this.
 #+begin_notice
 This chapter is based on unpublished notes that are my own work.
 Some of the open problems in the discussion are based on previously written
-discussions [cite:@modmini;@oc-modmini-preprint;@sampling-lower-bound].
+discussions [cite:@modmini;@oc-modmini;@sampling-lower-bound].
 #+end_notice
 
 As we saw for the sampling schemes so far, they do not do well for very small
