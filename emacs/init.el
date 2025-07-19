@@ -96,7 +96,8 @@
 
 
 
-(defmacro defspeciallink (name prefix)
+
+(defmacro defspeciallink (name display-name prefix)
   `(progn
      (defvar ,(intern (format "special-block-%s-labels" prefix)) '()) ; to store this theroem labels
      (defvar ,(intern (format "special-block-%s-labels-cdr" prefix)) nil)
@@ -108,11 +109,11 @@
                      ((org-export-derived-backend-p org-export-current-backend 'latex)
                       ,(format "\\ref{%s:%%s}" prefix)) ; use standard ref in LateX
                      ((org-export-derived-backend-p org-export-current-backend 'html)
-                      ,(format "<a href=\"#%s:%%s\">%%d</a>" prefix))) ; in HTML the number has to be print manually, finding the position of the label in the list
+                      ,(format "<a href=\"#%s:%%s\">%s %%d</a>" prefix display-name))) ; in HTML the number has to be print manually, finding the position of the label in the list
                     ref (1+ (cl-position (format "%s" ref) ,(intern (format "special-block-%s-labels" prefix)) :test 'equal)))))) ; sum one because lists are zero based
 
-(defmacro deftheorem (name display-name prefix &optional tcb)
-  "Defines a new theorem type called NAME (rendered as DISPLAY-NAME in HTML) which labels start with PREFIX. If TCB is not nil, in LaTeX the tcbtheorem syntax is used.
+(defmacro deftheorem (name display-name prefix)
+  "Defines a new theorem type called NAME (rendered as DISPLAY-NAME in HTML) which labels start with PREFIX.
 Usage:
 ,#+BEGIN_name Title :label lbl
 ....
@@ -120,7 +121,7 @@ Usage:
 As can be seen in [[prefix:lbl]]
                 "
   `(progn
-     (defspeciallink ,name ,prefix)
+     (defspeciallink ,name ,display-name ,prefix)
 
      (org-defblock ,name (title "TITLE" label nil unnumbered nil)
                    ,(format "Define %s special block." name)
@@ -129,14 +130,15 @@ As can be seen in [[prefix:lbl]]
                     ((org-export-derived-backend-p org-export-current-backend 'latex)
                      (format
                       (concat ,(format "\\begin{%s" name) (when unnumbered "*") "}"
-                              ,(if tcb "{%s}{%s}" (format "[%%s]\\label{%s:%%s}" prefix)) ; tcbtheorem or standard
+                              ,(format "[%%s]\\label{%s:%%s}" prefix)
                               "\n%s"
                               ,(format "\\end{%s" name) (when unnumbered "*") "}")
                       (or title "") (or label "") contents))
                     ((org-export-derived-backend-p org-export-current-backend 'html)
                      (format
                       (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\"><span class=\"special-block-number\">%s" prefix name display-name)
-                              (unless unnumbered (format " %d</span>" (length ,(intern (format "special-block-%s-labels" prefix)))))
+                              (unless unnumbered (format " %d" (length ,(intern (format "special-block-%s-labels" prefix)))))
+                              "</span>"
                               (when title " <span class=\"special-block-name\">") "%s" (when title "</span>") ".</span>"
                               ,(format "%%s</div>"))
                       (or label "") (or title "") contents))
