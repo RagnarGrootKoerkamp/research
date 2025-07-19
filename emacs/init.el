@@ -149,9 +149,11 @@ As can be seen in [[prefix:lbl]]
 (deftheorem newdefinition "Definition" dfn)
 (deftheorem theorem "Theorem" thm)
 (deftheorem mytheorem "Theorem" thm)
+(deftheorem lemma "Lemma" lem)
 (deftheorem problem "Problem" prob)
 (deftheorem openproblem "Open problem" prob)
 (deftheorem conjecture "Conjecture" conj)
+(deftheorem algorithm "Algorithm" alg)
 
 ;; Reset special-block-{theorem,definition}-labels{-cdr} before export.
 (add-hook 'org-export-before-parsing-functions
@@ -160,6 +162,8 @@ As can be seen in [[prefix:lbl]]
             (setq special-block-thm-labels-cdr nil)
             (setq special-block-theorem-labels '())
             (setq special-block-theorem-labels-cdr nil)
+            (setq special-block-lemma-labels '())
+            (setq special-block-lemma-labels-cdr nil)
             (setq special-block-mytheorem-labels '())
             (setq special-block-mytheorem-labels-cdr nil)
             (setq special-block-dfn-labels '())
@@ -178,7 +182,12 @@ As can be seen in [[prefix:lbl]]
             (setq special-block-conj-labels-cdr nil)
             (setq special-block-conjecture-labels '())
             (setq special-block-conjecture-labels-cdr nil)
+            (setq special-block-alg-labels '())
+            (setq special-block-alg-labels-cdr nil)
+            (setq special-block-algorithm-labels '())
+            (setq special-block-algorithm-labels-cdr nil)
             ))
+
 
 
 ;;;
