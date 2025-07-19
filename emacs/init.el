@@ -94,9 +94,6 @@
                  (setcdr ,(intern labels-cdr) label)
                (setq ,(intern labels) label))))))
 
-
-
-
 (defmacro defspeciallink (name display-name prefix)
   `(progn
      (defvar ,(intern (format "special-block-%s-labels" prefix)) '()) ; to store this theroem labels
@@ -155,37 +152,21 @@ As can be seen in [[prefix:lbl]]
 (deftheorem conjecture "Conjecture" conj)
 (deftheorem algorithm "Algorithm" alg)
 
-;; Reset special-block-{theorem,definition}-labels{-cdr} before export.
+;; Reset special-block-*-labels{-cdr} before export.
 (add-hook 'org-export-before-parsing-functions
           (lambda (backend)
             (setq special-block-thm-labels '())
             (setq special-block-thm-labels-cdr nil)
-            (setq special-block-theorem-labels '())
-            (setq special-block-theorem-labels-cdr nil)
-            (setq special-block-lemma-labels '())
-            (setq special-block-lemma-labels-cdr nil)
-            (setq special-block-mytheorem-labels '())
-            (setq special-block-mytheorem-labels-cdr nil)
+            (setq special-block-lem-labels '())
+            (setq special-block-lem-labels-cdr nil)
             (setq special-block-dfn-labels '())
             (setq special-block-dfn-labels-cdr nil)
-            (setq special-block-definition-labels '())
-            (setq special-block-definition-labels-cdr nil)
-            (setq special-block-newdefinition-labels '())
-            (setq special-block-newdefinition-labels-cdr nil)
             (setq special-block-prob-labels '())
             (setq special-block-prob-labels-cdr nil)
-            (setq special-block-problem-labels '())
-            (setq special-block-problem-labels-cdr nil)
-            (setq special-block-openproblem-labels '())
-            (setq special-block-openproblem-labels-cdr nil)
             (setq special-block-conj-labels '())
             (setq special-block-conj-labels-cdr nil)
-            (setq special-block-conjecture-labels '())
-            (setq special-block-conjecture-labels-cdr nil)
             (setq special-block-alg-labels '())
             (setq special-block-alg-labels-cdr nil)
-            (setq special-block-algorithm-labels '())
-            (setq special-block-algorithm-labels-cdr nil)
             ))
 
 
