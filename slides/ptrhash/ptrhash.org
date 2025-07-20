@@ -1,0 +1,194 @@
+#+title: PtrHash
+#+subtitle: Minimal Perfect Hashing at RAM Throughput
+#+author: Ragnar {Groot Koerkamp}
+#+hugo_section: slides
+#+filetags: @slides mphf
+#+OPTIONS: ^:{} num: num:0 toc:nil
+#+hugo_front_matter_key_replace: author>authors
+# #+toc: depth 2
+#+reveal_theme: white
+#+reveal_extra_css: /css/slide.min.css
+#+reveal_init_options: width:1920, height:1080, margin: 0.04, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+#+reveal_reveal_js_version: 4
+#+export_file_name: ../../static/slides/ptrhash/index.html
+#+hugo_paired_shortcodes: %notice
+#+date: <2025-07-20 Sun>
+# Export using C-c C-e R R
+# Enable auto-export using :toggle-org-reveal-export-on-save
+# Disable hugo export using :org-hugo-auto-export-mode
+
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+#+REVEAL_TITLE_SLIDE: <h1 class="title" style="text-transform:none;line-height:2.3rem;padding-top:1rem;padding-bottom:1rem;">%t<br/><span style="font-size:1.3rem;color: #444444">%s</span></h1>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:1rem;margin-top:2rem;">%a</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:smaller;font-weight:normal;color:grey">July 24, 2025</h2>
+# #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/bmilab.svg" style="position:absolute;bottom:6.5%%;left:2%%;width:30%%"></img>
+# #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%%;right:33%%;width:30%%"></img>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/slides/ptrhash" style="position:absolute;bottom:3.8%%;right:7%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/slides/ptrhash</a>
+
+* Hashing
+:PROPERTIES:
+:CUSTOM_ID: hashing
+:END:
+
+
+** A set of keys
+:PROPERTIES:
+:CUSTOM_ID: h-keys
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/h-keys.svg
+[[file:figs/h-keys.svg]]
+
+** A hash function
+:PROPERTIES:
+:CUSTOM_ID: h-hash
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/h-hash.svg
+[[file:figs/h-hash.svg]]
+
+** A hash function: collisions!
+:PROPERTIES:
+:CUSTOM_ID: h-collision
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/h-collision.svg
+[[file:figs/h-collision.svg]]
+
+** A hash function: injective / /perfect/
+:PROPERTIES:
+:CUSTOM_ID: h-injection
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/h-injection.svg
+[[file:figs/h-injection.svg]]
+
+** A hash function: bijective / /minimal & perfect/
+:PROPERTIES:
+:CUSTOM_ID: h-bijection
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/h-bijection.svg
+[[file:figs/h-bijection.svg]]
+
+* Problem statement
+:PROPERTIES:
+:CUSTOM_ID: problem-statement
+:END:
+
+Given a set of $n$ keys $K\subseteq \mathbb K$, build a function $h$ satisfying
+- $h(K) = \{0, \dots, n-1\}$, i.e., $h$ is /minimal & perfect/.
+
+ \\
+
+#+attr_reveal: :frag appear
+Goals, in this order:
+#+attr_reveal: :frag (appear)
+- $h$ is fast to evaluate,
+- $h$ is fast to construct,
+- $h$ takes little memory to store.
+
+** Naive solution: try seeded hashes
+:PROPERTIES:
+:CUSTOM_ID: n-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/n-1.svg
+[[file:figs/n-1.svg]]
+
+** Naive solution: try seeded hashes
+:PROPERTIES:
+:CUSTOM_ID: n-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/n-2.svg
+[[file:figs/n-2.svg]]
+
+** Naive solution: try seeded hashes
+:PROPERTIES:
+:CUSTOM_ID: n-3
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/n-3.svg
+[[file:figs/n-3.svg]]
+** Naive solution: $n! / n^n\approx e^n$ tries, $n\cdot\log_2 e$ bits
+:PROPERTIES:
+:CUSTOM_ID: n-4
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/n-4.svg
+[[file:figs/n-4.svg]]
+
+* Problem: each seed is a completely new hash
+:PROPERTIES:
+:CUSTOM_ID: naive-problem
+:END:
+
+* Build $h$ incrementally using buckets
+:PROPERTIES:
+:CUSTOM_ID: buckets-before
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/buckets-before.svg
+[[file:figs/buckets-before.svg]]
+
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-1.svg
+[[file:figs/incremental-1.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-2.svg
+[[file:figs/incremental-2.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-3
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-3.svg
+[[file:figs/incremental-3.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-4
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-4.svg
+[[file:figs/incremental-4.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-5
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-5.svg
+[[file:figs/incremental-5.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-6
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-6.svg
+[[file:figs/incremental-6.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-7
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-7.svg
+[[file:figs/incremental-7.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-8
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-8.svg
+[[file:figs/incremental-8.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-9
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-9.svg
+[[file:figs/incremental-9.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-10
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-10.svg
+[[file:figs/incremental-10.svg]]
+
+* Buckets
+:PROPERTIES:
+:CUSTOM_ID: buckets-after
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/buckets-after.svg
+[[file:figs/buckets-after.svg]]

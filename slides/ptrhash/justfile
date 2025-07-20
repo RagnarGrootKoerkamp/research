@@ -1,0 +1,13 @@
+export file="figs.ipe":
+    rm -f figs/*.svg
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -page 1 -view "NAME" {{file}} figs/NAME.svg || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -page 2 -view "NAME" {{file}} figs/NAME.svg || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -page 3 -view "NAME" {{file}} figs/NAME.svg || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -page 4 -view "NAME" {{file}} figs/NAME.svg || true
+
+png file="figs.ipe":
+    rm -f png/*.png
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -png -page 1 -view "NAME" -resolution 300 {{file}} figs/NAME.png || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -png -page 2 -view "NAME" -resolution 300 {{file}} figs/NAME.png || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -png -page 3 -view "NAME" -resolution 300 {{file}} figs/NAME.png || true
+    grep view {{file}} | grep -o 'name=".*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -png -page 4 -view "NAME" -resolution 300 {{file}} figs/NAME.png || true
