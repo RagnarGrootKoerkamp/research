@@ -19,14 +19,17 @@
 
 #+begin_export html
 <script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+
 #+end_export
 
 #+REVEAL_TITLE_SLIDE: <h1 class="title" style="text-transform:none;line-height:2.3rem;padding-top:1rem;padding-bottom:1rem;">%t<br/><span style="font-size:1.3rem;color: #444444">%s</span></h1>
-#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:1rem;margin-top:2rem;">%a</h2>
-#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:smaller;font-weight:normal;color:grey">July 24, 2025</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:1rem;line-height:initial;margin-top:1.5rem;">%a</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:0.7rem;font-family:monospace;line-height:initial;color:rgb(0, 133, 255);text-transform:none;">@curiouscoding.nl</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:0.7rem;font-weight:normal;color:grey;margin-top:0.5rem">SEA 2025, July 24, Venice</h2>
 # #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/bmilab.svg" style="position:absolute;bottom:6.5%%;left:2%%;width:30%%"></img>
-# #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%%;right:33%%;width:30%%"></img>
-#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/slides/ptrhash" style="position:absolute;bottom:3.8%%;right:7%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/slides/ptrhash</a>
+#+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%%;left:0%%;width:20%%"></img>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/papers/ptrhash.pdf" style="position:absolute;bottom:9.8%%;right:10%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/papers/ptrhash.pdf</a>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/slides/ptrhash" style="position:absolute;bottom:3.8%%;right:10%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/slides/ptrhash</a>
 
 * Hashing
 :PROPERTIES:
@@ -34,7 +37,7 @@
 :END:
 
 
-** A set of keys
+** A set of $n$ keys
 :PROPERTIES:
 :CUSTOM_ID: h-keys
 :END:
@@ -81,10 +84,35 @@ Given a set of $n$ keys $K\subseteq \mathbb K$, build a function $h$ satisfying
 
 #+attr_reveal: :frag appear
 Goals, in this order:
-#+attr_reveal: :frag (appear)
+#+attr_reveal: :frag appear
 - $h$ is fast to evaluate,
 - $h$ is fast to construct,
 - $h$ takes little memory to store.
+
+* Previous & parallel work
+:PROPERTIES:
+:CUSTOM_ID: prev-work
+:END:
+- FCH: [cite/t:@fch]
+- CHD: [cite/t:@chd]
+
+-----
+
+- PTHash: [cite/t:@pthash]
+- PHOBIC: [cite/t:@phobic]
+
+-----
+
+- PHast: [cite/t:@phast]
+- Consensus: [cite/t:@consensus]
+
+- Review: [cite/t:@mphf-survey]
+
+$$
+\newcommand{\lo}{\mathsf{lo}}
+\newcommand{\hi}{\mathsf{hi}}
+$$
+
 
 ** Naive solution: try seeded hashes
 :PROPERTIES:
@@ -185,10 +213,209 @@ Goals, in this order:
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/incremental-10.svg
 [[file:figs/incremental-10.svg]]
-
-* Buckets
+** Build $h$ incrementally
 :PROPERTIES:
-:CUSTOM_ID: buckets-after
+:CUSTOM_ID: incremental-11
 :END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/buckets-after.svg
-[[file:figs/buckets-after.svg]]
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-11.svg
+[[file:figs/incremental-11.svg]]
+** Build $h$ incrementally
+:PROPERTIES:
+:CUSTOM_ID: incremental-12
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-12.svg
+[[file:figs/incremental-12.svg]]
+
+* Better: assign buckets from large to small
+:PROPERTIES:
+:CUSTOM_ID: bucket-sort
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-12.svg
+[[file:figs/incremental-12.svg]]
+
+* Skew bucket sizes
+:PROPERTIES:
+:CUSTOM_ID: bucket-sizes
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/bucket-sizes.svg
+[[file:figs/bucket-sizes.svg]]
+
+
+* Query: 1. Hash key
+:PROPERTIES:
+:CUSTOM_ID: query-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-1.svg
+[[file:figs/query-1.svg]]
+
+* Query: 2. Lookup bucket
+:PROPERTIES:
+:CUSTOM_ID: query-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-2.svg
+[[file:figs/query-2.svg]]
+
+* Query: 3. Compute slot
+:PROPERTIES:
+:CUSTOM_ID: query-3
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-3.svg
+[[file:figs/query-3.svg]]
+
+
+* Remapping: avoiding the hard part
+:PROPERTIES:
+:CUSTOM_ID: remap-0
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/incremental-12.svg
+[[file:figs/incremental-12.svg]]
+
+
+** Remapping: add $1\%$ extra /slots/
+:PROPERTIES:
+:CUSTOM_ID: remap-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/remap-1.svg
+[[file:figs/remap-1.svg]]
+
+** Remapping: add $1\%$ extra /slots/
+:PROPERTIES:
+:CUSTOM_ID: remap-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/remap-2.svg
+[[file:figs/remap-2.svg]]
+
+** Remapping: map extra slots back
+:PROPERTIES:
+:CUSTOM_ID: remap-3
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/remap-3.svg
+[[file:figs/remap-3.svg]]
+
+
+** Remapping: map extra slots back
+:PROPERTIES:
+:CUSTOM_ID: remap-4
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/remap-4.svg
+[[file:figs/remap-4.svg]]
+
+* PTHash
+:PROPERTIES:
+:CUSTOM_ID: dictionary
+:END:
+
+- Iterate seed values (/pilots/) until a hit is found.
+- Dictionary compression to handle large values.
+
+#+attr_html: :class large :style height:400px;top:700px :src /ox-hugo/dictionary.svg
+[[file:figs/dictionary.svg]]
+
+
+* New: Fixed 8-bit pilots & Cuckoo Hashing
+:PROPERTIES:
+:CUSTOM_ID: cuckoo
+:END:
+- "Inline" 8-bit pilots for fast lookup
+- Handle impossible buckets by evicting others
+  - When none of the $2^8=256$ seeds are collision free, choose the one with
+    minimal number of collisions, and break ties towards evicting small buckets.
+
+<no animation here :(>
+
+* New: $\varepsilon$ cost sharding
+:PROPERTIES:
+:CUSTOM_ID: sharding
+:END:
+
+TODO: FIGURE
+
+* Queries: batching & prefetching
+:PROPERTIES:
+:CUSTOM_ID: batching-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/batching-1.svg
+[[file:figs/batching-1.svg]]
+* Queries: batching & prefetching
+:PROPERTIES:
+:CUSTOM_ID: batching-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/batching-2.svg
+[[file:figs/batching-2.svg]]
+
+* Simple operations
+:PROPERTIES:
+:CUSTOM_ID: simple-ops
+:END:
+- Hashing via
+   $$h(x) = \lo(C\cdot x) = (C\cdot x)\mod 2^{64}.$$
+- Quadratic bucket function
+  $$\gamma(x) = \hi(x\cdot x) = \lfloor x^2/2^{64}\rfloor.$$
+- Use fastmod for $\mod n$
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/overview.drawio.svg
+[[file:figs/overview.drawio.svg]]
+
+* Results
+:PROPERTIES:
+:CUSTOM_ID: results
+:END:
+
+** Construction time vs. size
+:PROPERTIES:
+:CUSTOM_ID: time-vs-size
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/size.svg
+[[file:plots/size.svg]]
+
+** Parameters
+:PROPERTIES:
+:CUSTOM_ID: parameters
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/table1.png
+[[file:table1.png]]
+
+** Comparison
+:PROPERTIES:
+:CUSTOM_ID: comparison
+:END:
+
+#+attr_html: :class large :style height:100%;left:60%;top:48% :src /ox-hugo/table2.png
+[[file:table2.png]]
+
+** Batching & Prefetching
+:PROPERTIES:
+:CUSTOM_ID: results-prefetching
+:END:
+#+attr_html: :class large :style height:100% :src /ox-hugo/query_batching.svg
+[[file:query_batching.svg]]
+
+** Multithreading
+:PROPERTIES:
+:CUSTOM_ID: results-multithreading
+:END:
+#+attr_html: :class large :style height:100% :src /ox-hugo/query_throughput.svg
+[[file:query_throughput.svg]]
+
+* Conclusions
+:PROPERTIES:
+:CUSTOM_ID: conclusion
+:END:
+- Simple $\implies$ fast
+- *Partition* data into cache-sized chunks
+- *Batching* & *prefetching* for max throughput
+
+* Brought to you by
+:PROPERTIES:
+:CUSTOM_ID: the-end
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/ptr.jpg
+[[file:ptr.jpg]]
