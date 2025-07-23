@@ -31,7 +31,7 @@
 #+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/papers/ptrhash.pdf" style="position:absolute;bottom:9.8%%;right:10%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/papers/ptrhash.pdf</a>
 #+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/slides/ptrhash" style="position:absolute;bottom:3.8%%;right:10%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/slides/ptrhash</a>
 
-* Hashing
+* Minimal Perfect Hash Functions
 :PROPERTIES:
 :CUSTOM_ID: hashing
 :END:
@@ -78,16 +78,22 @@
 :END:
 
 Given a set of $n$ keys $K\subseteq \mathbb K$, build a function $h$ satisfying
-- $h(K) = \{0, \dots, n-1\}$, i.e., $h$ is /minimal & perfect/.
+- $h(K) = \{0, \dots, n-1\}$:  $h$ is /minimal & perfect/.
 
- \\
+-----
 
-#+attr_reveal: :frag appear
-Goals, in this order:
-#+attr_reveal: :frag appear
-- $h$ is fast to evaluate,
-- $h$ is fast to construct,
-- $h$ takes little memory to store.
+#+attr_reveal: :frag t :frag_idx 2
+Why? Array of $n$ values as space-efficient value store.
+
+#+attr_reveal: :frag t :frag_idx 2
+Solutions take $\log_2(e) {=} 1.443$ to $3$ bits/key.
+
+#+attr_reveal: :frag t :frag_idx 2
+Goals of PtrHash:
+#+attr_reveal: :frag t :frag_idx 2
+- at most 3 bits/key (you probably store ≥16 bit values anyway),
+- fast to evaluate,
+- fast to construct.
 
 * Previous & parallel work
 :PROPERTIES:
@@ -106,7 +112,7 @@ Goals, in this order:
 - PHast: [cite/t:@phast]
 - Consensus: [cite/t:@consensus]
 
-- Review: [cite/t:@mphf-survey]
+- Survey: [cite/t:@mphf-survey]
 
 $$
 \newcommand{\lo}{\mathsf{lo}}
@@ -114,37 +120,32 @@ $$
 $$
 
 
-** Naive solution: try seeded hashes
+** Naive: try seeded hashes
 :PROPERTIES:
 :CUSTOM_ID: n-1
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/n-1.svg
 [[file:figs/n-1.svg]]
 
-** Naive solution: try seeded hashes
+** Naive: try seeded hashes
 :PROPERTIES:
 :CUSTOM_ID: n-2
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/n-2.svg
 [[file:figs/n-2.svg]]
 
-** Naive solution: try seeded hashes
+** Naive: try seeded hashes
 :PROPERTIES:
 :CUSTOM_ID: n-3
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/n-3.svg
 [[file:figs/n-3.svg]]
-** Naive solution: $n! / n^n\approx e^n$ tries, $n\cdot\log_2 e$ bits
+** Naive: $n^n / n!\approx e^n$ tries, $n\cdot\log_2 e$ bits
 :PROPERTIES:
 :CUSTOM_ID: n-4
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/n-4.svg
 [[file:figs/n-4.svg]]
-
-* Problem: each seed is a completely new hash
-:PROPERTIES:
-:CUSTOM_ID: naive-problem
-:END:
 
 * Build $h$ incrementally using buckets
 :PROPERTIES:
@@ -312,14 +313,22 @@ $$
 [[file:figs/dictionary.svg]]
 
 
-* New: Fixed 8-bit pilots & Cuckoo Hashing
+* PtrHash
 :PROPERTIES:
 :CUSTOM_ID: cuckoo
 :END:
-- "Inline" 8-bit pilots for fast lookup
+#+attr_html: :style color:grey
+- Iterate seed values (/pilots/) until a hit is found.
+- Dictionary compression to handle large values.
+
+-----
+
+- "Inlined" 8-bit pilots for fast lookup
 - Handle impossible buckets by evicting others
   - When none of the $2^8=256$ seeds are collision free, choose the one with
     minimal number of collisions, and break ties towards evicting small buckets.
+  - /Eviction/: "unassign" a seed, and put the bucket back in the queue.
+  - Distributes the entropy from the hard buckets over all seeds.
 
 <no animation here :(>
 
@@ -329,37 +338,6 @@ $$
 :END:
 
 TODO: FIGURE
-
-* Queries: batching & prefetching
-:PROPERTIES:
-:CUSTOM_ID: batching-1
-:END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/batching-1.svg
-[[file:figs/batching-1.svg]]
-* Queries: batching & prefetching
-:PROPERTIES:
-:CUSTOM_ID: batching-2
-:END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/batching-2.svg
-[[file:figs/batching-2.svg]]
-
-* Simple operations
-:PROPERTIES:
-:CUSTOM_ID: simple-ops
-:END:
-- Hashing via
-   $$h(x) = \lo(C\cdot x) = (C\cdot x)\mod 2^{64}.$$
-- Quadratic bucket function
-  $$\gamma(x) = \hi(x\cdot x) = \lfloor x^2/2^{64}\rfloor.$$
-- Use fastmod for $\mod n$
-
-* Overview
-:PROPERTIES:
-:CUSTOM_ID: overview
-:END:
-
-#+attr_html: :class large :style height:800px :src /ox-hugo/overview.drawio.svg
-[[file:figs/overview.drawio.svg]]
 
 * Results
 :PROPERTIES:
@@ -371,24 +349,95 @@ TODO: FIGURE
 :CUSTOM_ID: time-vs-size
 :END:
 
-#+attr_html: :class large :style height:800px :src /ox-hugo/size.svg
+#+attr_html: :class large :style height:1000px;top:55% :src /ox-hugo/size.svg
 [[file:plots/size.svg]]
-
-** Parameters
-:PROPERTIES:
-:CUSTOM_ID: parameters
-:END:
-
-#+attr_html: :class large :style height:800px :src /ox-hugo/table1.png
-[[file:table1.png]]
 
 ** Comparison
 :PROPERTIES:
 :CUSTOM_ID: comparison
 :END:
+- 300M variable length string keys
+\\
 
-#+attr_html: :class large :style height:100%;left:60%;top:48% :src /ox-hugo/table2.png
+- <3 bits/key
+- fastest queries by 2x to 4x
+- also fast construction
+
+#+attr_html: :class large :style height:100%;left:73%;top:48% :src /ox-hugo/table2.png
 [[file:table2.png]]
+
+* Queries: looping, batching, streaming
+:PROPERTIES:
+:CUSTOM_ID: queries
+:END:
+
+** A simple loop
+:PROPERTIES:
+:CUSTOM_ID: simple-loop
+:END:
+
+- Setup: PtrHash on $10^9$ integer keys; 300 MB.
+- Fact: Most queries need uncached data from RAM.
+- Fact: Reading RAM takes 80 ns
+- Question: how long does this take? (>90, ≈80, 40-60, <30)
+
+#+begin_src rust
+for k in keys {
+    h.query(k);
+}
+#+end_src
+
+#+attr_reveal: :frag t :frag_idx 2
+- Answer: 12 ns!
+  - The CPU works on 7 iterations in parallel!
+- To measure latency (TODO):
+
+#+attr_reveal: :frag t :frag_idx 2
+#+begin_src rust
+let mut seed = 0;
+for k in keys {
+    seed ^= h.query(seed ^ k);
+}
+#+end_src
+
+** Batching & Streaming
+:PROPERTIES:
+:CUSTOM_ID: batching
+:END:
+
+Batching:
+#+begin_src rust
+for batch in keys.array_chunks::<32>() {
+    for k in batch {
+        h.prefetch_seed(k);
+    }
+    for k in batch {
+        h.query(k);
+    }
+}
+#+end_src
+
+Streaming:
+#+begin_src rust
+for i in 0..n {
+    h.prefetch_seed(keys[i+32]);
+    h.query(keys[i]);
+}
+#+end_src
+
+** Batching with Prefetching
+:PROPERTIES:
+:CUSTOM_ID: batching-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/batching-1.svg
+[[file:figs/batching-1.svg]]
+** Batching with Prefetching
+:PROPERTIES:
+:CUSTOM_ID: batching-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/batching-2.svg
+[[file:figs/batching-2.svg]]
+
 
 ** Batching & Prefetching
 :PROPERTIES:
@@ -410,12 +459,43 @@ TODO: FIGURE
 :END:
 - Simple $\implies$ fast
 - *Partition* data into cache-sized chunks
-- *Batching* & *prefetching* for max throughput
+- *Streaming* & *prefetching* for max throughput
 
 * Brought to you by
 :PROPERTIES:
 :CUSTOM_ID: the-end
 :END:
 
-#+attr_html: :class large :style height:800px :src /ox-hugo/ptr.jpg
+#+attr_html: :class large :style height:1000px;top:55% :src /ox-hugo/ptr.jpg
 [[file:ptr.jpg]]
+
+* Bonus slides
+:PROPERTIES:
+:CUSTOM_ID: bonus
+:END:
+
+** Simple operations
+:PROPERTIES:
+:CUSTOM_ID: simple-ops
+:END:
+- Hashing via
+   $$h(x) = \lo(C\cdot x) = (C\cdot x)\mod 2^{64}.$$
+- Quadratic bucket function
+  $$\gamma(x) = \hi(x\cdot x) = \lfloor x^2/2^{64}\rfloor.$$
+- Use fastmod for $\mod n$
+
+** Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+#+attr_html: :class large :style height:800px :src /ox-hugo/overview.drawio.svg
+[[file:figs/overview.drawio.svg]]
+
+** Parameters
+:PROPERTIES:
+:CUSTOM_ID: parameters
+:END:
+
+#+attr_html: :class large :style height:1000px;top:55% :src /ox-hugo/table1.png
+[[file:table1.png]]

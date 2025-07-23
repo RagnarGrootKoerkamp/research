@@ -1369,12 +1369,12 @@
 </section>
 <script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
 <section id="slide-hashing">
-<h2 id="hashing">Hashing</h2>
+<h2 id="hashing">Minimal Perfect Hash Functions</h2>
 </section>
 <section id="slide-h-keys">
 <h3 id="h-keys">A set of \(n\) keys</h3>
 
-<div id="orge3eddd2" class="figure">
+<div id="orgd14c87c" class="figure">
 <p><img src="/ox-hugo/h-keys.svg" alt="h-keys.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1382,7 +1382,7 @@
 <section id="slide-h-hash">
 <h3 id="h-hash">A hash function</h3>
 
-<div id="org3dd0dff" class="figure">
+<div id="orgce6120a" class="figure">
 <p><img src="/ox-hugo/h-hash.svg" alt="h-hash.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1390,7 +1390,7 @@
 <section id="slide-h-collision">
 <h3 id="h-collision">A hash function: collisions!</h3>
 
-<div id="org8b333c9" class="figure">
+<div id="org5115ecc" class="figure">
 <p><img src="/ox-hugo/h-collision.svg" alt="h-collision.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1398,7 +1398,7 @@
 <section id="slide-h-injection">
 <h3 id="h-injection">A hash function: injective / <i>perfect</i></h3>
 
-<div id="org30121b4" class="figure">
+<div id="orgb0a19b5" class="figure">
 <p><img src="/ox-hugo/h-injection.svg" alt="h-injection.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1406,7 +1406,7 @@
 <section id="slide-h-bijection">
 <h3 id="h-bijection">A hash function: bijective / <i>minimal &amp; perfect</i></h3>
 
-<div id="orgf23a358" class="figure">
+<div id="org465ae86" class="figure">
 <p><img src="/ox-hugo/h-bijection.svg" alt="h-bijection.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1417,23 +1417,27 @@
 Given a set of \(n\) keys \(K\subseteq \mathbb K\), build a function \(h\) satisfying
 </p>
 <ul>
-<li><p>
-\(h(K) = \{0, \dots, n-1\}\), i.e., \(h\) is <i>minimal &amp; perfect</i>.
-</p>
-
-<p>
-<br />
-</p></li>
+<li>\(h(K) = \{0, \dots, n-1\}\):  \(h\) is <i>minimal &amp; perfect</i>.</li>
 
 </ul>
 
-<p class="fragment appear">
-Goals, in this order:
+<hr />
+
+<p data-fragment-index="2" class="fragment">
+Why? Array of \(n\) values as space-efficient value store.
 </p>
-<ul class="fragment appear">
-<li>\(h\) is fast to evaluate,</li>
-<li>\(h\) is fast to construct,</li>
-<li>\(h\) takes little memory to store.</li>
+
+<p data-fragment-index="2" class="fragment">
+Solutions take \(\log_2(e) {=} 1.443\) to \(3\) bits/key.
+</p>
+
+<p data-fragment-index="2" class="fragment">
+Goals of PtrHash:
+</p>
+<ul data-fragment-index="2" class="fragment">
+<li>at most 3 bits/key (you probably store ≥16 bit values anyway),</li>
+<li>fast to evaluate,</li>
+<li>fast to construct.</li>
 
 </ul>
 </section>
@@ -1459,7 +1463,7 @@ Goals, in this order:
 <li>PHast: Beling and Sanders (2025)</li>
 <li>Consensus: Lehmann, Sanders, et al. (2025)</li>
 
-<li>Review: Lehmann, Mueller, et al. (2025)</li>
+<li>Survey: Lehmann, Mueller, et al. (2025)</li>
 
 </ul>
 
@@ -1471,44 +1475,41 @@ Goals, in this order:
 </p>
 </section>
 <section id="slide-n-1">
-<h3 id="n-1">Naive solution: try seeded hashes</h3>
+<h3 id="n-1">Naive: try seeded hashes</h3>
 
-<div id="orgbdeda53" class="figure">
+<div id="orgc2e71a3" class="figure">
 <p><img src="/ox-hugo/n-1.svg" alt="n-1.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
 <section id="slide-n-2">
-<h3 id="n-2">Naive solution: try seeded hashes</h3>
+<h3 id="n-2">Naive: try seeded hashes</h3>
 
-<div id="org92dc37d" class="figure">
+<div id="org0334ad9" class="figure">
 <p><img src="/ox-hugo/n-2.svg" alt="n-2.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
 <section id="slide-n-3">
-<h3 id="n-3">Naive solution: try seeded hashes</h3>
+<h3 id="n-3">Naive: try seeded hashes</h3>
 
-<div id="org26fb62a" class="figure">
+<div id="org2a647fd" class="figure">
 <p><img src="/ox-hugo/n-3.svg" alt="n-3.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
 <section id="slide-n-4">
-<h3 id="n-4">Naive solution: \(n! / n^n\approx e^n\) tries, \(n\cdot\log_2 e\) bits</h3>
+<h3 id="n-4">Naive: \(n^n / n!\approx e^n\) tries, \(n\cdot\log_2 e\) bits</h3>
 
-<div id="org2ebea2a" class="figure">
+<div id="org3a77bb5" class="figure">
 <p><img src="/ox-hugo/n-4.svg" alt="n-4.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
-<section id="slide-naive-problem">
-<h2 id="naive-problem">Problem: each seed is a completely new hash</h2>
-</section>
 <section id="slide-buckets-before">
 <h2 id="buckets-before">Build \(h\) incrementally using buckets</h2>
 
-<div id="org16fee47" class="figure">
+<div id="org3f1d695" class="figure">
 <p><img src="/ox-hugo/buckets-before.svg" alt="buckets-before.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1516,7 +1517,7 @@ Goals, in this order:
 <section id="slide-incremental-1">
 <h3 id="incremental-1">Build \(h\) incrementally</h3>
 
-<div id="org02bc3fd" class="figure">
+<div id="org3fc56e2" class="figure">
 <p><img src="/ox-hugo/incremental-1.svg" alt="incremental-1.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1524,7 +1525,7 @@ Goals, in this order:
 <section id="slide-incremental-2">
 <h3 id="incremental-2">Build \(h\) incrementally</h3>
 
-<div id="org22a717a" class="figure">
+<div id="orge5f0def" class="figure">
 <p><img src="/ox-hugo/incremental-2.svg" alt="incremental-2.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1532,7 +1533,7 @@ Goals, in this order:
 <section id="slide-incremental-3">
 <h3 id="incremental-3">Build \(h\) incrementally</h3>
 
-<div id="orgcb8e22b" class="figure">
+<div id="org5c398ee" class="figure">
 <p><img src="/ox-hugo/incremental-3.svg" alt="incremental-3.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1540,7 +1541,7 @@ Goals, in this order:
 <section id="slide-incremental-4">
 <h3 id="incremental-4">Build \(h\) incrementally</h3>
 
-<div id="org3399f2e" class="figure">
+<div id="orgac3988b" class="figure">
 <p><img src="/ox-hugo/incremental-4.svg" alt="incremental-4.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1548,7 +1549,7 @@ Goals, in this order:
 <section id="slide-incremental-5">
 <h3 id="incremental-5">Build \(h\) incrementally</h3>
 
-<div id="org263ab05" class="figure">
+<div id="orgbb80111" class="figure">
 <p><img src="/ox-hugo/incremental-5.svg" alt="incremental-5.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1556,7 +1557,7 @@ Goals, in this order:
 <section id="slide-incremental-6">
 <h3 id="incremental-6">Build \(h\) incrementally</h3>
 
-<div id="org2bb043d" class="figure">
+<div id="orgd90bf5c" class="figure">
 <p><img src="/ox-hugo/incremental-6.svg" alt="incremental-6.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1564,7 +1565,7 @@ Goals, in this order:
 <section id="slide-incremental-7">
 <h3 id="incremental-7">Build \(h\) incrementally</h3>
 
-<div id="org5cebf7b" class="figure">
+<div id="orgd4c98fa" class="figure">
 <p><img src="/ox-hugo/incremental-7.svg" alt="incremental-7.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1572,7 +1573,7 @@ Goals, in this order:
 <section id="slide-incremental-8">
 <h3 id="incremental-8">Build \(h\) incrementally</h3>
 
-<div id="orgaf9b27e" class="figure">
+<div id="orgeb41acf" class="figure">
 <p><img src="/ox-hugo/incremental-8.svg" alt="incremental-8.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1580,7 +1581,7 @@ Goals, in this order:
 <section id="slide-incremental-9">
 <h3 id="incremental-9">Build \(h\) incrementally</h3>
 
-<div id="org552c347" class="figure">
+<div id="org90e2c75" class="figure">
 <p><img src="/ox-hugo/incremental-9.svg" alt="incremental-9.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1588,7 +1589,7 @@ Goals, in this order:
 <section id="slide-incremental-10">
 <h3 id="incremental-10">Build \(h\) incrementally</h3>
 
-<div id="org8451279" class="figure">
+<div id="org02c9a11" class="figure">
 <p><img src="/ox-hugo/incremental-10.svg" alt="incremental-10.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1596,7 +1597,7 @@ Goals, in this order:
 <section id="slide-incremental-11">
 <h3 id="incremental-11">Build \(h\) incrementally</h3>
 
-<div id="orgdf1203a" class="figure">
+<div id="org1de0fdc" class="figure">
 <p><img src="/ox-hugo/incremental-11.svg" alt="incremental-11.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1604,7 +1605,7 @@ Goals, in this order:
 <section id="slide-incremental-12">
 <h3 id="incremental-12">Build \(h\) incrementally</h3>
 
-<div id="org4c358e2" class="figure">
+<div id="org71be64f" class="figure">
 <p><img src="/ox-hugo/incremental-12.svg" alt="incremental-12.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1612,7 +1613,7 @@ Goals, in this order:
 <section id="slide-bucket-sort">
 <h2 id="bucket-sort">Better: assign buckets from large to small</h2>
 
-<div id="orgc35e8e1" class="figure">
+<div id="org12a32d1" class="figure">
 <p><img src="/ox-hugo/incremental-12.svg" alt="incremental-12.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1620,7 +1621,7 @@ Goals, in this order:
 <section id="slide-bucket-sizes">
 <h2 id="bucket-sizes">Skew bucket sizes</h2>
 
-<div id="orgc4bd6b9" class="figure">
+<div id="org5faff4c" class="figure">
 <p><img src="/ox-hugo/bucket-sizes.svg" alt="bucket-sizes.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1628,7 +1629,7 @@ Goals, in this order:
 <section id="slide-query-1">
 <h2 id="query-1">Query: 1. Hash key</h2>
 
-<div id="org621c2b0" class="figure">
+<div id="org94dada5" class="figure">
 <p><img src="/ox-hugo/query-1.svg" alt="query-1.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1636,7 +1637,7 @@ Goals, in this order:
 <section id="slide-query-2">
 <h2 id="query-2">Query: 2. Lookup bucket</h2>
 
-<div id="org7034a85" class="figure">
+<div id="orgbc21240" class="figure">
 <p><img src="/ox-hugo/query-2.svg" alt="query-2.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1644,7 +1645,7 @@ Goals, in this order:
 <section id="slide-query-3">
 <h2 id="query-3">Query: 3. Compute slot</h2>
 
-<div id="orgf86762e" class="figure">
+<div id="orgf7b4cc6" class="figure">
 <p><img src="/ox-hugo/query-3.svg" alt="query-3.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1652,7 +1653,7 @@ Goals, in this order:
 <section id="slide-remap-0">
 <h2 id="remap-0">Remapping: avoiding the hard part</h2>
 
-<div id="org3fc3862" class="figure">
+<div id="org3703b1a" class="figure">
 <p><img src="/ox-hugo/incremental-12.svg" alt="incremental-12.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1660,7 +1661,7 @@ Goals, in this order:
 <section id="slide-remap-1">
 <h3 id="remap-1">Remapping: add \(1\%\) extra <i>slots</i></h3>
 
-<div id="org866665b" class="figure">
+<div id="org06d2122" class="figure">
 <p><img src="/ox-hugo/remap-1.svg" alt="remap-1.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1668,7 +1669,7 @@ Goals, in this order:
 <section id="slide-remap-2">
 <h3 id="remap-2">Remapping: add \(1\%\) extra <i>slots</i></h3>
 
-<div id="org1762ae3" class="figure">
+<div id="orgc1b7583" class="figure">
 <p><img src="/ox-hugo/remap-2.svg" alt="remap-2.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1676,7 +1677,7 @@ Goals, in this order:
 <section id="slide-remap-3">
 <h3 id="remap-3">Remapping: map extra slots back</h3>
 
-<div id="org3902b96" class="figure">
+<div id="org5238afa" class="figure">
 <p><img src="/ox-hugo/remap-3.svg" alt="remap-3.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1684,7 +1685,7 @@ Goals, in this order:
 <section id="slide-remap-4">
 <h3 id="remap-4">Remapping: map extra slots back</h3>
 
-<div id="org23f99b2" class="figure">
+<div id="orgff8e6ea" class="figure">
 <p><img src="/ox-hugo/remap-4.svg" alt="remap-4.svg" class="large" style="height:800px" />
 </p>
 </div>
@@ -1698,19 +1699,29 @@ Goals, in this order:
 </ul>
 
 
-<div id="org7df3e40" class="figure">
+<div id="orgf439500" class="figure">
 <p><img src="/ox-hugo/dictionary.svg" alt="dictionary.svg" class="large" style="height:400px;top:700px" />
 </p>
 </div>
 </section>
 <section id="slide-cuckoo">
-<h2 id="cuckoo">New: Fixed 8-bit pilots &amp; Cuckoo Hashing</h2>
+<h2 id="cuckoo">PtrHash</h2>
+<ul style="color:grey">
+<li>Iterate seed values (<i>pilots</i>) until a hit is found.</li>
+<li>Dictionary compression to handle large values.</li>
+
+</ul>
+
+<hr />
+
 <ul>
-<li>&ldquo;Inline&rdquo; 8-bit pilots for fast lookup</li>
+<li>&ldquo;Inlined&rdquo; 8-bit pilots for fast lookup</li>
 <li>Handle impossible buckets by evicting others
 <ul>
 <li>When none of the \(2^8=256\) seeds are collision free, choose the one with
 minimal number of collisions, and break ties towards evicting small buckets.</li>
+<li><i>Eviction</i>: &ldquo;unassign&rdquo; a seed, and put the bucket back in the queue.</li>
+<li>Distributes the entropy from the hard buckets over all seeds.</li>
 
 </ul></li>
 
@@ -1726,24 +1737,164 @@ minimal number of collisions, and break ties towards evicting small buckets.</li
 TODO: FIGURE
 </p>
 </section>
-<section id="slide-batching-1">
-<h2 id="batching-1">Queries: batching &amp; prefetching</h2>
+<section id="slide-results">
+<h2 id="results">Results</h2>
+</section>
+<section id="slide-time-vs-size">
+<h3 id="time-vs-size">Construction time vs. size</h3>
 
-<div id="org17ce665" class="figure">
+<div id="org59913dd" class="figure">
+<p><img src="/ox-hugo/size.svg" alt="size.svg" class="large" style="height:1000px;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-comparison">
+<h3 id="comparison">Comparison</h3>
+<ul>
+<li>300M variable length string keys</li>
+
+</ul>
+<p>
+<br />
+</p>
+
+<ul>
+<li>&lt;3 bits/key</li>
+<li>fastest queries by 2x to 4x</li>
+<li>also fast construction</li>
+
+</ul>
+
+
+<div id="orge1a3d66" class="figure">
+<p><img src="/ox-hugo/table2.png" alt="table2.png" class="large" style="height:100%;left:73%;top:48%" />
+</p>
+</div>
+</section>
+<section id="slide-queries">
+<h2 id="queries">Queries: looping, batching, streaming</h2>
+</section>
+<section id="slide-simple-loop">
+<h3 id="simple-loop">A simple loop</h3>
+<ul>
+<li>Setup: PtrHash on \(10^9\) integer keys; 300 MB.</li>
+<li>Fact: Most queries need uncached data from RAM.</li>
+<li>Fact: Reading RAM takes 80 ns</li>
+<li>Question: how long does this take? (&gt;90, ≈80, 40-60, &lt;30)</li>
+
+</ul>
+
+<div class="org-src-container">
+
+<pre  class="src src-rust"   ><code trim><span style="color: #51afef;">for</span> <span style="color: #dcaeea;">k</span> <span style="color: #51afef;">in</span> keys {
+    h.query(k);
+}
+</code></pre>
+</div>
+
+<ul data-fragment-index="2" class="fragment">
+<li>Answer: 12 ns!
+<ul>
+<li>The CPU works on 7 iterations in parallel!</li>
+
+</ul></li>
+<li>To measure latency (TODO):</li>
+
+</ul>
+
+<div class="org-src-container">
+
+<pre  class="fragment" data-fragment-index="2"   ><code trim><span style="color: #51afef;">let</span> <span style="color: #51afef;">mut</span> <span style="color: #dcaeea;">seed</span> = 0;
+<span style="color: #51afef;">for</span> <span style="color: #dcaeea;">k</span> <span style="color: #51afef;">in</span> keys {
+    seed ^= h.query(seed ^ k);
+}
+</code></pre>
+</div>
+</section>
+<section id="slide-batching">
+<h3 id="batching">Batching &amp; Streaming</h3>
+<p>
+Batching:
+</p>
+<div class="org-src-container">
+
+<pre  class="src src-rust"   ><code trim><span style="color: #51afef;">for</span> <span style="color: #dcaeea;">batch</span> <span style="color: #51afef;">in</span> keys.array_chunks::&lt;32&gt;() {
+    <span style="color: #51afef;">for</span> <span style="color: #dcaeea;">k</span> <span style="color: #51afef;">in</span> batch {
+        h.prefetch_seed(k);
+    }
+    <span style="color: #51afef;">for</span> <span style="color: #dcaeea;">k</span> <span style="color: #51afef;">in</span> batch {
+        h.query(k);
+    }
+}
+</code></pre>
+</div>
+
+<p>
+Streaming:
+</p>
+<div class="org-src-container">
+
+<pre  class="src src-rust"   ><code trim><span style="color: #51afef;">for</span> <span style="color: #dcaeea;">i</span> <span style="color: #51afef;">in</span> 0..n {
+    h.prefetch_seed(keys[i+32]);
+    h.query(keys[i]);
+}
+</code></pre>
+</div>
+</section>
+<section id="slide-batching-1">
+<h3 id="batching-1">Batching with Prefetching</h3>
+
+<div id="org88ab029" class="figure">
 <p><img src="/ox-hugo/batching-1.svg" alt="batching-1.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
 <section id="slide-batching-2">
-<h2 id="batching-2">Queries: batching &amp; prefetching</h2>
+<h3 id="batching-2">Batching with Prefetching</h3>
 
-<div id="orgc3c434a" class="figure">
+<div id="org8d1326d" class="figure">
 <p><img src="/ox-hugo/batching-2.svg" alt="batching-2.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
+<section id="slide-results-prefetching">
+<h3 id="results-prefetching">Batching &amp; Prefetching</h3>
+
+<div id="org9d5dadc" class="figure">
+<p><img src="/ox-hugo/query_batching.svg" alt="query_batching.svg" class="large" style="height:100%" />
+</p>
+</div>
+</section>
+<section id="slide-results-multithreading">
+<h3 id="results-multithreading">Multithreading</h3>
+
+<div id="org3338452" class="figure">
+<p><img src="/ox-hugo/query_throughput.svg" alt="query_throughput.svg" class="large" style="height:100%" />
+</p>
+</div>
+</section>
+<section id="slide-conclusion">
+<h2 id="conclusion">Conclusions</h2>
+<ul>
+<li>Simple \(\implies\) fast</li>
+<li><b>Partition</b> data into cache-sized chunks</li>
+<li><b>Streaming</b> &amp; <b>prefetching</b> for max throughput</li>
+
+</ul>
+</section>
+<section id="slide-the-end">
+<h2 id="the-end">Brought to you by</h2>
+
+<div id="orgd16094e" class="figure">
+<p><img src="/ox-hugo/ptr.jpg" alt="ptr.jpg" class="large" style="height:1000px;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-bonus">
+<h2 id="bonus">Bonus slides</h2>
+</section>
 <section id="slide-simple-ops">
-<h2 id="simple-ops">Simple operations</h2>
+<h3 id="simple-ops">Simple operations</h3>
 <ul>
 <li>Hashing via
 \[h(x) = \lo(C\cdot x) = (C\cdot x)\mod 2^{64}.\]</li>
@@ -1754,70 +1905,18 @@ TODO: FIGURE
 </ul>
 </section>
 <section id="slide-overview">
-<h2 id="overview">Overview</h2>
+<h3 id="overview">Overview</h3>
 
-<div id="orge361762" class="figure">
+<div id="org26066f2" class="figure">
 <p><img src="/ox-hugo/overview.drawio.svg" alt="overview.drawio.svg" class="large" style="height:800px" />
-</p>
-</div>
-</section>
-<section id="slide-results">
-<h2 id="results">Results</h2>
-</section>
-<section id="slide-time-vs-size">
-<h3 id="time-vs-size">Construction time vs. size</h3>
-
-<div id="org881d403" class="figure">
-<p><img src="/ox-hugo/size.svg" alt="size.svg" class="large" style="height:800px" />
 </p>
 </div>
 </section>
 <section id="slide-parameters">
 <h3 id="parameters">Parameters</h3>
 
-<div id="orgbcfc07f" class="figure">
-<p><img src="/ox-hugo/table1.png" alt="table1.png" class="large" style="height:800px" />
-</p>
-</div>
-</section>
-<section id="slide-comparison">
-<h3 id="comparison">Comparison</h3>
-
-<div id="orgebf1555" class="figure">
-<p><img src="/ox-hugo/table2.png" alt="table2.png" class="large" style="height:100%;left:60%;top:48%" />
-</p>
-</div>
-</section>
-<section id="slide-results-prefetching">
-<h3 id="results-prefetching">Batching &amp; Prefetching</h3>
-
-<div id="org201daee" class="figure">
-<p><img src="/ox-hugo/query_batching.svg" alt="query_batching.svg" class="large" style="height:100%" />
-</p>
-</div>
-</section>
-<section id="slide-results-multithreading">
-<h3 id="results-multithreading">Multithreading</h3>
-
-<div id="org10782aa" class="figure">
-<p><img src="/ox-hugo/query_throughput.svg" alt="query_throughput.svg" class="large" style="height:100%" />
-</p>
-</div>
-</section>
-<section id="slide-conclusion">
-<h2 id="conclusion">Conclusions</h2>
-<ul>
-<li>Simple \(\implies\) fast</li>
-<li><b>Partition</b> data into cache-sized chunks</li>
-<li><b>Batching</b> &amp; <b>prefetching</b> for max throughput</li>
-
-</ul>
-</section>
-<section id="slide-the-end">
-<h2 id="the-end">Brought to you by</h2>
-
-<div id="orga07cb38" class="figure">
-<p><img src="/ox-hugo/ptr.jpg" alt="ptr.jpg" class="large" style="height:800px" />
+<div id="org9ea3f2f" class="figure">
+<p><img src="/ox-hugo/table1.png" alt="table1.png" class="large" style="height:1000px;top:55%" />
 </p>
 </div>
 </section>
