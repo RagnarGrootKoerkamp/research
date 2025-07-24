@@ -147,7 +147,12 @@ $$
 #+attr_html: :class large :style height:800px :src /ox-hugo/n-4.svg
 [[file:figs/n-4.svg]]
 
-* Build $h$ incrementally using buckets
+* Construction
+:PROPERTIES:
+:CUSTOM_ID: construction
+:END:
+
+** Build $h$ incrementally using buckets
 :PROPERTIES:
 :CUSTOM_ID: buckets-before
 :END:
@@ -227,7 +232,7 @@ $$
 #+attr_html: :class large :style height:800px :src /ox-hugo/incremental-12.svg
 [[file:figs/incremental-12.svg]]
 
-* Better: assign buckets from large to small
+** Better: assign buckets from large to small
 :PROPERTIES:
 :CUSTOM_ID: bucket-sort
 :END:
@@ -240,28 +245,6 @@ $$
 :END:
 #+attr_html: :class large :style height:800px :src /ox-hugo/bucket-sizes.svg
 [[file:figs/bucket-sizes.svg]]
-
-
-* Query: 1. Hash key
-:PROPERTIES:
-:CUSTOM_ID: query-1
-:END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/query-1.svg
-[[file:figs/query-1.svg]]
-
-* Query: 2. Lookup bucket
-:PROPERTIES:
-:CUSTOM_ID: query-2
-:END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/query-2.svg
-[[file:figs/query-2.svg]]
-
-* Query: 3. Compute slot
-:PROPERTIES:
-:CUSTOM_ID: query-3
-:END:
-#+attr_html: :class large :style height:800px :src /ox-hugo/query-3.svg
-[[file:figs/query-3.svg]]
 
 
 * Remapping: avoiding the hard part
@@ -301,6 +284,33 @@ $$
 #+attr_html: :class large :style height:800px :src /ox-hugo/remap-4.svg
 [[file:figs/remap-4.svg]]
 
+* Queries
+:PROPERTIES:
+:CUSTOM_ID: queries
+:END:
+
+** Query: 1. Hash key
+:PROPERTIES:
+:CUSTOM_ID: query-1
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-1.svg
+[[file:figs/query-1.svg]]
+
+** Query: 2. Lookup bucket
+:PROPERTIES:
+:CUSTOM_ID: query-2
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-2.svg
+[[file:figs/query-2.svg]]
+
+** Query: 3. Compute slot
+:PROPERTIES:
+:CUSTOM_ID: query-3
+:END:
+#+attr_html: :class large :style height:800px :src /ox-hugo/query-3.svg
+[[file:figs/query-3.svg]]
+
+
 * PTHash
 :PROPERTIES:
 :CUSTOM_ID: dictionary
@@ -332,12 +342,30 @@ $$
 
 <no animation here :(>
 
-* New: $\varepsilon$ cost sharding
+* $\varepsilon$ cost sharding
 :PROPERTIES:
 :CUSTOM_ID: sharding
 :END:
 
-TODO: FIGURE
+
+- $S$ shards
+- PTHash, PHOBIC: shards of expected size $a = n/S$, real size $a_i$
+  - $a / \lambda$ buckets per shard, $a_i/\alpha$ slots per shard
+  - Store shard offsets
+- PtrHash: $a / \lambda$ buckets per shard, $a /\alpha$ slots per shard
+  - Direct indexing
+- Shard size follows from Sebastiano's formula
+
+* PtrHash with array vs VFUNC
+:PROPERTIES:
+:CUSTOM_ID: vfunc
+:END:
+- VFUNC, storing $b$ bit values:
+  - 10% memory overhead: $b n + 0.1 b n$
+  - 3 independent/parallel reads
+- PtrHash:
+  - 3 bits overhead: $b n + 3n$
+  - 2 dependent/sequential reads
 
 * Results
 :PROPERTIES:
@@ -390,7 +418,7 @@ for k in keys {
 #+attr_reveal: :frag t :frag_idx 2
 - Answer: 12 ns!
   - The CPU works on 7 iterations in parallel!
-- To measure latency (TODO):
+- To measure latency:
 
 #+attr_reveal: :frag t :frag_idx 2
 #+begin_src rust
