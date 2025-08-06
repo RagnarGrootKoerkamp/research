@@ -1,0 +1,139 @@
+#+title: Chunking for Fasta Parsing
+#+filetags: hpc note
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2025-08-06 Wed>
+
+This is a quick note on some thoughts & experiments on fasta parsing, alongside [[https://github.com/RagnarGrootKoerkamp/fasta-parsing-playground][github:RagnarGrootKoerkamp/fasta-parsing-playground]].
+
+It's a common complaint these days that Fasta parsing is slow.
+A common parser is Needletail ([[https://github.com/onecodex/needletail][github]]), which builds on seq_io ([[https://github.com/markschl/seq_io][github]]).
+Another recent one is paraseq ([[https://github.com/noamteyssier/paraseq][github]]).
+
+Paraseq helps the user by providing an interface for parallel processing of
+reads, see eg [[https://github.com/noamteyssier/paraseq/blob/main/examples/multi_parallel.rs#L33][this example]].
+Unfortunately, this still has a bottleneck: while the users processing of reads
+is multi threaded, the parsing itself is still single threaded.
+
+* Minimizing critical sections
+
+In [cite/t:@scaling-aligners], some approaches are discussed for FASTQ parsing.
+1. Deferred parsing: search the end of the current block of 4 lines inside a
+   critical section, and then parse those in separate threads.
+2. Batch deferred: read $4N$ lines, and then parse those. This reduces
+   contention on the locks.
+3. Block deferred: read $B$ bytes, assuming that this exactly matches a single
+   record. This can be done by padding records with spaces to give them all the
+   same size, but is more of a hypothetical best case.
+
+* RabbitFx: chunking
+
+RabbitFx [cite:@rabbitfx] ([[https://github.com/RabbitBio/RabbitFX][github]]) is a recent parser written in C++ that does something
+new: it splits the entire input file into fixed size /chunks/ (of 8 MB by default) that are
+distributed those over the threads.
+Reads that cross chunk boundaries store a link to the next chunk:
+
+#+caption: The chunking & linking of RabbitFx [cite:@rabbitfx].
+#+attr_html: :class inset
+[[file:./rabbitfx-chunking.png]]
+
+The RabbitFx paper then reimplements some basic algorithms on top of this parser and should
+significantly higher throughput, reaching up to 2.4 GB/s[fn::I haven't looked
+into the details of their code, but this really is not so fast. As a baseline,
+[[../simd-minimizers/simd-minimizers.org][SimdMinimizers]] computes minimizers at over 500 MB/s on a single core, and that
+is much more involved that simply counting the number of A/C/G/T characters.]
+for counting bases on a
+server with two 20-core CPUs, compared to FQFeeder's 740 MS/s.
+
+Unfortunately, all of this doesn't work well with gzipped input which requires
+sequential unzipping. But anyway, I was curious to see how much perf this would
+give in practice. This can be used as an argument why single-block gzipping is bad.
+
+
+* Different chunking
+
+In my [[../1brc/1brc.org][1brc post]], I took a different approach. When there are $t$ threads, simply
+partition the input file into $t$ non-overlapping chunks, and give one chunk to
+each thread. Then there might be some reads that cross chunk boundaries, but
+this is not a problem: each thread first finds the start of the first record
+(the first =>= character), and then processes things from there. Each thread
+ends processing when the next =>= character it runs into is in the next chunk
+(or the end of the file is reached).
+
+#+caption: My proposed chunking: each thread just takes its own slice of the input file and does its own thing. The middle of the three threads processes the reads shown in yellow.
+#+attr_html: :class inset large
+[[file:./chunking.svg]]
+
+In this model, the parsing does not require any synchronization /at all/!
+
+In the code, I simply scan for all =>= characters and then collect a batch of
+reads spanning at least 1 MB. Then I send this to a queue to be picked up by a
+worker thread.[fn::Really the queue isn't needed so much here -- we could just
+pass a callback to a worker function, similar to what paraseq does with the
+map-reduce model. Then, each thread simply processes its own data.]
+In the worker thread, I search the first newline inside each record for the end
+of the header, and the rest is the read itself.
+
+Note that the underlying file is memory mapped, so that accessing it in multiple
+streams is trivial from the code perspective.
+
+* Experiments
+
+I did some experiments both on the =CHM13v2.0.fa= human genome, and a set of
+simulated reads[fn::Download =rsviruses17900.fastq.gz=, unzip, and then convert
+the =.fastq= to a =.fa=.] from [[https://zenodo.org/records/15411280][zenodo]] by Bede Constantinides that are used for
+benchmarking Deacon ([[https://github.com/bede/deacon][github]]).
+
+See the [[https://github.com/RagnarGrootKoerkamp/fasta-parsing-playground][github]] code for the implementation.
+
+=rsviruses17900.fa= is 5.4 GB and has reads of average length 2000 bp, and each
+read is a single line (ie no linebreaks inside records).
+
+Adding RabbitFx to these benchmarks is still TODO, since I don't feel like messing
+with C/C++ bindings at the moment.[fn::I get build errors on the
+=Examples.cpp=. Thanks C++.]
+
+#+caption: Throughput of parsing reads (average len 2000 bp) in GB/s. Note that both needletail and paraseq don't benefit from multiple threads, because I don't do any work on their output.
+#+attr_html: :class small
+| threads | needletail | paraseq |    us |
+|       1 |       6.91 |    5.28 |  7.81 |
+|       2 |       6.95 |    5.09 | 12.46 |
+|       3 |       7.04 |    4.97 | 15.26 |
+|       4 |       6.81 |    4.63 | 17.27 |
+|       5 |       6.84 |    4.70 | 18.32 |
+|       6 |       6.82 |    4.66 | 17.83 |
+
+#+caption: Throughput of human genome in GB/s. Note that the fasta file has linebreaks, and I don't find/strip them.
+#+attr_html: :class small
+| threads | needletail | paraseq |    us |
+|       1 |       2.77 | [[https://github.com/noamteyssier/paraseq/issues/37][bug]] |  8.26 |
+|       2 |       2.80 |    4.01 | 12.24 |
+|       3 |       2.80 |    3.96 | 15.38 |
+|       4 |       2.78 |    4.02 | 16.30 |
+|       5 |       2.80 |    3.92 | 17.08 |
+|       6 |       2.77 |    3.96 | 17.28 |
+
+Needletail nor paraseq only allocate a newline-free record on request, which I
+don't do in this benchmark, but I believe at least needletail does unconditionally
+store the positions of all newlines, and so does slightly more work.
+
+The new method caps out at 17 GB/s, while the peak memory
+transfer rate of my DDR4 RAM[fn::Note that the file is read from RAM, not
+disk/SSD, since it's already cached by the kernel.] is around 23 GB/s, so this
+is not too bad.
+If I drop the fixed 2.6 GHz CPU frequency that I used for the experiments,
+instead I get speeds up to 22.7 GB/s, which is actually very close!
+
+Thus, if the throughput of your code on all threads is more than 2-4 GB/s,
+you might try this technique to avoid file parsing being the point of contention.
+
+* Outlook
+I think this is a neat idea, but probably with limited practical usage, since
+most large inputs will be zipped. And in that case, you may have many input
+files, and it's better to spin up one thread/program per input file, so that
+decompression can be done in parallel.
+
+
+#+print_bibliography:
