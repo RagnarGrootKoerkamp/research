@@ -1,0 +1,448 @@
+#+title: Quickheap: an I/O efficient comparison-based heap
+#+filetags: @results @survey hpc data-structure software draft
+#+OPTIONS: ^:{} num: num:1
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-08-11 Mon>
+
+There was a hackernews [[https://news.ycombinator.com/item?id=44812695][post]] recently on a new single-source shortest path
+algorithm [cite:@sssp], that takes $O(m (\log n)^{2/3})$ time, which is less than
+$O(m + n \log n)$ (the complexity of Dijkstra with Fibonacci heaps with $O(1)$ inserts) when
+$m \leq n (\log n) ^{1/3}$, or equivalently, when the average degree satisfies
+$d=m/n=O((\log n) ^{1/3})$.
+Anyway -- this got me thinking about heaps. Specifically, about how fast we can
+make them.
+
+The bottom line is that there is the /quickheap/ data structure
+[cite:@quickheap] and its improved version [cite:@stronger-quickheaps], and my
+implementation of this ([[https://github.com/ragnargrootkoerkamp/quickheap][github:ragnargrootkoerkamp/quickheap]]) is 2 to 3$\times$
+faster than the other [[https://crates.io/keywords/heap][heaps]]/[[https://crates.io/keywords/priority-queue][priority queues]] from crates.io that I tested.
+
+* Background
+
+** Priority queue
+
+As a quick recap, for the purposes of this post, a /priority queue/ ([[https://en.wikipedia.org/wiki/Priority_queue][wikipedia]])
+is a data structure
+that supports the following two operations:
+- Push (insert) :: Add a value $x$ to the data structure.
+- Pop (extract min) :: Remove and return the /smallest/ value $x$ in the data structure.
+
+Other possible operations include /find min/ (peek), /delete/, and /decrement
+key/, but we will not consider these.
+
+Note: most literature seems to present the min-queue as above, but Wikipedia and
+implementations often use a max-queue, where a pop returns the maximum
+element instead.
+
+** Binary heap
+
+The binary heap ([[https://en.wikipedia.org/wiki/Binary_heap][wikipedia]]) works by using the /Eytzinger layout/, also known as simply the /heap layout/.
+This represents $n$ values as a binary tree that is stored layer by layer.
+If we put the root at index 1, the children of node $i$ are at $2i$ and $2i+1$.
+The /heap invariant/, which makes the tree into a /heap/ ([[https://en.wikipedia.org/wiki/Heap_(data_structure)][wikipedia]]),
+is that each value is at most the value of its two children, which
+implies that the root is the smallest value.
+
+*Push* is implemented by first appending the new value to the array, which adds
+it as the next node in the bottom layer of the tree (or possibly creating a new
+layer). Then, we ensure the invariant is preserved by swapping the new element
+with its parent as long as its larger.
+
+*Pop* is implemented by first extracting the root, and replacing it with the
+last element of the queue. Then, we again ensure the invariant is preserved by
+sifting down: we swap the root with the smaller of its two children as long as needed.
+
+We can see that in the worst case, both these operations take $\lg n =
+\log_2(n)$ steps.
+
+** D-ary heaps
+
+D-ary heaps ([[https://en.wikipedia.org/wiki/D-ary_heap][wikipedia]]) generalize binary heaps so that each node has up to $d$ children.
+Their main benefit is that they have better cache locality, and require fewer
+levels of traversing the tree. The drawback is that sifting down requires
+finding the minimum of $d$ elements rather than just 2, but this is anyway fast
+using some SIMD instructions.
+
+
+** Other heaps
+Other heaps are the /radix heap/ ([[https://en.wikipedia.org/wiki/Radix_heap][wikipedia]], [[https://ssp.impulsetrain.com/radix-heap.html][nice blog explanation]]) [cite:@radix-heap], which implements a /monotone/
+priority queue where the priority of the popped elements may only increase. This
+is for example the case when running Dijkstra's algorithm on a graph with
+non-negative edge weights.
+
+The /sequence heap/ [cite:@sequence-heap] is a relatively involved data
+structure designed specifically for minimizing I/O.
+
+The /cascade heap/ [cite:@cascade-heap] has $O(1)$ inserts, and $O(\log^* n +
+\log k)$ pop for the $k$'th popped element. Thus, this avoids the overhead of
+doing too much up-front work.
+
+* Literature on Quickheaps
+
+Sorting algorithms go back a long way. One way to sort a list is to put all
+elements in a heap and then extract them one by one, called /heapsort/ [cite:@heapsort].
+
+Another method is quicksort, which works as follows: first, choose a random
+element of the array as /pivot/. Then compare all elements to this pivot, and
+move the smaller ones to the front of the array, and the larger ones to the back
+of the array. Then recurse on the two halves.
+This runs in $O(n\log n)$ time, since the number of levels in the recursion is
+expected to be $O(\log n)$.
+
+** Optimal incremental sorting
+
+A related problem is to only sort the smallest $k\leq n$ elements, which can be
+done in $O(n + k \log k)$.
+Heapsort does this, but incurs an up-front cost of $O(n \log
+n)$.
+[cite/t:@optimal-incremental-sorting] give an
+incremental $O(n+k\log k)$ method that returns the smallest elements one by one in
+sorted order.
+Their method, /IncrementalQuickSelect/ (IQS) builds on the ideas of quicksort:
+1. Choose a random pivot and partition the array.
+2. Push the position of the pivot to a stack.
+3. Recurse on the left part with smaller values until only a single element is
+   left. This is the minimum.
+4. Pop that element, go up the stack, and recurse on the elements between this
+   pivot and the next as needed.
+5. Repeat until the array is empty.
+
+#+name: iqs
+#+caption: Example from [cite/t:@optimal-incremental-sorting] of the IQS method: a random (here: first) element is chosen as pivot to partition the array. This is repeated until only a single element is left, and the positions of all pivots are stored on a stack.
+#+attr_html: :class inset
+[[file:./incrementalquickselect.png]]
+
+On random input, IQS takes average time $O(n + k \log k)$.
+
+
+** Quickheap
+
+The conclusions of the 2006 paper above already mention that this same idea can
+be used to build a heap. This is presented in detail in [cite/t:@quickheap].
+
+Compared to the incremental sorting method above, the one additional operation
+it needs to support is pushing new elements.
+
+#+name: quickheap
+#+caption: Example from [cite/t:@quickheap] of inserting an element (35) into the quickheap.
+#+attr_html: :class inset
+[[file:./quickheap.png]]
+
+Like with binary heaps, we first push the new element to the back of the array,
+and then sift it (down, in this case) to its right location: as long as the new
+element is less than the preceding pivot, that pivot (eg 51 above) is shifted one position to
+the right to make space for the new element, and the new element is inserted on
+its left.
+
+Since the tree is expected to have $O(\log n)$ many levels on random input, this
+takes $O(\log n)$ steps, as for binary heaps.
+Additionally, it is shown that the I/O cost of push and pop is $O((1/B) \log
+(m/M))$, where $B$ is the block size and $M$ is the total available memory,
+which is close to optimal.
+Thus, quickheaps make efficient use of the memory bandwidth.
+
+#+name: quickheap-plot
+#+caption: On a sequence of m times (ins, (del, ins)^2) followed by m times (del, (ins, del)^2), quickheap (QH) is faster than the binary heap (BH) and pairing heap (PH), but slightly slower than the sequence heap (SH), which are optimized for cases where /all/ elements are extracted. Note that the y-axis reports the time divided by m lg(m).
+#+attr_html: :class inset
+[[file:./quickheap-plot.png]]
+
+Quickheaps are also shown to have much lower I/O cost than radix heaps.
+
+A drawback of quickheaps is that the analysis only works for randomized operations.
+
+** Randomized quickheaps
+When the keys being inserted into quickheap are mostly decreasing, this causes
+the number of layers/pivot to grow over time. This results in worst-case linear
+time inserts, since elements have to sift down linearly many layers.
+
+Randomized quickheaps (RQH) [cite:@stronger-quickheaps] solve this: every time an
+element is inserted and moves down one layer, the entire subtree starting in
+that layer is /flattened/ with probability $1/s$ when it has $s$ elements. That
+is, all pivots in the subtree are dropped, and the next pop operation will pick
+a new random pivot. This way, each subtree is re-randomized roughly once each
+time it doubles in size.
+
+#+name: random-quickheap-plot
+#+caption: On a sequence of m times (ins, (del, ins)^2) followed by m times (del, (ins, del)^2), the random quickheap (RQH) is faster than both the binary heap (BH) and quickheap (QH) for sufficiently large inputs.
+#+attr_html: :class inset
+[[file:./random-quickheap-plot.png]]
+
+The paper by [cite/t:@worst-case-optimal-incremental-sorting] takes a more
+practical approach to optimal worst-case behaviour.
+One could use the median-of-medians algorithm to select a
+pivot in the 30%-70% interval in linear time, but this is slow in practice.
+Instead, they first try a random pivot, and only fall back to median-of-medians
+in case this random pivot is not in the 30%-70% interval.
+
+* Bucket-based implementation
+** Data structure
+The original quickheap papers store everything in a flat array, without
+additional memory. In my implementation ([[https://github.com/ragnargrootkoerkamp/quickheap][github]]), I instead use a single bucket (vector)
+per layer. This simplifies the partition steps, since they do not have to be
+in-place, but comes at the cost of somewhat higher memory usage.
+Additionally, I store a flat list of the pivot values for all layers, rather
+than their positions.
+Lastly, I stop the recursion when layers have size at most 32. Then, this list
+is simply scanned to extract the smallest element.
+
+(Feel free to skip the code samples. Since they're so short I inlined them all,
+but they're only relevant if you care about the details.)
+
+#+caption: My version of the =QuickHeap= data structure.
+#+begin_src rust
+type T = u32;
+struct QuickHeap {
+    /// The number of layers.
+    layer: usize,
+    /// A decreasing array of the pivots for all layers.
+    /// pivots[0] = u32::MAX
+    pivots: Vec<T>,
+    /// The values in each layer.
+    /// pivots[i] >= elements of buckets[i] >= pivots[i+1]
+    buckets: Vec<Vec<T>>,
+}
+#+end_src
+
+The active/last layer is stored separately, so that we can reuse buffers instead
+of deallocating them.
+
+** Push
+
+Push is implemented by simply comparing the new element against /all/ the
+pivots, and then inserting it into the right layer.
+
+#+caption: We count the number of pivots larger than the new element.
+#+begin_src rust
+fn push(&mut self, x: T) {
+    let mut target_layer = 0;
+    for &p in &self.pivots[..=self.layer] {
+        if p > x {
+            target_layer += 1;
+        }
+    }
+    self.buckets[target_layer - 1].push(x);
+}
+#+end_src
+
+To enable maximum efficiency of SIMD comparisons, in practice we do this:
+#+caption: By always comparing to a multiple of 8 number of elements, each block of 8 is compiled to some SIMD instructions.
+#+begin_src diff
+ fn push(&mut self, x: T) {
+     let mut target_layer = 0;
+-    for &p in &self.pivots[..=self.layer] {
++    for &p in &self.pivots[..(self.layer+1).next_multiple_of(8)] {
+         if p > x {
+             target_layer += 1;
+         }
+     }
+     self.buckets[target_layer - 1].push(x);
+ }
+#+end_src
+
+This has complexity $O((\log n)/L)$ when using $L$ SIMD lanes, which in practice
+is fast, especially when $L=8$ for =u32= values.
+One option for some speedup could be to turn this into a 2-level B-tree, with a
+root node that divides the levels into $L+1$ chunks.
+
+** Pop
+Pop is more tricky. We split the current (bottom) layer as long as it has more
+than 32 elements. Then, we find the position of the minimum and remove it by
+swapping it with the last element in the layer. Lastly, we decrease the active
+layer if we exhausted it.
+
+#+caption: Popping works by first splitting the layer as long as it has more than 32 elements, and then scanning the remaining elements for the minimum.
+#+begin_src rust
+fn pop(&mut self) -> Option<T> {
+    // Only the top layer can be empty.
+    if self.buckets[self.layer].len() == 0 {
+        return None;
+    }
+    // Split the current layer as long as it is too large.
+    while self.buckets[self.layer].len() > 32 {
+        self.partition();
+    }
+    // Find and extract the minimum.
+    let layer = &mut self.buckets[self.layer];
+    let min_pos = layer.iter().position_min().unwrap();
+    let min = layer.swap_remove(min_pos);
+
+    // Update the active layer.
+    if layer.is_empty() && self.layer > 0 {
+        self.pivots[self.layer] = 0;
+        self.layer -= 1;
+    }
+    Some(min)
+}
+#+end_src
+
+** Partition
+This leaves only the partitioning of the layers. Of note are the fact that I use
+the median of 3 candidate pivots, and that the partitioning is based on AVX2
+SIMD instructions inspired by Daniel Lemire's [[https://lemire.me/blog/2017/04/10/removing-duplicates-from-lists-quickly/][blog]] (see [[https://github.com/RagnarGrootKoerkamp/quickheap/blob/master/src/simd.rs][github]] for the detailed code).
+
+#+caption: Partitioning the bottom layer works by reserving two sufficiently large arrays, and then using SIMD instructions to append values =< pivot= to one and values ~>= pivot~ to the other.
+#+begin_src rust
+fn partition(&mut self) {
+    // Reserve space for an additional 8 layers when needed.
+    if self.layer + 2 == self.pivots.len() {
+        self.pivots.extend(repeat_n(0, 8));
+        self.buckets.extend(repeat_n(vec![], 8));
+    }
+    // Alias the current layer (to be split) and the next layer.
+    let [cur_layer, next_layer] = &mut self.buckets[self.layer..=self.layer + 1] else {
+        unreachable!()
+    };
+    let n = cur_layer.len();
+
+    // Select 3 random pivots, and compute their median.
+    let mut pivots: [T; 3] = from_fn(|_| cur_layer[rand::random_range(0..n)]);
+    pivots.sort();
+    // Pivots are exclusive.
+    let pivot = pivots[1] + 1;
+    self.pivots[self.layer + 1] = pivot;
+
+    // Reserve space in the next layer,
+    // and make sure the current layer can hold a spare SIMD register.
+    next_layer.resize(n + 8, 0);
+    cur_layer.resize(n + 8, 0);
+
+    // Partition a list into two using SIMD.
+    let mut cur_len = 0;
+    let mut next_len = 0;
+    for i in (0..n).step_by(8) {
+        let vals = *cur_layer[i..i + 8].as_array().unwrap();
+        simd::partition(
+            u32x8::from_array(vals),
+            n - i, // Only use the at most n-i remaining elements.
+            pivot,
+            cur_layer,
+            &mut cur_len,
+            next_layer,
+            &mut next_len,
+        );
+    }
+    cur_layer.resize(cur_len, 0);
+    next_layer.resize(next_len, 0);
+
+    // If we extracted all elements to the next layer
+    // because the pivot was the largest one,
+    // undo and try again.
+    if cur_len == 0 {
+        std::mem::swap(cur_layer, next_layer);
+        return;
+    }
+
+    // Increment the active layer.
+    self.layer += 1;
+}
+#+end_src
+
+
+* Results
+** Libraries
+I benchmarked against a few heap and priority queue crates.
+I did not find any implementation of (randomized) quickheap either online or in
+the papers[fn::There is [[https://github.com/emmt/QuickHeaps.jl]], but it seems to
+just be a "quick" binary heap.], but there are some d-ary heaps:
+- =std::collections::BinaryHeap=: a plain binary max-heap. Used with
+  =Reverse<u32>= to make it a min-heap.
+- =orx_priority_queue::DaryHeap<(), u32, D>=: a d-ary heap, tested for D in 1,2,4,8.
+- =dary_heap::DaryHeap<(), u32, D>=: another d-ary heap, tested for D in 1,2,4,8.
+
+Excluded implementations:
+- =std::collections::BTreeSet=: does not natively support duplicate elements,
+  and also ~2x slower than other methods.
+- =indexset::BTreeSet=: idem.
+- =fibonacci_heap::FibonacciHeap=: a Fibonacci heap, but 10x slower than
+  everything else.
+- =pheap::PairingHeap=: a pairing heap, but slower than other heaps.
+
+We /do/ compare against a radix heap, which is specialized for cases where the popped keys increase with time.
+- =radix_heap::RadixHeapMap=
+
+** Datasets
+I test on a few types of data. First off, we test keys with types:
+- =u32=
+- =u64=
+
+For each type, we construct a number of test cases. Each
+has the structure
+$$
+F_k(n) := (\mathsf{push}\circ(\mathsf{pop}\circ\mathsf{push})^k)^n \circ(\mathsf{pop}\circ(\mathsf{push}\circ\mathsf{pop})^k)^n.
+$$
+1. *Heapsort*: $F_0(n)$: $n$ random pushes, followed by $n$ pops. I.e. a heapsort.
+2. *Random*: $F_4(n)$ with random pushes.
+   This simulates a heap that slowly grows and then slowly shrinks.
+3. *Linear*: $F_4(n)$, where the $i$th push pushes value $i$.
+4. *Increasing*: $F_4(n)$, but pushes increase by a random amount:
+   - for =u32=: the last popped value plus a random value up to 1000.
+   - for =u64=: the last popped value plus a random value up to $2^{32}$.
+
+** Results
+
+#+caption: Log-log plots of the average time per push-pop pair. Top row: =u32= values, bottom row: =u64= values. Left to right corresponds to the four datasets listed above: heapsort, random, linear, and increasing.
+#+caption: The shown time is the total time divided by $2k+1$, and thus is the average time for an element to be pushed and popped again. Experiments are stopped once they take >100 ns.
+#+caption: Memory usage is 4 or 8 times more than $n$, and ranges from 8 KiB to 128 MiB for =u32= and double that for =u64=.
+#+attr_html: :class inset large
+[[file:./quickheap-results.svg]]
+
+Some observations:
+- The *binary heap* (blue) and d-ary heaps (orange, green) have similar
+  performance for =u32= and =u64=.
+- The *4-ary heap* (green) in =orx_priority_queue= is consistently slightly faster than
+  the default binary heap.
+- The *8-ary heap* in =dary_heap= is usually much slower, but slightly faster for
+  large $n$.
+  - (Other d-ary heap variants are only rarely better than both of these two.)
+- The *quickheap* (red) is the fastest for both heapsort and the interleaved
+  variant with random pushes.
+  - For heapsort, it's up to 2x faster for =u32= for large $n$, because most
+    time is spent partitioning lists, and this is 2x faster for the smaller data type.
+  - For random interleaved pushes, this difference is nearly gone. Most likely
+    this is because roughly 75% of pushed elements will directly be popped again.
+    In fact, the *performance is nearly independent of $n$* here!
+  - Exact linear pushes are probably the worst for quickheap, as these always
+    get pushed to the top layer and then need to
+    sift down through the maximum possible number of layers.
+- The *radix* heap (purple) has constant performance for heapsort, since its
+  $O(n\log C)$ term only depends on the number of bits in the input values,
+  which is 32 or 64. This is also the worst possibly input for radix sort.
+  - Random pushes interleaved with pops are not supported, since the minimum
+    value in the heap may only increase.
+  - Radix sort is the fastest for linear input, likely because of its cache locality.
+  - For =u32= input that increases by 0 to 1000 on each push, radix sort gets
+    *faster* as $n$ increases, probably because there are very many duplicate elements.
+  - For =u64= input that increases by 0 to $2^{32}$ on each push, radix sort is
+    not as good, because now $\log C=\log2^{32}$ is quite large (compared to
+    $\log 1000$ before). As in the heapsort case, the performance is constant
+    though, because $\log C$ is constant.
+
+* Conclusion
+Overall, the radix heap is probably a good choice in cases where it can be used,
+specifically for small integer input.
+Otherwise, the quickheap is significantly faster than binary/d-ary heaps,
+especially as $n$ grows.
+This is primarily because of its better cache efficiency and
+corresponding I/O complexity:
+Binary/d-ary heaps must access $O(\log n)$ memory locations and have a cache
+miss (of cost $\sqrt {2^i}$, see [[https://www.ilikebigbits.com/2014_04_21_myth_of_ram_1.html][this blog on The Myth of RAM]]) at each layer $i$, whereas
+the quickheap pushes to one of $O(\log n)$ known (cached) locations, pops
+from a single location, and has memory-efficient partitioning as well.
+
+** Still TODO
+- I have not yet implemented the ideas from [cite/t:@stronger-quickheaps] to
+  prevent the worst-case quadratic growth.
+- I'd like to run experiments on some more realistic datasets. I could compare
+  Dijkstra with the radix heap and quickheap, but then I need some interesting
+  graphs to test on.
+- Prim's minimal spanning tree algorithm ([[https://en.wikipedia.org/wiki/Prim%27s_algorithm][wikipedia]]) is a case where the radix
+  heap will not work, and might be a good case to show the improvement of the
+  quickheap over d-ary heaps. But again, this needs some graphs to test on.
+- Are there non-graph applications of heaps? Things like an 'event queue' come
+  to mind: when processing a sorted list of intervals, we push the end of the
+  interval after processing the start. But again a radix heap (or even a bucket
+  heap) is probably better here, unless the timestamps are very high precision.
+
+#+print_bibliography:
