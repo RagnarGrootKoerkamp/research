@@ -4,6 +4,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_level_offset: 1
+#+hugo_paired_shortcodes: %notice %detail
 #+date: <2025-08-11 Mon>
 
 There was a hackernews [[https://news.ycombinator.com/item?id=44812695][post]] recently on a new single-source shortest path
@@ -25,6 +26,8 @@ find a modern implementation of any one of them -- somehow they don't seem used 
 all in practice. On the other hand, there is the /radix heap/ [cite:@radix-heap]
 that is faster at times, but it can only be used in cases where the extracted
 keys increase with time.
+
+Just straight to [[#implementation][Implementation]] or [[#results][Results]].
 
 * Background
 
@@ -195,6 +198,9 @@ Instead, they first try a random pivot, and only fall back to median-of-medians
 in case this random pivot is not in the 30%-70% interval.
 
 * Bucket-based implementation
+:PROPERTIES:
+:CUSTOM_ID: implementation
+:END:
 ** Data structure
 The original quickheap papers store everything in a flat array, without
 additional memory. In my implementation ([[https://github.com/ragnargrootkoerkamp/quickheap][github]]), I instead use a single bucket (vector)
@@ -211,10 +217,6 @@ is simply scanned to extract the smallest element.
 #+attr_html: :class inset large
 [[file:./quickheap.svg]]
 
-
-(Feel free to skip the code samples. I inlined them since they're short,
-but they're only relevant for the details.)
-
 #+caption: My version of the =QuickHeap= data structure.
 #+begin_src rust
 type T = u32;
@@ -222,7 +224,7 @@ struct QuickHeap {
     /// The number of layers.
     layer: usize,
     /// A decreasing array of the pivots for all layers.
-    /// pivots[0] = u32::MAX
+    /// pivots[0] = T::MAX
     pivots: Vec<T>,
     /// The values in each layer.
     /// pivots[i] >= elements of buckets[i] >= pivots[i+1]
@@ -238,6 +240,8 @@ of deallocating them.
 Push is implemented by simply comparing the new element against /all/ the
 pivots, and then inserting it into the right layer.
 
+#+attr_shortcode: "Code for pushing a new value."
+#+begin_detail
 #+caption: We count the number of pivots larger than the new element.
 #+begin_src rust
 fn push(&mut self, x: T) {
@@ -265,6 +269,7 @@ To enable maximum efficiency of SIMD comparisons, in practice we do this:
      self.buckets[target_layer - 1].push(x);
  }
 #+end_src
+#+end_detail
 
 This has complexity $O((\log n)/L)$ when using $L$ SIMD lanes, which in practice
 is fast, especially when $L=8$ for =u32= values.
@@ -277,6 +282,8 @@ than 16 elements. Then, we find the position of the minimum and remove it by
 swapping it with the last element in the layer. Lastly, we decrease the active
 layer if we exhausted it.
 
+#+attr_shortcode: "Code for popping the smallest value."
+#+begin_detail
 #+caption: Popping works by first splitting the layer as long as it has more than 16 elements, and then scanning the remaining elements for the minimum.
 #+begin_src rust
 fn pop(&mut self) -> Option<T> {
@@ -301,12 +308,15 @@ fn pop(&mut self) -> Option<T> {
     Some(min)
 }
 #+end_src
+#+end_detail
 
 ** Partition
 This leaves only the partitioning of the layers. Of note are the fact that I use
 the median of 3 candidate pivots, and that the partitioning is based on AVX2
 SIMD instructions inspired by Daniel Lemire's [[https://lemire.me/blog/2017/04/10/removing-duplicates-from-lists-quickly/][blog]] (see [[https://github.com/RagnarGrootKoerkamp/quickheap/blob/master/src/simd.rs][github]] for the detailed code).
 
+#+attr_shortcode: "Code for partitioning the bottom layer."
+#+begin_detail
 #+caption: Partitioning the bottom layer works by reserving two sufficiently large arrays, and then using SIMD instructions to append values =< pivot= to one and values ~>= pivot~ to the other.
 #+begin_src rust
 fn partition(&mut self) {
@@ -363,29 +373,35 @@ fn partition(&mut self) {
     self.layer += 1;
 }
 #+end_src
+#+end_detail
 
 
 * Results
+:PROPERTIES:
+:CUSTOM_ID: results
+:END:
 ** Libraries
 I benchmarked against a few heap and priority queue crates.
 I did not find any implementation of (randomized) quickheap either online or in
 the papers[fn::There is [[https://github.com/emmt/QuickHeaps.jl]], but it seems to
 just be a "quick" binary heap.], but there are some d-ary heaps:
-- =std::collections::BinaryHeap=: a plain binary max-heap. Used with
-  =Reverse<u32>= to make it a min-heap.
-- =orx_priority_queue::DaryHeap<(), u32, D>=: a d-ary heap, tested for D in 1,2,4,8.
-- =dary_heap::DaryHeap<(), u32, D>=: another d-ary heap, tested for D in 1,2,4,8.
+- [[https://doc.rust-lang.org/std/collections/struct.BinaryHeap.html][=std::collections::BinaryHeap=]]: a plain binary max-heap. Used with
+  [[https://doc.rust-lang.org/std/cmp/struct.Reverse.html][=Reverse<u32>=]] to make it a min-heap.
+- [[https://docs.rs/orx-priority-queue/latest/orx_priority_queue/struct.DaryHeap.html][=orx_priority_queue::DaryHeap<(), u32, D>=]]: a d-ary heap, tested for D in 1,2,4,8.
+- [[https://docs.rs/dary_heap][=dary_heap::DaryHeap<u32, D>=]]: another d-ary heap, tested for D in 1,2,4,8.
 
-Excluded implementations:
-- =std::collections::BTreeSet=: does not natively support duplicate elements,
+#+attr_shortcode: "Excluded implementations."
+#+begin_detail
+- [[https://doc.rust-lang.org/std/collections/struct.BTreeSet.html][=std::collections::BTreeSet=]]: does not natively support duplicate elements,
   and also ~2x slower than other methods.
-- =indexset::BTreeSet=: idem.
-- =fibonacci_heap::FibonacciHeap=: a Fibonacci heap, but 10x slower than
+- [[https://docs.rs/indexset/latest/indexset/struct.BTreeSet.html][=indexset::BTreeSet=]]: idem.
+- [[https://docs.rs/fibonacci_heap/latest/fibonacci_heap/][=fibonacci_heap::FibonacciHeap=]]: a Fibonacci heap, but 10x slower than
   everything else.
-- =pheap::PairingHeap=: a pairing heap, but slower than other heaps.
+- [[https://docs.rs/pheap/latest/pheap/][=pheap::PairingHeap=]]: a pairing heap, but slower than other heaps.
+#+end_detail
 
 We /do/ compare against a radix heap, which is specialized for cases where the popped keys increase with time.
-- =radix_heap::RadixHeapMap=
+- [[https://docs.rs/radix-heap/][=radix_heap::RadixHeapMap=]]
 
 ** Datasets
 I test on a few types of data. First off, we test keys with types:
@@ -407,11 +423,11 @@ $$
 
 ** Results
 
-#+caption: Log-log plots of the average time per push-pop pair. Top row: =u32= values, bottom row: =u64= values. Left to right corresponds to the four datasets listed above: heapsort, random, linear, and increasing.
+#+caption: (Click to enlarge.) Log-log plots of the average time per push-pop pair. Top row: =u32= values, bottom row: =u64= values. Left to right corresponds to the four datasets listed above: heapsort, random, linear, and increasing.
 #+caption: The shown time is the total time divided by $2k+1$, and thus is the average time for an element to be pushed and popped again. Experiments are stopped once they take >100 ns.
 #+caption: Memory usage is 4 or 8 times more than $n$, and ranges from 8 KiB to 128 MiB for =u32= and double that for =u64=.
 #+attr_html: :class inset large
-[[file:./quickheap-results.svg]]
+[[file:quickheap-results.svg][file:./quickheap-results.svg]]
 
 Some observations:
 - The *binary heap* (blue) and d-ary heaps (orange, green) have similar
