@@ -1,0 +1,107 @@
+#+title: Collisions in NtHash2
+#+filetags: @results nthash math wip
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-08-12 Tue>
+
+$$
+\newcommand{\srol}{\mathsf{srol}}
+\newcommand{\rol}{\mathsf{rol}}
+$$
+
+This post is a followup on this [[./nthash.org][previous post]] on making NtHash [cite:@nthash] collision free up
+to $k=32$.
+Here, we are instead looking at collisions in NtHash2 [cite:@nthash2], which differs from NtHash
+in that instead of rotating the 64 bits all at once, it splits them into two
+groups of size 31 and 33 bits that are rotated independently.
+
+Unfortunately, as Víctor Rodríguez Bouza wrote in a [[https://www.bacpop.org/blog/huntingcollisionswithnthash/][blogpost]], NtHash2 still has
+collisions for $k\geq 64$. But, a priory, it is not quite clear why we should
+still get these collisions -- the entire point was to avoid them.
+
+In short, NtHash2 defines a function $\srol_2(x)$ that splits the 64 bits of $x$
+into the lower 33 bits and the higher 31 bits, and the rotates the bits in each
+group independently. Then, given a random hash $H(c)$ for each character $c$,
+the hash of a kmer $s$ of length $k$ is
+$$
+h(s) := \bigoplus_{i=0}^{k-1} \srol_2^{k-1-i}(H(s_i))
+$$
+where $\oplus$ is bitwise xor.
+In the remainder, I will omit the $H$ and we just identify each character
+directly with its hash.
+
+* NtHash collisions
+NtHash uses $\srol = \rol$, the plain 64-bit rotate instruction.
+This has a collision between 65-mers that look like this:
+#+begin_src txt
+pos 0       ...    64
+s = A..............A
+t = C..............C
+#+end_src
+where they have equal characters on the dots. The problem here is that the hash
+of the first and last character cancel when they are equal:
+\begin{align*}
+h(s)
+&= \bigoplus_{i=0}^{64} \rol^{64-i}(s_i)\\
+&= \rol^0(A) \oplus \rol^{64}(A)\oplus \bigoplus_{i=1}^{63} \rol^{64-i}(s_i)\\
+&= \bigoplus_{i=1}^{63} \rol^{64-i}(s_i)
+= \bigoplus_{i=1}^{63} \rol^{64-i}(t_i)\\
+&= \rol^0(C) \oplus \rol^{64}(C)\oplus \bigoplus_{i=1}^{63} \rol^{64-i}(t_i)\\
+&= \bigoplus_{i=0}^{64} \rol^{64-i}(t_i)
+= h(t)
+\end{align*}
+
+* NtHash2 collisions
+A similar pattern occurs with NtHash2 when using $\srol_2$:
+#+begin_src txt
+pos 0  ...  3133  ...  64
+s = A.......A.A........A
+t = C.......C.C........C
+#+end_src
+
+Here, let's consider the two parts of the $\srol_2$ independently.
+For the 31-bit part, the four =A='s hash to
+\begin{align*}
+&\rol_{31}^{0}(A)\oplus \rol_{31}^{31}(A)\oplus \rol_{31}^{33}(A)\oplus \rol_{31}^{64}(A)\\
+=& \rol_{31}^{0}(A)\oplus \rol_{31}^{0}(A)\oplus \rol_{31}^{2}(A)\oplus \rol_{31}^{2}(A)\\
+=& 0
+\end{align*}
+while for the 33-bit part, they hash to
+\begin{align*}
+&\rol_{33}^{0}(A)\oplus \rol_{33}^{31}(A)\oplus \rol_{33}^{33}(A)\oplus \rol_{33}^{64}(A)\\
+=& \rol_{33}^{0}(A)\oplus \rol_{33}^{31}(A)\oplus \rol_{33}^{0}(A)\oplus \rol_{31}^{2}(A)\\
+=& 0
+\end{align*}
+and thus, both parts cancel out!
+Thus, anytime two kmers differ only in positions 0, 31, 33, 64, and one has all
+copies of one character and the other all copies of another character in these
+positions, this will cause a hash collisions. The same pattern also occurs for
+$k> 64$, where it can be "embedded" anywhere within the kmer.
+
+More generally, for roll lengths $a$ and $b$, we get this pattern at positions $\{0,a,b,a+b\}$.
+
+Even though we still get collisions, these are much less likely than the NtHash1
+collisions, as now we have 4 positions (3 equalities) that need to be equal, rather
+than just 2 positions (1 equality).
+
+* 3-way split
+The 3-way split suggested in the NtHash2 paper is $20+21+23=64$. Here still, we
+will get collisions. Calling these positions $a$, $b$, and $c$, with $a+b+c=64$,
+we get positions $\{0,a,b,a+b,c,a+c,b+c,a+b+c\}$:
+\begin{align*}
+&\rol_a^{0} \oplus \rol_a^{a} \oplus \rol_a^{b} \oplus \rol_a^{a+b} \oplus \rol_a^{c} \oplus \rol_a^{a+c} \oplus \rol_a^{b+c} \oplus \rol_a^{a+b+c}\\
+= &\rol_a^{0} \oplus \rol_a^{0} \oplus \rol_a^{b} \oplus \rol_a^{b} \oplus \rol_a^{c} \oplus \rol_a^{c} \oplus \rol_a^{b+c} \oplus \rol_a^{b+c}\\
+=&0
+\end{align*}
+
+In practice, we see collisions already at 44 here, so there must be some smaller
+'gadget'.
+
+For the 6-way split into $64=5+7+9+11+13+19$, collisions start at 35 instead.
+
+Thus, some work remains to be done to understand these better.
+
+#+print_bibliography:
