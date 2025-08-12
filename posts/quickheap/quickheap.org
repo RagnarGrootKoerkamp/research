@@ -195,11 +195,18 @@ per layer. This simplifies the partition steps, since they do not have to be
 in-place, but comes at the cost of somewhat higher memory usage.
 Additionally, I store a flat list of the pivot values for all layers, rather
 than their positions.
-Lastly, I stop the recursion when layers have size at most 32. Then, this list
+Lastly, I stop the recursion when layers have size at most 16. Then, this list
 is simply scanned to extract the smallest element.
 
-(Feel free to skip the code samples. Since they're so short I inlined them all,
-but they're only relevant if you care about the details.)
+
+#+name: quickheap
+#+caption: A schematic overview of the quickheap: elements are stored in /layers/. Deeper layers have smaller values, with each layer being at most its pivit. The bottom layer has at most 16 (here: 4) elements. Popping is done by scanning the bottom layer, and pushing is done by comparing the new value to all pilots and appending to the correct layer. To split a layer, a random pivot is selected as the median of 3 and smaller elements are pushed to the next layer, while larger elements stay. Values equal to the pivot are pushed down if they are on its left.
+#+attr_html: :class inset large
+[[file:./quickheap.svg]]
+
+
+(Feel free to skip the code samples. I inlined them since they're short,
+but they're only relevant for the details.)
 
 #+caption: My version of the =QuickHeap= data structure.
 #+begin_src rust
@@ -259,11 +266,11 @@ root node that divides the levels into $L+1$ chunks.
 
 ** Pop
 Pop is more tricky. We split the current (bottom) layer as long as it has more
-than 32 elements. Then, we find the position of the minimum and remove it by
+than 16 elements. Then, we find the position of the minimum and remove it by
 swapping it with the last element in the layer. Lastly, we decrease the active
 layer if we exhausted it.
 
-#+caption: Popping works by first splitting the layer as long as it has more than 32 elements, and then scanning the remaining elements for the minimum.
+#+caption: Popping works by first splitting the layer as long as it has more than 16 elements, and then scanning the remaining elements for the minimum.
 #+begin_src rust
 fn pop(&mut self) -> Option<T> {
     // Only the top layer can be empty.
@@ -271,7 +278,7 @@ fn pop(&mut self) -> Option<T> {
         return None;
     }
     // Split the current layer as long as it is too large.
-    while self.buckets[self.layer].len() > 32 {
+    while self.buckets[self.layer].len() > 16 {
         self.partition();
     }
     // Find and extract the minimum.
