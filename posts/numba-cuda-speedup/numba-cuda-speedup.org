@@ -4,6 +4,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+hugo_aliases: /phd/2021/03/24/numba-cuda-speedup/
 #+toc: headlines 3
+#+hugo_paired_shortcodes: %notice %detail
 #+date: <2021-05-24>
 *Xrefs:* [[https://www.reddit.com/r/CUDA/comments/mq1yrm/28000x_speedup_with_numbacuda/][r/CUDA]], [[https://numba.discourse.group/t/blog-28000x-speedup-with-numba-cuda/667][Numba discourse]]
 
@@ -209,12 +210,12 @@ specified number of positions. It runs in an estimated *7000s* or almost
 2 hours.
 
 #+attr_html: :open ''
-#+begin_details
+#+begin_detail
 #+begin_summary
 V0: 7000s (Click to toggle)
 #+end_summary
 #+include: v0.py src python
-#+end_details
+#+end_detail
 
 **** V1: Numba
      :PROPERTIES:
@@ -236,12 +237,12 @@ wrapping a list comprehension in =np.array= doesn't work.
 Note that I unrolled the =np.roll= since it appears that Numba is better
 at optimizing the manual for loop.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V1: 50s (Click to toggle, changed lines are marked with a +)
 #+end_summary
 #+include: d1.py src python
-#+end_details
+#+end_detail
 
 **** V2: Multithreading
      :PROPERTIES:
@@ -292,12 +293,12 @@ kernel.
 It turns out that this code takes *100s* to process all sequences --
 much slower than our single threaded python before...
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V3: 100s (Click to toggle)
 #+end_summary
 #+include: v3.py src python
-#+end_details
+#+end_detail
 
 **** V4: Parallel kernel invocations
      :PROPERTIES:
@@ -385,12 +386,12 @@ that's still only on par with the multithreaded CPU code.
   32 kernels in parallel]] but in my runs it's always capped at 16. I
   have no idea why it doesn't go higher.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V4: 13s (Click to toggle)
 #+end_summary
 #+include: d4.py src python
-#+end_details
+#+end_detail
 
 **** V5: Single kernel with many blocks
      :PROPERTIES:
@@ -411,12 +412,12 @@ kernel gets this runtime of 11.0s, (probably because =2*16=32= blocks is
 enough to saturate all SMs,) but having all sequences in one kernel is
 the most convenient.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V5: 11s (Click to toggle)
 #+end_summary
 #+include: d5.py src python
-#+end_details
+#+end_detail
 
 **** V6: Detailed profiling: Kernel Compute
      :PROPERTIES:
@@ -448,12 +449,12 @@ not doing here.)
 
 This gives a factor 2 speedup to *5.5s*!
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V6: 5.5s (Click to toggle)
 #+end_summary
 #+include: d6.py src python
-#+end_details
+#+end_detail
 
 **** V7: Detailed profiling: Kernel Latency
      :PROPERTIES:
@@ -472,12 +473,12 @@ reading from.
 
 This again shaves off almost a second, going to *4.7s*.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V7: 4.7s (Click to toggle)
 #+end_summary
 #+include: d7.py src python
-#+end_details
+#+end_detail
 
 **** V8: Detailed profiling: Shared Memory Access Pattern
      :PROPERTIES:
@@ -500,12 +501,12 @@ memory addresses. This is an easy fix, since we can just swap the block
 dimensions when launching the kernel, that brings the runtime down to
 *4.6s*. (Not much, but at least we fixed those warnings.)
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V8: 4.6s (Click to toggle)
 #+end_summary
 #+include: d8.py src python
-#+end_details
+#+end_detail
 
 **** V9: More work per thread
      :PROPERTIES:
@@ -533,12 +534,12 @@ go down now, because we reuse the reads of =h = hashes[c][k]= and
 
 This given an almost 3x improvement, and the runtime is now *1.88s*.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V9: 1.88s (Click to toggle)
 #+end_summary
 #+include: d9.py src python
-#+end_details
+#+end_detail
 
 **** V10: Cache seq to shared memory
      :PROPERTIES:
@@ -556,12 +557,12 @@ negligible fraction of data so doesn't affect the runtime significantly,
 but a proper implementation would have to deal with these last few
 characters separately.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V10: 1.79s (Click to toggle)
 #+end_summary
 #+include: d10.py src python
-#+end_details
+#+end_detail
 
 **** V11: Hashes and signs in shared memory
      :PROPERTIES:
@@ -572,12 +573,12 @@ before using them. This again increases the amount of shared memory per
 block, which reduces the maximum number of blocks a single SM can run,
 but it turns out to be faster: *1.51s*.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V11: 1.51s (Click to toggle)
 #+end_summary
 #+include: d11.py src python
-#+end_details
+#+end_detail
 
 **** V12: Revisiting blocks per kernel
      :PROPERTIES:
@@ -619,12 +620,12 @@ I've also seen a slowdown of up to 50% when using this technique,
 although this could be because of the increases memory transfer time
 instead of a kernel slowdown in itself.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V13: 1.39s (Click to toggle)
 #+end_summary
 #+include: d13.py src python
-#+end_details
+#+end_detail
 
 **** V14: Better hardware
      :PROPERTIES:
@@ -721,12 +722,12 @@ parallel, and hence the total throughput will be lower.
 I tried playing around with the [[https://numba.pydata.org/numba-doc/latest/cuda-reference/kernel.html#kernel-declaration][=max_registers=]]
 flag to =@cuda.jit=, but this didn't provide any gains.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 V15: 2.60s (Click to toggle)
 #+end_summary
 #+include: d15.py src python
-#+end_details
+#+end_detail
 
 ** Wrap up
    :PROPERTIES:

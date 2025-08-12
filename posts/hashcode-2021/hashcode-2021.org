@@ -3,6 +3,7 @@
 #+OPTIONS: ^:{}
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 0
+#+hugo_paired_shortcodes: %notice %detail
 #+date: <2021-03-01>
 
 *Xrefs:* [[https://hashcodejudge.withgoogle.com/#/rounds/5879728443490304/][Problem]] | [[https://hashcodejudge.withgoogle.com/scoreboard][Scoreboard]] | [[https://codeforces.com/blog/entry/88188][Codeforces announcement]], [[https://codeforces.com/blog/entry/88328][this blog]] | [[https://news.ycombinator.com/item?id=26319076][Hacker News]]\\
@@ -96,7 +97,7 @@ explain the problem here, you probably already read it anyway.) Input
 was relatively simple, but required a rewrite to directly map street
 names back to integers. That probably took most of those 11 minutes:
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 Input data
 #+end_summary
@@ -127,7 +128,7 @@ struct Input {
     void read(istream& i) { ... }
 };
 #+end_src
-#+end_details
+#+end_detail
 
 Output took slightly longer, mostly because this requires both writing
 and reading, so we can improve existing solutions using local search.
@@ -135,7 +136,7 @@ One nice thing here is that the problem statement has a sample input and
 output, so now we can do a sanity check and read and write the output,
 and check whether it remains the same.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 Output data
 #+end_summary
@@ -156,7 +157,7 @@ struct Output {
     void write(ostream& o) const { ... }
 };
 #+end_src
-#+end_details
+#+end_detail
 
 #+begin_src
 > [01:14] Ragnar Groot Koerkamp: scoring
@@ -191,7 +192,7 @@ the input.
 
 Given all the work done before, coding this was very simple:
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 A simple idea
 #+end_summary
@@ -222,7 +223,7 @@ int main(int argc, char** argv) {
     o.write();
 }
 #+end_src
-#+end_details
+#+end_detail
 
 I ran this on all the testcases and made our first submission to the
 judge system for a total of 7,885,741 points. A decent score with a
@@ -239,7 +240,7 @@ entered via that street. The intuition as for why this may be a good
 idea should be obvious.
 
 #+attr_html: :open ''
-#+begin_details
+#+begin_detail
 #+begin_summary
 A diff of 300k
 #+end_summary
@@ -250,7 +251,7 @@ A diff of 300k
 +            is.green.push_back({sid, usage[sid]});
          }
 #+end_src
-#+end_details
+#+end_detail
 
 Fiddling a bit more, I was able to bump F another 500k as well by making
 it green for $\sqrt x$ seconds. At the time, this seemed sensible,
@@ -258,7 +259,7 @@ $\sqrt x$ being the geometric mean of $1$ and $x$, but I didn't
 really have a proper explanation.
 
 #+attr_html: :open ''
-#+begin_details
+#+begin_detail
 #+begin_summary
 A diff of 500k
 #+end_summary
@@ -270,7 +271,7 @@ A diff of 500k
 +            is.green.push_back({sid, int(sqrt(usage[sid]))});
          }
 #+end_src
-#+end_details
+#+end_detail
 
 #+begin_src
 > [02:31] Ragnar Groot Koerkamp: some sols
@@ -361,7 +362,7 @@ list of streets for the car first.
 > [02:29] Ragnar Groot Koerkamp: fix scoring
 #+end_src
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 Fix bad index
 #+end_summary
@@ -385,7 +386,7 @@ Fix bad index
      }
  }
 #+end_src
-#+end_details
+#+end_detail
 
 With that fix out of the way, problems weren't gone though. At this
 point I was quite confused and thinking something must be wrong with the
@@ -425,7 +426,7 @@ non-greedy variant which already scored great points, but in practice,
 they were completely independent - I was just looking to fix the modulus
 and the duration of 1 for each light was automatically implied by this.
 
-#+begin_details
+#+begin_detail
 #+begin_summary
 Greedy
 #+end_summary
@@ -503,7 +504,7 @@ Greedy
         }
     }
 #+end_src
-#+end_details
+#+end_detail
 
 It took roughly half an hour to implement this, and the result was nice:
 +190k on D. However, that still left a significant ~1M gap to the

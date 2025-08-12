@@ -5,7 +5,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
-#+hugo_paired_shortcodes: %notice details
+#+hugo_paired_shortcodes: %notice %detail
 #+hugo_aliases: /posts/fast-minimizers
 #+date: <2024-07-12 Fri>
 
@@ -540,10 +540,10 @@ harness = false
 
 We add =benches/bench.rs= which looks like this:
 #+attr_shortcode: "Click to show code."
-#+begin_details
+#+begin_detail
 #+caption: A basic criterion benchmark for the comparison so far.
 #+include: "code/bench.rs" src rust :lines "19-53"
-#+end_details
+#+end_detail
 
 *** Making criterion fast
 By default, the benchmarks are quite slow. That's for a couple of reasons:
@@ -725,7 +725,7 @@ The hot loop of the code looks much, much better now, using =cmov= instead of
 branches to overwrite the minimum.
 
 #+attr_shortcode: "New assembly"
-#+begin_details
+#+begin_detail
 #+caption: New hot-loop, using =cmov=, and very few branches.
 #+begin_src asm
   1.59 │898:┌─→lea        0x8(%r14),%r13
@@ -745,7 +745,7 @@ branches to overwrite the minimum.
   0.44 │    ├──cmp        %r9,%r14
   3.90 │    └──jne        898          
 #+end_src
-#+end_details
+#+end_detail
 
 Also the =perf stat= is great now: =4.23 IPC= and =0.13%= branch misses, so
 we'll leave it at this.
@@ -760,7 +760,7 @@ we'll leave it at this.
 We can confirm that indeed a lot of time is spent on branch-misses around
 the popping of the queue.
 #+attr_shortcode: "Assembly code showing a badly predicted branch."
-#+begin_details
+#+begin_detail
 #+caption: Each of the two directions after the branch takes =10%= of time.
 #+begin_src asm
  1.20 │3a0:   lea        (%rdx,%rax,1),%rdi
@@ -780,7 +780,7 @@ the popping of the queue.
  0.38 │    │  xor        %eax,%eax
 *9.64*│3d2:└─→cmp        %rcx,%rax
 #+end_src
-#+end_details
+#+end_detail
 
 Sadly, I don't really see much room for improvement here.
 
@@ -801,7 +801,7 @@ the =minimizer_positions= function:
 
 The hot loop for finding the minimum of a window is very compact again.
 #+attr_shortcode: "Assembly code"
-#+begin_details
+#+begin_detail
 #+caption: Hot loop of =Jumping= that finds the minimum of a window, with plenty =cmov= instructions and no branches.
 #+begin_src asm
   2.84 │170:┌─→lea     0x1(%rcx),%rsi
@@ -828,7 +828,7 @@ The hot loop for finding the minimum of a window is very compact again.
        │    ├──cmp     %rbx,%rcx
   0.13 │    └──jne     170                                                 
 #+end_src
-#+end_details
+#+end_detail
 
 More problematic is the =63%= of time spent on hashing kmers, but we will
 postpone introducing a faster hash function a bit longer.
@@ -838,10 +838,10 @@ The original =Rescan= implementation suffers from the same issue as the
 =Buffered= and compares positions, so let's reuse the =RingBuf::forward_min()=
 function, and compare elements only by value.
 #+attr_shortcode: "Code for RescanOpt."
-#+begin_details
+#+begin_detail
 #+caption: Optimized =RescanOpt= that runs in =10.2ms= instead of =14.1ns=.
 #+include: "code/blog/rescan.rs" src rust :lines "25-"
-#+end_details
+#+end_detail
 
 This has =3.55 IPC= up from =3.02=, and =0.91%= branch misses, down from
 =2.26%=, which results in the runtime going down from =14.1ms= to =10.2ms=.
@@ -873,11 +873,11 @@ their own value:
 #+end_src
 
 #+attr_shortcode: "Code for SplitOpt."
-#+begin_details
+#+begin_detail
 #+name: code-split-opt
 #+caption: Optimized =SplitOpt= that runs in =11.2ms= instead of =14.0ns=.
 #+include: "code/blog/split.rs" src rust :lines "31-66"
-#+end_details
+#+end_detail
 
 Now, it runs in =11.2ms= instead of =14.0ms=, and has =3.46 IPC= (up from =3.37
 IPC=) and =0.63%= branch misses, down from =1.55%=.
@@ -1035,7 +1035,7 @@ try to make it a bit faster.
 #+end_src
 
 #+attr_shortcode: "Assembly for collecting ntHashes into a vector."
-#+begin_details
+#+begin_detail
 #+caption: Assembly code for collecting all ntHashes into a vector. We see plenty of branches.
 #+begin_src gas
 1c5:   mov    %r14,(%rax,%r13,8)
@@ -1085,7 +1085,7 @@ try to make it a bit faster.
 24d:   cmp    0x30(%rsp),%r13
      ↑ jne    1c5
 #+end_src
-#+end_details
+#+end_detail
 
 Even though we know from =perf stat= that there are basically no branch misses,
 the assembly does contain a lot of branches, most of which correspond to
@@ -1173,7 +1173,7 @@ fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> 
 #+end_src
 
 #+attr_shortcode: "Generated assembly"
-#+begin_details
+#+begin_detail
 #+caption: The assembly still shows a call to =grow_one=, which should be impossible to reach.
 #+begin_src gas
   0.04 │330:┌─→mov          0x10(%rsp),%rax
@@ -1202,7 +1202,7 @@ fn hash_kmers(&mut self, k: usize, t: &[u8]) -> impl Iterator<Item = Self::Out> 
        │     ↑ jmp          330
        │38f:   mov          0x8(%rsp),%r12
 #+end_src
-#+end_details
+#+end_detail
 
 Well this doesn't work. I really trusted the compiler to optimize this away, but
 it doesn't[fn::Maybe there is a reason for keeping it that I don't see? Let me know!]. Guess I'll have to adjust my trust level accordingly.
@@ -1288,7 +1288,7 @@ Somehow this is worse. It seems two new branches came back when removing this
 one![fn::Cf. [[https://en.wikipedia.org/wiki/Lernaean_Hydra][Hydra]] (Greek mythology).]
 
 #+attr_shortcode: "Assembly, but worse."
-#+begin_details
+#+begin_detail
 #+caption: There is now a branch again to check if the index is 0.
 #+begin_src gas
        │2f0:┌─→cmp          %rbx,%r8
@@ -1311,7 +1311,7 @@ one![fn::Cf. [[https://en.wikipedia.org/wiki/Lernaean_Hydra][Hydra]] (Greek myth
        │    ├──cmp          %rsi,%r12
   8.44 │    └──jne          2f0
 #+end_src
-#+end_details
+#+end_detail
 
 I've also tried adding an =assert_eq!(v.len(), len)=, but that doesn't help
 either.[fn::Cf. [[https://en.wikipedia.org/wiki/Chekhov%27s_gun][Chekhov's gun]].]
@@ -1579,7 +1579,7 @@ It's fine to return out-of-order data.
 The first SIMD version is basically the same as before when using =[u64, L]=,
 but using =Simd<u64, L>= instead, with =#![feature(portable_simd)]= enabled.
 #+attr_shortcode: "SIMD version of ntHash"
-#+begin_details
+#+begin_detail
 #+caption: The SIMD version is quite similar to before. It's slightly slower at =1.14ns/kmer= for =L=4=.
 #+begin_src rust
 let i = self.current_idx - 1;
@@ -1591,7 +1591,7 @@ let hi: Simd<u64, L> = from_fn(|l| self.rot_k[seqi[l] as usize]).into();
 let hk: Simd<u64, L> = from_fn(|l| h(seqk[l] as u8)).into();
 self.fh = ((self.fh << 1) | (self.fh >> 63)) ^ hi ^ hk;
 #+end_src
-#+end_details
+#+end_detail
 The main difference is that in SIMD, there is no bit-rotate instruction[fn::At
 least not with AVX256. AVX512 [[https://doc.rust-lang.org/core/arch/x86/fn._mm256_rol_epi32.html][does have it]] though.], so
 that instead we have to implement this using two shifts. Let's have a quick look
@@ -1980,10 +1980,10 @@ it is what it is.
 #+end_notice
 
 #+attr_shortcode: "The full code for SIMD-based hashing of bitpacked data is here."
-#+begin_details
+#+begin_detail
 #+caption: Full source of the SIMD ntHash with bit-packed data.
 #+include: "code/blog/nthash.rs" src rust :lines "185-"
-#+end_details
+#+end_detail
 
 The four =gather= instructions only take around 30% of the total time now, and
 thus aren't nearly as much of a bottleneck anymore.
@@ -2140,7 +2140,7 @@ we must determine the loop to analyse. For simplicity, let's exclude the input
 gathering, and only focus on the nthash computation, that covers around 70% of
 the time:
 #+attr_shortcode: "Assembly code of the hot loop."
-#+begin_details
+#+begin_detail
 #+caption: The current hot loop.
 #+begin_src gas
   5.89 │1530:┌─→vmovdqa        0x1a0(%rsp),%ymm6
@@ -2176,7 +2176,7 @@ the time:
   0.10 │     ├──test           $0xf,%sil
   1.95 │     └──jne            1530                                                
 #+end_src
-#+end_details
+#+end_detail
 
 We can use [[https://github.com/pacak/cargo-show-asm][=carg-show-asm=]] to conveniently extract the assembly code.
 First, we mark the =hash_kmers= function as =#[inline(never)]= so that we can
@@ -2189,7 +2189,7 @@ This outputs the full function, including setup and cleanup. We manually copy
 the assembly corresponding to the inner loop to a separate file.
 
 #+attr_shortcode: "Extracted assembly code"
-#+begin_details
+#+begin_detail
 #+caption: The extracted assembly code has some minor differences in ordering from the one before, but it mostly the same.
 #+begin_src gas
 	vmovdqa 608(%rsp), %ymm7
@@ -2220,7 +2220,7 @@ the assembly corresponding to the inner loop to a separate file.
 	testb $15, %dil
 	jne .LBB116_30
 #+end_src
-#+end_details
+#+end_detail
 
 Then, we can run LLVM-mca on this code: =llvm-mca < assembly=, optionally with
 some flags such as =--all-stats=, =--all-view=, =--bottleneck-analysis=, and =--timeline=. I
@@ -2248,7 +2248,7 @@ occur only once every =32= iterations.
 
 Then, we get a table of latency and throughput values.
 #+attr_shortcode: "Latency and throughput table"
-#+begin_details
+#+begin_detail
 #+caption: MicroOps, latency, and throughput numbers.
 #+begin_src txt
 [1]: #uOps
@@ -2287,13 +2287,13 @@ Then, we get a table of latency and throughput values.
  1      1     0.25                        testb	$15, %dil
  1      1     0.50                        jne	.LBB116_30
 #+end_src
-#+end_details
+#+end_detail
 
 And lastly, we see which ports every instruction can execute on. The top line is
 a summary of total usage of each port.
 
 #+attr_shortcode: "Port usage table"
-#+begin_details
+#+begin_detail
 #+caption: Port usage for each instruction. Ports 1, 2, 5, and 6 are used 5.5 times every iteration.
 #+begin_src txt
 Resources:
@@ -2343,11 +2343,11 @@ Resource pressure by instruction:
  -      -      -     0.03    -      -      -     0.96   0.01    -     testb	$15, %dil
  -      -     0.97    -      -      -      -      -     0.03    -     jne	.LBB116_30
 #+end_src
-#+end_details
+#+end_detail
 
 The timeline also looks cool.
 #+attr_shortcode: "Timeline"
-#+begin_details
+#+begin_detail
 #+caption: Two iterations of the timeline, that show that the =vmovdqa= instructions that load the characters take a lot of time to execute.
 #+begin_src txt
 [5,0]     .    .    .    .    .    DeeeeeeeE-R    .    .    .    .    . .   vmovdqa	608(%rsp), %ymm7
@@ -2405,7 +2405,7 @@ The timeline also looks cool.
 [6,25]    .    .    .    .    .    .    .   D========eE-R   .    .    . .   testb	$15, %dil
 [6,26]    .    .    .    .    .    .    .    D========eER   .    .    . .   jne	.LBB116_30
 #+end_src
-#+end_details
+#+end_detail
 
 The thing that struck me most in all this is that the =vmovdqa= instructions
 have a quite high latency of 7 cycles. Even though it is probably hidden, it
@@ -2430,10 +2430,10 @@ To recap, our speed is:
 And for completeness, here's the full source code.
 
 #+attr_shortcode: "Full code for the SIMD NtHash implementation."
-#+begin_details
+#+begin_detail
 #+caption: Full code for the SIMD FxHash implementation.
 #+include: "code/blog/nthash.rs" src rust :lines "185-"
-#+end_details
+#+end_detail
 
 *** Doubling down again
 Currently, the number of instructions per cycle is 3, while it could be over 4.
@@ -2493,10 +2493,10 @@ return self.chars * self.constant;
 #+end_src
 
 #+attr_shortcode: "Full code for the SIMD FxHash implementation."
-#+begin_details
+#+begin_detail
 #+caption: Full code for the SIMD FxHash implementation.
 #+include: "code/blog/fxhash.rs" src rust
-#+end_details
+#+end_detail
 
 Again faster, with =0.32 ns/kmer= now, or 0.83 cycles per kmer!
 

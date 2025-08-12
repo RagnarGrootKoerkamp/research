@@ -5,7 +5,7 @@
 #+toc: headlines 3
 #+PROPERTY: header-args :eval never-export
 #+hugo_level_offset: 0
-#+hugo_paired_shortcodes: %notice details
+#+hugo_paired_shortcodes: %notice %detail
 #+hugo_aliases: /posts/high-throughput-searching-1
 #+date: <2024-12-18 Wed>
 
@@ -1039,7 +1039,7 @@ should achieve near-optimal performance given the CPU's memory bandwidth to L3
 and RAM (at least, that's what I assume is the bottleneck now).
 
 #+attr_shortcode: "Click to show code for interleaving."
-#+begin_details
+#+begin_detail
 #+caption: In code, we interleave all layers by compiling a separate function for each height of the tree. Then the compiler can unroll the loop over the layers. There is a bunch of overhead in the code for the first and last iterations that's omitted.
 #+begin_src rust
 pub fn batch_interleave_full_128(&self, qs: &[u32]) -> Vec<u32> {
@@ -1118,7 +1118,7 @@ pub fn batch_interleave_full<const P: usize, const L: usize, const PL: usize>(
     out
 }
 #+end_src
-#+end_details
+#+end_detail
 
 #+attr_html: :class inset large
 #+caption: Interleaving all layers of the search binary search improves throughput from =29ns/query= to =24ns/query=.
