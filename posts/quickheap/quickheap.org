@@ -72,12 +72,23 @@ priority queue where the priority of the popped elements may only increase. This
 is for example the case when running Dijkstra's algorithm on a graph with
 non-negative edge weights.
 
-The /sequence heap/ [cite:@sequence-heap] is a relatively involved data
-structure designed specifically for minimizing I/O.
+The /sequence heap/ [cite:@sequence-heap] and funnel heap [cite:@funnel-heap]
+are two similar I/O efficient / cache-oblivious data structures. (But, according
+to [cite/t:@priority-queue-survey], they serve slightly different purposes.)
+They build on the idea of /binary mergers/: given two input buffers containing
+sorted data, they merge those into a sorted output buffer as needed. These
+"gadgets" are used to build $k$-way mergers, and a chain of these is made for
+exponentially increasing $k$.
 
 The /cascade heap/ [cite:@cascade-heap] has $O(1)$ inserts, and $O(\log^* n +
 \log k)$ pop for the $k$'th popped element. Thus, this avoids the overhead of
 doing too much up-front work.
+The /logarithmic funnel/ [cite:@log-funnel-heap] takes a similar approach of
+building high dimensional trees.
+
+A more broad survey is given by [cite/t:@priority-queue-survey], which
+surprisingly does not mention the quickheap described below.
+
 
 * Literature on Quickheaps
 
@@ -408,7 +419,7 @@ Some observations:
     sift down through the maximum possible number of layers.
 - The *radix* heap (purple) has constant performance for heapsort, since its
   $O(n\log C)$ term only depends on the number of bits in the input values,
-  which is 32 or 64. This is also the worst possibly input for radix sort.
+  which is 32 or 64. This is also the worst possible input for radix sort.
   - Random pushes interleaved with pops are not supported, since the minimum
     value in the heap may only increase.
   - Radix sort is the fastest for linear input, likely because of its cache locality.
@@ -432,7 +443,7 @@ the quickheap pushes to one of $O(\log n)$ known (cached) locations, pops
 from a single location, and has memory-efficient partitioning as well.
 
 ** Still TODO
-- I have not yet implemented the ideas from [cite/t:@stronger-quickheaps] to
+- I have not yet implemented the ideas from the randomized quickheap [cite/t:@stronger-quickheaps] to
   prevent the worst-case quadratic growth.
 - I'd like to run experiments on some more realistic datasets. I could compare
   Dijkstra with the radix heap and quickheap, but then I need some interesting
