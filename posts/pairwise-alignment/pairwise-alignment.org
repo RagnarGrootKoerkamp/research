@@ -207,6 +207,7 @@ higher than the divergence, since random errors can cancel each other.
 #+name: edit-graph
 #+caption: An example of an edit graph (left) corresponding to the alignment of strings =ABCA= and =ACBBA=, adapted from [cite:@sellers]. Bold edges indicate matches of cost 0, while all other edges have cost 1. All edges are directed from the top-left to the bottom-right. The shortest path of cost 2 is highlighted. The middle shows the corresponding dynamic programming (DP) matrix containing the distance $\g(u)$ to each state. The right shows the final alignment corresponding to the shortest path through the graph, where a =C= is inserted between the first =A= and =B=, and the initial =C= is substituted for a =B=.
 #+attr_html: :class inset medium
+#+attr_latex: :scale 1.4 :placement [t]
 [[file:fig/edit-graph.svg]]
 
 *Dynamic programming.*
@@ -265,6 +266,7 @@ states in order of increasing ``anticipated total distance''.
 #+caption: Different types of pairwise alignment. Bold vertices and edges indicate where each type of alignment may start and end. Local-extension alignment can end anywhere, whereas local alignment can also start anywhere. Like clipping, these modes require a /score/ for matching characters, while in other cases, a /cost model/ (with cost-0 matches) suffices. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+name: alignment-types
 #+attr_html: :class inset large
+#+attr_latex: :scale 1.1 :placement [t]
 [[file:fig/alignment-modes.svg]]
 
 There are a few variants of pairwise alignments and edit distance. While the
@@ -314,6 +316,7 @@ Later, in [[../mapping/mapping.org][Chapter 5]], we look deeper into semi-global
 #+caption: Overview of different cost models. The highlighted edge indicates the cost of matching characters, while all remaining edges indicate the cost of mismatch or indel edges. The longest common subsequence (LCS) is a /score/ rather than a /cost/, and counts the maximal number of matching characters. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+name: cost-models
 #+attr_html: :class inset medium
+#+attr_latex: :scale 1.4 :placement [t]
 [[file:fig/cost-models.svg]]
 
 There are different models to specify the cost of each edit operation
@@ -435,6 +438,7 @@ a few years before, although in a different domain.
 #+caption: The cubic algorithm as introduced by Needleman and Wunsch [cite:@nw]. Consider the highlighted cell. In the cubic algorithm, we first compute the cost between the two preceding characters, which are both =B= and thus create a match. Then, we consider all earlier cells in the the preceding row and column, and consider all gaps of arbitrary length $k$ and cost $w_k=k$.
 #+caption: The quadratic algorithm does not support arbitrary gap costs, but relies on $w_k=k$. This allows it to only consider three neighbouring states.
 #+attr_html: :class inset :width 80%
+#+attr_latex: :scale 1.4 :placement [t]
 [[file:fig/dp.svg]]
 
 *Needleman-Wunsch' cubic algorithm.*
@@ -707,11 +711,13 @@ more efficient approach based on /computational volumes/ that merges DP and A*.
 #+name: a1
 #+caption: Schematic overview of global pairwise alignment methods. The shaded areas indicate states computed by each method, and darker shades indicate states that are computed multiple times. In practice, diagonal transition only computes a very sparse set of states, as indicated by lines rather than an area.
 #+attr_html: :class inset large
+#+attr_latex: :scale 1.0
 [[file:fig/algs-1.svg]]
 
 #+name: a2
 #+caption: A detailed example of each method shown in [[a1]]. Shaded areas indicate computed values, and darker shades states are computed more than once. The yellow path indicates the optimal alignment. For diagonal transition (DT), the wavefronts are indicates by black lines, and this grey lines indicate a best path to each state. The top right (j) shows contours for the longest common subsequence.
 #+attr_html: :class inset large
+#+attr_latex: :scale 1.0
 [[file:fig/algs-2.svg]]
 
 
@@ -1129,6 +1135,7 @@ LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
 #+caption: Red shaded states are not visited.
 #+name: fig:four-russians
 #+attr_html: :class inset
+#+attr_latex: :scale 1.0 :placement [t]
 [[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]
 
 *Four Russians method.*

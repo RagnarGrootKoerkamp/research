@@ -56,6 +56,7 @@ Then we run a separate alignment to find the optimal alignment.
 #+name: types
 #+caption: Different types of pairwise alignment. Bold vertices and edges indicate where each type of alignment may start and end. Local-extension alignment can end anywhere, whereas local alignment can also start anywhere. Like clipping, these modes require a /score/ for matching characters, while in other cases, a /cost model/ (with cost-0 matches) suffices. This figure is based on an earlier version that was made in collaboration with Pesho Ivanov.
 #+attr_html: :class inset large
+#+attr_latex: :scale 1.2 :placement [t]
 [[file:fig/alignment-modes.svg]]
 
 As we saw in \cref{ch:astarpa}, there are many different types of pairwise alignment ([[types]]).
@@ -69,6 +70,7 @@ relative size of the two sequences being aligned.
 
 #+caption: Depending on the absolute and relative size of the two sequences, instances of semi-global alignment fall into three categories: pairwise alignment, text searching, and mapping.
 #+attr_html: :class inset :width 70%
+#+attr_latex: :scale 1.2 :placement [t]
 [[file:fig/dimentions.svg]]
 
 *Pairwise semi-global alignment.*
@@ -148,6 +150,7 @@ small alignments.
 #+name: text-searching
 #+caption: Text searching is the problem of finding a typically short (length $O(w)$) pattern in a longer text. The left shows how the classical Needleman-Wunsch algorithm fills the entire matrix column by column. On the right (adapted from [cite:@myers99]), we search for all alignments with cost $\leq k$, and states at distance $\leq k$ are highlighted. The bloc\(k\)-based approach only computes blocks that contain at least one state at distance $\leq k$, and takes $O(n \lceil k/w\rceil)$ time in expectation on random strings [cite:@chang92].
 #+attr_html: :class inset large
+#+attr_latex: :scale 1.7 :placement [t]
 [[file:fig/search.svg]]
 
 In A*PA2 (\cref{ch:astarpa2}), we developed a bloc\(k\)-based method for pairwise alignment.
@@ -184,6 +187,7 @@ top row ($j=0$).
 #+caption: By default, global alignment uses a cost of 1 along all edges of the matrix, while semi-global alignment and overlap/ends-free/extension variants have a cost of 0 along some edge.
 #+caption: When a pattern only partially overlaps the text, as shown on the left, it may be preferable to have a /skip-cost/ $\alpha$ for each unmatched character that is in between $0$ and $1$. This can also be applied to global alignment (replacing ends-free alignment), and can be an alternative to local alignment.
 #+attr_html: :class inset medium
+#+attr_latex: :scale 1.4 :placement [t]
 [[file:fig/skip-cost.svg]]
 
 In some applications, it may happen that the pattern is present, but cut off at
@@ -221,6 +225,7 @@ approximately $\alpha$, as shown in [[skip-cost-example]] for $\alpha=0.5$.
 #+name: skip-cost-example
 #+caption: Example of computing a semi-global alignment with a skip-cost of $\alpha = 1/2$. In the first column the graph, edges of cost 1 and 0 alternate. On the bottom, the graph is extended with matches until a multiple of the block size is reached. On the right, the final score in row $j$ is increased by $\lceil \alpha(m-j)\rceil = \lceil (m-j)/2\rceil$ to obtain the score including skip-cost. Three alignments are highlighted and shown, with edits highlighted. Only half of the skipped characters (rounded up) incurs a cost.
 #+attr_html: :class inset medium
+#+attr_latex: :scale 1.5 :placement [t]
 [[file:fig/skip-cost-example.svg]]
 
 *Applying the skip-cost.*
@@ -245,12 +250,14 @@ to 0.
 #+name: skip-cost-plot
 #+caption: Example of the output of the skip-cost alignment when aligning a length-100 pattern onto a length-600 text (as shown in [[skip-cost-setup]]). Graphs are shown for $\alpha=1$, corresponding to classical semi-global alignment, $\alpha=0.5$, corresponding to the skip-cost introduced here, and $\alpha=0$, corresponding to an overlap alignment. Vertical lines indicate the region inside of which the pattern fully matches within the text, and where the cost of the alignment does not depend on the skip-cost $\alpha$.
 #+attr_html: :class inset large
+#+attr_latex: :placement [t]
 [[file:skip-cost/skip-cost-plot.svg]]
 
 #+name: skip-cost-setup
 #+caption: The setup of the alignment results shown in [[skip-cost-plot]]. A random pattern of length 100 is generated and overlaid on a length 600 text 3 times:
 #+caption: once in the middle, and twice with a 50 base overlap at the start/end of the sequence. Before inserting the pattern into the text, a different number of mutations is applied to the full length-100 pattern.
 #+attr_html: :class inset medium
+#+attr_latex: :scale 2.0 :placement [t]
 [[file:fig/skip-cost-setup.svg]]
 
 ** Results
@@ -261,6 +268,7 @@ to 0.
 #+name: search-results-plot
 #+caption: Log-log plot of the time to align a pattern of length $m$ against a text of length 50 kbp, in nanoseconds per base of the text. Only the time needed to compute the minimal distance is reported, excluding alignment/traceback. Our SIMD search method (yellow) always computes the entire matrix. Edlib, on the other hand, by default uses a band doubling approach (solid lines). Disabling this via a fixed high threshold is shown dashed.
 #+attr_html: :class inset medium
+#+attr_latex: :width 0.7 \textwidth :placement [t]
 [[file:search-results/search-plot.svg]]
 
 We benchmark the throughput of the search function in [[search-results-plot]], where we
@@ -312,6 +320,7 @@ provide a significant speedup.
 #+name: seed-chain-extend
 #+caption: An example of the /seed-chain-extend/ method for mapping. First, /seeds/ (black diagonals) are found, which are short matches between the two sequences. Then, these seeds are /chained/ into /chains/ (dashed lines). Each seed and each chain is scored based on the number of seeds in the chain and their relative positions. The chains with the highest scores are selected as candidate alignments. Then, short alignments are done to fill the gaps between the seeds and /extend/ the chain into a full alignment. A drawback of seed-chain-extend is that it may not return optimal alignments. Instead, a full semi-global alignment could be done around the chain to obtain an exact alignment, leading to /seed-chain-align/. The bottom left shows a semi-global alignment using Needleman-Wunsch, and the bottom-right showh a semi-global alignment using band-doubling.
 #+attr_html: :class inset medium
+#+attr_latex: :scale 1.5 :placement [t]
 [[file:fig/seed-chain-extend.svg]]
 
 The problem of /mapping/ differs from text searching considered so far in a few
@@ -387,6 +396,7 @@ This technique is used by MUMmer [cite:@mummer-1;@mummer-4];
 #+name: chain-models
 #+caption: There are different models to give costs and scores to chains. Here we show three possible costs that can be given to the connection between
 #+attr_html: :class inset medium :width 80%
+#+attr_latex: :scale 1.5 :placement [t]
 [[file:fig/chaining.svg]]
 
 After finding all the seed matches, the next step is to find candidate regions
@@ -557,9 +567,10 @@ Experiments are run on an Intel =i7-10750H= with AVX2, running at a fixed CPU fr
 2.6 GHz.
 
 #+begin_export latex
-\begin{table}[b]
+\begin{table}[t]
 \caption{\label{tab:map-results}Results of aligning 1000 random subsequence of chromosome 1, with varying divergence. The first row shows the time in seconds to index the 235 Mbp chromosome, and remaining rows show the total time to map the 1000 reads. For minimap2, we try various default configurations, while for A*Map we use $k=20$ and $k=28$. (*): For $k=28$, the alignments found with $4.4\%$ divergence are not guaranteed to be exact, since $k$ is larger than $1/d=1/4.4\%$, and indeed, 3 reads remain unmapped. The PacBio mode uses homopolymer compression.}
 \centering
+\small
 \begin{tabular}{rrrrrr}
   \toprule
 Divergence &
