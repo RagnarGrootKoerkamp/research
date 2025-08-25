@@ -131,7 +131,7 @@ chooses the smallest one, as shown in [[minimizer-example]]. This has a density 
 large as the trivial lower bound.
 
 #+name: minimizer-example
-#+caption: An example of the random minimizer. First all \(k\)-mers of length $k=5$ are hashed using a random hash function, as shown by the black lines with their hash written above them. Then, in each window of $w=4$ consecutive \(k\)-mer hashes, as e.g. the window highlighted in yellow, the (position of) the smallest \(k\)-mer hash is recorded. Then, the (positions of) the smallest \(k\)-mers in all windows form the set of minimizers. This figure is taken from [cite:@simd-minimizers-preprint] and made in collaboration with Igor Martayan.
+#+caption: An example of the random minimizer. First all \(k\)-mers of length $k=5$ are hashed using a random hash function, as shown by the black lines with their hash written above them. Then, in each window of $w=4$ consecutive \(k\)-mer hashes, as e.g. the window highlighted in yellow, the (position of) the smallest \(k\)-mer hash is recorded. Then, the (positions of) the smallest \(k\)-mers in all windows form the set of minimizers. This figure is taken from [cite:@simd-minimizers] and made in collaboration with Igor Martayan.
 #+attr_latex: :placement [t] :scale 1.3
 [[file:figs/minimizer.svg]]
 
@@ -703,10 +703,10 @@ $$f(\revcomp(W)) = w-1-f(W).$$
 
 One way to turn any minimizer scheme into a canonical minimizer scheme is by
 using the order $\Ok^{\revcomp}(x) = \min(\Ok(x), \Ok(\revcomp(x)))$
-[cite:@minimizers;@nthash] or $\Ok^{\revcomp}(x) = \Ok(x) + \Ok(\revcomp(x))$ [cite:@nthash2;@simd-minimizers-preprint].
+[cite:@minimizers;@nthash] or $\Ok^{\revcomp}(x) = \Ok(x) + \Ok(\revcomp(x))$ [cite:@nthash2;@simd-minimizers].
 Still, this leaves the problem of whether to sample the leftmost or rightmost
 occurrence of a \(k\)-mer in case of ties. This can be solved using the technique of
-the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers-preprint]: ensure that $w+k-1$ is odd,
+the /refined minimizer/ [cite:@refined-minimizer;@simd-minimizers]: ensure that $w+k-1$ is odd,
 and pick the strand with the highest count of =GT= bases.
 Wittler [cite:@encoding-canonical-kmers] shows
 a way to encode canonical \(k\)-mers that saves one bit.
@@ -1348,7 +1348,7 @@ searches for small universal hitting sets. Especially for $k$ just below $w$,
 its density is much better than any other scheme.
 
 *GreedyMini.*
-Unlike the previous UHS schemes, GreedyMini [cite:@greedymini-preprint] directly
+Unlike the previous UHS schemes, GreedyMini [cite:@greedymini] directly
 constructs a low-density minimizer scheme using a brute force approach.
 As we saw, the density of a minimizer scheme equals the probability that the
 smallest \(k\)-mer in a $w+k$ long context is at the start or end.

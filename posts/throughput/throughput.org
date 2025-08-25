@@ -54,8 +54,8 @@ access reads.
 In this part, we summarize high level techniques for writing high
 throughput code.
 We give examples of how these optimizations are applied in the two upcoming
-chapters, where we optimize the computation of random minimizers [cite:@simd-minimizers-preprint] and build a
-fast /minimal perfect hash function/ data structure [cite:@ptrhash-full].
+chapters, where we optimize the computation of random minimizers [cite:@simd-minimizers] and build a
+fast /minimal perfect hash function/ data structure [cite:@ptrhash].
 
 All text is my own, and at most loosely based on the mentioned papers.
 #+end_notice
@@ -143,7 +143,7 @@ We note that both these applications have uses in text indexing.
 First, minimizers are used in many different data structures. One way in which
 they are used is to /sketch/ the input text into a smaller representation. Then,
 one can build a much smaller and faster data structure only on this sketched
-representation [cite:@u-index-preprint;@sampling-sa-minimizers;@mdbg].
+representation [cite:@u-index;@sampling-sa-minimizers;@mdbg].
 This sketching step can also be seen as a way to compress the data. This means
 that the compression algorithm itself (the computation of the minimizers)
 is the only part of the pipeline that sees the full input data, while all
@@ -203,7 +203,7 @@ There are many indices and tools using minimizers,
 such as SSHash [cite:@sshash]
 and minimizer-space De Bruijn graphs [cite:@mdbg].
 In some cases, minimizers are also specifically used as a sketch of the text
-[cite:@sampling-sa-minimizers;@u-index-preprint]. Specifically there, this
+[cite:@sampling-sa-minimizers;@u-index]. Specifically there, this
 ''compression'' step of computing the minimizers can easily become a bottleneck,
 since all subsequent operations only have to operate on the much smaller
 sketched space. Thus, this is a classic compute bound problem, where the input
