@@ -476,12 +476,13 @@ hyperthreading disabled.
 #+caption: The correlation is between the computed distances, and the distances computed by a bottom-$s$ sketch with $s=65536$.
 | Tool       | Sketch type | size $s$ | $b$-bits | Sketching (s) | Distances (s) | Correlation |
 |------------+-------------+----------+----------+---------------+---------------+-------------|
-| BinDash    | bottom      |      128 |       64 |         118.0 |         0.530 |      0.9567 |
-| BinDash    | bottom      |     1024 |       64 |         121.2 |         3.780 |      0.9911 |
-| BinDash    | bottom      |     8192 |       64 |         146.9 |        32.780 |      0.9946 |
-| SimdSketch | bottom      |      128 |       32 |           3.8 |         0.243 |      0.9651 |
-| SimdSketch | bottom      |     1024 |       32 |           3.8 |         1.918 |      0.9965 |
-| SimdSketch | bottom      |     8192 |       32 |           4.2 |        15.499 |      0.9993 |
+| BinDash    | bottom      |      128 |       64 |         113.3 |         0.580 |      0.9669 |
+| BinDash    | bottom      |     1024 |       64 |         116.3 |         3.580 |      0.9960 |
+| BinDash    | bottom      |     8192 |       64 |         138.6 |        29.450 |      0.9994 |
+| SimdSketch | bottom      |      128 |        8 |           2.0 |         0.216 |      0.9655 |
+| SimdSketch | bottom      |     1024 |        8 |           2.0 |         1.699 |      0.9965 |
+| SimdSketch | bottom      |     8192 |        8 |           2.1 |        13.689 |      0.9993 |
+| SimdSketch | bottom      |    32768 |        8 |           2.8 |        54.954 |      0.9999 |
 | BinDash    | bucket      |      128 |        1 |         124.7 |         0.270 |      0.8996 |
 | BinDash    | bucket      |      128 |        8 |         124.7 |         0.250 |      0.9649 |
 | BinDash    | bucket      |      128 |       32 |         124.6 |         0.240 |      0.9650 |
@@ -491,20 +492,26 @@ hyperthreading disabled.
 | BinDash    | bucket      |     8192 |        1 |         126.4 |         0.370 |      0.9978 |
 | BinDash    | bucket      |     8192 |        8 |         126.7 |         0.600 |      0.9994 |
 | BinDash    | bucket      |     8192 |       32 |         127.1 |         1.740 |      0.9994 |
-| BinDash-rs | bucket      |      128 |       32 |         146.4 |         0.246 |      0.9581 |
+| BinDash-rs | bucket      |      128 |       32 |         146.4 |         0.246 |      0.9588 |
 | BinDash-rs | bucket      |     1024 |       32 |         145.8 |         0.353 |      0.9929 |
-| BinDash-rs | bucket      |     8192 |       32 |         147.1 |         1.977 |      0.9988 |
-| SimdSketch | bucket      |      128 |        1 |           3.7 |         0.004 |      0.9238 |
-| SimdSketch | bucket      |      128 |        8 |           3.8 |         0.010 |      0.9674 |
-| SimdSketch | bucket      |      128 |       32 |           3.8 |         0.011 |      0.9675 |
-| SimdSketch | bucket      |     1024 |        1 |           3.8 |         0.009 |      0.9860 |
-| SimdSketch | bucket      |     1024 |        8 |           3.8 |         0.051 |      0.9944 |
-| SimdSketch | bucket      |     1024 |       32 |           3.8 |         0.078 |      0.9943 |
-| SimdSketch | bucket      |     8192 |        1 |           4.1 |         0.038 |      0.9976 |
-| SimdSketch | bucket      |     8192 |        8 |           4.1 |         0.360 |      0.9994 |
-| SimdSketch | bucket      |     8192 |       32 |           4.2 |         0.922 |      0.9994 |
-| SimdSketch | bucket      |    16384 |        1 |           4.4 |         0.067 |      0.9990 |
-| SimdSketch | bucket      |    32768 |        1 |           5.1 |         0.131 |      0.9995 |
+| BinDash-rs | bucket      |     8192 |       32 |         147.1 |         1.977 |      0.9987 |
+| SimdSketch | bucket      |      128 |        1 |           2.0 |         0.005 |      0.9254 |
+| SimdSketch | bucket      |      128 |        8 |           2.0 |         0.014 |      0.9677 |
+| SimdSketch | bucket      |      128 |       16 |           2.0 |         0.015 |      0.9677 |
+| SimdSketch | bucket      |      128 |       32 |           2.0 |         0.015 |      0.9678 |
+| SimdSketch | bucket      |     1024 |        1 |           2.0 |         0.011 |      0.9861 |
+| SimdSketch | bucket      |     1024 |        8 |           2.0 |         0.057 |      0.9945 |
+| SimdSketch | bucket      |     1024 |       16 |           2.0 |         0.065 |      0.9945 |
+| SimdSketch | bucket      |     1024 |       32 |           2.0 |         0.067 |      0.9944 |
+| SimdSketch | bucket      |     8192 |        1 |           2.2 |         0.035 |      0.9977 |
+| SimdSketch | bucket      |     8192 |        8 |           2.2 |         0.382 |      0.9994 |
+| SimdSketch | bucket      |     8192 |       16 |           2.2 |         0.595 |      0.9994 |
+| SimdSketch | bucket      |     8192 |       32 |           2.2 |         0.881 |      0.9994 |
+| SimdSketch | bucket      |    32768 |        1 |           3.0 |         0.110 |      0.9996 |
+| SimdSketch | bucket      |    32768 |        8 |           3.0 |         1.736 |      0.9999 |
+| SimdSketch | bucket      |    32768 |       16 |           3.0 |         2.788 |      0.9999 |
+| SimdSketch | bucket      |    32768 |       32 |           3.0 |         4.074 |      0.9999 |
+| SimdSketch | bucket      |   131072 |        1 |           6.9 |         0.541 |      0.9999 |
 
 The table above compares all tools. Some observations:
 - The time for sketching is mostly independent of the input parameters, since
@@ -545,11 +552,7 @@ Again some observations:
 - BinDash and SimdSketch give very similar results for the bucket hash (middle
   and bottom row), and also very similar to BinDash-rs (top right).
 - $b=8$ (middle column) looks very similar to $b=32$ (left column). $b=1$ is worse.
-- BinDash's bottom sketch (middle top) seems off. It seems to have a bias to
-  reporting too small values, and is off when the similarity is small. I suspect
-  this is due to a bug[fn::Most likely, [[https://github.com/zhaoxiaofei/bindash/blob/71613b921eb9c766b1599def2ea15a8d1e41c933/src/genome.hpp#L158][this loop]] should terminate as soon as
-  $s$ distinct values have been seen, as noted in Section [[#bottom-s]].] in the computation of the Jaccard similarity, but my
-  attempt at fixing it was not successful.
+- Fixed by now: BinDash's bottom sketch (middle top) was off ([[https://github.com/zhaoxiaofei/bindash/issues/23][github issue]]).
 
 ** Comparison speed
 We now look slightly closer at comparing the speed of comparing sketches, versus
