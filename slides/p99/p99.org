@@ -1,0 +1,516 @@
+#+title: 40x Faster Binary Search
+# #+subtitle: P99 2025
+#+author: Ragnar {Groot Koerkamp}
+#+hugo_section: slides
+#+filetags: @slides hpc data-strutures binary-search wip
+#+OPTIONS: ^:{} num: num:0 toc:nil
+#+hugo_front_matter_key_replace: author>authors
+# #+toc: depth 2
+#+reveal_theme: white
+#+reveal_extra_css: /css/slide.min.css
+#+reveal_extra_css: /css/p99.min.css
+#+reveal_init_options: width:1920, height:1080, margin: 0.04, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+#+REVEAL_PLUGINS: (highlight)
+#+REVEAL_HIGHLIGHT_CSS: /css/vs.min.css
+#+reveal_reveal_js_version: 4
+#+export_file_name: ../../static/slides/p99/index.html
+#+hugo_paired_shortcodes: %notice
+#+date: <2025-07-20 Sun>
+# Export using C-c C-e R R
+# Turn off org-special-block-extras-mode
+# Enable auto-export using :toggle-org-reveal-export-on-save
+# Disable hugo export using :org-hugo-auto-export-mode
+
+
+#+attr_html: :style display:none
+[[file:p99-title-slide.png]]
+
+
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+#+REVEAL_TITLE_SLIDE: <h1 class="title" style="text-transform:none;line-height:2.3rem;padding-top:1rem;padding-bottom:1rem;">%t<br/><span style="font-size:1.3rem;color: #444444">%s</span></h1>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:1rem;line-height:initial;margin-top:1.5rem;">%a</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;font-size:0.7rem;font-family:monospace;line-height:initial;color:rgb(0, 133, 255);text-transform:none;">@curiouscoding.nl</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:0.7rem;font-weight:normal;color:grey;margin-top:0.5rem">P99 2025</h2>
+# #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/bmilab.svg" style="position:absolute;bottom:6.5%%;left:2%%;width:30%%"></img>
+#+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%%;left:0%%;width:20%%"></img>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/slides/p99" style="position:absolute;bottom:9.8%%;right:5%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/slides/p99</a>
+#+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/posts/static-search-tree" style="position:absolute;bottom:3.8%%;right:5%%;width:45%%;color:grey;font-size:smaller">curiouscoding.nl/posts/static-search-tree</a>
+#+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/p99-title-slide.png" style="position:absolute;top:-4%%;left:-3%%;width:106%%;height:106%%;max-width:initial;max-height:initial"></img>
+
+
+* Ragnar {Groot Koerkamp}
+:PROPERTIES:
+:CUSTOM_ID: me
+:END:
+- Did IMO & ICPC; currently head-of-jury for NWERC.
+- Some time at Google.
+- Quit and solved all of [[https://projecteuler.net/][projecteuler.net]] (700+) during Covid.
+- Just finished PhD on /high throughput bioinformatics/ @ ETH Zurich.
+  - Lots of sequenced DNA that needs processing.
+  - Many /static/ datasets, e.g. a 3GB human genome.
+  - Revisiting basic algorithms and optimizing them to the limit.
+  - Good in theory $\neq$ fast in practice.
+
+* Problem Statement
+:PROPERTIES:
+:CUSTOM_ID: problem-statement
+:END:
+- Input: a static sorted list of 32 bit integers.
+- Queries: given $q$, find the smallest value in the list $\geq q$.
+
+#+begin_src rust
+trait SearchIndex {
+    // Initialize the data structure.
+    fn new(sorted_data: &[u32]) -> Self;
+    // Return the smallest value >=q.
+    fn query(&self, q: u32) -> u32;
+}
+#+end_src
+\\
+- Why? E.g. searching through a suffix array.
+- Previous work on Algorithmica:\\
+  [[https://en.algorithmica.org/hpc/data-structures/s-tree/][en.algorithmica.org/hpc/data-structures/s-tree]]
+- This work: [[https://curiouscoding.nl/posts/static-search-tree/][curiouscoding.nl/posts/static-search-tree]]
+  
+* Binary Search: complexity $O(\lg n)$
+:PROPERTIES:
+:CUSTOM_ID: binary-search
+:END:
+
+1. Compare $q=5$ with the middle element $x$.
+2. Recurse on left half if $q\leq x$, right half if $q>x$.
+3. End when 1 element left after $\lceil\lg_2(n+1)\rceil$ steps.
+
+
+#+attr_html: :class large :style height:600px;top:55% :src /ox-hugo/binary-search.svg
+[[file:binary-search.svg]]
+
+** Binary Search: latency is more than $O(\lg n)$
+:PROPERTIES:
+:CUSTOM_ID: binary-search-latency
+:END:
+
+#+attr_html: :class large :style left:50%;height:80%;top:55% :src /ox-hugo/bs-1.svg
+[[file:bs-plots/bs-1.svg]]
+
+** Array Indexing: $O(n^{0.35})$ latency!
+:PROPERTIES:
+:CUSTOM_ID: array-indexing-latency
+:END:
+
+#+attr_html: :class large :style left:50%;height:80%;top:55% :src /ox-hugo/bs-2.svg
+[[file:bs-plots/bs-2.svg]]
+
+** Heap Layout: efficient caching + prefetching
+:PROPERTIES:
+:CUSTOM_ID: caches
+:END:
+- Binary search: top of tree is spread out; each cache line has 1 value.
+- Eytzinger layout: top layers of tree are clustered in cache lines.
+  - Also allows prefetching!
+
+#+attr_html: :class large :style left:50%;height:80%;top:67%;width:80% :src /ox-hugo/bs-eytzinger.svg
+[[file:bs-eytzinger.svg]]
+
+** Heap Layout: close to array indexing!
+:PROPERTIES:
+:CUSTOM_ID: eytzinger
+:END:
+
+#+attr_html: :class large :style left:50%;height:80%;top:55% :src /ox-hugo/bs-3.svg
+[[file:bs-plots/bs-3.svg]]
+
+* Static Search Trees / B-trees
+:PROPERTIES:
+:CUSTOM_ID: static-search-trees
+:END:
+- Fully use each cache line.
+\\
+\\
+\\
+\\
+\\
+\\
+\\
+#+begin_src rust
+#[repr(align(64))]       // Each block fills exactly one 512-bit cache line.
+struct Block { data: [u32; 16] }  
+struct Tree {
+    tree: Vec<Block>,    // Blocks.
+    offsets: Vec<usize>, // Index of first block in each layer.
+}
+#+end_src
+
+#+attr_html: :class large :style top:46%;height:500px :src /ox-hugo/full.svg
+[[file:figs/full.svg]]
+
+** Static Search Trees: Slower than Eytzinger?!
+:PROPERTIES:
+:CUSTOM_ID: btree-plot
+:END:
+#+attr_html: :class large :style left:50%;top:52%;height:80% :src /ox-hugo/2-find-linear.svg
+[[file:figs/plots/2-find-linear.svg]]
+
+
+# ** Traversing the tree
+
+# #+begin_src rust
+# fn search(tree: &Tree, q: u32) -> u32 {
+#     let layers = tree.offsets.len();
+#     let mut k = 0;
+#     for o in tree.offsets[0..layers-1] {
+#         let jump_to = find(tree.tree[o + k], q);
+#         k = k * (N + 1) + jump_to;
+#     }
+#     let o = tree.offsets[layers-1];
+#     let idx = find(tree.node(o + k), q);
+#     tree.tree[o + k + idx / N].data[idx % N]
+# }
+# #+end_src
+
+* Up next: assembly-level optimizations :)
+:PROPERTIES:
+:CUSTOM_ID: asm
+:END:
+
+#+attr_html: :class full :style z-index:-1 :src /ox-hugo/p99-section.png
+[[file:p99-section.png]]
+
+** Optimizing =find=: linear scan baseline
+:PROPERTIES:
+:CUSTOM_ID: find-baseline
+:END:
+
+#+begin_src rust
+fn find_linear(block: &Block, q: u32) -> usize {
+    for i in 0..N {
+        if block.data[i] >= q {
+            // Early break causes branch mispredictions
+            // and prevents auto-vectorization!
+            return i;
+        }
+    }
+    return N;
+}
+#+end_src
+
+** Optimizing =find=: auto-vectorization
+:PROPERTIES:
+:CUSTOM_ID: find-simd
+:END:
+
+#+begin_src rust
+fn find_count(block: &Block, q: u32) -> usize {
+    let mut count = 0;
+    for i in 0..N {
+        if block.data[i] < q {
+            count += 1;
+        }
+    }
+    count
+}
+#+end_src
+
+#+begin_src asm
+ vmovdqu      (%rax,%rcx), %ymm1     ; load data[..8]
+ vmovdqu      32(%rax,%rcx), %ymm2   ; load data[8..]
+ vpbroadcastd %xmm0, %ymm0           ; 'splat' the query value
+ vpmaxud      %ymm0, %ymm2, %ymm3    ; v
+ vpcmpeqd     %ymm3, %ymm2, %ymm2    ; v
+ vpmaxud      %ymm0, %ymm1, %ymm0    ; v
+ vpcmpeqd     %ymm0, %ymm1, %ymm0    ; 4x compare query with values
+ vpackssdw    %ymm2, %ymm0, %ymm0    ;
+ vpcmpeqd     %ymm1, %ymm1, %ymm1    ; v
+ vpxor        %ymm1, %ymm0, %ymm0    ; 2x negate result
+ vextracti128 $1, %ymm0, %xmm1       ; v
+ vpacksswb    %xmm1, %xmm0, %xmm0    ; v
+ vpshufd      $216, %xmm0, %xmm0     ; v
+ vpmovmskb    %xmm0, %ecx            ; 4x extract mask
+ popcntl      %ecx, %ecx             
+#+end_src
+# ** Optimizing =find=: count trailing zeros
+# :PROPERTIES:
+# :CUSTOM_ID: find-ctz
+# :END:
+# #+begin_src rust
+# #![feature(portable_simd)]
+# fn find_ctz(block: &Block, q: u32) -> usize {
+#     let data: Simd<u32, N> = Simd::from_slice(&block.data[0..N]);
+#     let q = Simd::splat(q);          // Copy q to all N lanes.
+#     let mask = q.simd_le(data);      // 1 when q<=data.
+#     mask.first_set().unwrap_or(N)    // position of first index >= q.
+# }
+# #+end_src
+
+# #+begin_src asm
+#  vpminud      (%rsi,%r8), %ymm0, %ymm1   ; take min!? of data[8..] and query
+#  vpcmpeqd     %ymm1, %ymm0, %ymm1        ; does the min equal query?
+#  vpminud      32(%rsi,%r8), %ymm0, %ymm2 ; take min!? of data[..8] and query
+#  vpcmpeqd     %ymm2, %ymm0, %ymm2        ; does the min equal query?
+#  vpackssdw    %ymm1, %ymm2, %ymm1        ; pack the two results together
+#  vextracti128 $1, %ymm1, %xmm2           ; extract half (both halves are equal)
+#  vpacksswb    %xmm2, %xmm1, %xmm1        ; to 8bit values, but weirdly shuffled
+#  vpshufd      $216, %xmm1, %xmm1         ; unshuffle
+#  vpmovmskb    %xmm1, %r8d                ; extract the high bit of each 8bit value.
+#  orl          $65536,%r8d                ; set bit 16, to cover the unwrap_or(N)
+#  tzcntl       %r8d,%r15d                  
+# #+end_src
+# ** Optimizing =find=: signed comparisons
+# :PROPERTIES:
+# :CUSTOM_ID: find-signed
+# :END:
+# #+begin_src rust
+# #![feature(portable_simd)]
+# fn find_ctz(block: &Block, q: i32) -> usize { // i32 now!
+#     let data: Simd<i32, N> = Simd::from_slice(&block.data[0..N]);
+#     let q = Simd::splat(q);          // Copy q to all N lanes.
+#     let mask = q.simd_le(data);      // 1 when q<=data.
+#     mask.first_set().unwrap_or(N)    // position of first index >= q.
+# }
+# #+end_src
+
+# #+begin_src diff
+# -vpminud      (%rsi,%r8), %ymm0, %ymm1
+# -vpcmpeqd     %ymm1, %ymm0, %ymm1
+# +vpcmpgtd     (%rsi,%rdi), %ymm1, %ymm2   ; is query(%ymm1) > data[8..]?
+# -vpminud      32(%rsi,%r8), %ymm0, %ymm2
+# -vpcmpeqd     %ymm2, %ymm0, %ymm2
+# +vpcmpgtd     32(%rsi,%rdi), %ymm1, %ymm1 ; is query(%ymm1) > data[..8]?
+#  vpackssdw    %ymm2, %ymm1, %ymm1         ; pack results
+# +vpxor        %ymm0, %ymm1, %ymm1         ; negate results (ymm0 is all-ones)
+#  vextracti128 $1, %ymm1, %xmm2            ; extract u16x16
+#  vpacksswb    %xmm2, %xmm1, %xmm1         ; shuffle
+#  vpshufd      $216, %xmm1, %xmm1          ; extract u8x16
+#  vpmovmskb    %xmm1, %edi                 ; extract u16 mask
+#  orl          $65536,%edi                 ; add bit to get 16 when none set
+#  tzcntl       %edi,%edi                   ; count trailing zeros
+# #+end_src
+# ** Optimizing =find=: popcount
+# :PROPERTIES:
+# :CUSTOM_ID: find-popcount
+# :END:
+# #+begin_src diff
+#  #![feature(portable_simd)]
+#  fn find_popcount(block: &Block, q: i32) -> usize {
+#      let data: Simd<i32, N> = Simd::from_slice(&block.data[0..N]);
+#      let q = Simd::splat(q);
+# -    let mask = q.simd_le(data);      // <=
+# +    let mask = q.simd_gt(data);      // >
+# -    mask.first_set().unwrap_or(N)    // first_set counts zeros
+# +    mask.to_bitmask().count_ones()   // count_ones
+# }
+# #+end_src
+
+# #+begin_src diff
+#  vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1
+#  vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0
+#  vpackssdw    %ymm1, %ymm0, %ymm0     ; interleave 16bit low halves
+# -vpxor        %ymm0, %ymm1, %ymm1
+#  vextracti128 $1, %ymm0, %xmm1        ; 1
+#  vpacksswb    %xmm1, %xmm0, %xmm0     ; 2
+#  vpshufd      $216, %xmm0, %xmm0      ; 3 unshuffle interleaving
+#  vpmovmskb    %xmm0, %edi             ; 4 instructions to extract bitmask
+# -orl          $65536,%edi             ;      since movemask_epi16 does not exist
+# -tzcntl       %edi,%edi               
+# +popcntl      %edi, %edi
+# #+end_src
+** Optimizing =find=: popcount
+:PROPERTIES:
+:CUSTOM_ID: find-popcount
+:END:
+#+begin_src rust
+#![feature(portable_simd)]
+fn find_popcount(block: &Block, q: i32) -> usize {
+    let data: Simd<i32, N> = Simd::from_slice(&block.data[0..N]);
+    let q = Simd::splat(q);
+    let mask = data.simd_lt(q);      // x[i] < q
+    mask.to_bitmask().count_ones()   // count_ones
+}
+#+end_src
+
+#+begin_src asm
+vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1
+vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0
+vpackssdw    %ymm1, %ymm0, %ymm0     ; interleave 16bit low halves
+vextracti128 $1, %ymm0, %xmm1        ; 1
+vpacksswb    %xmm1, %xmm0, %xmm0     ; 2
+vpshufd      $216, %xmm0, %xmm0      ; 3 unshuffle interleaving
+vpmovmskb    %xmm0, %edi             ; 4 instructions to extract bitmask
+popcntl      %edi, %edi
+#+end_src
+** Optimizing =find=: manual =movemask_epi8=
+:PROPERTIES:
+:CUSTOM_ID: find-manual
+:END:
+#+begin_src rust
+fn find_manual(block: &Block, q: i32) -> usize { // i32 now!
+    let low: Simd<i32, 8> = Simd::from_slice(&self.data[0..N / 2]);
+    let high: Simd<i32, 8> = Simd::from_slice(&self.data[N / 2..N]);
+    let q = Simd::<i32, 8>::splat(q);
+    let mask_low  = q_simd.simd_gt(low ); // compare with low  half
+    let mask_high = q_simd.simd_gt(high); // compare with high half
+    let merged = _mm256_packs_epi32(mask_low, mask_high); // interleave
+    let mask: i32 = _mm256_movemask_epi8(merged);         // movemask_epi8!
+    mask.count_ones() as usize / 2        // correct for double-counting
+}
+#+end_src
+
+#+begin_src diff
+ vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1     ; 1 cycle, in parallel
+ vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0   ; 1 cycle, in parallel
+ vpackssdw    %ymm0, %ymm1, %ymm0           ; 1 cycle
+-vextracti128 $1, %ymm0, %xmm1     ;
+-vpacksswb    %xmm1, %xmm0, %xmm0  ;
+-vpshufd      $216, %xmm0, %xmm0   ;
+-vpmovmskb    %xmm0, %edi          ; 4 instructions emulating movemask_epi16
++vpmovmskb    %ymm0, %edi                   ; 2 cycles        movemask_epi8
+ popcntl      %edi, %edi                    ; 1 cycle
++                                  ; /2 is folded into pointer arithmetic
+#+end_src
+
+** The results: branchless is great!
+:PROPERTIES:
+:CUSTOM_ID: optimized-find-plot
+:END:
+#+attr_html: :class large :style left:50%;top:52%;height:80% :src /ox-hugo/3-find.svg
+[[file:figs/plots/3-find.svg]]
+
+* Throughput, not latency
+:PROPERTIES:
+:CUSTOM_ID: throughput
+:END:
+#+attr_html: :class full :style z-index:-1 :src /ox-hugo/p99-section.png
+[[file:p99-section.png]]
+
+** Batching: Many queries in parallel
+:PROPERTIES:
+:CUSTOM_ID: batching
+:END:
+#+begin_src diff
+-fn query                (&self, q :   u32    ) ->  u32     {
++fn batch<const B: usize>(&self, qs: &[u32; B]) -> [u32; B] {
+-    let mut k =  0    ;                                    // current index
++    let mut k = [0; B];                                    // current indices
+     for [o, _o2] in self.offsets.array_windows() {         // walk down the tree
++        for i in 0..B {
+             let jump_to = self.node(o + k[i]).find(qb[i]); // call `find`
+             k[i] = k[i] * (B + 1) + jump_to;               // update index
++        }
+     }
+ 
+     let o = self.offsets.last().unwrap();
++    from_fn(|i| {
+         let idx = self.node(o + k[i]).find(qb[i]);
+         self.tree[o + k[i] + idx / N].data[idx % N]        // return value
++    })
+ }
+#+end_src
+
+** Batching: up to 2.5x faster!
+:PROPERTIES:
+:CUSTOM_ID: batching-plot
+:END:
+#+attr_html: :class large :style left:50%;top:52%;height:80% :src /ox-hugo/4-batching.svg
+[[file:figs/plots/4-batching.svg]]
+
+** Prefetching
+:PROPERTIES:
+:CUSTOM_ID: prefetching
+:END:
+#+begin_src diff
+ fn batch<const B: usize>(&self, qs: &[u32; B]) -> [u32; B] {
+     let mut k = [0; B];                                    // current indices
+     for [o, o2] in self.offsets.array_windows() {          // walk down the tree
+         for i in 0..B {
+             let jump_to = self.node(o + k[i]).find(qb[i]); // call `find`
+             k[i] = k[i] * (B + 1) + jump_to;               // update index
++            prefetch_index(&self.tree, o2 + k[i]);         // prefetch next layer
+         }
+     }
+ 
+     let o = self.offsets.last().unwrap();
+     from_fn(|i| {
+         let idx = self.node(o + k[i]).find(qb[i]);
+         self.tree[o + k[i] + idx / N].data[idx % N]        // return value
+     })
+ }
+#+end_src
+
+** Prefetching: 30% faster again!
+:PROPERTIES:
+:CUSTOM_ID: prefetching-plot
+:END:
+#+attr_html: :class large :style left:50%;top:52%;height:80% :src /ox-hugo/5-prefetch.svg
+[[file:figs/plots/5-prefetch.svg]]
+
+** Optimizing pointer arithmetic: more gains
+:PROPERTIES:
+:CUSTOM_ID: pointer-arithmetic-plot
+:END:
+- Convert all pointers to byte units, to avoid conversions.
+#+attr_html: :class large :style left:50%;top:57%;height:75% :src /ox-hugo/6-improvements.svg
+[[file:figs/plots/6-improvements.svg]]
+
+** Interleaving: more pressure on the RAM, -20%
+:PROPERTIES:
+:CUSTOM_ID: interleaving-plot
+:END:
+- Interleave multiple batches at different iterations.
+#+attr_html: :class large :style left:50%;top:57%;height:75% :src /ox-hugo/8-interleave.svg
+[[file:figs/plots/8-interleave.svg]]
+** Tree layout: internal nodes store minima
+:PROPERTIES:
+:CUSTOM_ID: tree-layout-before
+:END:
+- For query 5.5, we walk down the *left* subtree.
+- Returning 6 reads a *new* cache line.
+#+attr_html: :class large :style top:62%;height:800px :src /ox-hugo/full.svg
+[[file:figs/full.svg]]
+** Tree layout: internal nodes store maxima
+:PROPERTIES:
+:CUSTOM_ID: tree-layout-after
+:END:
+- For query 5.5, we walk down the *middle* subtree.
+- Returning 6 reads *the same* cache line.
+#+attr_html: :class large :style top:62%;height:800px :src /ox-hugo/flipped.svg
+[[file:figs/flipped.svg]]
+** Tree layout: another 10% gained!
+:PROPERTIES:
+:CUSTOM_ID: tree-layout-plot
+:END:
+#+attr_html: :class large :style left:50%;top:52%;height:80% :src /ox-hugo/9-left-max-tree.svg
+[[file:figs/plots/9-left-max-tree.svg]]
+* Conclusion
+:PROPERTIES:
+:CUSTOM_ID: conclusion
+:END:
+- With 4GB input: 40x speedup!
+  - binary search: 1150ns
+  - static search tree: 27ns
+
+- Latency of Eytzinger layout search is 3x slower than RAM latency.
+- Throughput of static search tree is 3x slower than RAM throughput.
+
+- RAM is slow, caches are fast.
+- Grinding through assembly works; be your own compiler!
+- Theoretical big-O complexities are useless here,
+  since caches invalidate the RAM-model assumptions.
+
+* P99 CONF
+:PROPERTIES:
+:CUSTOM_ID: last
+:END:
+\\
+\\
+\\
+- X: [[https://x.com/curious_coding][@curious_coding]]
+- Bsky: [[https://bsky.app/profile/curiouscoding.nl][@curiouscoding.nl]]
+- Blog: [[https://curiouscoding.nl][curiouscoding.nl]]
+  - [[https://curiouscoding.nl/posts/static-search-tree/][/posts/static-search-tree]]
+  - [[https://curiouscoding.nl/slides/p99/][/slides/p99]]
+
+#+attr_html: :class full :style z-index:-1 :src /ox-hugo/p99-last.png
+[[file:p99-last.png]]

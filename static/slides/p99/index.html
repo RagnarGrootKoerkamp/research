@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>40x Faster Binary Search</title>
+<meta name="author" content="Ragnar {Groot Koerkamp}"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+.underline { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.css"/>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/theme/white.css" id="theme"/>
+
+<link rel="stylesheet" href="/css/slide.min.css"/>
+
+<link rel="stylesheet" href="/css/p99.min.css"/>
+<link rel="stylesheet" href="/css/vs.min.css"/><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section id="sec-title-slide"><h1 class="title" style="text-transform:none;line-height:2.3rem;padding-top:1rem;padding-bottom:1rem;">40x Faster Binary Search<br/><span style="font-size:1.3rem;color: #444444"></span></h1>
+<h2 class="author" style="margin:0;font-size:1rem;line-height:initial;margin-top:1.5rem;">Ragnar {Groot Koerkamp}</h2>
+<h2 class="author" style="margin:0;font-size:0.7rem;font-family:monospace;line-height:initial;color:rgb(0, 133, 255);text-transform:none;">@curiouscoding.nl</h2>
+<h2 class="date" style="font-size:0.7rem;font-weight:normal;color:grey;margin-top:0.5rem">P99 2025</h2>
+<img src="/ox-hugo/ethz.svg" style="position:absolute;bottom:0%;left:0%;width:20%"></img>
+<a href="https://curiouscoding.nl/slides/p99" style="position:absolute;bottom:9.8%;right:5%;width:30%;color:grey;font-size:smaller">curiouscoding.nl/slides/p99</a>
+<a href="https://curiouscoding.nl/posts/static-search-tree" style="position:absolute;bottom:3.8%;right:5%;width:45%;color:grey;font-size:smaller">curiouscoding.nl/posts/static-search-tree</a>
+<img src="/ox-hugo/p99-title-slide.png" style="position:absolute;top:-4%;left:-3%;width:106%;height:106%;max-width:initial;max-height:initial"></img>
+</section>
+
+<div id="orge89790f" class="figure">
+<p><img src="p99-title-slide.png" alt="p99-title-slide.png" style="display:none" />
+</p>
+</div>
+
+
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+<section id="slide-me">
+<h2 id="me">Ragnar {Groot Koerkamp}</h2>
+<ul>
+<li>Did IMO &amp; ICPC; currently head-of-jury for NWERC.</li>
+<li>Some time at Google.</li>
+<li>Quit and solved all of <a href="https://projecteuler.net/">projecteuler.net</a> (700+) during Covid.</li>
+<li>Just finished PhD on <i>high throughput bioinformatics</i> @ ETH Zurich.
+<ul>
+<li>Lots of sequenced DNA that needs processing.</li>
+<li>Many <i>static</i> datasets, e.g. a 3GB human genome.</li>
+<li>Revisiting basic algorithms and optimizing them to the limit.</li>
+<li>Good in theory \(\neq\) fast in practice.</li>
+
+</ul></li>
+
+</ul>
+</section>
+<section id="slide-problem-statement">
+<h2 id="problem-statement">Problem Statement</h2>
+<ul>
+<li>Input: a static sorted list of 32 bit integers.</li>
+<li>Queries: given \(q\), find the smallest value in the list \(\geq q\).</li>
+
+</ul>
+
+<div class="org-src-container">
+
+<pre   ><code class="rust" >trait SearchIndex {
+    // Initialize the data structure.
+    fn new(sorted_data: &amp;[u32]) -&gt; Self;
+    // Return the smallest value &gt;=q.
+    fn query(&amp;self, q: u32) -&gt; u32;
+}
+</code></pre>
+</div>
+<p>
+<br />
+</p>
+<ul>
+<li>Why? E.g. searching through a suffix array.</li>
+<li>Previous work on Algorithmica:<br />
+<a href="https://en.algorithmica.org/hpc/data-structures/s-tree/">en.algorithmica.org/hpc/data-structures/s-tree</a></li>
+<li>This work: <a href="https://curiouscoding.nl/posts/static-search-tree/">curiouscoding.nl/posts/static-search-tree</a></li>
+
+</ul>
+</section>
+<section id="slide-binary-search">
+<h2 id="binary-search">Binary Search: complexity \(O(\lg n)\)</h2>
+<ol>
+<li>Compare \(q=5\) with the middle element \(x\).</li>
+<li>Recurse on left half if \(q\leq x\), right half if \(q>x\).</li>
+<li>End when 1 element left after \(\lceil\lg_2(n+1)\rceil\) steps.</li>
+
+</ol>
+
+
+
+<div id="orgfbbd61b" class="figure">
+<p><img src="/ox-hugo/binary-search.svg" alt="binary-search.svg" class="large" style="height:600px;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-binary-search-latency">
+<h3 id="binary-search-latency">Binary Search: latency is more than \(O(\lg n)\)</h3>
+
+<div id="org08658d1" class="figure">
+<p><img src="/ox-hugo/bs-1.svg" alt="bs-1.svg" class="large" style="left:50%;height:80%;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-array-indexing-latency">
+<h3 id="array-indexing-latency">Array Indexing: \(O(n^{0.35})\) latency!</h3>
+
+<div id="orgf9f9014" class="figure">
+<p><img src="/ox-hugo/bs-2.svg" alt="bs-2.svg" class="large" style="left:50%;height:80%;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-caches">
+<h3 id="caches">Heap Layout: efficient caching + prefetching</h3>
+<ul>
+<li>Binary search: top of tree is spread out; each cache line has 1 value.</li>
+<li>Eytzinger layout: top layers of tree are clustered in cache lines.
+<ul>
+<li>Also allows prefetching!</li>
+
+</ul></li>
+
+</ul>
+
+
+<div id="orga38895f" class="figure">
+<p><img src="/ox-hugo/bs-eytzinger.svg" alt="bs-eytzinger.svg" class="large" style="left:50%;height:80%;top:67%;width:80%" />
+</p>
+</div>
+</section>
+<section id="slide-eytzinger">
+<h3 id="eytzinger">Heap Layout: close to array indexing!</h3>
+
+<div id="orgfc7d71c" class="figure">
+<p><img src="/ox-hugo/bs-3.svg" alt="bs-3.svg" class="large" style="left:50%;height:80%;top:55%" />
+</p>
+</div>
+</section>
+<section id="slide-static-search-trees">
+<h2 id="static-search-trees">Static Search Trees / B-trees</h2>
+<ul>
+<li>Fully use each cache line.</li>
+
+</ul>
+<p>
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+<br />
+</p>
+<div class="org-src-container">
+
+<pre   ><code class="rust" >#[repr(align(64))]       // Each block fills exactly one 512-bit cache line.
+struct Block { data: [u32; 16] }  
+struct Tree {
+    tree: Vec&lt;Block&gt;,    // Blocks.
+    offsets: Vec&lt;usize&gt;, // Index of first block in each layer.
+}
+</code></pre>
+</div>
+
+
+<div id="orga4e69fc" class="figure">
+<p><img src="/ox-hugo/full.svg" alt="full.svg" class="large" style="top:46%;height:500px" />
+</p>
+</div>
+</section>
+<section id="slide-btree-plot">
+<h3 id="btree-plot">Static Search Trees: Slower than Eytzinger?!</h3>
+
+<div id="orgf0b66cd" class="figure">
+<p><img src="/ox-hugo/2-find-linear.svg" alt="2-find-linear.svg" class="large" style="left:50%;top:52%;height:80%" />
+</p>
+</div>
+</section>
+<section id="slide-asm">
+<h2 id="asm">Up next: assembly-level optimizations :)</h2>
+
+<div id="orgf23928a" class="figure">
+<p><img src="/ox-hugo/p99-section.png" alt="p99-section.png" class="full" style="z-index:-1" />
+</p>
+</div>
+</section>
+<section id="slide-find-baseline">
+<h3 id="find-baseline">Optimizing <code>find</code>: linear scan baseline</h3>
+<div class="org-src-container">
+
+<pre   ><code class="rust" >fn find_linear(block: &amp;Block, q: u32) -&gt; usize {
+    for i in 0..N {
+        if block.data[i] &gt;= q {
+            // Early break causes branch mispredictions
+            // and prevents auto-vectorization!
+            return i;
+        }
+    }
+    return N;
+}
+</code></pre>
+</div>
+</section>
+<section id="slide-find-simd">
+<h3 id="find-simd">Optimizing <code>find</code>: auto-vectorization</h3>
+<div class="org-src-container">
+
+<pre   ><code class="rust" >fn find_count(block: &amp;Block, q: u32) -&gt; usize {
+    let mut count = 0;
+    for i in 0..N {
+        if block.data[i] &lt; q {
+            count += 1;
+        }
+    }
+    count
+}
+</code></pre>
+</div>
+
+<div class="org-src-container">
+
+<pre   ><code class="asm" > vmovdqu      (%rax,%rcx), %ymm1     ; load data[..8]
+ vmovdqu      32(%rax,%rcx), %ymm2   ; load data[8..]
+ vpbroadcastd %xmm0, %ymm0           ; 'splat' the query value
+ vpmaxud      %ymm0, %ymm2, %ymm3    ; v
+ vpcmpeqd     %ymm3, %ymm2, %ymm2    ; v
+ vpmaxud      %ymm0, %ymm1, %ymm0    ; v
+ vpcmpeqd     %ymm0, %ymm1, %ymm0    ; 4x compare query with values
+ vpackssdw    %ymm2, %ymm0, %ymm0    ;
+ vpcmpeqd     %ymm1, %ymm1, %ymm1    ; v
+ vpxor        %ymm1, %ymm0, %ymm0    ; 2x negate result
+ vextracti128 $1, %ymm0, %xmm1       ; v
+ vpacksswb    %xmm1, %xmm0, %xmm0    ; v
+ vpshufd      $216, %xmm0, %xmm0     ; v
+ vpmovmskb    %xmm0, %ecx            ; 4x extract mask
+ popcntl      %ecx, %ecx             
+</code></pre>
+</div>
+</section>
+<section id="slide-find-popcount">
+<h3 id="find-popcount">Optimizing <code>find</code>: popcount</h3>
+<div class="org-src-container">
+
+<pre   ><code class="rust" >#![feature(portable_simd)]
+fn find_popcount(block: &amp;Block, q: i32) -&gt; usize {
+    let data: Simd&lt;i32, N&gt; = Simd::from_slice(&amp;block.data[0..N]);
+    let q = Simd::splat(q);
+    let mask = data.simd_lt(q);      // x[i] &lt; q
+    mask.to_bitmask().count_ones()   // count_ones
+}
+</code></pre>
+</div>
+
+<div class="org-src-container">
+
+<pre   ><code class="asm" >vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1
+vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0
+vpackssdw    %ymm1, %ymm0, %ymm0     ; interleave 16bit low halves
+vextracti128 $1, %ymm0, %xmm1        ; 1
+vpacksswb    %xmm1, %xmm0, %xmm0     ; 2
+vpshufd      $216, %xmm0, %xmm0      ; 3 unshuffle interleaving
+vpmovmskb    %xmm0, %edi             ; 4 instructions to extract bitmask
+popcntl      %edi, %edi
+</code></pre>
+</div>
+</section>
+<section id="slide-find-manual">
+<h3 id="find-manual">Optimizing <code>find</code>: manual <code>movemask_epi8</code></h3>
+<div class="org-src-container">
+
+<pre   ><code class="rust" >fn find_manual(block: &amp;Block, q: i32) -&gt; usize { // i32 now!
+    let low: Simd&lt;i32, 8&gt; = Simd::from_slice(&amp;self.data[0..N / 2]);
+    let high: Simd&lt;i32, 8&gt; = Simd::from_slice(&amp;self.data[N / 2..N]);
+    let q = Simd::&lt;i32, 8&gt;::splat(q);
+    let mask_low  = q_simd.simd_gt(low ); // compare with low  half
+    let mask_high = q_simd.simd_gt(high); // compare with high half
+    let merged = _mm256_packs_epi32(mask_low, mask_high); // interleave
+    let mask: i32 = _mm256_movemask_epi8(merged);         // movemask_epi8!
+    mask.count_ones() as usize / 2        // correct for double-counting
+}
+</code></pre>
+</div>
+
+<div class="org-src-container">
+
+<pre   ><code class="diff" > vpcmpgtd     (%rsi,%rdi), %ymm0, %ymm1     ; 1 cycle, in parallel
+ vpcmpgtd     32(%rsi,%rdi), %ymm0, %ymm0   ; 1 cycle, in parallel
+ vpackssdw    %ymm0, %ymm1, %ymm0           ; 1 cycle
+-vextracti128 $1, %ymm0, %xmm1     ;
+-vpacksswb    %xmm1, %xmm0, %xmm0  ;
+-vpshufd      $216, %xmm0, %xmm0   ;
+-vpmovmskb    %xmm0, %edi          ; 4 instructions emulating movemask_epi16
++vpmovmskb    %ymm0, %edi                   ; 2 cycles        movemask_epi8
+ popcntl      %edi, %edi                    ; 1 cycle
++                                  ; /2 is folded into pointer arithmetic
+</code></pre>
+</div>
+</section>
+<section id="slide-optimized-find-plot">
+<h3 id="optimized-find-plot">The results: branchless is great!</h3>
+
+<div id="org2c1e7ff" class="figure">
+<p><img src="/ox-hugo/3-find.svg" alt="3-find.svg" class="large" style="left:50%;top:52%;height:80%" />
+</p>
+</div>
+</section>
+<section id="slide-throughput">
+<h2 id="throughput">Throughput, not latency</h2>
+
+<div id="org3d4ad13" class="figure">
+<p><img src="/ox-hugo/p99-section.png" alt="p99-section.png" class="full" style="z-index:-1" />
+</p>
+</div>
+</section>
+<section id="slide-batching">
+<h3 id="batching">Batching: Many queries in parallel</h3>
+<div class="org-src-container">
+
+<pre   ><code class="diff" >-fn query                (&amp;self, q :   u32    ) -&gt;  u32     {
++fn batch&lt;const B: usize&gt;(&amp;self, qs: &amp;[u32; B]) -&gt; [u32; B] {
+-    let mut k =  0    ;                                    // current index
++    let mut k = [0; B];                                    // current indices
+     for [o, _o2] in self.offsets.array_windows() {         // walk down the tree
++        for i in 0..B {
+             let jump_to = self.node(o + k[i]).find(qb[i]); // call `find`
+             k[i] = k[i] * (B + 1) + jump_to;               // update index
++        }
+     }
+ 
+     let o = self.offsets.last().unwrap();
++    from_fn(|i| {
+         let idx = self.node(o + k[i]).find(qb[i]);
+         self.tree[o + k[i] + idx / N].data[idx % N]        // return value
++    })
+ }
+</code></pre>
+</div>
+</section>
+<section id="slide-batching-plot">
+<h3 id="batching-plot">Batching: up to 2.5x faster!</h3>
+
+<div id="org53b8510" class="figure">
+<p><img src="/ox-hugo/4-batching.svg" alt="4-batching.svg" class="large" style="left:50%;top:52%;height:80%" />
+</p>
+</div>
+</section>
+<section id="slide-prefetching">
+<h3 id="prefetching">Prefetching</h3>
+<div class="org-src-container">
+
+<pre   ><code class="diff" > fn batch&lt;const B: usize&gt;(&amp;self, qs: &amp;[u32; B]) -&gt; [u32; B] {
+     let mut k = [0; B];                                    // current indices
+     for [o, o2] in self.offsets.array_windows() {          // walk down the tree
+         for i in 0..B {
+             let jump_to = self.node(o + k[i]).find(qb[i]); // call `find`
+             k[i] = k[i] * (B + 1) + jump_to;               // update index
++            prefetch_index(&amp;self.tree, o2 + k[i]);         // prefetch next layer
+         }
+     }
+ 
+     let o = self.offsets.last().unwrap();
+     from_fn(|i| {
+         let idx = self.node(o + k[i]).find(qb[i]);
+         self.tree[o + k[i] + idx / N].data[idx % N]        // return value
+     })
+ }
+</code></pre>
+</div>
+</section>
+<section id="slide-prefetching-plot">
+<h3 id="prefetching-plot">Prefetching: 30% faster again!</h3>
+
+<div id="orgdb682ae" class="figure">
+<p><img src="/ox-hugo/5-prefetch.svg" alt="5-prefetch.svg" class="large" style="left:50%;top:52%;height:80%" />
+</p>
+</div>
+</section>
+<section id="slide-pointer-arithmetic-plot">
+<h3 id="pointer-arithmetic-plot">Optimizing pointer arithmetic: more gains</h3>
+<ul>
+<li>Convert all pointers to byte units, to avoid conversions.</li>
+
+</ul>
+
+<div id="org909cc7e" class="figure">
+<p><img src="/ox-hugo/6-improvements.svg" alt="6-improvements.svg" class="large" style="left:50%;top:57%;height:75%" />
+</p>
+</div>
+</section>
+<section id="slide-interleaving-plot">
+<h3 id="interleaving-plot">Interleaving: more pressure on the RAM, -20%</h3>
+<ul>
+<li>Interleave multiple batches at different iterations.</li>
+
+</ul>
+
+<div id="org62be66e" class="figure">
+<p><img src="/ox-hugo/8-interleave.svg" alt="8-interleave.svg" class="large" style="left:50%;top:57%;height:75%" />
+</p>
+</div>
+</section>
+<section id="slide-tree-layout-before">
+<h3 id="tree-layout-before">Tree layout: internal nodes store minima</h3>
+<ul>
+<li>For query 5.5, we walk down the <b>left</b> subtree.</li>
+<li>Returning 6 reads a <b>new</b> cache line.</li>
+
+</ul>
+
+<div id="org5fce7d6" class="figure">
+<p><img src="/ox-hugo/full.svg" alt="full.svg" class="large" style="top:62%;height:800px" />
+</p>
+</div>
+</section>
+<section id="slide-tree-layout-after">
+<h3 id="tree-layout-after">Tree layout: internal nodes store maxima</h3>
+<ul>
+<li>For query 5.5, we walk down the <b>middle</b> subtree.</li>
+<li>Returning 6 reads <b>the same</b> cache line.</li>
+
+</ul>
+
+<div id="org559bc6b" class="figure">
+<p><img src="/ox-hugo/flipped.svg" alt="flipped.svg" class="large" style="top:62%;height:800px" />
+</p>
+</div>
+</section>
+<section id="slide-tree-layout-plot">
+<h3 id="tree-layout-plot">Tree layout: another 10% gained!</h3>
+
+<div id="orgca5bd0e" class="figure">
+<p><img src="/ox-hugo/9-left-max-tree.svg" alt="9-left-max-tree.svg" class="large" style="left:50%;top:52%;height:80%" />
+</p>
+</div>
+</section>
+<section id="slide-conclusion">
+<h2 id="conclusion">Conclusion</h2>
+<ul>
+<li>With 4GB input: 40x speedup!
+<ul>
+<li>binary search: 1150ns</li>
+<li>static search tree: 27ns</li>
+
+</ul></li>
+
+<li>Latency of Eytzinger layout search is 3x slower than RAM latency.</li>
+<li>Throughput of static search tree is 3x slower than RAM throughput.</li>
+
+<li>RAM is slow, caches are fast.</li>
+<li>Grinding through assembly works; be your own compiler!</li>
+<li>Theoretical big-O complexities are useless here,
+since caches invalidate the RAM-model assumptions.</li>
+
+</ul>
+</section>
+<section id="slide-last">
+<h2 id="last">P99 CONF</h2>
+<p>
+<br />
+<br />
+<br />
+</p>
+<ul>
+<li>X: <a href="https://x.com/curious_coding">@curious_coding</a></li>
+<li>Bsky: <a href="https://bsky.app/profile/curiouscoding.nl">@curiouscoding.nl</a></li>
+<li>Blog: <a href="https://curiouscoding.nl">curiouscoding.nl</a>
+<ul>
+<li><a href="https://curiouscoding.nl/posts/static-search-tree/">/posts/static-search-tree</a></li>
+<li><a href="https://curiouscoding.nl/slides/p99/">/slides/p99</a></li>
+
+</ul></li>
+
+</ul>
+
+
+<div id="org769f47d" class="figure">
+<p><img src="/ox-hugo/p99-last.png" alt="p99-last.png" class="full" style="z-index:-1" />
+</p>
+</div>
+</section>
+</section>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/plugin/highlight/highlight.js"></script>
+
+
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+plugins: [RevealHighlight],
+width:1920, height:1080, margin: 0.04, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+});
+
+</script>
+</body>
+</html>
