@@ -5,117 +5,96 @@
 
 #+toc: headlines 2
 
-Here I list projects that I'm currently working on, and ideas for future work.
+Here I list projects that I am working/have worked on. Outdated almost always.
 
-This page is usually outdated.
+* In progress (October 2025)
+Algorithm engineering (with Peter Sanders' group @ KIT):
+- *QuickHeap* ([[../posts/quickheap/quickheap.org][blog]]): a fast SIMD-based heap
+- *k-perfect hashing*: quickly map keys to bins of size of $k\in \{8,16\}$,
+  mostly extending PtrHash.
+- *Static hash sets* (=StaticHashSet<u32>=) with single-cache-miss lookups
+- Fast 2-bit rank for use in =bwa-mem=, with Heng Li.
 
-* In progress
-- A* pairwise aligner [[[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][GitHub]]] :: Exact global pairwise alignment of random strings in
-  expected linear time.
+Tool/library development (with Igor Martayan & Bede Constantinides):
+- Updated *packed-seq* ([[https://github.com/rust-seq/packed-seq][gh]]), *seq-hash* ([[https://github.com/rust-seq/seq-hash][gh]]), *simd-minimizers* ([[https://github.com/rust-seq/simd-minimizers/][gh]])
+  - Faster handling of short-read data
+  - Support for N characters using 2+1bit encoding
+  - simd-mini: skip minimizers of windows containing N and other non-ACGT chars.
+- *Paraseq* ([[https://github.com/noamteyssier/paraseq][gh]]) PRs:
+  - multithreaded unzipping for paired-end input
+  - new =ParallelReader= API
+  - overall cleanup and deduplication
+- *Deacon* ([[https://github.com/bede/deacon][gh]]):
+  - speedups from dependencies above
+  - more reusing of allocations
+  - faster hashset WIP
+  - faster IO and on-disk format
 
-  Contains proof of correctness, implementation, evals and comparison with WFA
-  and edlib on random data.
+Furthermore:
+- *Simd-Sketch* ([[https://github.com/RagnarGrootKoerkamp/simd-sketch][gh]], [[../posts/simd-sketch/simd-sketch.org][blog]]):
+  - algorithm engineering for fast bottom & bucket sketching
+  - TODO: algorithm engineering for fast bottom-sketch distance comparison
+  - SIMD for fast bucket-sketch distances
+  - experiments (sketch time, comparison time, correlation)
+    - 1-bit hashing with many hashes is best
+  - WIP: applications/integration with [[https://github.com/karel-brinda/attotree][attotree]] (by Karel Břinda) and [[https://github.com/bacpop/sketchlib.rust][sketchlib]]
+    (by John Lees)
+  - TODO: fix bias due to 32-bit hash collisions.
+  - TODO?: locality sensitive clustering; phylogeny reconstruction
+- *NtHash collisions* ([[file:../posts/nthash2-collisions.org][blog]]), with John Lees and Victor Bouza.
 
-- Proof of expected linear time alignment :: I have a proof of concept to show that a
-  simplified version of the algorithm currently implemented by A* pairwise
-  aligner runs in expected linear time on random input with sufficiently low
-  edit distance ($|\Sigma|^{1/e} \ll n$), but need to spend some time on details
-  and writing it down. WIP post: [[file:../posts/linear-time-pa/linear-time-pa.org][linear time pairwise alignment]].
-- Finish review post :: Write text on diagonal transition and fill in other
-  remaining TODO sections.
-- Post comparing heuristics :: A comparison of the different heuristics that have
-  been used so far.
+Further collaborations (external involvement / supervision):
+- Theory: *$O(n\lg n)$ chaining* for anchored edit distance, with Nicola Rizzo.
+  - ([[https://www.overleaf.com/project/68bd6809d64fe90ec1d4eacf][private overleaf]])
+- Software: *Barbell*: fast & accurate demultiplexing, with Rick Beeloo.
 
-* On hold
-- Spaced $k$mer similarity :: See [[file:../posts/spaced-kmer-distance.org][this post]]. Not as interesting as the A*PA work.
 
-* Pending ideas/blogposts
-Some ideas I have, that each deserve at least a blogpost once I find the time.
-- Low memory WFA backtracking ::
-  Instead of storing furthest reaching points for
-  all wavefronts, it is sufficient to only store /critical/ points where paths
-  split/merge.
-  This should lower memory usage of WFA to close to linear, without needing BiWFA.
-- NW/Diagonal transition with exponential search and heuristics ::
-  Think about merging NW/Diagonal transition with exponential search and
-  heuristics.
-  When doing exponential search, we can use a heuristic to limit the band/number
-  of diagonals to process. If we are given the actual distance, this may lead to
-  a linear time algorithm to prove that it is indeed the correct distance.
+* Dormant
+- *Sassy* [cite:@sassy-preprint]: under review.
+- *Minimizers*:
+  - publish the anti-lex scheme?
+  - continue investigation of greedymini to develop 'understandable' equivalent schemes.
+  - Find exact optimal schemes for all $k\equiv 1\pmod w$
+  - lower bound for local schemes
 
-  TODO: Figure out how to use pruning heuristics in this case -- so far this
-  only works well for non-pruning/static heuristics.
-- Homopolymer affine layers ::
-  We could make affine layers with a special (lower) cost that only allows homopolymer
-  inserts/deletes. From first experiments that such a cost is not necessarily
-  well-defined, so further evaluations are needed.
-- A*PA post :: A post on the A*PA paper.
-  - Additionally, there can be a post on how it extends/is similar to many other
-    existing ideas/algorithms/papers.
-- Semi-global pairwise alignment review :: similar to the global pairwise
-  alignment review, but for semi-global / $k$-approximate string matches.
-- Finding (in)exact matches ::
-  This turns out to be hard to do fast. For exact matches the fastest is a
-  hashmap mapping qgrams to locations. Instead of an ~absl::flat_hash_map~, it
-  may be better to handroll something and ignore/bail on collisions.
+Code:
+- *sshash-rs* ([[https://github.com/RagnarGrootKoerkamp/sshash-rs][gh]])
+- *suffix array searching* ([[https://github.com/RagnarGrootKoerkamp/suffix-array-searching][gh]], [[../posts/static-search-tree/static-search-tree.org][post]]) [cite:@sacabench]
+  
+* Done
+See [[./publications.org][publications]].
 
-  For inexact matches, everything is more complicated, but again the fastest
-  seems to be a hashmap and looking up all mutations of a string.
+* Long term plans
+If anything here interests you, feel free to reach out for collaborations.
 
-  A simple optimization here is to build a map over $A$, which contains only
-  $n/k$ seeds, and do lookups for all $n$ $k$mers in $B$.
+- *engineer STPD* [cite:@stpd]: write a highly optimized implementation.
+  - minimizer space?
+  - fuzzy version by only using minimizer start positions?
+- *Optimal CPU/memory performance* given 3D latency and cooling constraints.
+- *Pairwise alignment review paper* based on thesis chapter 2 ([[../../posts/pairwise-alignment][this post]]).
+  - *Review on approximate string matching*, [[../posts/approximate-string-matching/approximate-string-matching.org][this post]] (will never happen).
+- *Minimizers review paper* based on thesis part 2 ([[../../posts/minimizers][this post]]).
 
-* Smaller tasks
-- Extract A*PA benchmarks :: =simple coding task= Extract the ~evals~ directory to a separate reusable repo with benchmarks and
-  tests.
-- Find ONT reads corresponding to a reference :: =annoying= It would be nice to test A*PA
-  on a set of real ONT reads. We need to find a dataset where the reads are from
-  exactly the same genome as the reference, so that no biological mutations (in
-  particular long indels) are present in the data.
-- Test/bench datasets ::
-  It would be nice to have more testcases than just random ones. In particular,
-  the following would be nice:
-  - random strings with multiple long indels
-  - Random with non-uniform mutations (only inserts, only deletions, ...)
-  - Random with different length distribution on indel length, so they are
-    longer than the default geometric distribution.
-
-* Future plans
-- Exact global pairwise alignment review :: Finish that post, and convert the [[file:../posts/pairwise-alignment][post]] into a paper, once
-  it's done.
-- Extend A*PA to build on diagonal-transition :: =needs work= Currently the algorithm is
-  based on the vanilla $O(nm)$ DP. Instead we can base it on the diagonal
-  transition methods to reduce the number of states visited and the memory
-  needed to store $g$.
-
-  This should provide a speedup especially in regions where the linear search
-  falls back to quadratic behaviour.
-- More A*PA extensions ::
-  - Ends-free/semi-global alignment :: =easy= I know how this would work and just
-    needs doing.
-  - Affine costs :: =tricky= should be possible, but harder. Will be very tricky to get
-    right (bug-free).
-  - Replace gap-cost transition by letter-count-cost transition :: =hard= very unclear
-    how this would work, and whether the transformation can be preserved.
-- Review paper on semi-global pairwise alignment :: =low priority= =lots of work/time= Similar to the table I made for
-  global exact pairwise alignment, but for semi-global/mapping. There are a lot of papers in this
-  area. [cite/text/c:@navarro01] also does this with a focus on $k$-approximate
-  string matching, but it quite old by now.
-
-* Open questions
-- Can WFA/diagonal transition benefit from bit-parallel techniques? (Likely
-  answer: No.)
+* Abandoned
+- *Affine A*PA2*: too much of an overhaul.
+- *Spaced $k$-mer similarity*: see [[file:../posts/spaced-kmer-distance.org][this post]].
+- *Expected linear time A*PA*: see a draft in [[file:../posts/linear-time-pa/linear-time-pa.org][this post]].
+- *Linear memory WFA*:  Instead of storing furthest reaching points
+  for all wavefronts, it is sufficient to only store /critical/ points where
+  paths split/merge.  This should lower memory usage of WFA to close to linear,
+  without needing BiWFA. See [[../posts/linear-memory-wfa/linear-memory-wfa.org][this post]]. This has similar vibes to TALCO [cite:@talco].
+- *Local doubling*: see [[../posts/local-doubling/local-doubling.org][this post]].
 
 * Reading list
-- Succinct datastructures:
-  - Rank and select over mutable bitmaps [cite:@rank-select-mutable-bitmaps]
+(I'm too lazy to add proper DOI entries for everything here.)
+
+- Rank and select over mutable bitmaps [cite:@rank-select-mutable-bitmaps]
 - Bounded context BWT
   - https://twitter.com/jnalanko/status/1747585917861208266
   - https://github.com/jhhung/kISS
   - k-context BWT: [cite:@k-spectra]
 - counting-quotient-filter
 - r-index
-- syncmers
 - fmalign2
 - local-kmer-selection
 - count-min-sketch (with conservative updates)
@@ -137,50 +116,22 @@ Some ideas I have, that each deserve at least a blogpost once I find the time.
 - Eskemap for A*PA?
 - Lyndon trees: https://arxiv.org/abs/2406.16475, Giuseppe Romana
 - ForAlign
-- U-index variant: https://github.com/mranisz/samsami
-- https://www.sciencedirect.com/science/article/pii/S0304397522007642?casa_token=s43fN-Spjf0AAAAA:9i3HPEfmAs0X7eYvglMmam7eBH52tMAvqAeTEnEBlpVn8YJb1WoGR-wiHv5yfAOA_t4sgI7HlZ8
 - [cite:@bwt-compression]
 - texrex: https://academic.oup.com/nargab/article/7/2/lqaf039/8115380?login=false
-- ETH talk by Jeff Dean
-- parallel fasta parser
 - simd-utils crate (for myers bitpacking, and simd-minimizers)
 - Medlib: https://www.biorxiv.org/content/biorxiv/early/2025/05/07/2025.05.01.651420.full.pdf
-- Ish
-- Deacon
 - K2Rmini
-- MPHF review
 - alignment history: https://pubmed.ncbi.nlm.nih.gov/10890397/
 - BGSA pairwise aligner
 - Prokrustean graph
 - New Durbin & Myers paper
-- Sylph
-- rabbitfx
 - slp-recompression
-- ish
-- co-linear-chaining
-- greedy-aligning
 - GapsMis pairwise aligner https://www.sciencedirect.com/science/article/pii/S0304397515002200#se0030
+- KeBaB: https://link.springer.com/chapter/10.1007/978-3-032-05228-5_2
+- https://ashvardanian.com/posts/stringwars-on-gpus/
+- TODO: dedup up projects/talks/publications/cv pages
 
 
-* Projects to pick up
-** A*PA2
-- semi-global
-- affine
-** Minimizers
-- analyze practical small-k scheme: OC-syncmers
-- merge mod-mini and OC-syncmer
-- Lower bound for local schemes
-- Lower bound for $1<k<w$
-- Find exact optimal schemes for all $k\equiv 1\pmod w$
-** High throughput
-- SSHash-rs
-- Suffix array binary searching (PLA-index)
-- Optimize https://github.com/acubeLab/Deep-Shallow-Suffix-Sorting; cf [cite:@sacabench]
-- fast minimizers SEA paper
-- ptrhash SEA paper
-- PACE 25
-** k-mer indices
-- write some proof-of-concept code
 
 
 #+print_bibliography:
