@@ -1,0 +1,82 @@
+#+title: Thoughts on "Static Retrival Revisited"
+#+filetags: @paper-review retrieval
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-11-04 Tue>
+
+These are some summarizing notes and thoughts on
+[cite/title/b:@static-retrieval-revisited] by [cite/author/bf:@static-retrieval-revisited].
+
+* Problem definitions
+**Static Retrieval.** Given $n$ keys $X\subseteq U$ and $n$ $v$-bit values
+$f(X) \in [2^v]$, encode $f: X\to [2^v]$.
+The goal is use a minimal number of bits on top of the trivial
+$nv$ lower bound, while allowing efficient queries.
+
+A **static dictionary** is similar, but also encodes the set $X$ itself: $f: U \to \{\bot\} \cup [2^v]$
+[cite:@static-dictionary].
+Note that (unlike I initially assumed), a static dictionary does /not/ have to
+support updates to values.
+
+* Optimal solutions 
+When $v$ is large ($\Omega(\log n)$), a minimal perfect hash function (MPHF)
+takes $\leq 3$ bits/key to map the keys $x\in X$ bijectively into $[n]$, after which
+the value can be retrieved using an array lookup. This takes $nv + O(n)$ bits in
+total and has $O(1)$ queries, which is shown to be on the optimal space-time
+tradeoff curve.
+
+When $v=1$, an alternative solution using only $O(\log n)$ bits (or $O(1)$
+/words/) and constant time queries is given by [cite/t:@constant-time-retrieval].
+The core of the method is to create a full-rank sparse linear system over $\mathbb F_2$,
+so that each query xors together a few bits, while all queries together can be
+embedded into a single list of bits.
+
+For $v=\Theta(\log n)$, multiple copies of this structure can be used for $v \log n$ bits of
+overhead and $O(v)$ query time, which again is shown to be an optimal
+tradeoff.[fn::I wonder why it's not possible to work over $\mathbb F_2^v$ to
+achieve $O(1)$ queries instead.]
+
+* Why an overhead is necessary
+Naively, one might assume that $nv$ bits must be sufficient to store $f$, but
+this is not the case.
+It turns out that any encoding of $f$ necessarily contains some information on
+$X$, and thus, some bits must be 'wasted' on that, rather than on storing just
+the values.
+The paper goes into detail on how (the encoding of) $f$ can be augmented with
+additional information $g$ to recover $X$. Since there are $\binom{|U|}{n}$ options
+for $X$, this implies that the total space of $f$ and $g$ must be at least
+\begin{equation*}
+ |f| + |g| \geq nv + \log_2 \binom{|U|}n,
+\end{equation*}
+and thus that
+\begin{equation*}
+ |f| \geq nv + \log_2 \binom{|U|}n - |g|.
+\end{equation*}
+
+As an extremal example, assume that $v$ equals the word-size $w$ and that each query to
+$f$ reads exactly one word. Then, each $x\in X$ must be mapped to a distinct
+word of $f$'s representation. But this is exponentially unlikely (assuming a
+uniform random $X$), and would
+typically require at least $\log_2(e)\cdot n = 1.44n$ bits of entropy. Thus,
+this gives a lot of information /about $X$ itself/.
+
+This information could also be encoded into $f$ itself by
+extending the static $nv$ array with an internal MPHF, as described above.
+
+If, on the other hand, each lookup to $f$ reads $O(\log n)$ words, and takes for
+example their xor, then the probability that the system created by this has full
+rank is relatively large, and only $\log n$ extra words are necessary.
+
+* Augmented Retrieval
+When there is a secondary datastructure of size similar to $f$, say $h: [n] \to
+[2^v]$, then the space overhead of $f$ can be absorbed into $h$!
+Whereas before we needed to ensure that the set of random queries $x$ hit all
+words of $f$, now we can mix those into $h$. For example, we can use an array of
+size $2n$ and let $h(i)$ be the xor of (say) values $2i$, $2i+1$, and some random values.
+When we then add additional constraints for the values of $X$, it's OK if those
+don't hit all locations, since we already hit every location at least once
+with the values of $h$ anyway.
+
+#+print_bibliography:
