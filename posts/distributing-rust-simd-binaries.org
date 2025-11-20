@@ -1,0 +1,207 @@
+#+title: Distributing Rust SIMD Binaries
+#+filetags: @devops
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-11-20 Thu>
+
+Many of my rust crates and binaries building on them use SIMD instructions. Notably:
+- =packed-seq=, a library for 2-bit encoding DNA ([[https://github.com/rust-seq/packed-seq][gh]], [[https://docs.rs/packed-seq/latest/packed_seq/][docs.rs]]),
+- =simd-minimizers=, a library for fast computation of /minimizers/ ([[https://github.com/rust-seq/simd-minimizers][gh]], [[https://docs.rs/simd-minimizers/latest/simd_minimizers/][docs.rs]], [[https://doi.org/10.4230/LIPIcs.SEA.2025.20][paper]]),
+- =deacon=, a tool for fast decontamination of reads ([[https://github.com/bede/deacon][gh]], [[https://doi.org/10.1101/2025.06.09.658732][preprint]]),
+- =sassy=, a SIMD-based approximate string searching library and binary ([[https://github.com/RagnarGrootKoerkamp/sassy][gh]], [[https://docs.rs/sassy/latest/sassy/][docs.rs]], [[https://doi.org/10.1101/2025.07.22.666207][preprint]]),
+- =barbell=, a tool for demultiplexer based on sassy ([[https://github.com/rickbeeloo/barbell][gh]], [[https://doi.org/10.1101/2025.10.22.683865][preprint]])
+all support fast algorithms based on both x86-64 (x64, henceforth) AVX2 and
+aarch64 NEON instructions. The question of this post is: how to effectively
+distribute binaries using these libraries?
+
+As a solution, the =ensure_simd= crate ([[https://github.com/ragnargrootkoerkamp/ensure_simd][gh]]) does a compile time check that
+either NEON or AVX2 instructions are enabled.
+It also contains instructions for effectively distributing such binaries,
+which is explained in more detail here.
+
+* What's inside
+Initially, most of my code uses Rust's unstable =#![feature(portabe-simd)]=.
+Unfortunately, users and packagers don't like unstable Rust, so by now I have
+converted everything to =wide= ([[https://github.com/Lokathor/wide][gh]], [[https://docs.rs/wide/latest/wide/][docs.rs]]). Wide supports types like =u64x4=
+like this (omitting irrelevant details):
+#+begin_src rust
+pick! {
+  if #[cfg(target_feature="avx2")] { // x64 variant
+    struct u64x4 { avx2: m256i }
+  } else {
+    struct u64x4 { a : u64x2, b : u64x2 }
+  }
+}
+#+end_src
+Thus, it detects if the =avx2= feature is enabled during compilation. If so, it
+directly uses a 256-bit type, and otherwise it falls back to a tuple of 128-bit
+elements, which in turn is implemented as:
+#+begin_src rust
+pick! {
+  if #[cfg(target_feature="sse2")] { // x64 variant
+    struct u64x2 { sse: m128i }
+  } else if #[cfg(target_feature="simd128")] { // wasm variant
+    struct u64x2 { simd: v128 }
+  } else if #[cfg(all(target_feature="neon",target_arch="aarch64"))]{ // arm/aarch64 variant
+    struct u64x2 { neon : uint64x2_t }
+  } else { // fallback
+    struct u64x2 { arr: [u64; 2] }
+  }
+}
+#+end_src
+This is more interesting:
+whereas the =u64x4= only had a native version on x64, 128-bit SIMD is also
+supported in both WebAssembly (wasm) and on arm chips with the NEON feature.
+
+* Compile-time feature detection
+What is important here is that the implementation is chosen /at compile time/.
+Thus, the entire binary only has one instance of the =wide= crate, and we must
+make sure that the right version is used during compilation, or otherwise the
+binary will silently have degraded performance.
+
+In particular, =wide= will work even when the =avx2= feature is not set, but in
+that case we will not get the expected performance, since it has to emulate
+everything using 128-bit =sse2= instructions instead. Thus, all my libraries
+include a specific check that AVX2 or NEON SIMD instructions are indeed enabled
+when doing a release build.
+
+#+caption: When compiling, and it's 1) not a debug build, 2) not a documentation build, and 3) neither the AVX2 nor NEON target-feature is enabled, and 4) also the =scalar= feature is not enabled on the crate, then force a compile error.
+#+begin_src rust
+#[cfg(not(any(
+    debug_assertions,
+    doc,
+    target_feature = "avx2",
+    target_feature = "neon",
+    feature = "scalar"
+)))]
+compile_error!("
+Sassy uses AVX2 or NEON SIMD instructions for performance.
+To get the expected performance, compile/install using eg:
+RUSTFLAGS=\"-C target-cpu=native\" cargo install sassy
+Alternatively, silence this error by activating the `scalar` feature (eg `cargo install -F scalar ...`).
+See the sassy README for details."
+);
+#+end_src
+
+The check can be ignored by passing the =-F scalar= feature flag to cargo, in
+which case the less efficient fallback types will be used.
+
+** Other solutions
+There are other solutions to this: one is /run-time/ feature detection.
+Unfortunately, which this works great when you're hardcoding the intrinsics
+manually, it's not a solution in our case, because =wide= instantiates
+everything at compile-time.
+
+The [[https://docs.rs/multiversion/latest/multiversion/][=multiversion=]] crate provides a macro that compiles a single function under
+different architectures and then chooses the one to dispatch to at runtime. But
+again, here we're talking about an entire library that has to change rather than
+a single function.
+
+There is also [[https://github.com/ronnychevalier/cargo-multivers][=cargo-multivers=]] that can build a binary with different features
+enabled and then combines those into a single binary that chooses the one to use
+at runtime, but it seems conceptually quite heavy and has a significant startup
+overhead due to decompressing the binaries.
+
+* Rust's default target-cpu
+This is all nice, but it gives some problems:
+on x64, Rust has a default target of x86-64-v1, which does not include all the
+features we need. Instead, we can force to use all feature available on the host
+CPU and optimize the code for it using:
+#+begin_src toml
+# .config/cargo.toml
+[build]
+rustflags = ["-C", "target-cpu=native"]
+#+end_src
+or by passing =RUSTFLAGS= directly into cargo:
+#+begin_src sh
+RUSTFLAGS="-C target-cpu=native" cargo build -r
+#+end_src
+
+Note that this is only /required/ on x64, where the default is missing AVX2, but
+even on aarch64 platforms (where NEON is always available),
+telling the compiler to optimize the code for a
+specific CPU can be beneficial: even when two CPUs implement the same
+instructions, they might have different costs for different instructions, and
+the compiler can use this information to generate better code.
+
+** =cargo build= vs =cargo install=
+By default, =cargo build= will [[https://doc.rust-lang.org/cargo/reference/config.html][search]] for =.cargo/config.toml= configuration files in
+the workspace root and up, and thus you can also provide e.g.
+=~/.cargo/config.toml=, and always ask for =target-cpu=native= from there.
+
+Similarly, =cargo install --path .= will build and install the current directory
+using the provided config. Unfortunately though, this config is /not/ part of
+the crate that is pushed to crates.io. Thus, =cargo install sassy= does /not/
+automatically build with all available features enabled, and the user has to ask
+for this manually (or otherwise for x64 the =compile_error!= will trigger):
+#+begin_src sh
+RUSTFLAGS="-C target-cpu=native" cargo install sassy
+#+end_src
+
+* Hardware support
+
+In practice, AVX2 is supported by Intel since Haswell (2013), and
+by /all/ AMD Zen architectures (2017).
+In fact, x64 CPU features come in groups called /microarchitecture levels/.
+[[https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels][This wikipedia page]] has a great overview, and show the aforementioned processors
+support all of x86-64-v3.
+
+Similarly, NEON is a /required/ feature for the aarch64 architecture, and thus
+supported on /all/ Apple silicon chips since M1 (2020).
+
+* Distributing binaries
+We want to ensure that distributed binaries are maximally portable.
+This means that we explicitly /should not/ use =target-cpu=native=.
+For example, many CI servers support x6-64-v4 which includes AVX512. Such
+binaries will be fast, but also will not work on systems (such as my laptop)
+that only have x86-64-v3 and thus do not support AVX512.
+
+Thus, instead of compiling for the =native= target, we fix x86-64-v3 for x64
+systems. Furthermore, for builds on an aarch64 M chip, we specifically target
+the =apple-m14= architecture, corresponding to the M1:
+#+begin_src toml
+# .cargo/config-portable.toml
+
+[target.'cfg(target_arch="x86_64")']
+# x86-64-v2 does not have AVX2, but we need that.
+# x86-64-v4 has AVX512 which we explicitly do not include for portability.
+rustflags = ["-C", "target-cpu=x86-64-v3"]
+
+[target.'cfg(all(target_arch="aarch64", target_os="macos"))']
+# For aarch64 macos builds, specifically target M1 rather than generic aarch64.
+rustflags = ["-C", "target-cpu=apple-a14"]
+#+end_src
+
+We would like to only include this config for building portable binaries, so
+that builds directly from the repository still achieve maximal performance.
+That is easily achieved by using =mv .cargo/config-portable.toml
+.cargo/config.toml= before =cargo build=.
+
+** GitHub Releases
+GitHub releases are set up via =cargo-dist= ([[https://github.com/axodotdev/cargo-dist][gh]]).
+It uses a small =dist-workspace.toml= [[https://github.com/RagnarGrootKoerkamp/sassy/blob/master/dist-workspace.toml][file]] to generate (via =dist init=) a
+massive [[https://github.com/RagnarGrootKoerkamp/sassy/blob/master/.github/workflows/release.yml][workflow]] that in the end simply builds the binaries and makes a new
+release with changelog whenever a new tag is pushed.
+
+** Bioconda
+The Barbell Bioconda workflow is in [[https://github.com/bioconda/bioconda-recipes/pull/60260/files][this pr]].
+
+** Pypi
+The sassy pypi release workflow is [[https://github.com/RagnarGrootKoerkamp/sassy/blob/master/.github/workflows/publish_pypi.yaml][here]] .
+
+* Open questions
+1. Should we look into =cargo-multivers= to ship a single portable binary per
+   architecture?
+2. Should the repository contain =target-cpu=native= by default to enable
+   maximum performance, or should we always prefer portability?
+3. Should we add an additional run-time check that AVX2 or NEON is actually
+   supported by the CPU running the binary? This sounds nice, but in practice,
+   something like argument parsing will already use the max available SIMD
+   instructions at compilation time, which will trigger an =illegal instruction=
+   error very early on. The only way to avoid this is to have every binary call
+   =ensure_simd()= at the very start of the program, but this feels a bit brittle.
+
+#+print_bibliography:
