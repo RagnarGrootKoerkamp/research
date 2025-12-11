@@ -1,0 +1,66 @@
+#+title: Amplicon Clustering using edit distance
+#+filetags: @lablog pairwise-alignment wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-12-10 Wed>
+
+/Amplicon clustering/ is used in the sequencing of viruses. For example, a
+30kbp SARs-CoV-2 virus is split into ~100 slightly overlapping /amplicons/ of
+length around 400:
+
+#+caption: Screenshot from [[https://labs.primalscheme.com/detail/artic-sars-cov-2/400/v4.1.0/]].
+#+attr_html: :class inset large
+[[file:amplicons.png]]
+
+Each of these amplicons is replicated many times and sequenced using ONT to a
+coverage of around 1000, where each read covers a full 400bp amplicon, as well
+as primers at the start (and end?).
+
+*The goal is to cluster the 100k 400bp reads (40Mbp of data) into the
+original 100 amplicons.*
+
+Current methods are reference based and map each read to a known reference, but
+this can introduce bias and has possible issues when the virus being sequenced
+has diverged too much from the reference.
+
+Here, we will attempt to use edit distance based methods (sassy) for clustering.
+
+*Code:* [[https://github.com/ragnargrootkoerkamp/amplicon-clustering][github:ragnargrootkoerkamp/amplicon-clustering]].
+
+
+* Datasets
+
+Bede Constantinides and others put together some datasets at  https://www.ebi.ac.uk/ena/browser/view/PRJEB50520.
+We will use two files:
+
+=ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR895/ERR8959186/oxf__ont__artic-v4.1__B.reads.fastq.gz=:
+100k reads of length ~500
+
+ 
+=ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR895/ERR8959165/oxf__ont__midnight-v2__B.reads.fastq.gz=:
+55k reads of average length ~600
+
+* Approach
+The basic approach is this: for each amplicon we keep a single representative.
+Then, each read is matched (aligned) against all representatives. Ideally
+exactly one of those distances is small and the read is assigned to that bucket.
+If none of the distances is small, we assign it to a new cluster.
+
+In total, this should do around $100\cdot 100\ 000 = 10M$ pairwise comparisons,
+which should be pretty fast using either A*PA2 or sassy.
+
+* Tools
+** A*PA2
+- Does not support overhang
+- Really only does global alignment (even in =astarpa2::full= mode), which isn't quite good enough.
+** pa-bitpacking
+- has =pa_bitpacking::search= which simply fills the entire matrix using SIMD.
+** Sassy
+- Has =alpha= for cheap overhangs
+- only does semi-global
+- not quite optimized yet for searching short texts
+
+#+print_bibliography:
