@@ -1,0 +1,51 @@
+#+title: Writing typst in emacs
+#+filetags: @devops
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-12-12 Fri>
+
+This is a short note on setting up Doom emacs for very fast typst previews.
+
+*typst-ts-mode* provides =typst-ts-watch-mode= via =C-c C-w=, which runs =typst
+ watch= in the background, as well as =typst-ts-preview= via =C-c C-p= which
+ opens the current pdf file. Using =zathura= as pdf viewer provides live updates.
+#+begin_src elisp
+;; doom/packages.el
+;; typst: https://codeberg.org/meow_king/typst-ts-mode/wiki/Installation.md
+(package! typst-ts-mode :recipe (:host codeberg :repo "meow_king/typst-ts-mode"))
+#+end_src
+
+Since typst is so fast to compile, and near-live previews are nice, we'd like to
+save the file often. Since =space f s= is somewhat annoying to type all the
+time, we'll add some auto-saving. (I wonder if/when there will be a typst LSP
+that works live without having to save the file, similar to the [[https://typst.app]] live preview.)
+
+We *save when emacs loses focus* using
+#+begin_src elisp
+;; save on focus lost
+;; https://stackoverflow.com/q/1230245
+(add-hook 'focus-out-hook (lambda () (interactive) (save-some-buffers t)))
+#+end_src
+
+Even better, I have caps-lock mapped to escape, so I remapped escape in normal
+mode to save as well:
+#+begin_src elisp
+(define-key evil-normal-state-map (kbd "<escape>") (lambda () (interactive) (save-some-buffers t)))
+#+end_src
+It does not work super smoothly because it seems to inhibit some other things
+that run on escape, but it's good enough for now[fn::Note that I'm a complete elisp
+noob. Feel free to suggest improvements.] and I use it *a lot*.
+
+Another thing I tried before that is *save on exiting insert mode*, but this
+turned out not as useful as I thought: sometimes it's annoying to auto-format-on-save
+the buffer while you're making changes, and there are changes like deleting a
+line with =dd= that never enter insert mode, and so manual saving would still be
+necessary in that case anyway. But anyway, I had the following snippet for that:
+#+begin_src elisp
+;; save on exiting insert mode
+;; https://www.reddit.com/r/emacs/comments/3s7d38
+;(add-hook 'evil-insert-state-exit-hook (lambda () (interactive) (save-some-buffers t)))
+#+end_src
