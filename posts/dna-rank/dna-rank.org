@@ -1,0 +1,113 @@
+#+title: 2bit rank
+#+filetags: @results @lablog hpc wip data-structure
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-11-09 Sun>
+
+If you're in bioinformatics and do anything with data structures for indexing
+large amounts of data, or if you are generally into /succinct data structures/
+(that use space close to the information-theoretic lower bound, [[https://en.wikipedia.org/wiki/Succinct_data_structure][wikipedia]]),
+you've probably heard of /rank and select/
+
+
+BWA [cite/t:@bwa-mem] uses a custom routine ([[https://github.com/lh3/bwa/blob/b92993c1161e73167181558856567ef2f367e3f0/bwt.c#L98-L220][github code]]) for rank over 2-bit DNA alphabets.
+By request of Heng Li, here we investigate if we can make it faster.
+
+* Problem statement
+Given the a text $T$ over a size-4 (2-bit) alphabet, build a data structure that
+can quickly count the number of A, C, G, /and/ T characters up to position $i$ in $S$.
+Specifically, for each query $i$ we want to return /all 4/ counts.
+
+#+begin_src rust
+impl DnaRank {
+    /// Take a DNA string over ACGT characters.
+    pub fn new(seq: &[u8]) -> Self;
+    
+    /// Count the number of A, C, G, *and* T characters before the given position.
+    pub fn count4(&self, pos: usize) -> [u32; 4];
+}
+#+end_src
+
+** Metrics
+1. most important: fast
+   - low latency?
+   - high throughput when called in a loop?
+   - high throughput with prefetching
+   - also, with multithreading
+2. secondary: small. But 2x overhead is fine.
+   - as long as it fits in RAM, all is good
+
+* Motivation: BWA / FM-index
+
+* Data structure layout
+- query time is measured in the RAM model: cost 1 per memory access.
+** 1-level indices
+- $n$: number of characters.
+*** Flat: $2n$ bits, $O(n)$ queries
+#+attr_html: :class inset medium
+[[file:./text-only.svg]]
+*** All-answers $4n\lg n$ bits, $O(1)$ queries
+#+attr_html: :class inset medium
+[[file:./ranks-only.svg]]
+
+
+** What's in a cache line?
+
+#+attr_html: :class inset medium
+[[file:./cacheline.svg]]
+
+** 2-level indices: blocks
+- Blocks of $B$ characters.
+- For each block, store the character counts for the text preceding the block. 
+*** External block counts: $2n + n/B\cdot 4\lg n$ bits, $O(B)$ queries
+
+#+attr_html: :class inset medium
+[[file:./plain.svg]] 
+
+
+*** Internal block counts: $2n + n/(B-4\lg n)\cdot 4\lg n$ bits, $O(B)$ queries
+
+#+attr_html: :class inset medium
+[[file:./plain-inline.svg]] 
+
+** 3-level indices: superblocks
+- Superblocks corresponding to $S$ blocks or $S\cdot B$ characters, so that the
+  block offsets can use less precision.
+  
+#+attr_html: :class inset medium
+[[file:./superblock.svg]] 
+
+
+#+attr_html: :class inset medium
+[[file:./superblocks-transposed.svg]] 
+
+#+attr_html: :class inset medium
+[[file:./superblock-inline.svg]] 
+
+
+** Current implementation in BWA
+- query code: https://github.com/lh3/bwa/blob/master/bwt.c
+  - =bwt_occ=: count occurrence of 1 character up to position.
+  - =bwt_occ4=: count occurrences of 4 characters
+  - =bwt_2occ4=: count occurrences of 4 characters in an interval. This is the
+    most important one.
+- construction is here: https://github.com/lh3/bwa/blob/master/bwtindex.c#L150, =bwt_bwtupdate_core=
+- flat array
+- 2-level index: every =OCC_INTERVAL= stores 4 counts followed by BWT input text. No superblocks.
+
+** Other implementations
+- SDSL?
+- QWT [cite:@quad-wavelet-tree] ([[https://docs.rs/qwt/latest/qwt/][docs.rs/qwt]]): 3-level index
+  - Superblocks stores large (64bit?) number.
+  - Blocks have 12bit delta relative to superblock.
+  - Popcount inside the block.
+
+
+* Link todo:
+- https://news.ycombinator.com/item?id=35678032
+  - https://amturing.acm.org/pdf/GrayTuringTranscript.pdf
+
+#+print_bibliography:
