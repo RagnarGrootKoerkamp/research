@@ -1,0 +1,249 @@
+#+title: Overview of static data structures
+#+filetags: @survey data-structure mphf wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2025-12-17 Wed>
+
+$$
+\newcommand{\K}{\mathbb K}
+\newcommand{\V}{\mathbb V}
+$$
+
+This post summarizes different types of /static/ data structures:
+- their definition,
+- space lower bounds, and
+- practical approaches.
+
+Surely some relevant methods are still missing. Feel free to suggest more.
+
+This post was written with input from Stefan Hermann and Stefan Walzer.
+
+* Types of static data structures
+We assume that we are given
+- a function $f: K \to \V$
+- from a set of $n$ $k$-bit keys $K\subseteq \K = [2^{k}]$
+  - *with the assumption that $|K| \ll |\K|$* (say, $|K| \leq 0.01 |\K|$)
+- to $v$-bit values $f(K) = V \subseteq \V=[2^{v}]$.
+
+We consider various variants of this setting.
+
+Terminology:
+- /function/: only defined on $K$
+- /dictionary/: detects non-keys
+- /retrieval/: static key-set
+- /static/: static keys and values
+- /updatable/: static keys but updatable values
+- /dynamic/: updatable keys and values
+- /non-keys/: values $x' \in K' = \K - K$.
+
+In the following, space usage ignores lower-order terms, and we do not consider
+construction time. For reference, $\log e =1.44$.
+
+** Rank
+Given an $n$-bit array of $0$ and $1$, answer queries: how many $1$s are there
+before position $x$?
+
+- Space usage: usually between $1.01n$ and $1.2n$ bits.
+- Implementations:
+  - Rank9 [cite:@rank9;@sux-rs]
+  - sdsl [cite:@sdsl]
+  - pasta [cite:@engineering-rank-select]
+  - poppy-cs [cite:@poppy]
+  - qwt/RSWide/RSNarrow [cite:@quad-wavelet-tree]
+  - paired blocks [cite:@engineering-rank]
+  - btree [cite:@rank-select-mutable-bitmaps]
+  - quadrank (wip, [[file:quadrank/quadrank.org][post]])
+    
+** Rank + Select
+Given an $n$-bit array of $0$ and $1$, answer queries: how many $1$s are there
+before position $x$?
+
+- Space usage: usually between $1.01n$ and $1.2n$ bits.
+- Implementations:
+  - simple [cite:@rank9;@sux-rs]
+  - sdsl [cite:@sdsl]
+  - pasta [cite:@engineering-rank-select]
+  - poppy-cs [cite:@poppy]
+  - paired blocks [cite:@engineering-rank]
+  - 3* [cite:@rank-select-theory-practice]
+  - btree [cite:@rank-select-mutable-bitmaps]
+
+** Minimal perfect hash function (MPHF)
+An MPHF bijectively maps the $n$ keys of $K$ to $[n]$. It is undefined for non-keys.
+
+MPHF's form a building block for other static data structures listed below.
+
+- Space lower bound: $\log e = 1.44$ bits/key
+- Examples:
+  - PTHash [cite:@pthash], Phobic [cite:@phobic], PtrHash [cite:@ptrhash], Phast
+    [cite:@phast]: $2$ to $3$ bits/key, $O(1)$ queries mostly via 1 cache miss
+  - Consensus [cite:@consensus]: as small as $1.45$ bits/key and query time
+    $\log 1/\varepsilon$ or $\log n$ depending on the exact method.
+  - survey: [cite/t:@mphf-survey]
+** Static retrieval: Static function with static values
+/Static retrieval/ corresponds to a /static function/ $f$ storing $f(x)$ for all $x\in K$, that is undefined for all
+non-keys. Values are static as well.
+
+- Space lower bound: $v$ bits/key
+- Examples:
+  - 3-way hypergraph peeling: $1.23v$ bits/key, $O(1)$ query via 3 parallel reads [cite:@hypergraph-peeling]
+  - fuse graphs: $1.12v$ bits/key via more efficient hypergraph peeling, still 3
+    parallel reads [cite:@fuse-graphs] (sux-rs [cite:@sux-rs] has an implementation)
+  - BuRR (bumped ribbon retrieval): $v$ bits/key, $O(v)$ query time ($v$ times $3$ parallel reads) [cite:@burr]
+  - MPHF+array: $v+\log e$ bits/key, $O(1)$ query time via $2$ sequential reads.
+  - see also $\varepsilon$-cost sharding for partitioned construction [cite:@eps-cost-sharding]
+** Updatable retrieval: Static function with mutable values
+/Updatable retrieval/ corresponds to a /static function/ $f$ storing $f(x)$ for all $x\in K$, that is undefined for all
+non-keys, /for which values can be updated/, i.e., we can assign $f(x) \gets v'$.
+
+- Space lower bound: $v + 0.16$ bits/key [cite:@space-lower-bound-dynamic-retrieval]
+  - In practice, also $v+\log e$ bits/key for $v\gg 1$?
+- Example:
+  - MPHF+array: $v+\log e$ bits/key, $O(1)$ query time via $2$ sequential reads.
+    
+    
+** Static set (membership)
+A /static set/ $f$ answers for each $x$ whether it is in $K$ or not.
+
+- Space lower bound: $k - \log n + \log e$ bits/key
+  - Note: when $n$ is large and keys are dense in $K$, effectively one only has
+    to store the distances between adjacent keys, which takes just over
+     $\log (2^k/n) = k - \log n$ bits/key.
+- Examples:
+  - standard HashSet (C++ =unordered_hashset=, Rust =HashSet=): $1.2k$ to $2.4k$ bits/key; space overhead for $2\times$
+    growth factor and $\approx 20\%$ empty slots. $O(1)$ queries with probing
+    and mostly 1 cache miss
+  - cuckoo hashing: $(1+\varepsilon)k$ bits/key; $O(1)$ queries with either 2
+    parallel reads or the second read conditional on the first.
+  - Elias Fano (EF) encoding: $2+0.06+\log (2^k/n) = 2.06+k - \log n$ bits/key
+    - Stores the low $b=\lceil k-\log n\rceil$ bits of each key explicitly, and
+      uses a 1-hot encoding for the number of times a multiple of $2^b$ is
+      crossed between adjacent values. Then uses a rank and/or select structure
+      on the bitvector for index operations that take an additional $0.06$ to
+      $0.4$ bits/key.
+    - Answers whether $x$ is in the set by checking if the smallest value $\geq
+      x$ is $x$ itself.
+  - optimal static dictionary [cite:@static-dictionary]: $n^\varepsilon$ overhead to lowerbound, $O(1)$ queries
+      
+
+** Static ordered set
+Compared to a static set, a static /ordered/ set allows /successor/ queries:
+what is the smallest element in the set $\geq x$?
+
+We *assume* that all implementations of this somehow store an ordered list of
+keys, and that returning the first element $\geq x$ implicitly computes an index
+into this list.
+
+- Space lower bound: $k - \log n + \log e$ bits/key (as before)
+- Examples:
+  - C++ =set= (red-black tree): pointer-based; $k+64$ bits/key?
+  - Rust =BTreeSet= (B-tree): around $2k$ or so?
+  - EF with select: $2+0.06+\log (2^k/n) = 2.06+k - \log n$ bits/key.
+    
+** Static dictionary: static keys and values
+A /dictionary/ differs from a /function/ in that it recognizes non-keys $x'$:
+$f(x') = \bot$ is guaranteed, whereas $f(x)\in \V$ is the usual value.
+In a /static dictionary/, both keys and values are static.
+
+- Space lower bound: $k-\log n + v + \log e$ bits/key
+- Examples:
+  - static set + static retrieval: $k-\log n+\log e + v$ bits/key ($\log e$ away)
+  - static ordered set + array: $k - \log n + \log e + v$ bits/key ($\log e$ away)
+    - Retrieve the sorted position via the ordered set, and use that to index
+      an array.
+  - static ordered set on $(k,v)$ pairs: $k-\log n + \log e + v$ bits/key ($\log
+    e$ away)
+  - MPHF + key-value array: $\log e + k + v$ bits/key ($\log n$ away).
+  - cuckoo hashing [cite:@cuckoo-hashing]: $(1+\varepsilon)(k+v)$ bits/key
+  - optimal static dictionary [cite:@static-dictionary]: $n^\varepsilon$ overhead to lowerbound, $O(1)$ queries
+** Updatable dictionary with mutable values
+In an /updatable dictionary/, values can be updated.
+
+In practice, all known static dictionaries associate a unique memory location to
+each value (unlike e.g. static retrieval structures). Thus, we can trivially
+update the value as needed, and all static dictionary methods also work as an
+updatable dictionary.
+
+- Space lower bound: $k-\log n + v + \log e$ bits/key
+** TODO Dynamic dictionary with mutable keys and values
+In a /dynamic dictionary/, keys are mutable and can thus be added and removed.
+
+- Space lower bound: ?
+- Examples:
+  - C++ =absl::flat_hash_map=, Rust =HashMap=: $1.2(k+v)$ to $2.4(k+v)$ bits/key
+    with $2\times$ growth factor
+    
+** TODO Static filter
+A static set with false-positive ratio $2^{-p}$.
+
+- Space lower bound: $p$ bits/key?
+- Examples:
+  - bloom filter [cite:@bloom-filter]
+  - cuckoo filter [cite:@cuckoo-filter]
+  - xor filter [cite:@xor-filters]
+  - binary fuse filters [cite:@binary-fuse-filters]: $1.12p$ bits/key
+  - blocked bloom filters [cite:@blocked-bloom-filters]
+  - many more ...
+  # - backpack quotient filter [cite:@backpack-quotient-filter]
+  # - counting quotient filter [cite:@counting-quotient-filter]
+    
+** TODO Ordered static/updatable/dynamic dictionary?
+Like a normal dictionary, but with successor queries.
+
+- Space lower bound: ?
+- Examples:
+  - C++ =map=
+  - Rust =BTreeMap=
+
+
+* Summary table
+
+#+caption: Summary of static data structures, their space lower bounds, and practical solutions with their space usage.
+#+caption: Double starred methods (**) are within $o(1)$ bit/key from optimal.
+#+caption: Single starred methods (*) are within $\Theta(1)$ bit/key from optimal.
+#+attr_html: :class small
+| data structure/method          | non-keys | values  | space (bits/key)                        | query                           |
+| *MPHF*                         | no       | -       | $\geq \log e$                           |                                 |
+| - Consensus*                   |          |         | $\log e + 0.001$                        | $O(1/\varepsilon)$, $O(\log n)$ |
+| - PTHash/PHOBIC/PtrHash/Phast  |          |         | $2$ to $3$                              | $O(1)$                          |
+|                                |          |         |                                         |                                 |
+| *static retrieval*             | no       | static  | $\geq v$                                |                                 |
+| - BuRR**                       |          |         | $v$                                     | $O(v)$                          |
+| - MPHF + array*                |          |         | $v+\log e$                              | $O(1)$                          |
+| - hypergraph peeling           |          |         | $1.23v$                                 | $O(1)$                          |
+|                                |          |         |                                         |                                 |
+| *updatable retrieval*          | no       | mutable | $\geq v+\log e$ (for $v\gg 1$)          |                                 |
+| - MPHF + array*                |          |         | $v+\log e$                              |                                 |
+|                                |          |         |                                         |                                 |
+| *static set*                   | yes      | -       | $\geq k - \log n + \log e$              |                                 |
+| - Elias Fano*                  |          |         | $k - \log n + 2$                        |                                 |
+| - cuckoo hashing               |          |         | $(1+\varepsilon)k$                      | $O(1)$                          |
+| - hashset                      |          |         | $1.2k$ to $2.4k$                        | $O(1)$                          |
+| - optimal static dictionary    |          |         | $k - \log n + O(n^{\varepsilon-1})$     | $O(1)$                          |
+|                                |          |         |                                         |                                 |
+| *static ordered set*           | yes      | -       | $\geq k - \log n + \log e$              |                                 |
+| - Elias Fano*                  |          |         | $k - \log n + 2$                        |                                 |
+|                                |          |         |                                         |                                 |
+| *static dictionary*            | yes      | static  | $\geq k-\log n + v + \log e$            |                                 |
+| *updatable dictionary*         | yes      | mutable | $\geq k-\log n + v + \log e$            |                                 |
+| - static set + inline values** |          |         | $k-\log n + v + \log e$                 |                                 |
+| - ordered set on $(k,v)$**     |          |         | $k-\log n + v + \log e$                 |                                 |
+| - MPHF + kv-array              |          |         | $k + v + \log e$                        | $O(1)$                          |
+| - cuckoo hashing               |          |         | $(1+\varepsilon)(k+v)$                  | $O(1)$                          |
+| - optimal static dictionary    |          |         | $k - \log n + v + O(n^{\varepsilon-1})$ | $O(1)$                          |
+|                                |          |         |                                         |                                 |
+| *standard data structures*     |          |         |                                         |                                 |
+| - =HashSet=                    | yes      | -       | $1.2k$ to $2.4k$                        | $O(1)$                          |
+| - =HashMap=                    | yes      | mutable | $1.2(k+v)$ to $2.4(k+v)$                | $O(1)$                          |
+| - =BTreeSet=                   | yes      | -       | $\approx 2k$?                           | $O(B\lg n)$                     |
+| - =BTreeMap=                   | yes      | mutable | $\approx 2(k+v)$?                       | $O(B\lg n)$                     |
+| - static hashset               | yes      | -       | $\approx 1.2k$                          | $O(1)$                          |
+| - static hashmap               | yes      | mutable | $\approx 1.2(k+v)$                      | $O(1)$                          |
+| - static btree set             | yes      | -       | $(1+1/(B-1))k$                          | $O(B\lg n)$                     |
+| - static btree map             | yes      | mutable | $(1+1/(B-1))(k+v)$                      | $O(B\lg n)$                     |
+
+
+#+print_bibliography:
