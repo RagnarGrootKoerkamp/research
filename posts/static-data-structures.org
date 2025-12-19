@@ -10,6 +10,7 @@
 $$
 \newcommand{\K}{\mathbb K}
 \newcommand{\V}{\mathbb V}
+\newcommand{\c}[1]{\mathbf{\mathsf{#1}}}
 $$
 
 This post summarizes different types of /static/ data structures:
@@ -21,25 +22,52 @@ Surely some relevant methods are still missing. Feel free to suggest more.
 
 This post was written with input from Stefan Hermann and Stefan Walzer.
 
-* Types of static data structures
+See [[#summary][the end]] for a summarizing table.
+
+* Classification of static data structures
 We assume that we are given
 - a function $f: K \to \V$
 - from a set of $n$ $k$-bit keys $K\subseteq \K = [2^{k}]$
   - *with the assumption that $|K| \ll |\K|$* (say, $|K| \leq 0.01 |\K|$)
 - to $v$-bit values $f(K) = V \subseteq \V=[2^{v}]$.
 
-We consider various variants of this setting.
+Given $x\in \K$ and $y\in \V$, we consider a few operations one can do in such a
+setting [cite:@walzer-thesis]:
+- $\c{member}(x)$: returns whether $x\in K$.
+- $\c{lookup}(x)$: returns $f(x)$ when $x\in K$ and $\bot$ otherwise.
+- $\c{eval}(x)$: returns $f(x)$ when $x\in K$ and an arbitrary value in $\mathbb V$ otherwise.
+- $\c{update}(x, y)$: updates $f(x) \gets v$.
+
+There are different classes of data structures that support different subsets of these
+operations:
+
+| problem              | eval | member | lookup | update | note                                              |
+| minimal perfect hashing | x    |        |        |        | $f$ is /some/ bijection from $K$ to $[n]$         |
+| order-preserving (monotone) MPHF | x    |        |        |        | $f(x) = \vert\{x'\in K \mid x' < x\}\vert$    |
+| static retrieval     | x    |        |        |        |                                                   |
+| updatable retrieval  | x    |        |        | x      |                                                   |
+| static set           |      | x      |        |        |                                                   |
+| static ordered set   |      | x      |        |        | Also supports returning the smallest key $\geq x$ |
+| static dictionary    |      | x      | x      |        |                                                   |
+| updatable dictionary |      | x      | x      | x      |                                                   |
+| dynamic dictionary   |      | x      | x      | x      | Also supports inserting/removing keys             |
+
+Not listed in this table are /rank/ and /select/, because their input is a
+typically a bit-array instead.
 
 Terminology:
-- /function/: only defined on $K$
-- /dictionary/: detects non-keys
-- /retrieval/: static key-set
+- /retrieval/: supports $\c{eval}$ and possibly $\c{update}$
+- /static function/: somewhat an alias for retrieval
+- /dictionary/: supports $\c{lookup}$
 - /static/: static keys and values
 - /updatable/: static keys but updatable values
 - /dynamic/: updatable keys and values
 - /non-keys/: values $x' \in K' = \K - K$.
 
-In the following, space usage ignores lower-order terms, and we do not consider
+* Space lower bounds and practical approaches
+In the following, we summarize each problem, list space lower bounds, and
+give some examples of data structures that can be used.
+Space usage ignores lower-order terms, and we do not consider
 construction time. For reference, $\log e =1.44$.
 
 ** Rank
@@ -58,8 +86,8 @@ before position $x$?
   - quadrank (wip, [[file:quadrank/quadrank.org][post]])
     
 ** Rank + Select
-Given an $n$-bit array of $0$ and $1$, answer queries: how many $1$s are there
-before position $x$?
+Given an $n$-bit array of $0$ and $1$, answer queries: what is the position of
+the $i$th $1$?
 
 - Space usage: usually between $1.01n$ and $1.2n$ bits.
 - Implementations:
@@ -83,16 +111,20 @@ MPHF's form a building block for other static data structures listed below.
   - Consensus [cite:@consensus]: as small as $1.45$ bits/key and query time
     $\log 1/\varepsilon$ or $\log n$ depending on the exact method.
   - survey: [cite/t:@mphf-survey]
+** TODO Order-preserving MPHF
+- Space lower bound: TODO
+- Examples: TODO
 ** Static retrieval: Static function with static values
 /Static retrieval/ corresponds to a /static function/ $f$ storing $f(x)$ for all $x\in K$, that is undefined for all
 non-keys. Values are static as well.
 
 - Space lower bound: $v$ bits/key
 - Examples:
-  - 3-way hypergraph peeling: $1.23v$ bits/key, $O(1)$ query via 3 parallel reads [cite:@hypergraph-peeling]
+  - 3-way hypergraph peeling: $1.23v$ bits/key, $O(1)$ query via 3 parallel reads [cite:@practical-perfect-hashing]
   - fuse graphs: $1.12v$ bits/key via more efficient hypergraph peeling, still 3
     parallel reads [cite:@fuse-graphs] (sux-rs [cite:@sux-rs] has an implementation)
-  - BuRR (bumped ribbon retrieval): $v$ bits/key, $O(v)$ query time ($v$ times $3$ parallel reads) [cite:@burr]
+  - BuRR (bumped ribbon retrieval): $v$ bits/key, $O(v)$ query time ($v$ times
+    an unaligned =u64= read) [cite:@burr]
   - MPHF+array: $v+\log e$ bits/key, $O(1)$ query time via $2$ sequential reads.
   - see also $\varepsilon$-cost sharding for partitioned construction [cite:@eps-cost-sharding]
 ** Updatable retrieval: Static function with mutable values
@@ -100,7 +132,7 @@ non-keys. Values are static as well.
 non-keys, /for which values can be updated/, i.e., we can assign $f(x) \gets v'$.
 
 - Space lower bound: $v + 0.16$ bits/key [cite:@space-lower-bound-dynamic-retrieval]
-  - In practice, also $v+\log e$ bits/key for $v\gg 1$?
+  - In practice, also $v+\log e$ bits/key for $v\gg 1$
 - Example:
   - MPHF+array: $v+\log e$ bits/key, $O(1)$ query time via $2$ sequential reads.
     
@@ -116,7 +148,7 @@ A /static set/ $f$ answers for each $x$ whether it is in $K$ or not.
   - standard HashSet (C++ =unordered_hashset=, Rust =HashSet=): $1.2k$ to $2.4k$ bits/key; space overhead for $2\times$
     growth factor and $\approx 20\%$ empty slots. $O(1)$ queries with probing
     and mostly 1 cache miss
-  - cuckoo hashing: $(1+\varepsilon)k$ bits/key; $O(1)$ queries with either 2
+  - cuckoo hashing [cite:@cuckoo-hashing;@k-orientability-thresholds;@k-orientability-thresholds-2]: $(1+\varepsilon)k$ bits/key; $O(1)$ queries with either 2
     parallel reads or the second read conditional on the first.
   - Elias Fano (EF) encoding: $2+0.06+\log (2^k/n) = 2.06+k - \log n$ bits/key
     - Stores the low $b=\lceil k-\log n\rceil$ bits of each key explicitly, and
@@ -157,7 +189,7 @@ In a /static dictionary/, both keys and values are static.
   - static ordered set on $(k,v)$ pairs: $k-\log n + \log e + v$ bits/key ($\log
     e$ away)
   - MPHF + key-value array: $\log e + k + v$ bits/key ($\log n$ away).
-  - cuckoo hashing [cite:@cuckoo-hashing]: $(1+\varepsilon)(k+v)$ bits/key
+  - cuckoo hashing: $(1+\varepsilon)(k+v)$ bits/key
   - optimal static dictionary [cite:@static-dictionary]: $n^\varepsilon$ overhead to lowerbound, $O(1)$ queries
 ** Updatable dictionary with mutable values
 In an /updatable dictionary/, values can be updated.
@@ -168,6 +200,8 @@ update the value as needed, and all static dictionary methods also work as an
 updatable dictionary.
 
 - Space lower bound: $k-\log n + v + \log e$ bits/key
+  - (This equals the static case, because the dictionary contains all needed
+    information to build a modified version from scratch on each update.)
 ** TODO Dynamic dictionary with mutable keys and values
 In a /dynamic dictionary/, keys are mutable and can thus be added and removed.
 
@@ -200,12 +234,15 @@ Like a normal dictionary, but with successor queries.
 
 
 * Summary table
+:PROPERTIES:
+:CUSTOM_ID: summary
+:END:
 
 #+caption: Summary of static data structures, their space lower bounds, and practical solutions with their space usage.
 #+caption: Double starred methods (**) are within $o(1)$ bit/key from optimal.
 #+caption: Single starred methods (*) are within $\Theta(1)$ bit/key from optimal.
 #+attr_html: :class small
-| data structure/method          | non-keys | values  | space (bits/key)                        | query                           |
+| data structure/method          | member      | values  | space (bits/key)                        | query                           |
 | *MPHF*                         | no       | -       | $\geq \log e$                           |                                 |
 | - Consensus*                   |          |         | $\log e + 0.001$                        | $O(1/\varepsilon)$, $O(\log n)$ |
 | - PTHash/PHOBIC/PtrHash/Phast  |          |         | $2$ to $3$                              | $O(1)$                          |
