@@ -1,0 +1,74 @@
+#+title: Asymptotic elevators
+#+filetags: @misc physics highlight
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+# #+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2025-12-22 Mon>
+
+I was listening to an episode of the /well there's your problem/ podcast about
+pencil towers ([[https://www.youtube.com/watch?v=BvMYplJ59TE&t=11297s][youtube]]), and it had a section on how elevators are a problem because they
+require a lot of space. So here's a mathematical version of that.
+
+* Problem statement
+- Given are $n$ people that need to go to floors $1, 2, \dots, n$.
+- Elevators have constant acceleration, and must be standing still to
+  enter/exit.[fn::Speed limits do not exist for elevators.]
+- Possible elevator configurations:
+  1. single elevator over entire height
+  2. partition the height in disjoint intervals, and then one elevator per interval
+  3. double-deck: a single elevator that is $h$ floors high
+- /Not/ allowed: two free-moving elevators above each other that make sure to
+  never bump into each other.
+- Elevators have infinite capacity.
+- There are $k$ elevator shafts.
+- *Question:* How much total travel time do you need to get everyone home, if
+  everybody arrives at the same time.
+- *Harder(?):* What if the people arrive in a random permutation (1 per time
+  step), and their clock starts ticking as soon as they arrive?
+
+* Observations
+- Going $n$ floors up takes at least $O(\sqrt n)$ time.
+- Total travel time is at least $\sum_{i=0}^n O(\sqrt i) = O(n \sqrt n)$
+- $1$ elevator carrying everyone going 1 step at a time: $O(n^2)$ total time
+- $2$-elevator sqrt-decomposition: one elevator stops every $\sqrt n$ floors,
+  and then a (set of) second elevators for the final up to $\sqrt n$ floors.
+  - first elevator: $n$ people times $n/(\sqrt n)/2$ 'big steps' on average
+    times $\sqrt{\sqrt n}$ time per big step is $O(n^{7/4})$
+  - second elevator: $n$ people times $(\sqrt n)$ 'small steps' on average
+    times $1$ per small step is $O(n^{3.2})$
+  - so overall the big steps dominate
+- $2$-elevator, one that stops every $B$ floors and then $B$ that stop every
+  one floor:
+  - the first one: $n \cdot (n/B) \cdot \sqrt B = n^2/\sqrt B$
+  - the second one: $n \cdot B = nB$.
+  - solve for equality: $B = n/\sqrt B$ => $B = n^{2/3}$
+  - so $n^{1+2/3}$ solution
+- $\lg n$ elevator binary tree: 
+  - $2^k \leq n \leq 2^{k+1}$
+  - Take first elevator to $2^k$ if needed: time $\sqrt{2^k} = O(\sqrt n)$
+  - There take second elevator that goes up $2^{k-1}$ floors if needed.
+  - Then $2^{k-2}$ levels up
+  - and so on until the last floor.
+  - Total time per person averages $\sqrt{2^k}/2 + \sqrt{2^{k-1}}/2 + \dots + \sqrt{2}/2 + \sqrt{1}/2 =
+    O(\sqrt{2^k}) = O(\sqrt n)$, so up-to-a-constant optimal total travel
+    time $O(n \sqrt n)$.
+
+*Open questions:*
+- What is the optimal elevator-shafts vs time tradeoff?
+- How low can we push the constants for any specific $k$ and $n$?
+      
+* Harder variant: random arrival order
+- The dominant term in the easy version is the time spent in the first long-distance elevator.
+- Waiting for that elevator is at most it going up and down.
+- Thus, worst-case time with random arrivals is at most $3\times$ the optimal
+  one, which has the same complexity!
+
+* Closing thoughts
+This problem feels oddly familiar to the $\sqrt n$ memory model where reading
+memory also takes $\sqrt n$ time. There, we gather random pieces of
+data and we are bound by speed of light and planar information density.
+Here, instead, we are bound by acceleration and deceleration in 1D, and we
+/scatter/ instead of /gather/ the people, and somewhat surprisingly, the result
+of $\sqrt n$ average latency per person comes out the same!
