@@ -1,0 +1,70 @@
+#+title: [WIP] FM-index variants
+#+filetags: @survey data-structures fm-index wip
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2025-12-23 Tue>
+
+Here I'll list some variants of the FM-index and r-index, and techniques used in
+making faster indices.
+
+This post was written with a lot of input by Simon Gene Gottlieb, as well as
+discussions with Rob Patro.
+
+* Applications of FM-index
+- approximate pattern matching of short (150bp short reads, 23bp primers)
+  patterns with some number of errors
+- matching statistics
+  - MEM
+  - SMEM
+  - Pseudo matching length (PML, in Movi and Movi2)
+    - not yet implemented in ropebwt
+
+* Data structure variants
+
+- wavelet tree [cite:@wavelet-tree]
+- multi-ary wavelet trees [cite:@multiary-wavelet-trees]
+- wavelet matrix [cite:@wavelet-matrix]
+- n-step [cite:@n-step-fm]
+  - only useful for exact applications?
+- compressed multiple steps: [cite:@compressed-sparse-fm-k-steps]
+- b-move [cite:@b-move]
+- run-block BWT [cite:@centrifuger]
+
+r-index variants:
+- r-index [cite:@r-index]
+- spumoni [cite:@spumoni]
+- spumoni2 [cite:@spumoni2]
+- movi [cite:@movi]
+- movi2 [cite:@movi2]
+- ropebwt [cite:@ropebwt]
+- flattened bitvectors [cite:@engineering-rank]
+- pfp-fm [cite:@pfp-fm;@pfp-fm-wabi]
+ 
+** New idea for large (kmer/minimizer/pfp) alphabets
+- Elias-Fano coded occurrence list per character. 2bits/token overhead for
+  uniform random text.
+
+* Search schemes
+Approximate matching against an FM-index is slow if you start at the start.
+Indeed, seed-chain-extend methods start by seeking exact $k$-mer matches.
+/Search schemes/ extend that idea to an exact setting. In the most basic form: a
+length-$m$ pattern with $k$ errors contains at least one exact match of a substring of length
+$\lfloor m/k\rfloor$. Thus, we can first search those, and then extends left and
+right using a bidirectional index.
+
+Papers in this line of work:
+- Bowtie 1 [cite:@bowtie]
+- Columba 1.1 [cite:@search-schemes]
+- hato: automated search schemes: [cite:@automated-search-schemes]
+- Columba [cite:@columba]
+- Sahara [cite:@search-schemes-sahara]: weighted model to better predict cost
+  
+** Open questions [to me]?
+- Start at any point, instead of exactly at 'block' boundaries?
+- Can we dynamically go either left or right, choosing the one resulting in less
+  branching? Or the one that gives the largest reduction in number of matches?
+  
+
+
+#+print_bibliography: 
