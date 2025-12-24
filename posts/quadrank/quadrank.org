@@ -106,6 +106,32 @@ impl DnaRank {
   - Blocks have 12bit delta relative to superblock.
   - Popcount inside the block.
 
+* Evals
+Current status:
+
+Compared libaries:
+- =Rank9= and 5 =RankSmall= variants from sux-rs ([[https://github.com/vigna/sux-rs][github:vigna/sux-rs]]) [cite:@rank9;@sux-rs]
+  - PR adding prefetch: https://github.com/vigna/sux-rs/pull/98
+- =qwt= implementations of =RSNarrow= and =RSWide= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) [cite:@quad-wavelet-tree]
+  - PR adding prefetch: https://github.com/rossanoventurini/qwt/pull/6
+- =genedex= implementations of ={Flat,Condensed}TextWithRankSupport<u32, {Block64,Block512}>= ([[https://github.com/feldroop/genedex][github:feldroop/genedex]])
+  - PR adding prefetch: https://github.com/feldroop/genedex/pull/4
+- =spider= [cite:@spider] ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]): our own Rust port, TODO to achieve the same perf,
+  because the provided C benchmark is a bit faster.
+
+Not compared:
+- The B-tree based methods of [cite/t:@rank-select-mutable-bitmaps] ([[https://github.com/jermp/mutable_rank_select][github:jermp/mutable_rank_select]]) is missing
+  because it's written in C++ and benchmarking via FFI is very likely too slow.
+  - (Working on a highly optimised Rust port of this library for both Rank and
+    Select might be next.)
+- The C++ method of [cite/t:@engineering-rank] ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) was implemented in genedex already
+  and slightly faster there[fn::Personal communication with Simon Gene
+  Gottlieb], but in these plots the small version of genedex is somewhat slow,
+  so this needs further investigation as well.
+
+#+caption: space overhead vs time tradeoff for various rank implementations in Rust for varying number of threads. The red lines show latency (first col) and throughput (rest) bounds given by the RAM.
+#+attr_html: :class inset large
+[[file:./quadrank-plot.png]]
 
 * Link todo:
 - https://news.ycombinator.com/item?id=35678032
