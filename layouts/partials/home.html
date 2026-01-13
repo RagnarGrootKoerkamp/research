@@ -57,28 +57,47 @@
 </section>
 
 <section class="container list">
-  {{ .Content }} {{ range $tag := (slice "wip" "popular" "highlight") }} {{ if
+  {{ .Content }} {{ range $tag := (slice "wip" "popular" "recent" "highlight") }} {{ if
   or hugo.IsServer (not (eq $tag "wip")) }} {{ if eq $tag "popular" }}
   <h2>Popular</h2>
+  {{ else if eq $tag "recent" }}
+  <h2>Recent</h2>
   {{ else if eq $tag "highlight" }}
   <h2>Highlights</h2>
   {{else}}
   <h2>{{$tag | humanize }} posts</h2>
   {{end}}
   <ul>
-    {{ range (where site.RegularPages ".Type" "posts") }} {{ if in .Params.Tags
-    $tag }}
-    <li>
-      <span class="date">
-        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
-      </span>
-      <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
-        >{{ .Title }}</a
-      >
-      {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
-      {{end }}
-    </li>
-    {{ end }} {{ end }}
+    {{ if eq $tag "recent" }}
+      {{ range first 5 (where site.RegularPages ".Type" "posts") }}
+      {{ if not (in .Params.Tags "wip") }}
+      <li>
+          <span class="date">
+              {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
+          </span>
+          <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
+          >{{ .Title }}</a
+                       >
+          {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
+          {{end }}
+      </li>
+      {{ end }}
+      {{ end }}
+    {{ else }}
+      {{ range (where site.RegularPages ".Type" "posts") }} {{ if in .Params.Tags
+      $tag }}
+      <li>
+          <span class="date">
+              {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
+          </span>
+          <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
+          >{{ .Title }}</a
+                       >
+          {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
+          {{end }}
+      </li>
+      {{ end }} {{ end }}
+    {{end}}
   </ul>
   {{ end }} {{ end }}
 </section>
