@@ -43,7 +43,7 @@ operations:
 
 | problem              | eval | member | lookup | update | note                                              |
 | minimal perfect hashing | x    |        |        |        | $f$ is /some/ bijection from $K$ to $[n]$         |
-| order-preserving (monotone) MPHF | x    |        |        |        | $f(x) = \vert\{x'\in K \mid x' < x\}\vert$    |
+| monotone MPHF | x    |        |        |        | $f(x) = \vert\{x'\in K \mid x' < x\}\vert$    |
 | static retrieval     | x    |        |        |        |                                                   |
 | updatable retrieval  | x    |        |        | x      |                                                   |
 | static set           |      | x      |        |        |                                                   |
@@ -111,9 +111,14 @@ MPHF's form a building block for other static data structures listed below.
   - Consensus [cite:@consensus]: as small as $1.45$ bits/key and query time
     $\log 1/\varepsilon$ or $\log n$ depending on the exact method.
   - survey: [cite/t:@mphf-survey]
-** TODO Order-preserving MPHF
+** TODO Monotone MPHF
+- MPHF that maps keys to their index in the sorted list.
 - Space lower bound: TODO
 - Examples: TODO
+** TODO Order-preserving MPHF
+- MPHF that maps keys to $[n]$ in the order as given in the input.
+- Not very interesting, because the space lower bound is $\lg n$ bits per
+  element, and so an MPHF followed by explicit values is near-optimal.
 ** Static retrieval: Static function with static values
 /Static retrieval/ corresponds to a /static function/ $f$ storing $f(x)$ for all $x\in K$, that is undefined for all
 non-keys. Values are static as well.
