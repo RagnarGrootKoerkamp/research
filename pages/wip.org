@@ -1,56 +1,26 @@
 #+title: Past, ongoing, and future research plans
 #+hugo_section: /
 #+OPTIONS: ^:{}
+#+toc: headlines 2
 #+date: <2025-10-06 Mon>
 
-#+toc: headlines 2
+Some lists of ongoing work to keep things organised for myself.
 
-Here I list projects that I am working/have worked on. Outdated almost always.
-Mostly as a note-to-self to keep things a bit organised.
+* Upcoming journal papers
+- Sassy [cite:@sassy-preprint]: submitted to bioinformatics
+- Deacon [cite:@deacon-preprint]: to be submitted
+- Barbell [cite:@barbell-preprint]: to be submitted
+- Mim [cite:@mim-preprint]: to be submitted
+- Sassy v2: to be finished and submitted (maybe WABI/Recomb-seq?)
 
-* In progress (October 2025)
-Algorithm engineering (with Peter Sanders' group @ KIT):
-- *QuickHeap* ([[../posts/quickheap/quickheap.org][blog]]): a fast SIMD-based heap
-- *k-perfect hashing*: quickly map keys to bins of size of $k\in \{8,16\}$,
-  mostly extending PtrHash.
-- *Static hash sets* (=StaticHashSet<u32>=) with single-cache-miss lookups
-- Fast *2-bit rank* for use in =bwa-mem=, with Heng Li.
-
-Tool/library development (with Igor Martayan & Bede Constantinides):
-- Updated *packed-seq* ([[https://github.com/rust-seq/packed-seq][gh]]), *seq-hash* ([[https://github.com/rust-seq/seq-hash][gh]]), *simd-minimizers* ([[https://github.com/rust-seq/simd-minimizers/][gh]])
-  - Faster handling of short-read data
-  - Support for N characters using 2+1bit encoding
-  - simd-mini: skip minimizers of windows containing N and other non-ACGT chars.
-- *Paraseq* ([[https://github.com/noamteyssier/paraseq][gh]]) PRs:
-  - multithreaded unzipping for paired-end input
-  - new =ParallelReader= API
-  - overall cleanup and deduplication
-- *Deacon* ([[https://github.com/bede/deacon][gh]]):
-  - speedups from dependencies above
-  - more reusing of allocations
-  - faster hashset WIP
-  - faster IO and on-disk format
-
-Furthermore:
-- *Simd-Sketch* ([[https://github.com/RagnarGrootKoerkamp/simd-sketch][gh]], [[../posts/simd-sketch/simd-sketch.org][blog]]):
-  - algorithm engineering for fast bottom & bucket sketching
-  - TODO: algorithm engineering for fast bottom-sketch distance comparison
-  - SIMD for fast bucket-sketch distances
-  - experiments (sketch time, comparison time, correlation)
-    - 1-bit hashing with many hashes is best
-  - WIP: applications/integration with [[https://github.com/karel-brinda/attotree][attotree]] (by Karel Břinda) and [[https://github.com/bacpop/sketchlib.rust][sketchlib]]
-    (by John Lees)
-  - TODO: fix bias due to 32-bit hash collisions.
-  - TODO?: locality sensitive clustering; phylogeny reconstruction
-- *NtHash collisions* ([[file:../posts/nthash2-collisions.org][blog]]), with John Lees and Victor Bouza.
-
-Further collaborations (external involvement / supervision):
-- Theory: *$O(n\lg n)$ chaining* for anchored edit distance, with Nicola Rizzo.
-# - ([[https://www.overleaf.com/project/68bd6809d64fe90ec1d4eacf][private overleaf]])
-- Software: *Barbell* ([[https://github.com/rickbeeloo/barbell][gh]]): fast & accurate demultiplexing, with Rick Beeloo.
-# - Extending *A*Map*, with Sebastian Schmidt.
-# - Bringing *Sassy* to practice, with Kornel Labun.
-
+* Upcoming conference papers
+- QuadRank: SEA (Jan 23)
+- QuickHeap: SEA (Jan 23)? ESA B (April)?
+- Chaining: WABI (May)? Recomb-Seq (March)?
+- SimdSketch: WABI (May)? Recomb-Seq (March)?
+- Small-k minimizers: WABI (May)?
+- k-PHF hashmap: ESA B (April)
+  
 * Upcoming conference dates & deadlines
 :PROPERTIES:
 :CUSTOM_ID: cfp-deadlines
@@ -60,44 +30,28 @@ Sorted by CfP deadline.
   - +CfP: *Nov 7* 2025 (full paper: Nov 14)+
   - May 26-29 2026, Thessaloniki, Greece
 - DSB:
-  - CfP: *Jan 2 2026*
+  - +CfP: *Jan 9 2026*+
   - Feb 18-19 2026, Venice, Italy
-  - Papers:
-    - _QuadRank_
-    - _SimdSketch_
 - HiTSeq:
   - CfP: proceedings: *Jan 20, 2026*, abstract: *April 9, 2026*, poster: *May 7, 2026*
   - ISMB: July 12-16, Washington DC
 - SEA:
   - CfP: *January 23, 2026*
   - June 22-24 2026, Copenhagen, Denmark
-  - Papers:
-    - _QuadRank_
-    - _QuickHeap_?
+  - papers: QuadRank, (QuickHeap)
 - Recomb-Seq:
-  - CfP: Proceedings: *~Feb* 2026, Short talks / posters: *~March* 2026
+  - CfP: Proceedings: *March 12* 2026, Short talks / posters: *~March* 2026
   - May 24-25 2026, Thessaloniki, Greece
-  - Papers:
-    - _SimdSketch_?
-    - _Chaining_?
-    - _Sassy v2_?
 - ESA:
   - CfP: *~April*
   - September 0-4 2026, L'Aquila, Italy
-  - Papers:
-    - _k-PHF-hashmap_ (B)
-    - _quickheap_? (B)
 - WABI:
   - CfP: *~May*
   - September 0-4 2026, L'Aquila, Italy
-  - Papers:
-    - _SimdSketch_?
-    - _Chaining_?
-    - _small-k minimizers_?
 
+    
 
 * Dormant
-- *Sassy* [cite:@sassy-preprint]: under review.
 - *Minimizers*:
   - publish the anti-lex scheme?
   - continue investigation of greedymini to develop 'understandable' equivalent schemes.
@@ -108,9 +62,6 @@ Code:
 - *sshash-rs* ([[https://github.com/RagnarGrootKoerkamp/sshash-rs][gh]])
 - *suffix array searching* ([[https://github.com/RagnarGrootKoerkamp/static-search-tree][gh]], [[../posts/static-search-tree/static-search-tree.org][post]]) [cite:@sacabench]
   
-* Done
-See [[./publications.org][publications]].
-
 * Long term plans
 If anything here interests you, feel free to reach out for collaborations.
 
@@ -132,56 +83,6 @@ If anything here interests you, feel free to reach out for collaborations.
   without needing BiWFA. See [[../posts/linear-memory-wfa/linear-memory-wfa.org][this post]]. This has similar vibes to TALCO [cite:@talco].
 - *Local doubling*: see [[../posts/local-doubling/local-doubling.org][this post]].
 
-* Reading list
-(I'm too lazy to add proper DOI entries for everything here.)
-
-- Rank and select over mutable bitmaps [cite:@rank-select-mutable-bitmaps]
-- Bounded context BWT
-  - https://twitter.com/jnalanko/status/1747585917861208266
-  - https://github.com/jhhung/kISS
-  - k-context BWT: [cite:@k-spectra]
-- counting-quotient-filter
-- r-index
-- fmalign2
-- local-kmer-selection
-- count-min-sketch (with conservative updates)
-  - count-min-sketch.pdf
-  - efficient-kmer-counting.pdf
-- tinted dbg
-- function-assigned masked superstrings
-
-- Turning unit cost into affine cost alignment?
-  - Maybe by doubling and refining costs in each iteration? similar to
-    cost-scaling flow algorithms?
-- [cite:@spaln3]
-- [cite:@setsketch]
-- [cite:@linear-space-four-russians]
-- [cite:@multi-context-seeds]
-- [cite:@from-superstring-to-indexing]
-- [cite:@col-bwt]
-- https://sedgewick.io/ideas/#computer-science-for-all
-- Eskemap for A*PA?
-- Lyndon trees: https://arxiv.org/abs/2406.16475, Giuseppe Romana
-- ForAlign
-- [cite:@bwt-compression]
-- texrex: https://academic.oup.com/nargab/article/7/2/lqaf039/8115380?login=false
-- simd-utils crate (for myers bitpacking, and simd-minimizers)
-- Medlib: https://www.biorxiv.org/content/biorxiv/early/2025/05/07/2025.05.01.651420.full.pdf
-- K2Rmini
-- alignment history: https://pubmed.ncbi.nlm.nih.gov/10890397/
-- BGSA pairwise aligner
-- Prokrustean graph
-- New Durbin & Myers paper
-- slp-recompression
-- GapsMis pairwise aligner https://www.sciencedirect.com/science/article/pii/S0304397515002200#se0030
-- KeBaB: https://link.springer.com/chapter/10.1007/978-3-032-05228-5_2
-- https://ashvardanian.com/posts/stringwars-on-gpus/
-- TODO: dedup up projects/talks/publications/cv pages
-- TODO: Metagraph: https://www.nature.com/articles/s41586-025-09603-w
-- U-index variant: https://github.com/mranisz/samsami
-- https://www.sciencedirect.com/science/article/pii/S0304397522007642?casa_token=s43fN-Spjf0AAAAA:9i3HPEfmAs0X7eYvglMmam7eBH52tMAvqAeTEnEBlpVn8YJb1WoGR-wiHv5yfAOA_t4sgI7HlZ8
-
-
-
 
 #+print_bibliography:
+
