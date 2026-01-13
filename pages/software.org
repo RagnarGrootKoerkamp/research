@@ -10,31 +10,74 @@ rather than direct bioinformatics applications, and so I appreciate getting in
 contact with potential users :)
 
 * Tools
-- [[https://github.com/RagnarGrootKoerkamp/sassy][*Sassy*]]: SIMD-based approximate string matching
+- [[https://github.com/RagnarGrootKoerkamp/sassy][*Sassy*]], with [[http://github.com/rickbeeloo/][Rick Beeloo]] [cite:@sassy-preprint]:
+  
+  SIMD-based approximate string matching
   - Status: done.
   - Search short (10-100, or up to 1kbp) patterns in long texts.
   - Supports =ACTG=, IUPAC, and ASCII.
-- [[https://github.com/RagnarGrootKoerkamp/simd-sketch][*simd-sketch*]]: SIMD-based bottom and bucket sketches.
-  - Status: basic version done; could use polishing.
-  - Builds on =seq-hash=.
-- [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][*A*PA2*]]: Global pairwise alignment based on SIMD, bitpacking, and band-doubling
+- [[https://github.com/RagnarGrootKoerkamp/astar-pairwise-aligner][*A*PA2*]], with [[https://github.com/pesho-ivanov][Pesho Ivanov]] [cite:@astarpa;@astarpa2]:
+
+  Global pairwise alignment based on SIMD, bitpacking, and band-doubling
   - Reliable, but only supports =ACTG= input.
+- [[https://github.com/RagnarGrootKoerkamp/simd-sketch][*simd-sketch*]]:
+  
+  SIMD-based bottom and bucket sketches.
+  - Status: basic version done; needs polishing.
+  - Builds on =seq-hash=.
+- [[https://github.com/COMBINE-lab/mim][*mim*]], with [[https://github.com/rob-p][Rob Patro]] [cite:@mim-preprint]:
+  
+  a small auxiliary =.mim= index alongside =.fastx.gz=
+  files for multi-threaded decompression.
 
-* Bitpacked DNA crates
+** Tools building on this
+- [[https://github.com/bede/deacon][*Deacon*]], by [[http://github.com/bede][Bede Constantinides]] [cite:@deacon-preprint]:
+  Fast read filtering/decontamination. Builds on simd-minimizers.
+- [[https://github.com/rickbeeloo/barbell][*Barbell*]], by [[http://github.com/rickbeeloo/][Rick Beeloo]] [cite:@barbell-preprint]:
+  Fast demultiplexing. Builds on sassy.
 
+* Libraries
+- [[https://crates.io/crates/pa-types][*pa_types*]]: type definitions for pairwise alignment coordinates, and [[https://docs.rs/pa-types/1.2.0/pa_types/cigar/struct.Cigar.html][=Cigar=]] utilities.
+  
+** DNA bitpacking
 Crates using 2-bit packed sequence representations and SIMD algorithms on top of them.
+All developed together with [[https://github.com/imartayan/][Igor Martayan]] as part of simd-minimizers [cite:@simd-minimizers].
 - [[https://github.com/rust-seq/packed-seq][*packed_seq*]]: Slowly growing library for managing 2-bit encoded =ACTG= DNA sequences.
   - Also supports 2+1 bit encoding to indicate ambiguous (N) characters.
 - [[https://github.com/rust-seq/seq-hash][*seq-hash*]]: Streams over all nt-hashes (or other hashes) of a packed sequences.
 - [[https://github.com/rust-seq/simd-minimizers][*simd-minimizers*]]: compute minimizers of a sequence.
-  - Support skipping over ambiguous windows.
+  - Supports skipping over ambiguous windows.
+
+** Dependency graph
+  
+#+BEGIN_SRC dot :file software-dep-graph.png
+digraph {
+barbell -> sassy
+barbell -> pa_types
+sassy -> pa_types
+deacon -> simd_minimizers
+deacon -> packed_seq
+simd_minimizers -> seq_hash
+simd_minimizers -> packed_seq
+seq_hash -> packed_seq
+simd_sketch -> packed_seq
+simd_sketch -> seq_hash
+"A*PA2" -> pa_types
+}
+#+END_SRC
+
+#+attr_html: :class inset medium
+#+RESULTS:
+[[file:software-dep-graph.png]]
     
-* Further libraries
-- [[https://github.com/RagnarGrootKoerkamp/cacheline-ef][*cacheline_ef*]]: Elias-Fano encoding, one cacheline at a time.
-- [[https://github.com/RagnarGrootKoerkamp/PtrHash][*PtrHash*]]: A fast minimal perfect hash function.
+* Data structures
+- [[https://github.com/RagnarGrootKoerkamp/cacheline-ef][*cacheline_ef*]]: Elias-Fano encoding, one cacheline at a time. Part of PtrHash.
+- [[https://github.com/RagnarGrootKoerkamp/PtrHash][*PtrHash*]] [cite:@ptrhash]: A fast minimal perfect hash function.
 
 * Experimental/incomplete
 - [[https://github.com/RagnarGrootKoerkamp/minimizers][*Minimizers*]]: reference implementations and experiments for minimizer and sampling
   schemes.
-- [[https://github.com/RagnarGrootKoerkamp/sshash-rs][*sshahs-rs*]]: quick but incomplete reimplementation of SSHash.
-- [[https://github.com/RagnarGrootKoerkamp/static-search-tree][*suffix array searching*]]: static search trees are faster than binary search.
+- [[https://github.com/RagnarGrootKoerkamp/sshash-rs][*sshash-rs*]]: quick but incomplete reimplementation of SSHash.
+- [[https://github.com/RagnarGrootKoerkamp/static-search-tree][*suffix array searching*]] ([[file:../posts/static-search-tree/static-search-tree.org][blog]]): static search trees are faster than binary search.
+
+#+print_bibliography: 
