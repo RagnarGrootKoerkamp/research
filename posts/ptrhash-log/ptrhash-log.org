@@ -1,4 +1,4 @@
-#+title: PTRHash: Notes on adapting PTHash in Rust
+#+title: PtrHash: Notes on adapting PTHash in Rust
 #+filetags: @results @lablog mphf hpc
 #+OPTIONS: ^:{}
 #+hugo_front_matter_key_replace: author>authors
@@ -2643,7 +2643,7 @@ go in the first shard, and so on. We make sure that $P$ is a multiple of $S$.
 Then we process one shard at a time: we hash the keys, sort them into their
 parts, and then compute the pilots for each part independently.
 
-I [[https://github.com/RagnarGrootKoerkamp/PTRHash/issues/1][implemented]] two ways to shard keys:
+I [[https://github.com/RagnarGrootKoerkamp/PtrHash/issues/1][implemented]] two ways to shard keys:
 
 1. On-disk sharding: create a file for each shard, iterate over the keys, and
    append the hash of each key to file for the shard it belongs to.
@@ -2653,8 +2653,8 @@ I [[https://github.com/RagnarGrootKoerkamp/PTRHash/issues/1][implemented]] two w
 ** 128bit hashing
 
 In order to scale more than $2^{32}$ keys, we need to use $128$bit hash
-functions ([[https://github.com/RagnarGrootKoerkamp/PTRHash/issues/4][github issue]]). There are many hash functions out there, all with
-different speed vs. randomness tradeoffs. I [[https://github.com/RagnarGrootKoerkamp/PTRHash/blob/hashers/src/hash.rs][implemented]] many of them. Although I
+functions ([[https://github.com/RagnarGrootKoerkamp/PtrHash/issues/4][github issue]]). There are many hash functions out there, all with
+different speed vs. randomness tradeoffs. I [[https://github.com/RagnarGrootKoerkamp/PtrHash/blob/hashers/src/hash.rs][implemented]] many of them. Although I
 have no idea of the quality of the implementations I used, these are some quick
 results for hashing =u64= keys:
 
@@ -2740,7 +2740,7 @@ Observe that:
   things slow down even more. (In fact I'm surprised it's only a $2\times$
   slowdown. The latency is hidden pretty well.)
 
-One way in which PTRHash differs from PTHash is that apart from just the =taken=
+One way in which PtrHash differs from PTHash is that apart from just the =taken=
 bitvector, it needs to store an additional $32bit$ index for each slot to be able to
 displace elements, which requires a lot more memory. If we could prevent this,
 memory usage would go down and it may be possible to use larger parts without
@@ -2787,15 +2787,15 @@ TODO:
       rotations (up to the part size) are searched before rehashing is required.
 
 - Practicalities:
-  - Many small parts (size 2500 only; PTRhash uses around 100k-500k); encode their starts relative to the expected start.
+  - Many small parts (size 2500 only; PtrHash uses around 100k-500k); encode their starts relative to the expected start.
   - Compact encoding: all values have the same bit length.
   - interleaved coding: first code first bucket of every part, then second
     bucket, and so on, since the $i$'th bucket of each part has a more similar
     distribution and thus compresses better.
   - One simple benefit of having all large buckets next to each other is more
-    efficient caching. This will also be great for PTRhash.
+    efficient caching. This will also be great for PtrHash.
 
-*** TODO for PTRhash
+*** TODO for PtrHash
 - Try the optimal bucket function and see how much it improves construction time.
 - Try 'rotation' displacement inside a part instead of re-hashing.
   - This will probably be bad, because $(h(x)+d)\bmod p$ (for part size $p$)
