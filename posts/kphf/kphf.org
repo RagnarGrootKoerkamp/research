@@ -1,0 +1,229 @@
+#+title: $k$-Perfect Hash Functions
+#+filetags: wip mphf
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2026-01-15 Thu>
+
+There are ongoing notes on lower and upper bounds for non-minimal k-perfect
+hashing based on discussions with Stefan Walzer, Stafan Hermann, and Peter Sanders.
+
+* Construction of k-PHF using modified PtrHash
+
+Code at =src/kphf.rs= at http://github.com/RagnarGrootKoerkamp/static-hash-sets
+- =slot_ratio=: number of slots to use relative to $n$.
+- =meta_ratio=: size of metadata relative to total input size.
+- =sort=: sort the buckets by size or not?
+
+#+begin_src
+slot_ratio: 1.4, meta_ratio: 0.002 , sort:  true, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.002 , sort: false, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.002 , sort:  true, consensus:  true, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.001 , sort:  true, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.001 , sort: false, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.001 , sort:  true, consensus:  true, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.0005, sort:  true, consensus: false, bits/key: 0.0320 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.0005, sort: false, consensus: false, bits/key: 0.0320 Collisions: 0
+slot_ratio: 1.4, meta_ratio: 0.0005, sort:  true, consensus:  true, bits/key: 0.0320 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.002 , sort:  true, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.002 , sort: false, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.002 , sort:  true, consensus:  true, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.001 , sort:  true, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.001 , sort: false, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.001 , sort:  true, consensus:  true, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.3, meta_ratio: 0.0005, sort:  true, consensus: false, bits/key: 0.0320 Collisions: 24
+slot_ratio: 1.3, meta_ratio: 0.0005, sort: false, consensus: false, bits/key: 0.0320 Collisions: 24
+slot_ratio: 1.3, meta_ratio: 0.0005, sort:  true, consensus:  true, bits/key: 0.0320 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.002 , sort:  true, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.002 , sort: false, consensus: false, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.002 , sort:  true, consensus:  true, bits/key: 0.1280 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.001 , sort:  true, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.001 , sort: false, consensus: false, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.001 , sort:  true, consensus:  true, bits/key: 0.0640 Collisions: 0
+slot_ratio: 1.2, meta_ratio: 0.0005, sort:  true, consensus: false, bits/key: 0.0320 Collisions: 24427
+slot_ratio: 1.2, meta_ratio: 0.0005, sort: false, consensus: false, bits/key: 0.0320 Collisions: 24427
+slot_ratio: 1.2, meta_ratio: 0.0005, sort:  true, consensus:  true, bits/key: 0.0320 Collisions: 1
+#+end_src
+
+Conclusion: we can construct k-PHF with 20% extra slots and 0.1% relative size
+of the metadata.
+
+* k-PHF Lower bounds
+
+For minimal k-PHF, the brute-force solution admits $\binom{n}{k,\dots,k}$
+solutions, so needs $(n/k)^n / \binom{n}{k,\dots,k}$ tries, which corresponds to
+$\log e + \log((k!)^{1/k} / k)$ bits.
+
+For load factor $\alpha$, [[https://sagecell.sagemath.org/?q=sezncq][this script]] computes the lower bound of a $k$-PHF.
+
+
+| load $\alpha$ |     k=1 |     k=2 |     k=4 |       k=8 |           k=16 |
+|           0.1 | 0.07466 | 0.00849 | 0.00022 | 0.0000003 | 0.000000000001 |
+|           0.2 | 0.15498 | 0.03112 | 0.00259 |   0.00004 |     0.00000002 |
+|           0.3 | 0.24202 | 0.06581 | 0.00989 |   0.00052 |       0.000003 |
+|           0.4 | 0.33724 | 0.11221 | 0.02444 |   0.00267 |        0.00008 |
+|           0.5 | 0.44269 | 0.17114 | 0.04833 |   0.00857 |        0.00068 |
+|           0.6 | 0.56140 | 0.24472 | 0.08410 |   0.02095 |        0.00318 |
+|           0.7 | 0.69828 | 0.33704 | 0.13568 |   0.04360 |        0.01028 |
+|           0.8 | 0.86221 | 0.45624 | 0.21044 |   0.08294 |        0.02699 |
+|           0.9 | 1.07359 | 0.62179 | 0.32631 |   0.15418 |        0.06498 |
+|           1.0 | 1.44269 | 0.94265 | 0.58893 |   0.35509 |        0.20832 |
+
+** Estimated lower bounds for variants
+
+$k=8$:
+- regular: 0.36
+- windowed: 0.08
+- 4-aligned: 0.13
+
+$k=16$:
+- regular: 0.21
+- windowed: 0.02
+- 4-aligned: 0.05
+
+* Cache-optimal k-PHF
+Given $n$, $k$, and $\alpha$, one can optimize two different things:
+- The overall size of the MPHF
+- The number of queries answered by a fixed-size cache.
+These are different! For eg bucket-placement techniques, you want to balance the
+size of the bins as much as possible to ensure there are sufficient empty
+bins until the end. Whereas in order to answer as many keys as possible using
+the cache, you would rather have a very unbalanced bin size distribution and
+then use more space afterwards to work around this.
+
+* RecSplit
+RecSplit takes the keys and repeatedly splits it into parts until only parts of
+size (at most) $k$ remain.
+The original RecSplit already provides a minimal k-PHF when $k$ is a power of
+$2$.
+It has $O(1)$ overhead per split when each split is encoded independently, and
+smaller overhead when consensus is used. Note that the shape of the splitting
+tree does not matter: it can be either 'repeatedly split off the bottom $k$' or
+repeatedly 'split in half'.
+
+Strategies for splitting off the bottom $k$:
+** Accept $\leq k$
+Choose a $\lambda$. Then hash all keys and accept each with probability $\lambda
+/ n$. Accept the bin when the size $\mathrm{Po}(\lambda) \leq k$. Choose
+$\lambda$ such that the expected size of the truncated distribution equals the
+average load
+$$\mathbb E[\mathrm{Po}(\lambda)_{\leq k}] = \alpha k.$$
+The problem is that this needs /many/ tries when $\alpha \to 1$.
+
+Instead, do the following: accept the bin only when it has size between $k-x$
+and $k$ inclusive, for some integer $x$ depending on $\lambda$ such that the expected size is (roughly)
+$\alpha$. To make this work exactly, accept $k-x$ itself only with some probability.
+Then choose $\lambda$ such that the probability of accepting the bin is
+maximized.
+
+[[https://sagecell.sagemath.org/?z=eJyVUkFu2zAQvAvQH3jLkmFMyUCAJIC_kBZob4YRCDLlEpRJgpLb5C15hc8G8gS9qbuU7NjuJeVF5HJndmZEsw0-9szttuGNVR1zIc_yzLIFe6DN8AHDgeOpVN1uC8vhIIRRTVX3PpqqBcNZ4yMzzDgWK7fRYG9LvuJ51kxAREB5RzgrRrYzuOWcpqx1wza6_xGqWsOw5095xnANB8Q3xq1fovc9NPCKhMi4F1ayQrKySItP3R8FjUsjxkpHfFi7a_0GCKVAo4ZCoCKVCpwL7JbzCRB1v4uOPUNCnqS14SV443qwQWL7pC4gsxaCrH01miCP6STB-ysGI_6DQ1kVLm2Sy1IFdDOZuzAFz5SsPHo7N1fv4m9iPuX-jmwuzFrjUjNeqTnGPbun4O-PgadMOmxdXgWUNOPPQ9HD--pCBVLq-RpG6D8aOjhKmNpTLOcKE7UNn3mU0qZA82xkoBw-2ajem9omlUbRg7kOtJRU5Sjz2_efhB4VLoFw8vQq6cTH8bQlfCJeSVb71sfFTdTrmzTwbVu9ItEJWsweH_Gi--X_QGjxIeOg21Ehl9S8mAv68L81dRx6&lang=sage&interacts=eJyLjgUAARUAuQ==][This script]] does something similar, but only considers a 'backlog' of previously
+unplaced keys for each bin, rather than all keys. It gets reasonably close
+(within 30% or so) of the lower bound:
+
+#+caption: red: space usage of $\alpha$-PHF for $k=8$. Blue: space usage of the greedy 'backlog' strategy for various parameters.
+#+attr_html: :class inset
+[[file:./kphf-backlog-plot.png]] 
+
+With consensus, this should also have quite small overhead.
+
+* What is the optimal bin-size distribution for PtrHash-based k-PHF
+
+At the end, the bins follow some size distribution.
+When bruteforcing a seed, this is simply a truncated Poisson distribution with
+expected value $\alpha k$.
+
+When choosing a seed, we should choose the one that makes the distribution most
+/flat//uniform, with respect to some metric. 
+
+We considered the case $k=2$ and the optimal distribution of bin-sizes after
+half the keys have been places. When halfway through all bins have size $1$, we
+basically build two MPHFs on $n/2$ keys, for 1.4 bits/key overall.
+
+When halfway through half the buckets have 2 keys, we sort-of build a $k=2$-MPHF
+on the first and second half of keys. For the first half we select $n/2$
+'random' buckets which saves $n/2$ bits, but then pay $n/2$ bits to actualy map
+into them. (Thus, building a $2$-MPHF on $n/4$ bins is exactly as hard as
+building a $2$-PHF with bins of size $0$ or $2$ on $n/2$ bins.)
+The second half of keys needs $n/2$ extra bits to map into the gaps left behind
+by the first half. In the end, this uses 1.4 bits/key as well.
+
+So, the optimal choice must be to have somewhere between $0$ and $n$ bins of
+size $1$ halfway through.
+
+* Halfway bin-size for $k=2$
+
+Suppose we are incrementally building a $2$-MPHF on $n$ keys.
+At some point, we have assigned half the keys, and at that point there are $a$
+bins of size 2, $b$ bins of size 1, and $c$ bins of size 0, with $a+b+c=n/2$
+(the total number of bins) and $2a+1b+0c=n/2$ (half the keys). This implies $a=c=(n/2-b)/2$.
+Now say we have $b=\beta n/2$ of the bins with 1 key in them. We want to derive
+2 numbers:
+- The entropy/bits/space needed to map first half of keys.
+- The space needed to map the second half of keys.
+and from this we get the space needed for all keys.
+
+** First half
+We first choose the bins we are going to use:
+$$A:=\binom{n/2}{a,b,c}$$
+Then, we choose exactly which keys go into each bin:
+$$B:=\binom{n/2}{\underbrace{2,\dots, 2}_{a\times}, \underbrace{1,\dots, 1}_{b\times}}$$
+The total number of functions mapping the first half of keys into the $n/2$ bins
+is
+$$N:=(n/2)^{n/2}.$$
+We compute the number of bits per element needed to store a suitable function for the first
+half as
+$$S_1:=\frac 1n \log \frac{N}{AB} = \frac 12 \log e - \frac 14(1-\beta) - \frac 12 H(\beta)$$
+where $H(x) = - x\log(x) - (1-x)\log(1-x)$ is the entropy of $\beta$.
+
+(Note that I'm normalizing by $\frac 1n$ here, so this is bits/key over all $n$ keys.)
+
+** Second half
+The bins that the keys go to are now fixed. So the number of suitable functions
+is
+$$C:=\binom{n/2}{\underbrace{2,\dots, 2}_{c\times}, \underbrace{1,\dots, 1}_{b\times}}$$
+which equals $B$ since $a=c$.
+
+The total number of functions for the second half is again $N$. We then get
+$$S_2:=\frac 1n \log \frac{N}{C} = \frac 12 \log e + \frac 14 (1-\beta).$$
+
+** Total
+The $\frac 14(1-\beta)$ terms cancel, and the total space is
+$$S:=S_1+S_2=\log e - \frac 12 H(\beta)$$
+
+Thus, $\beta=0$ and $\beta=2$ both require $\log e$ bits/key, corresponding to
+our earlier analysis. Optimal is $\beta=1/2$, ie half the bins having 1 element,
+where the total space usage is $\log e - \frac 12$ which indeed is exactly the optimal
+space usage of a 2-MPHF.
+
+A property of $\beta=1/2$ is that then, the number of keys in size-1 bins
+exactly equals the number of keys in size-2 bins. But those do not equal the
+number of keys in size-0 bins, so this feels slightly ad-hoc I'd say.
+
+** First-half optimum
+Note that the $\beta=\frac 12$ that minimizes the overall space is /not/ the
+same as the one that minimizes the space for the first half. That, instead, is
+at $\beta = \sqrt 2 - 1 \approx 0.414$ ([[https://www.wolframalpha.com/input?i=minimize+log%282%2C+e%29%2F2-%281-x%29%2F4+%2B+%28x+log%282%2C+x%29+%2B+%281-x%29log%282%2C1-x%29%29%2F2][wolfram alpha]]) with value
+$$S_1(\sqrt 2 - 1) = 0.0855 \textrm{ bits/key}$$
+whereas with the globally optimal value we have
+$$S_1(1/2) = \frac 12 \log e -\frac 18 - \frac 12 = 0.0963 \textrm{ bits/key}$$
+which is slightly more, but not too much.
+
+The total memory in these two cases is:
+$$S(\sqrt 2-1) = 0.9533$$
+and
+$$S(1/2) = 0.9426$$
+
+Summarizing:
+#+attr_html: :class small
+| $\beta$     |  $S_1$ | $S = S_1+S_2$ |
+| $\sqrt 2-1$ | 0.0855 |        0.9533 |
+| $1/2$       | 0.0963 |        0.9426 |
+| diff        | 0.0108 |       -0.0107 |
+
+Curiously, the space we save at the halfway point is (almost?) exactly (up to
+rounding errors?) the space we then loose overall.
+
+#+print_bibliography:
+
