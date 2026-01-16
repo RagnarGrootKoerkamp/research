@@ -225,5 +225,38 @@ Summarizing:
 Curiously, the space we save at the halfway point is (almost?) exactly (up to
 rounding errors?) the space we then loose overall.
 
+* Optimal bin-size distribution
+
+Based on the above, note that at the halfway point, $\beta = 1/2$ gives 25% bins
+of size 0, 50% bins of size 1, and 25% bins of size 2. That is exactly the
+binomial distribution! Thus, we hypothesize that, if the goal is to reach
+$\alpha=1$, at any point in time, the distribution of bin-sizes should follow a
+binomial distribution.
+
+Equivalently: the probability of putting a key in a bin should scale with the
+number of empty slots in the bin. (Nice edge case: empty bins then have
+probability 0.) Or: for each key we choose a random empty slot, rather than a
+random bin.
+
+Another way of looking at this: if at some point the $B$ bins have $s_1, \dots,
+s_B$ empty slots /remaining/ (for $S=s_1+\dots+s_B$ remaining keys), the total
+number of remaining /good/ functions that works
+is $G:=\binom{S}{s_1, \dots, s_B}$, out of $T:=(n/B)^{S}$ functions in total.
+The number of tries to find a good function is then
+$$
+T/G = \frac{(n/B)^S}{\binom{S}{s_1,\dots, s_B}} = \frac{(n/B)^S}{S!} \prod_i s_i!
+$$
+Thus, we want to minimize the cost//badness/ $\prod s_i$.
+
+Specifically, if we have some current badness $b$ and we have a seed for a
+bucket with $\ell$ keys that puts them in (distinct) bins with $s^1, \dots,
+s^\ell$ remaining free slots,
+the badness goes down by $\prod s^i$, and so we want to choose a seed that
+maximizes this product.
+
+Unfortunately, using this cost function in my k-PHF variant of PtrHash does not
+seem to work too well, and it causes more collisions than simply choosing the
+seed that (lexicographically) minimizes the number of largest buckets it hits.
+
 #+print_bibliography:
 
