@@ -1,0 +1,86 @@
+# .github/workflows/release-pypi.yaml
+
+name: Build and publish sassy-rs wheels
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  # Build for all 3 target platforms.
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (ABI-stable build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Install build dependencies
+        run: pip install "packaging>=24.2"
+
+      - name: Initialize portable config
+        run: mv .cargo/config-portable.toml .cargo/config.toml
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          args: --release --features python --out dist --target ${{ matrix.target }}
+          sccache: "true"
+          manylinux: auto
+        env:
+          PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*
+
+  # Publish to PyPI
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download the artefacts
+      - name: Download built artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+          working-directory: .
+
+      - name: Install upload dependencies
+        run: pip install --upgrade "packaging>=24.2" twine
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload --skip-existing dist/*

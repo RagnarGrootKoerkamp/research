@@ -1,0 +1,237 @@
+#+title: CI for Rust testing and releasing
+#+filetags: devops highlight
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-01-25 Sun>
+
+This post will collect template files for setting up
+GitHub CI for testing and releasing Rust libraries and binaries to:
+- crates.io ([[#cratesio][libraries]], [[#cratesio-bin][binaries]])
+- [[#github][GitHub releases]]
+- [[#binstall][cargo binstall]]
+- [[#pypi][PyPI]]
+- [[#bioconda][Bioconda]]
+
+We also have some workarounds for dealing with [[#avx2][AVX2 SIMD instructions]].
+  
+Source files for all snippets can be found at [[https://github.com/RagnarGrootKoerkamp/research/tree/master/posts/ci/][github:RagnarGrootKoerkamp/research/posts/ci]].
+
+
+*Example repositories* that use (a subset of) the setup shown here:
+- Libraries:
+  - packed-seq: https://github.com/rust-seq/packed-seq
+  - simd-minimizers: https://github.com/rust-seq/simd-minimizers
+- Binaries:
+  - Sassy (bioconda + pypi): https://github.com/RagnarGrootKoerkamp/sassy
+  - Barbell (bioconda): https://github.com/rickbeeloo/barbell
+  - Deacon (bioconda): https://github.com/bede/deacon
+
+* Testing
+:PROPERTIES:
+:CUSTOM_ID: testing
+:END:
+We test our code by running =cargo test= and/or =cargo test -r= on pushes and
+PRs to =master=.
+
+We test on two architectures:
+- x86-64 linux,
+- aarch64 apple.
+
+#+caption: GitHub CI config for building and running =cargo test= on x86-64 Ubuntu and aarch64 MacOs.
+#+include: "./github-test.yaml" src yaml
+
+* Releasing libraries
+We release libraries to [[crates.io]]. We do /not/ create corresponding GitHub
+releases, since those are mostly only useful for hosting binary artefacts.
+
+** Changelog
+One should also keep a changelog, so users and your future self can see what
+major changes there are between versions.
+I'm not very consistent with the exact formatting of entries, but usually it
+looks something like the below.
+Ideally one should update the changelog as part of the commit/PR that adds a
+feature, but more typically, I just scroll over all commits since the last
+release and update the changelog accordingly.
+
+Either way, it's nice to keep the unreleased git-only changes in a separate
+part. That way they could also be extracted to e.g. GitHub release notes easily.
+The =next-header= bit is explained below.
+
+#+caption: An example changelog file.
+#+include: "./CHANGELOG.md" src md
+
+** =cargo release=
+:PROPERTIES:
+:CUSTOM_ID: cargo-release
+:END:
+=cargo release= (install with =cargo install cargo-release=) is a nice helper
+program for creating crates.io releases. It checks that everything is committed
+and can auto-increment version numbers and crate git tags.
+
+Specifically, I use the configuration below to:
+- Create tags and release commits in the format =v1.0.0=.
+- Update the =CHANGELOG.md= file to replace =## git= by the next version and
+  insert a new =## git= section above it.
+- For Sassy's python release: version-bump the =pyproject.toml= as well.
+
+#+caption: An example =release.toml= setup for =cargo release=.
+#+include: "./release.toml" src toml
+
+** crates.io
+:PROPERTIES:
+:CUSTOM_ID: cratesio
+:END:
+For the crates.io release itself, we need some metadata in the =Cargo.toml=. E.g.:
+
+#+caption: Example =Cargo.toml= file with release metadata for Sassy.
+#+include: "./Cargo.toml" :lines "1-14" src toml
+
+Then, releases are made using =cargo release=.
+To automatically bump the version, use =cargo release major/minor/patch=.
+* Releasing binaries
+Releasing binaries is more involved: we must pre-compile them for specific
+target platforms and then distribute those to common archives:
+- GitHub release artefacts,
+- Bioconda,
+- Pypi.
+
+We release for three architectures:
+- x86-64 linux,
+- aarch64 apple,
+- aarch64 linux.
+  
+** Crates.io
+:PROPERTIES:
+:CUSTOM_ID: cratesio-bin
+:END:
+Crates.io allows users to run e.g. =cargo install sassy=, which downloads the
+latest version and builds it locally from source. It does not host binaries.
+
+** The pain of AVX2
+:PROPERTIES:
+:CUSTOM_ID: avx2
+:END:
+For all further distribution channels, we precompile binaries for specific platforms and with
+specific features enabled.
+
+Many of my crates use AVX2 or NEON SIMD instructions. For aarch64 that's fine,
+since NEON is always available. For x86-64 however, most, but not all, machines
+support AVX2. By default, Rust conservatively target x86-64-v1 ([[https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels][wikipedia]]),
+which only includes SSE but not AVX2. v2 adds SSE3, SSE4, and popcount
+instructions, while v3 adds AVX, AVX2, and BMI2 (containing =pdep= and =pext=, [[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#BMI2_(Bit_Manipulation_Instruction_Set_2)][wikipedia]]).
+v4 adds AVX512, but is supported on much fewer platforms.
+
+When building locally, it is sufficient to just build for the native CPU:
+
+#+caption: An example =.cargo/config.toml= to compile for the native CPU.
+#+include: "./config.toml" src toml
+
+On CI, however, this is problematic, because the runner machines might support
+AVX512, and we very much do /not/ want AVX512 instructions in our distributed binaries.
+Thus, for CI builds, we instead hardcode x86-64-v3. This means that binaries
+will /not/ work for a small fraction of users. To avoid ugly errors on
+unavailable instructions, we check that AVX2 is available at run-time (see next section).
+For ARM builds, we specifically target Apple M1 chips.
+
+#+caption: An example =.cargo/config-portable.toml= to compile for x86-64-v3 and apple-a14.
+#+include: "./config-portable.toml" src toml
+
+*** =ensure_simd=
+
+From the Rust side, we rely on AVX2 in two ways.
+- Via direct calls to AVX2 intrinsics.
+- Via =wide= ([[https://docs.rs/wide/latest/wide/][docs.rs]]), a stable wrapper equivalent of portable-simd.
+In both cases, AVX2 instrinsics are only called if the corresponding =avx= or
+=avx2= feature flags are set, and stable fallbacks are used otherwise.
+
+To make sure that the fallbacks are not used in practice, the =ensure_simd=
+crate ([[https://docs.rs/ensure_simd/latest/ensure_simd/][docs.rs]], [[https://github.com/ragnargrootkoerkamp/ensure_simd][github]]) does a compile time check that the =neon= (on aarch64) or =avx2=
+(on x86-64) feature is set, and triggers a compile-time error with an explanation otherwise.
+
+By using this in our CI builds, we can be sure that successful builds indeed
+have the expected performance.
+
+The library also provides a single [[https://docs.rs/ensure_simd/latest/ensure_simd/fn.ensure_simd.html][function]] =ensure_simd::ensure_simd()= that
+checks that AVX2 is available at run-time, to fail with a informative error
+message when AVX2 binaries are run on systems that do not support it.
+
+** Profile selection
+To ensure fully optimized builds, we use a =dist= profile that is separate from
+=release=. It uses full LTO (link-time-optimization), disables debug symbols
+(for a smaller binary), and uses a single codegen unit so that optimizations can
+work across all crates.
+
+#+caption: =Cargo.toml= configuration for maximally optimized =dist= profile.
+#+include: "./Cargo.toml" :lines "16-" src toml
+
+** GitHub
+:PROPERTIES:
+:CUSTOM_ID: github
+:END:
+We use the =.github/workflows/release.yaml= configuration below to test the
+library and build the binaries.
+The workflow automatically triggers whenever a version tag starting with =v= is
+pushed (which is done automatically by =cargo release=).
+Then, it uploads all artefacts into a draft release.
+This can then be manually amended with release notes and finally released.
+It produces binaries as in e.g. [[https://github.com/RagnarGrootKoerkamp/sassy/releases/tag/v0.1.10][this]] Sassy release.
+
+#+caption: GitHub CI config for building and running =cargo test= on x86-64 Ubuntu and aarch64 MacOs.
+#+include: "./github-test.yaml" src yaml
+
+** =cargo binstall=
+:PROPERTIES:
+:CUSTOM_ID: binstall
+:END:
+
+=cargo binstall= ([[https://github.com/cargo-bins/cargo-binstall][github]]) is a tool to directly install binaries by trying to download them from
+GitHub releases associated to a crate (and otherwise falling back to building
+from source). It automatically picks up the binaries in our release, and so
+=cargo binstall sassy= /just works/.
+
+** PyPI
+:PROPERTIES:
+:CUSTOM_ID: pypi
+:END:
+For the PyPI releases, we have the following =pyproject.toml= configuration/metadata file.
+
+#+caption: Python project configuration.
+#+include: "./pyproject.toml" src toml
+
+We use GitHub CI for the actual building and releasing.
+Again, this triggers whenever a version tag is pushed.
+
+#+caption: GitHub CI for building and releasing PyPI wheels.
+#+include: "./github-release-pypi.yaml" src yaml
+
+** Bioconda
+:PROPERTIES:
+:CUSTOM_ID: bioconda
+:END:
+
+Bioconda releases are made by adding a /recipe/ to the repository. The PR adding
+Sassy is [[https://github.com/bioconda/bioconda-recipes/pull/60835][here]]. 
+
+#+caption: Bioconda recipe for sassy.
+#+include: "./bioconda-meta.yaml" src yaml
+
+When a new GitHub release is made, within a few hours, the =BiocondaBot=
+automatically makes a PR to bump the bioconda version as well. See e.g. [[https://github.com/bioconda/bioconda-recipes/pull/62017][this PR]]
+to bump Barbell. It needs to be approved by one of the recipe owners, and then
+merged by someone with access to the repository.
+
+* Conclusion
+
+With all this set up, the release flow becomes:
+1. Update =CHANGELOG.md=
+2. =cargo release major/minor/patch=
+3. If enabled, go to the GitHub releases page once CI finishes and finalize the
+   draft release.
+4. If enabled, wait for the bioconda PR and approve it.
+
+
+
+#+print_bibliography:
