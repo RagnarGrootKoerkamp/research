@@ -1,0 +1,866 @@
+#+title: Trying to understand DDR memory
+#+filetags: @lablog hpc linux highlight
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-01-20 Tue>
+
+#+begin_description
+These are chronological (and thus, only lightly organized) notes on my attempt to
+understand how DDR4 and DDR5 RAM memory work.
+
+See the final results for the conclusion on how virtual addresses map to physical addresses.
+#+end_description
+
+These are chronological (and thus, only lightly organized) notes on my attempt to
+understand how DDR4 and DDR5 RAM memory work.
+
+See [[#results][the final results]] for the conclusion on how virtual addresses map to physical addresses.
+
+* Questions
+
+Specific questions to be answered:
+- How is data distributed among the chips?
+- How does /dual channel/ DDR work?
+  - And does the CPU become a bottleneck here?
+- How does RAM /work/?
+- Are there internal cache sizes?
+- What is /burst/?
+  - Can we disable it?
+  - Can we read only a single word?
+- And /prefetching/? (8n, 16n)
+  - Why? (reduce downtime / communication overhead)
+  - Stored how?
+- Why does DDR5 have 2x32 lanes instead of DDR4's 64bit lanes?
+- How large are /rows/ and /columns/?
+- What about LPDDR (= lower power DDR)
+- What's a /transfer/ anyway
+- /banks/? /bank groups/?
+  - transferring to different bank groups is faster?
+- DDR5: 2/4/8 bank groups
+- How does virtual memory map to physical memory?
+
+* A load of articles/blogs/pages to read
+
+** Wikipedia articles
+
+Wikipedia articles:
+- DDR: https://en.wikipedia.org/wiki/DDR_SDRAM
+- DDR4: https://en.wikipedia.org/wiki/DDR4_SDRAM
+- DDR5: https://en.wikipedia.org/wiki/DDR5_SDRAM
+- https://en.wikipedia.org/wiki/Synchronous_dynamic_random-access_memory#PREFETCH
+- https://en.wikipedia.org/wiki/Interleaved_memory
+- https://en.wikipedia.org/wiki/Memory_refresh
+  
+  
+** More posts
+- https://www.synopsys.com/blogs/chip-design/ddr-generations-memory-density-speed.html
+- https://www.synopsys.com/articles/ddr4-bank-groups.html
+- [cite:@fetch-me-if-you-can]
+  - https://github.com/hpides/prefetching
+- https://api.drum.lib.umd.edu/server/api/core/bitstreams/5ec3f878-7a0d-4df8-a98f-1600b5c35e2b/content
+- https://www.synopsys.com/blogs/chip-design/ddr5-technology-advancements-performance.html
+- https://superuser.com/questions/1132788/what-is-a-ram-bank-how-is-it-defined
+- book: DRAM Circuit Design: Fundamental and High-Speed Topics (IEEE Press Series on Microelectronic Systems)
+- https://www.igorslab.de/en/ddr5-deep-dive-kingston-in-interview-about-new-memory-standard-and-examples-from-the-practice/2/
+- long post explaining all timings: https://www.reddit.com/r/overclocking/comments/ahs5a2/demystifying_memory_overclocking_on_ryzen_oc/
+- https://www.systemverilog.io/design/understanding-ddr4-timing-parameters/
+- https://blog.cloudflare.com/ddr4-memory-organization-and-how-it-affects-memory-bandwidth/#:~:text=Multi%2Drank%20memory%20modules%20use,rank%20can%20start%20its%20transmission.
+- https://medium.com/@mitali.soni04/decoding-dram-timings-part-i-4f97a5b90e82
+- https://medium.com/@mitali.soni04/decoding-dram-timings-part-ii-9541e0f72aca
+- https://www.forrestthewoods.com/blog/memory-bandwidth-napkin-math/
+- https://www.youtube.com/watch?v=7J7X7aZvMXQ
+- https://ieeexplore.ieee.org/document/6932587
+  - nice intro
+
+** Notes
+
+https://en.wikipedia.org/wiki/Synchronous_dynamic_random-access_memory#PREFETCH:
+#+begin_quote
+[DDR3] Row accesses might take 50 ns, depending on the speed of the DRAM, whereas column accesses off an open row are less than 10 ns.
+#+end_quote
+
+#+begin_quote
+DDR4 did not double the internal prefetch width again, but uses the same 8n prefetch as DDR3.[29] Thus, it will be necessary to interleave reads from several banks to keep the data bus busy.
+#+end_quote
+
+https://api.drum.lib.umd.edu/server/api/core/bitstreams/5ec3f878-7a0d-4df8-a98f-1600b5c35e2b/content
+  
+- dual channel has 2 chips doing the _exact_ same work, interleaving things at
+  the level of words: 64 bits to one and 64 bits to the other.
+  - Does this mean an effective RAM cache size of 1024 bits, given burst mode???
+
+https://www.synopsys.com/articles/ddr4-bank-groups.html
+- prefetch matches cacheline size
+- DDR4: bank groups, so multiple reads can happen 'in parallel'
+  - a prefetch happens within a bank group, but takes time
+  - 16n prefetch would be larger than a cacheline, not useful
+  - instead: 2 (or more) bank ground that work independently in parallel
+  - alternating groups is faster than consecutive reads in a group
+    - 4 cycles across groups; more within
+  - 1600MHz gives up to 3200Mb/s when alternating, or 2133Mb/s within the same group
+  - alternating between banks: can fully saturate the bandwidth with 4 internal
+    cycles (8 transfers) between bursts
+  - on the same group, only as low as ~half the throughput
+
+https://edc.intel.com/content/www/us/en/design/ipla/software-development-platforms/client/platforms/alder-lake-desktop/12th-generation-intel-core-processors-datasheet-volume-1-of-2/007/system-memory-controller-organization-mode-ddr4-5-only/#:~:text=Intel%C2%AE%20DDR4%2F5%20Flex,(64%2Dbyte%20boundary).
+#+begin_quote
+Dual-Channel Symmetric mode, also known as interleaved mode, provides maximum performance on real world applications. Addresses are ping-ponged between the channels after each cache line (64-byte boundary). 
+#+end_quote
+
+https://edc.intel.com/content/www/us/en/design/ipla/software-development-platforms/client/platforms/alder-lake-desktop/12th-generation-intel-core-processors-datasheet-volume-1-of-2/007/technology-enhancements-of-intel-fast-memory-access-intel-fma/
+- out of all pending requests, efficient ones to be answered are chosen
+    
+https://en.wikipedia.org/wiki/Interleaved_memory
+- row buffer typically has same size as OS memory page
+
+
+https://ieeexplore.ieee.org/document/898056 [cite:@page-interleaving]
+
+https://superuser.com/questions/606742/what-do-channel-interleave-and-rank-interleave-settings-mean-in-bios
+- =channel interleave= and =rank interleave= can be changed in bios?
+
+https://ee.usc.edu/~redekopp/ee457/slides/EE457Unit7b_Interleaving.pdf
+bank: byte-size memory
+
+https://chipress.online/2024/04/12/what-is-dram-hierarchy/#:~:text=Multiple%20Bank%20Groups%20and%20Banks,latency%20and%20improve%20DRAM%20throughput
+- nice figure
+
+https://www.systemverilog.io/design/ddr4-basics/
+- good figures
+- each bank has multiple (4 or 8) memory arrays
+- 512/1024/2048  page size = bits/row
+- 1024 columns always
+- variable number of rows
+- width cascading: 128bit words by having half from each chip
+
+https://www.systemverilog.io/design/lpddr5-tutorial-physical-structure/
+
+
+
+synchronous vs async ram:
+- sync: common clock frequency
+
+** My own RAM
+
+laptop model:
+- HMAA4GS6AJR8N-XN
+- https://www.compuram.biz/memory_module/sk-hynix/hmaa4gs6ajr8n-xn.htm
+- 3200 MT/s
+- 1600 MHz
+- 32GB (2Rx8): 2 ranks, 8 bit data width / 8 banks
+- 260pin
+- 2 ranks
+- number of dram: 16
+- 2Gx8: 2GB per chip, within each rank?
+- construction type: FBGA(78ball)
+- unbuffered: more reliability by buffering data before sending it over
+- organization: 4Gx64
+- number of DRAM: 16
+- DRAM organization: 2Gx8
+
+** Continued notes
+
+jedec standard:
+https://e2e.ti.com/cfs-file/__key/communityserver-discussions-components-files/196/JESD79_2D00_4.pdf
+
+page 15: 2Gb x8 addressing:
+- 4 bank groups (2bits)
+- 4 banks inside a group (2bits)
+- 17bit row ID => 128ki rows
+- 10bit col ID => 1024 cols
+- 1KB page size (#cols * 8 banks)
+  
+=> total page size for 8 chips: 8KB.
+
+
+Possible experiment:
+- read =a[i]=, where i iterates over the integers with only a fixed subset of
+  bits set, like a mask of =111101001110000=. Trying all patterns, we can try to
+  hit consecutive rows on the same bank.
+- multithreaded setting; always have a certain bit of the index at 0, the rest 1
+  - try to always hit the same bank
+  - try to always hit the same rank
+
+Side note:
+- L1 prefetch needs fill buffers, but the L2 hardware prefetcher does not!
+
+gemini: cache lines are alternated between dimms/channels.
+
+https://arxiv.org/html/2512.18300v1
+[cite:@zenhammer]
+#+begin_quote
+For example, modern memory mappings, such as AMD-Zen [11], split a 4KB page
+such that it gets distributed across 32 banks (with only two lines of a page
+co-resident in the same bank).
+Such mappings exploit the available bank-level parallelism for reads, even at
+the expense of the row-buffer hit-rate.
+#+end_quote
+- interesting indeed: reading from different banks is faster than consecutive
+  reads from a single row then
+- more generally, I guess cachelines are round-robin between banks then
+
+https://os.itec.kit.edu/3617_3389.php [cite:@xeon-address-mapping]
+
+
+https://docs.amd.com/r/en-US/pg313-network-on-chip/DDR4-Component-Choice
+#+begin_quote
+For a 64-bit DDR4 interface, this means the controller can support a single x64 channel, or dual x32 channels.
+#+end_quote
+ie, there are cases where the two dimms do exactly the same work but on half the
+bits. Then additional bank (groups) are available for parallellism
+
+with two memory controllers (same as channels or not?):
+- memory can be interleaved at eg 1KB block size, or 
+- each controller is half the address space
+
+** Address mapping notation
+
+This pages is really nice:
+- https://docs.amd.com/r/en-US/pg313-network-on-chip/Address-Mapping-Notation
+
+Example: =16R-2B-2BG-10C=:
+- ignore low 3 bits, because we get 64b = 8B = 2^3 B back.
+- 10 bits for column. Ie a linear piece of memory fills a row.
+  - Each column is 64b = 8B across all banks, 1024 columns per row = 8KiB
+- 2 bits for the bank group, ie spread 4 rows over 4 distinct bank groups
+- 2 bits for bank, ie then take a row in each bank of each group
+- 15 bits for row, ie then use the other rows in each bank
+
+
+Reading consecutively from the same row (in the same bank) is slow though. So
+instead, we can alternate bank group after every 64B cache line (aka bank group optimization):
+=16R-2B-1BG-7C-1BG-3C=: this moves 1 BG bit to the end, so we interleave reads
+to two bank groups to be able to fully saturate the bandwidth. This has 95%
+efficiency, compared to 54% of the simple row-bank-column approach.
+
+#+begin_quote
+If addressing is random and transaction size is equal to the DRAM basic access unit, then no address mapping has an advantage. The DRAM controller will reorder transactions to hide page access overhead as much as possible. Expected efficiency is around 40%.
+#+end_quote
+
+** Intel spec
+
+Intel spec:
+https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/10th-gen-core-families-datasheet-vol-1-datasheet.pdf
+
+#+begin_quote
+Addresses are ping-ponged between the channels after each cache line (64-byte boundary). 
+#+end_quote
+
+5.1.5:
+- just-in-time: most efficient request scheduled first, e.g., one that hits a
+  different bank than the last instruction.
+- command overlap: send stuff to other banks while one is doing slow activate/pre-charge/read/write
+- out-of-order: batch requests to the same open page
+  
+** Rank interleaving
+https://blog.cloudflare.com/ddr4-memory-organization-and-how-it-affects-memory-bandwidth/#:~:text=Multi%2Drank%20memory%20modules%20use,rank%20can%20start%20its%20transmission.
+
+#+begin_quote
+Multi-rank memory modules use a process called rank interleaving, where the ranks that are not accessed go through their refresh cycles in parallel
+#+end_quote
+
+#+begin_quote
+On the other hand, there is some I/O latency penalty with multi-rank memory modules, since memory controllers need additional clock cycles to move from one rank to another. 
+#+end_quote
+
+#+begin_quote
+one row can remain active per bank
+#+end_quote
+
+
+* reMap: using Performance counters
+https://github.com/helchr/reMap
+
+[cite/t:@reversing-dram-addressing] uses performance counters to read directly
+how many times each rank/bank group/bank is accessed.
+
+It uses stuff from =/sys/bus/event_source/devices/uncore_imc/=
+
+=type= is =14=.
+
+here
+https://stackoverflow.com/questions/64923795/using-linux-perf-tool-to-measure-the-amount-of-times-the-cpu-has-to-acccess-the
+I read that only Xeon/servers have these cas counters.
+
+*Performance counter monitor*: https://github.com/intel/pcm
+- =pcm-memory= with per-bank stats only works on Xeon unfortunately
+
+* Sudoku
+Really cool paper and software: [cite/title/b:@sudoku-dram-address-mapping] [cite:@sudoku-dram-address-mapping].
+https://github.com/scale-snu/Sudoku
+
+hugepages setup:
+#+begin_src sh
+cd /sys/devices/system/node/node0/hugepages/hugepages-1048576kB
+cat nr_hugepages # likely prints 0
+cat free_hugepages # likely prints 0
+# just over half of the 64GB memory
+echo 40 | sudo tee nr_hugepages
+cat nr_hugepages # should print 40
+cat free_hugepages # likely prints 40
+#+end_src
+
+speed:
+#+begin_src c
+#define SBDR_LOWER_BOUND_ 350
+#+end_src
+memory config:
+#+begin_src c
+{DDRType::DDR4, 64ULL * GB, 8, 2, 2, 17, 10, 8 * 1024, 8}
+#+end_src
+
+I also incremented =max_bits_= by 2 in the =Sudoku= constructor. Not exactly sure why it's needed.
+
+We also pin the cpu frequency to 3.0GHz (slightly above the native 2.6GHz):
+#+begin_src sh
+sudo cpupower frequency-set --governor powersave -d 3.0GHz -u 3.0GHz
+#+end_src
+
+** Step 1: DRAM addressing functions
+ie things that map to the same bank
+
+command:
+#+begin_src sh
+sudo ./reverse_functions -o out -p 40 -t ddr4 -n 2 -s 32 -r 2 -w 8 -d -v -l
+#+end_src
+
+functions:
+#+begin_src 
+0x4080
+0x88000
+0x110000
+0x220000
+0x440000
+0x4b300
+#+end_src
+
+** Step 2: row/column bits
+#+begin_src sh
+sudo ./identify_bits -o out -p 40 -t ddr4 -n 2 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x4080,0x88000,0x110000,0x220000,0x440000,0x4b300
+#+end_src
+
+result with masking:
+column bits: 0xdc0
+row_bits,0xffff80000
+column_bits,0xdc0
+
+Note that some column bits are still missing, as ~0xdc0 = 1101 1100b~ only has 5
+instead of 7 bits set. (We are looking for 7 bits, because each column has $2^{10}$
+64-bit words and thus $2^7$ cache lines.)
+
+** Step 3: validation
+#+begin_src sh
+sudo ./validate_mapping -o out -p 40 -t ddr4 -n 2 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x4080,0x88000,0x110000,0x220000,0x440000,0x4b300 \
+    -R 0xffff80000 \
+    -C 0xdc0
+#+end_src
+#+begin_src txt
+[-] There are incomplete disjoint sets.
+0x4cb300,
+Insert bit 9 to column_bits
+Insert bit 12 to column_bits
+#+end_src
+So real column should be 0x1FC0, exactly the same as in Table 2 in the paper for
+another intel DDR4 machine. (That only has 7 bits, because the last 3 column bits
+indicate 8 64bit words that always share a cacheline [I think].)
+
+We get:
+#+begin_src txt
+Validated DRAM address mapping:
+  functions:0x4080,0x88000,0x110000,0x220000,0x440000,0x4b300,
+  row_bits:0xffff80000
+  column_bits:0x1fc0
+#+end_src
+
+** Step 4: which function is what?
+Lets first have a manual look at these functions:
+#+begin_src 
+000000000000000000000001111111000000 -- col
+000000000000000000000100000010000000 -- dimm/rank?
+000000000000000001001011001100000000 -- channel?
+000000000000000010001000000000000000 -- bank/group?
+000000000000000100010000000000000000 -- bank/group?
+000000000000001000100000000000000000 -- bank/group?
+000000000000010001000000000000000000 -- bank/group?
+111111111111111110000000000000000000 -- row
+#+end_src
+They use 36 bits, corresponding to $2^{36} = 64$ GiB of data.
+
+Also note that the low 6 bits are 0, because we have $2^6=64$ byte cache lines.
+
+*Some [wrong] guesses.*
+We already /know/ the row and column bits, but the rest is speculation for now.
+Looking at the Sudoku paper, we need 4 functions for banks and bank groups, so I
+would speculate that's the four very similar ones.
+Then we need 2 to select the DIMM and rank within a channel (because each
+channel could have 2 rank-2 memory sticks), so I'd guess the two similar
+patterns that remain. Specifically, that would mean the highest bit determines
+the DIMM, of which I only have 1 in each channel, and thus be unused.
+
+That leaves one 'weird'/'chaotic' pattern for the channel, which also seems to
+match the Sudoku table [cite:@sudoku-dram-address-mapping]:
+
+#+attr_html: :class inset large
+[[file:./sudoku-table.png]]
+
+** Refreshes
+
+Now lets have a look at the output of =decompose_functions=, which does
+additional experiments to distinguish DIMMs/ranks/bank groups/bank.
+#+begin_src sh
+sudo ./decompose_functions -o out -p 40 -t ddr4 -n 2 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x4080,0x4b300,0x88000,0x110000,0x220000,0x440000 \
+    -R 0xffff80000 \
+    -C 0x1fc0
+#+end_src
+
+Specifically, it chooses two addresses that only differ by a given function and
+then alternatingly reads them. DRAM needs regular 'refreshing', every 64ms or so, which for my
+hardware takes =tRFC1 = 350ns=. This can be done one either one bank at a time,
+or for all banks simultaneously.
+
+If we now choose 2 addresses and read them alternatingly, we will see one of two
+patterns. If they are in the same /refresh group/, we will see a single refresh
+delay every refresh cycle. If they are in different refresh groups, we will see
+two refresh patterns interleaved.
+
+You might need to play a bit with the =REGULAR_REFRESH_INTERVAL_THRESHOLD= parameter.
+We get:
+#+begin_src txt
+[+] Check refresh intervals of function 0x4080
+Functions: 0x4080, tREFI: 1015, tREFI/2: 9
+[+] Check refresh intervals of function 0x4b300
+Functions: 0x4b300, tREFI: 1016, tREFI/2: 8
+[+] Check refresh intervals of function 0x88000
+Functions: 0x88000, tREFI: 1018, tREFI/2: 6
+[+] Check refresh intervals of function 0x110000
+Functions: 0x110000, tREFI: 0, tREFI/2: 1024          <------ channel selector?
+[+] Check refresh intervals of function 0x220000
+Functions: 0x220000, tREFI: 1019, tREFI/2: 5
+[+] Check refresh intervals of function 0x440000
+Functions: 0x440000, tREFI: 1020, tREFI/2: 4
+#+end_src
+
+These numbers mean the following: for 5 of the 6 functions, we consistently
+observe a =tREFI= delay, which is the refresh interval. (I still have not found
+a way to extract the actual value of number from my hardware.)
+The =0x10000= function on the other hand consistently shows a smaller interval
+between refreshes, meaning that this switches data to a different refresh group.
+
+Thus, I speculate that =0x110000= determines the DIMM, and all banks on each
+DIMM (across /both/ ranks) refresh at the same time.
+
+See also /Auto-refresh/ (AR) on [[https://en.wikipedia.org/wiki/Memory_refreshjjjjjj][wikipedia]].
+
+** Consecutive Accesses
+Now we look at the time between consecutive accesses, =tRDRD= (time ReaD ReaD)
+and specifically =tCCD_S= and =tCCD_L=, the time between consecutive reads in
+different (S, short) and the same (L, long) bank groups, assuming row-buffer hits.
+For this, the tool schedules 4 consecutive reads from each of two rows and lets
+the memory controller execute them as fast as possible.
+
+We get this:
+#+begin_src txt
+Functions: 0x4080, Avg RDRD latency: 347                   <---- bank group/channel
+[+] Check consecutive memory accesses of function 0x4b300
+Functions: 0x4b300, Avg RDRD latency: 346                  <---- bank group/channel
+[+] Check consecutive memory accesses of function 0x88000
+Functions: 0x88000, Avg RDRD latency: 345                  <---- bank group/channel
+[+] Check consecutive memory accesses of function 0x110000
+Functions: 0x110000, Avg RDRD latency: 400                 <---- rank (Before: DIMM?)
+[+] Check consecutive memory accesses of function 0x220000
+Functions: 0x220000, Avg RDRD latency: 396                 <---- bank
+[+] Check consecutive memory accesses of function 0x440000
+Functions: 0x440000, Avg RDRD latency: 397                 <---- bank
+#+end_src
+
+Latency here represents the number of clock cycles to read a total of 8 values.
+
+Based on the paper, alternating between channels should be fastest, followed by
+bank groups. Alternating between banks and Rank is slower.
+
+My guesses are based on correlating these results with the plot from the Sudoku paper:
+
+#+attr_html: :class inset small
+[[file:./sudoku-latency.png]]
+
+#+attr_html: :class small
+|                                        | refresh group | read-read | what                 |
+| =000000000000000000000001111111000000= |            |           | col                  |
+| =000000000000000000000100000010000000= | same       |       347 | bank group / channel |
+| =000000000000000001001011001100000000= | same       |       346 | bank group / channel |
+| =000000000000000010001000000000000000= | same       |       345 | bank group / channel |
+| =000000000000000100010000000000000000= | different  |       400 | rank/channel?        |
+| =000000000000001000100000000000000000= | same       |       396 | bank                 |
+| =000000000000010001000000000000000000= | same       |       397 | bank                 |
+| =111111111111111110000000000000000000= |            |           | row                  |
+
+
+Correlating with row Intel-A 2-channels 1-dimm-per-channel from the table above:
+#+attr_html: :class small
+|                                        | what    |
+| =000000000000000000000001111111000000= | col     |
+| =000000000000000010000010011000000000= | channel |
+| =000000000000000000000101010000000000= | group   |
+| =001001001000000010001000000000000000= | group   |
+| =000000000000000100010000000000000000= | rank    |
+| =010010010011001000100000000000000000= | bank    |
+| =100100100100110001000000000000000000= | bank    |
+| =111111111111111110000000000000000000= | row     |
+
+Things look quite similar and so my guess is that the order of things is indeed
+the same:
+#+attr_html: :class small
+|                                        | refresh group | read-read | what    |
+| =000000000000000000000001111111000000= |               |           | col     |
+| =000000000000000000000100000010000000= | same??        |       347 | channel |
+| =000000000000000001001011001100000000= | same          |       346 | group   |
+| =000000000000000010001000000000000000= | same          |       345 | group   |
+| =000000000000000100010000000000000000= | different     |       400 | rank    |
+| =000000000000001000100000000000000000= | same          |       396 | bank    |
+| =000000000000010001000000000000000000= | same          |       397 | bank    |
+| =111111111111111110000000000000000000= |               |           | row     |
+
+
+* Sudoku, now with only 1 DIMM
+
+** setup
+
+1. Allocate 20 1GB hugepages
+2. Add an entry to the table with 32 GB.
+   #+begin_src c
+    {DDRType::DDR4, 32ULL * GB, 8, 2, 2, 17, 10, 8 * 1024, 8},
+   #+end_src
+** 1. reverse functions
+3. run the same command as before, but now for 1 DIMM and 20 pages:
+   #+begin_src sh
+   sudo ./reverse_functions -o out -p 17 -t ddr4 -n 1 -s 32 -r 2 -w 8 -d -v -l
+   #+end_src
+
+Changes to make it work:
+Change timing to
+#+begin_src c
+#define SBDR_LOWER_BOUND_ 330
+#define SBDR_UPPER_BOUND_ 400
+#+end_src
+and use the median instead of average time.
+
+This outputs:
+#+begin_src txt
+Found functions:
+  0x2040
+  0x44000
+  0x88000
+  0x110000
+  0x220000
+#+end_src
+
+** 2. identify bits
+
+
+#+begin_src sh
+sudo ./identify_bits -o out -p 17 -t ddr4 -n 2 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x2040,0x44000,0x88000,0x110000,0x220000
+#+end_src
+
+with original =max_bits= or +1:
+#+begin_src 
+Found bits: 
+  row_bits,0x3fffc0000
+  column_bits,0x1fc0
+#+end_src
+
+The only issue here is that this has only 16 row bits. Likely it doesn't detect
+the last one because I only have slightly over half of the memory used. Either
+way we can assume that the real row bits should be =0x7fffc0000=
+
+** 3. validate mapping
+#+begin_src 
+sudo ./validate_mapping -o out -p 17 -t ddr4 -n 1 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x2040,0x44000,0x88000,0x110000,0x220000 \
+    -R 0x3fffc0000 \
+    -C 0x1fc0
+#+end_src
+
+** 4. decompose functions
+#+begin_src sh
+sudo ./decompose_functions -o out -p 17 -t ddr4 -n 1 -s 32 -r 2 -w 8 -d -v -l\
+    -f 0x2040,0x44000,0x88000,0x110000,0x220000 \
+    -R 0x3fffc0000 \
+    -C 0x1fc0
+#+end_src
+The situation is more clear now: the interleaved refresh intervals are across
+the two ranks. And then the 2 fast RDRD latencies are across groups and the two
+slow ones across banks.
+#+begin_src txt
+[2026-01-23 19:54:39.689] [info] [+] DecomposeUsingRefreshes
+Functions: 0x2040, tREFI: 978, tREFI/2: 46
+Functions: 0x44000, tREFI: 981, tREFI/2: 43
+Functions: 0x88000, tREFI: 2, tREFI/2: 1022    -- ranks
+Functions: 0x110000, tREFI: 992, tREFI/2: 32
+Functions: 0x220000, tREFI: 916, tREFI/2: 108
+[2026-01-23 19:54:41.602] [info] [+] DecomposeUsingConsecutiveAccesses
+Functions: 0x2040, Avg RDRD latency: 346       -- group
+Functions: 0x44000, Avg RDRD latency: 342      -- group
+Functions: 0x88000, Avg RDRD latency: 403      -- rank
+Functions: 0x110000, Avg RDRD latency: 390     -- bank
+Functions: 0x220000, Avg RDRD latency: 393     -- bank
+#+end_src
+
+New table:
+
+#+attr_html: :class small
+|                                       | refresh group | read-read | what  |
+| =00000000000000000000001111111000000= |               |           | col   |
+| =00000000000000000000010000001000000= | same          |       346 | group |
+| =00000000000000001000100000000000000= | same          |       342 | group |
+| =00000000000000010001000000000000000= | different     |       403 | rank  |
+| =00000000000000100010000000000000000= | same          |       390 | bank  |
+| =00000000000001000100000000000000000= | same          |       393 | bank  |
+| =11111111111111111000000000000000000= |               |           | row   |
+
+* Final results
+:PROPERTIES:
+:CUSTOM_ID: results
+:END:
+
+#+attr_html: :class small
+| 1 DIMM (32 GB)                  | what  | 2 DIMM (64 GB)                   | what    |
+| =00000000000000000000001111111= | col   | =000000000000000000000001111111= | col     |
+| =00000000000000000000010000001= | group | =000000000000000000000100000010= | channel |
+|                                 | -     | =000000000000000001001011001100= | group   |
+| =00000000000000001000100000000= | group | =000000000000000010001000000000= | group   |
+| =00000000000000010001000000000= | rank  | =000000000000000100010000000000= | rank    |
+| =00000000000000100010000000000= | bank  | =000000000000001000100000000000= | bank    |
+| =00000000000001000100000000000= | bank  | =000000000000010001000000000000= | bank    |
+| =11111111111111111000000000000= | row   | =111111111111111110000000000000= | row     |
+
+Summary on how to interpret this:
+- =col= indicates that the low 7 bits are used to indicate the column to read from.
+- =row= indicates that the high 16 or 17 bits determine the row to read from.
+- All other masks indicate that the xor of the indicated address-bits is taken,
+  and the parity determines the channel/rank/group/bank. Each rank has 4 groups
+  containing 4 banks each, so these get 2 bits assigned to them.
+
+In general these look very similar. Differences:
+- With 2 DIMMs, pairs of cachelines go next to each other in the same row. With
+  1, they are scattered across groups.
+- With 2 DIMMs, the lowest level scattering is changed to channels. The first
+  group-scatter gets a somewhat random mask.
+
+  
+* =decode-dimms=
+
+Here I'm logging the output of running some analysis tools.
+
+=decode-dimms=, part of =i2c-tools=, on arch is a nice tool to read
+information from memory module EEPROM.
+But note that this is /static/ information, and /not/ the current mode.
+For me it prints eg:
+
+#+begin_src txt
+...
+Fundamental Memory type                          DDR4 SDRAM
+
+---=== Memory Characteristics ===---
+Maximum module speed                             3200 MT/s (PC4-25600)
+Size                                             32768 MB
+Banks x Rows x Columns x Bits                    16 x 17 x 10 x 64
+SDRAM Device Width                               8 bits
+Ranks                                            2
+Rank Mix                                         Symmetrical
+Primary Bus Width                                64 bits
+AA-RCD-RP-RAS (cycles)                           22-22-22-52
+Supported CAS Latencies                          24T, 22T, 21T, 20T, 19T, 18T, 17T, 16T, 15T, 14T, 13T, 12T, 11T, 10T
+
+---=== Timings at Standard Speeds ===---
+AA-RCD-RP-RAS (cycles) as DDR4-3200              22-22-22-52
+AA-RCD-RP-RAS (cycles) as DDR4-2933              21-21-21-47
+AA-RCD-RP-RAS (cycles) as DDR4-2666              19-19-19-43
+AA-RCD-RP-RAS (cycles) as DDR4-2400              17-17-17-39
+AA-RCD-RP-RAS (cycles) as DDR4-2133              15-15-15-35
+AA-RCD-RP-RAS (cycles) as DDR4-1866              13-13-13-30
+AA-RCD-RP-RAS (cycles) as DDR4-1600              11-11-11-26
+
+---=== Timing Parameters ===---
+Minimum Cycle Time (tCKmin)                      0.625 ns
+Maximum Cycle Time (tCKmax)                      1.600 ns
+Minimum CAS Latency Time (tAA)                   13.750 ns
+Minimum RAS to CAS Delay (tRCD)                  13.750 ns
+Minimum Row Precharge Delay (tRP)                13.750 ns
+Minimum Active to Precharge Delay (tRAS)         32.000 ns
+Minimum Active to Auto-Refresh Delay (tRC)       45.750 ns
+Minimum Recovery Delay (tRFC1)                   350.000 ns
+Minimum Recovery Delay (tRFC2)                   260.000 ns
+Minimum Recovery Delay (tRFC4)                   160.000 ns
+Minimum Four Activate Window Delay (tFAW)        21.000 ns
+Minimum Row Active to Row Active Delay (tRRD_S)  2.500 ns
+Minimum Row Active to Row Active Delay (tRRD_L)  4.900 ns
+Minimum CAS to CAS Delay (tCCD_L)                5.000 ns
+Minimum Write Recovery Time (tWR)                15.000 ns
+Minimum Write to Read Time (tWTR_S)              2.500 ns
+Minimum Write to Read Time (tWTR_L)              7.500 ns
+
+...
+
+Part Number                                      HMAA4GS6AJR8N-XN    
+
+Number of SDRAM DIMMs detected and decoded: 1
+#+end_src
+
+This confirms some information we already knew by now:
+- 2 ranks per DIMM
+- 10 column bits, 17 row bits, and 16 banks.
+The question is how relevant the timing parameters are if these are not
+necessarily the current values.
+
+  
+** Bank groups
+reading from different bank groups takes the minimum of 4 cycles (in which 8
+words are transmitted)
+
+** Refresh
+https://www.reddit.com/r/overclocking/comments/1gdz1bv/are_trefi_and_trfc_the_only_temperature_sensitive/
+
+64ms between refreshes, split in 8192 groups, so 64ms/8192=7.8us on average
+between refresh calls
+
+Each call is around 350ns=4.5% long, blocking the entire rank.
+
+** Random access throughput
+Limitations:
+- opening a single row in a bank
+  - tRCD = 13.750 ns to move row into amplifiers
+  - tRAS = 32.000 ns to move it back
+- between reads in a group: 4.9ns
+- between reads across groups: 2.5ns
+- but either way: at most 4 reads on the rank every 21ns => 5.25 ns/read limit
+  per rank (or DIMM?)
+
+* CPU benchmarks
+Lastly, some benchmarks, run with both 1 and 2 DIMMs.
+** cpu-benchmarks
+See [[file:../cpu-benchmarks/cpu-benchmarks.org]] and [[https://github.com/RagnarGrootKoerkamp/cpu-benchmarks][github:RagnarGrootKoerkamp/cpu-benchmarks]].
+
+*** random access throughput 1 DIMM
+#+begin_src txt
+cpu-benchmarks > cargo run -r --bin cpu-benchmarks -- --dense -t 30 -j6 mt-throughput
+...
+bytes 1536.000 MiB threads 6  thrps    5.399 ns/q
+#+end_src
+#+begin_src txt
+cpu-benchmarks > cargo run -r --bin cpu-benchmarks -- --dense -t 30 -j12 mt-throughput
+...
+bytes 1792.000 MiB threads 12  thrps    5.034 ns/q
+#+end_src
+
+*** random access throughput 2 DIMM
+#+begin_src txt
+cpu-benchmarks > cargo run -r --bin cpu-benchmarks -- --dense -t 30 -j6 mt-throughput
+...
+bytes 1536.000 MiB threads 6  thrps    2.679 ns/q
+#+end_src
+#+begin_src txt
+cpu-benchmarks > cargo run -r --bin cpu-benchmarks -- --dense -t 30 -j12 mt-throughput
+...
+bytes 1792.000 MiB threads 23  thrps    2.618 ns/q
+#+end_src
+** memory-read-experiment
+See [[https://github.com/feldroop/memory-read-experiment][github:feldroop/memory-read-experiment]]
+*** strided reading 1 DIMM
+#+begin_src txt
+memory-read-experiment > cargo run -r
+Method         (ns/read)  |   1 t |   6 t |  12 t |
+sequential                | 3.612 | 3.217 | 3.301 |
+sequential pf             | 3.643 | 3.166 | 3.305 |
+sequential offset         | 3.598 | 3.166 | 3.299 |
+sequential offset pf      | 3.631 | 3.166 | 3.303 |
+dbl sequential            | 5.692 | 3.587 | 3.616 |
+dbl sequential pf         | 5.906 | 3.600 | 3.688 |
+trip sequential           | 5.769 | 3.577 | 3.715 |
+trip sequential pf        | 5.842 | 3.525 | 3.843 |
+quad sequential           | 6.859 | 3.722 | 3.816 |
+quad sequential pf        | 6.749 | 3.712 | 4.151 |
+oct sequential            | 7.374 | 4.341 | 4.484 |
+oct sequential pf         | 7.326 | 4.334 | 4.825 |
+hex sequential            | 7.719 | 6.002 | 3.389 |
+hex sequential pf         | 7.656 | 6.113 | 5.290 |
+32 sequential             | 8.074 | 6.249 | 3.550 |
+32 sequential pf          | 8.360 | 5.838 | 3.388 |
+64 sequential             | 6.963 | 4.069 | 4.079 |
+64 sequential pf          | 7.278 | 3.764 | 4.826 |
+128 sequential            | 7.320 | 4.481 | 4.485 |
+256 sequential            | 7.995 | 4.946 | 4.790 |
+512 sequential            | 8.052 | 6.466 | 5.687 |
+1024 sequential           | 8.021 | 17.248 | 11.497 |
+2048 sequential           | 8.026 | 16.849 | 11.481 |
+4096 sequential           | 8.108 | 16.966 | 11.573 |
+8192 sequential           | 9.532 | 26.091 | 17.547 |
+16384 sequential          | 13.224 | 47.222 | 31.138 |
+32768 sequential          | 24.741 | 95.730 | 61.251 |
+random                    | 9.101 | 5.419 | 4.486 |
+random safe               | 8.276 | 5.022 | 4.481 |
+random pf                 | 7.838 | 4.812 | 4.490 |
+stride                    | 7.889 | 5.076 | 4.486 |
+stride safe               | 7.886 | 5.164 | 4.488 |
+stride pf                 | 8.024 | 4.934 | 4.495 |
+#+end_src
+*** strided reading 2 DIMM
+#+begin_src txt
+memory-read-experiment > cargo run -r
+Method         (ns/read)  |   1 t |   6 t |  12 t |
+sequential                | 3.289 | 1.742 | 1.831 |
+sequential pf             | 3.331 | 1.725 | 1.833 |
+sequential offset         | 3.292 | 1.729 | 1.835 |
+sequential offset pf      | 3.232 | 1.730 | 1.835 |
+dbl sequential            | 4.962 | 1.877 | 2.011 |
+dbl sequential pf         | 5.109 | 1.857 | 2.040 |
+trip sequential           | 5.787 | 1.952 | 2.094 |
+trip sequential pf        | 6.077 | 2.009 | 2.207 |
+quad sequential           | 6.610 | 2.031 | 2.110 |
+quad sequential pf        | 6.502 | 1.980 | 2.223 |
+oct sequential            | 6.838 | 2.346 | 2.490 |
+oct sequential pf         | 6.808 | 2.328 | 2.548 |
+hex sequential            | 7.208 | 3.227 | 1.879 |
+hex sequential pf         | 7.166 | 3.328 | 2.968 |
+32 sequential             | 7.896 | 3.409 | 1.940 |
+32 sequential pf          | 8.168 | 3.337 | 1.854 |
+64 sequential             | 6.875 | 2.019 | 2.063 |
+64 sequential pf          | 7.267 | 1.951 | 2.585 |
+128 sequential            | 6.997 | 2.264 | 2.271 |
+256 sequential            | 7.018 | 2.275 | 2.367 |
+512 sequential            | 7.200 | 3.487 | 3.039 |
+1024 sequential           | 7.545 | 10.966 | 6.884 |
+2048 sequential           | 7.294 | 9.182 | 6.656 |
+4096 sequential           | 7.287 | 8.673 | 6.241 |
+8192 sequential           | 7.934 | 13.559 | 9.274 |
+16384 sequential          | 9.594 | 25.168 | 17.262 |
+32768 sequential          | 13.397 | 45.962 | 30.245 |
+65536 sequential          | 21.942 | 93.211 | 49.382 |
+random                    | 8.175 | 2.609 | 2.328 |
+random safe               | 7.599 | 2.484 | 2.323 |
+random pf                 | 7.225 | 2.395 | 2.315 |
+stride                    | 7.245 | 2.380 | 2.284 |
+stride safe               | 7.269 | 2.394 | 2.282 |
+stride pf                 | 7.199 | 2.365 | 2.278 |
+#+end_src
+
+* Remaining questions
+- Why do we not so interleaved refresh intervals between reads from different
+  DIMMs?
+  - Speculative answer: they auto-synchronize. As soon as 1 starts a refresh,
+    the other becomes idle and will also refresh.
+- Why is alternating reads between channels not faster than alternating between
+  groups?
+  - I guess because both are maximally fast?
+- Why is alternating reads between ranks quite a bit slower?
+  - No ideas here; the rank-to-rank switching time should be only a single cycle
+    or so.
+
+#+print_bibliography:
+
