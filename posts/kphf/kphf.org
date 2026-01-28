@@ -1,4 +1,4 @@
-#+title: $k$-Perfect Hash Functions
+#+title: k-Perfect Hash Functions
 #+filetags: wip mphf
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -66,20 +66,20 @@ For minimal k-PHF, the brute-force solution admits $\binom{n}{k,\dots,k}$
 solutions, so needs $(n/k)^n / \binom{n}{k,\dots,k}$ tries, which corresponds to
 $\log e + \log((k!)^{1/k} / k)$ bits.
 
-For load factor $\alpha$, [[https://sagecell.sagemath.org/?q=sezncq][this script]] computes the lower bound of a $k$-PHF.
+For load factor $\alpha$, [[https://sagecell.sagemath.org/?q=sezncq][this script]] computes the lower bound for non-minimal $k$-PHF.
 
 
-| load $\alpha$ |     k=1 |     k=2 |     k=4 |       k=8 |           k=16 |
-|           0.1 | 0.07466 | 0.00849 | 0.00022 | 0.0000003 | 0.000000000001 |
-|           0.2 | 0.15498 | 0.03112 | 0.00259 |   0.00004 |     0.00000002 |
-|           0.3 | 0.24202 | 0.06581 | 0.00989 |   0.00052 |       0.000003 |
-|           0.4 | 0.33724 | 0.11221 | 0.02444 |   0.00267 |        0.00008 |
-|           0.5 | 0.44269 | 0.17114 | 0.04833 |   0.00857 |        0.00068 |
-|           0.6 | 0.56140 | 0.24472 | 0.08410 |   0.02095 |        0.00318 |
-|           0.7 | 0.69828 | 0.33704 | 0.13568 |   0.04360 |        0.01028 |
-|           0.8 | 0.86221 | 0.45624 | 0.21044 |   0.08294 |        0.02699 |
-|           0.9 | 1.07359 | 0.62179 | 0.32631 |   0.15418 |        0.06498 |
-|           1.0 | 1.44269 | 0.94265 | 0.58893 |   0.35509 |        0.20832 |
+| load $\alpha$ |     k=1 |     k=2 |     k=4 |       k=8 |           k=16 |             k=32 |           k=64 |            k=128 |
+|           0.1 | 0.07466 | 0.00849 | 0.00022 | 0.0000003 | 0.000000000001 |                  |                |                  |
+|           0.2 | 0.15498 | 0.03112 | 0.00259 |   0.00004 |     0.00000002 | 0.00000000000002 |                |                  |
+|           0.3 | 0.24202 | 0.06581 | 0.00989 |   0.00052 |       0.000003 |     0.0000000004 |                |                  |
+|           0.4 | 0.33724 | 0.11221 | 0.02444 |   0.00267 |        0.00008 |        0.0000002 | 0.000000000003 |                  |
+|           0.5 | 0.44269 | 0.17114 | 0.04833 |   0.00857 |        0.00068 |         0.000012 |    0.000000009 | 0.00000000000001 |
+|           0.6 | 0.56140 | 0.24472 | 0.08410 |   0.02095 |        0.00318 |          0.00020 |       0.000002 |     0.0000000006 |
+|           0.7 | 0.69828 | 0.33704 | 0.13568 |   0.04360 |        0.01028 |          0.00149 |        0.00009 |        0.0000009 |
+|           0.8 | 0.86221 | 0.45624 | 0.21044 |   0.08294 |        0.02699 |          0.00677 |        0.00113 |          0.00009 |
+|           0.9 | 1.07359 | 0.62179 | 0.32631 |   0.15418 |        0.06498 |          0.02404 |        0.00755 |          0.00188 |
+|           1.0 | 1.44269 | 0.94265 | 0.58893 |   0.35509 |        0.20832 |          0.11967 |        0.06761 |          0.03770 |
 
 ** Estimated lower bounds for variants
 
@@ -161,6 +161,11 @@ by the first half. In the end, this uses 1.4 bits/key as well.
 
 So, the optimal choice must be to have somewhere between $0$ and $n$ bins of
 size $1$ halfway through.
+
+** Optimal bucket bunction for minimal k-PHF
+See [cite/t:@k-perfect-hashing]:
+- [[https://github.com/stefanfred/engineering-k-perfect-hashing/blob/master/include/hash-displace/OptimalBucketFunction.hpp][github:stefanfred/engineering-k-perfect-hashing/.../OptimalBucketFunction.hpp]]
+- [[https://github.com/stefanfred/engineering-k-perfect-hashing/blob/master/src/muericalIntegrationBucketFunction.cpp][github:stefanfred/engineering-k-perfect-hashing/.../muericalIntegrationBucketFunction.cpp]]
 
 * Halfway bin-size for $k=2$
 
@@ -277,6 +282,34 @@ How many bits/key do we need? Then derive bucket function from that.
 - Choose a seed that optimizes =entropy(seed) + entropy(remaining work)=.
 - Somehow encode all these seeds efficiently. To use consensus we'd need to
   actually consider multiple tries for each seed.
+
+* Practical idea?
+Inspired by IcebergHT [cite:@iceberg-ht], see
+[[file:../hash-table-bounds/hash-table-bounds.org::#iceberg-ht][this post on hash table bounds]] for a screenshot.
+
+1. We make buckets of 64 elements.
+2. We store a 64-byte (single-cache line) filter for each bucket, containing an 8-bit
+   fingerprint for each element.
+   - This allows much larger k than if we store key-value pairs inline directly.
+   - With 64-bit keys and 64-bit values, we'd pretty much need 2 cache misses anyway?
+3. Rather than falling back to secondary structures, as in IcebergHT, we put a
+   64-PHF in front of this. See table at the top for space bounds. At 90% load:
+   0.0075 bits/elem, or 2MB metadata for a 16GB array of 64bit total key-value pairs.
+   - As usual when using a bucket function, almost all queries will be answered
+     using a small prefix anyway.
+
+Drawback: 64 8-bit fingerprints has 25% false-positive rate for both positive
+and negative queries. We could try something like storing the EF encoding of 60
+10-bit fingerprints?
+- Store 8 bits explicitly
+- Store 128bit 01 mask with unary encoding of how often a multiple of 256 is crossed.
+
+Even stronger:
+- map 128 keys to a cache line, and store 4-bit fingerprints + another 4 bits
+  using EF.
+- Since the keys are sorted by fingerprint, we roughly know where to look, and
+  so we can start probing from the expected location outwards.
+   
 
 #+print_bibliography:
 
