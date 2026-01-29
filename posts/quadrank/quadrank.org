@@ -6,7 +6,7 @@
 #+toc: headlines 3
 #+hugo_level_offset: 1
 #+hugo_aliases: /posts/dna-rank
-#+date: <2025-11-09 Sun>
+#+date: <2026-01-25 Sun>
 
 $$\newcommand{\rank}{\mathsf{rank}}$$
 $$\newcommand{\rankall}{\mathsf{rankall}}$$
@@ -17,9 +17,9 @@ $$\newcommand{\rankall}{\mathsf{rankall}}$$
 :END:
 
 *Motivation.* Given a text,
-a /rank/ query $\rank(p, c)$ counts the number of occurrences of
-character $c$ among the first $p$ characters of the text.
-Space-efficient methods to answer rank queries form an important
+a query $\rank(q, c)$ counts the number of occurrences of
+character $c$ among the first $q$ characters of the text.
+Space-efficient methods to answer these rank queries form an important
 building block in many succinct data structures.
 For example, the FM-index [cite:@fm-index] is a widely used data
 structure that uses rank queries to locate all occurrences of a pattern in a text.
@@ -29,39 +29,41 @@ fast as possible. Thus, data structures should have high /throughput/ when used
 with /many threads/.
 
 *Contributions.*
-For the $\sigma=2$ binary alphabet, we develop =BiRank=.
+For the $\sigma=2$ binary alphabet, we develop =BiRank= with 3.28% space overhead.
 It merges the central ideas of two recent papers: (1)
 we interleave (inline) offsets in each cache line of the underlying bit vector
 [cite:@spider], reducing cache-misses, and (2)
 these offsets are to the /middle/ of each block so that only half of it needs
 popcounting [cite:@engineering-rank].
-In =QuadRank=, we extend these techniques to the size $\sigma=4$ (DNA) alphabet.
+In =QuadRank= (14.4% space overhead), we extend these techniques to the $\sigma=4$ (DNA) alphabet.
 
-Both data structures are optimized for high throughput, answering many queries
-as fast as possible, by adding /prefetch/ instructions to start loading the required
-cache lines ahead of time.
+Both data structures typically require only a single cache miss per query, making
+them highly suitable for high throughput and memory bound settings.
+To enable batch-processing, we support /prefetching/ the cache line required to answer a query.
 
 *Results.*
-=BiRank= has a space overhead of 3.125% and =QuadRank= has a space overhead
-of 14%. They are around $1.5\times$ faster than methods that do not use
-inlining. Prefetching gives another up to $2\times$ speedup, at which point the RAM
-bandwidth becomes a hard limit on the total throughput.
+=BiRank= and =QuadRank= are around $1.5\times$ and $2\times$ faster than
+similar-overhead methods that do not use inlining.
+Prefetching gives an additional $2\times$ speedup, at which point the
+dual-channel DDR4 RAM
+bandwidth becomes a hard limit on the total throughput. With prefetching, both
+methods outperform all other methods apart from SPIDER [cite:@spider] by $2\times$.
 
 When using QuadRank in a toy count-only FM-index, this results into up to $4\times$
 speedup over Genedex, a state-of-the-art batching FM-index implementation.
 
 * Introduction
-Given a fixed text $T=t_0\dots t_{n-1}$ of length $n$ over an alphabet $\Sigma$ of size $\sigma$, a /rank/
-query $\rank_T(p, c)$ counts the number of occurrences of character $c\in
-\Sigma$ in the first $p$ ($0\leq p\leq n$) characters of the text[fn::Like
+Given a fixed text $T=t_0\dots t_{n-1}$ of length $n$ over an alphabet $\Sigma$ of size $\sigma$, a
+query $\rank_T(q, c)$ counts the number of occurrences of symbol $c\in
+\Sigma$ in the first $q$ ($0\leq q\leq n$) characters of the text[fn::Like
 Rank9 [cite:@rank9] and most (but not all) other implementations, we follow Dijkstra's advise [cite:@dijkstra-numbering] and
 start numbering at zero.]:
 $$
-\rank_T(p, c) := \sum_{i\in \{0, \dots, p-1\}} [T_i = c].
+\rank_T(q, c) := \sum_{i\in \{0, \dots, q-1\}} [t_i = c].
 $$
 In most literature, the binary alphabet of size $\sigma=2$ is used, in which
 case the text is simply a string of $n$ bits. In this case, we also write
-$\rank_T(p) := \rank_T(p, 1)$ to count the number of $1$ bits.
+$\rank_T(q) := \rank_T(q, 1)$ to count the number of $1$ bits.
 
 Of interest are space-efficient data structures that
 can answer these queries quickly. Indeed, there exist /succinct/ data structures
@@ -72,18 +74,9 @@ When the bitvector itself is stored explicitly,
 a tight lower bound on the space usage is $n + \Omega(n \log\log n / \log n)$
 bits [cite:@rank-space-bound;@rank-optimal-space-bound].
 
-A fast and widely used implementation is Rank9 [cite:@rank9], which has a fixed
-$25\%$ space overhead.
-Many subsequent works have reduced the space overhead, usually at the cost of
-slightly slower queries. For example, poppy [cite:@poppy] is quite small with
-only 3.125% overhead. In practice, nearly all fast implementations have some small
-constant overhead, making them /compact/ ($n+O(n)$ bits) but not /succinct/
-($n+o(n)$ bits). See the next section for a detailed overview of past work.
-
-*QuadRank.* In this paper, we first develop fast data structures for rank over the binary
-alphabet (BiRank) by combining many existing techniques. We then extend these results to
-the $\sigma=4$ (DNA) alphabet in QuadRank, which has direct applications to both the
-FM-index and wavelet trees.
+A fast and widely used implementation is Rank9 [cite:@rank9], which has a fixed $25\%$ space overhead.
+Many subsequent works have reduced the space overhead to as little as 1.6%, as detailed in [[*Background]].
+In practice, most implementations have fixed overhead, making them /compact/ ($n+O(n)$ bits) but not /succinct/.
 
 *FM-index.*
 A primary application of Rank queries is in the /FM-index/ [cite:@fm-index], a
@@ -99,11 +92,11 @@ and this paper started as an attempt to speed this up.
 For alphabets of arbitrary size, /wavelet trees/ [cite:@wavelet-tree]
 or the /wavelet matrix/ [cite:@wavelet-matrix]
 can be used
-instead, which need $\lg_2 \sigma$ queries to a binary rank structure. Recently,
+instead, which both need $\lg_2 \sigma$ queries to a binary rank structure. Recently,
 quad wavelet trees [cite:@quad-wavelet-tree] have been introduced, following
 earlier theoretical [cite:@compressed-representations] and practical
 [cite:@multiary-wavelet-trees] results on multi-ary wavelet trees.
-Quad wavelet trees use rank over a $\sigma=4$ /quad vector/ as a building block,
+Quad wavelet trees use rank over a /quad vector/ as a building block,
 and thus need only $\log_4 \sigma$ rank queries, leading to $2\times$ to
 $3\times$ speedups.
 
@@ -115,44 +108,44 @@ In particular, this allows using all cores/threads of the CPU as well as
 processing queries in /batches/ inside each thread, to hide the memory latency.
 
 Current benchmarks usually measure the throughput of answering rank queries in a
-for loop, but this does not take into account the possibility for batching, nor
-does it include the effects of running many threads in parallel.
-As we will see, many existing methods become bottlenecked by the total memory
-bandwidth of the CPU when used in a high-throughput setting, and we specifically
-design our data structures to make efficient use of the memory bandwidth.
+for loop on a single thread, but this does not take into account the possibility for batching, nor
+does it capture the effects of running many threads in parallel.
+As we will see, in a high-throughput setting, many existing methods become
+bottlenecked by the total memory bandwidth of the CPU. We specifically
+design our data structures to use the memory bandwidth maximally efficient.
 
 *Contributions.*
 We develop two data structures, BiRank and QuadRank, that support
-high-throughput rank queries over texts over alphabets of size 2 and 4 of length
-up to $2^{43}$ bits (1 TiB) or $2^{45}$ characters (8 TiB).
-respectively).
+high-throughput rank queries over texts over alphabets of size 2 and 4.
 Our Rust library is available at https://github.com/RagnarGrootKoerkamp/quadrank.
+# of length up to $2^{43}$ bits (1 TiB) or $2^{45}$ characters (8 TiB). respectively).
 
 Both of them integrate a number of existing techniques (see next section),
 and are /not/ designed to support select queries, allowing for more optimizations.
-Specifically, BiRank integrates (1) inlining of L2 into the bitvector
+Specifically, BiRank has 3.28% overhead and integrates (1) inlining of L2 into the bitvector
 [cite:@spider], which reduced cache misses, (2) 
-paired-blocks with mask-lookup [cite:@engineering-rank], halving the number of popcounts, and (3) an additional
-zeroth tree level [cite:@poppy] that is modified to be only half the size to
-allow ranks up to $2^{40}$.
+paired-blocks with mask-lookup [cite:@engineering-rank], halving the number of popcounts,
+and (3) an additional zeroth tree level [cite:@poppy] that is modified to be
+only half its usual size.
 
-QuadRank extends the ideas of BiRank, but has roughly $4\times$ larger space overhead
-since it stores offsets for each character. It combines the cache-locality of the
+QuadRank extends the ideas of BiRank, but has roughly $4\times$ larger space
+overhead (14.4%)
+since it stores metadata for each symbol. It combines the cache-locality of the
 implementation in BWA-MEM [cite:@bwa-mem] with the low overhead of
 quad vectors [cite:@quad-wavelet-tree-preprint] and a transposed bit layout for
 faster queries [cite:@awry-optimized-fm-index;@engineering-rank].
-QuadRank is optimized for returning ranks for all 4 characters at once by using
+QuadRank is optimized for returning ranks for all 4 symbols at once by using
 AVX2 instructions, which is useful for approximate pattern matching in an FM-index.
 
-Both data structures usually only need a single cache line from RAM to answer
-queries (as long as the 0.05% resp. 0.20% overhead L1 array fits in L3 cache),
-and we provide an API to prefetch this when processing queries in
-batches. We added similar prefetch instructions to other popular rank libraries
-as well.
+Both data structures need only a single cache line from RAM to answer
+queries as long as the input is less than roughly 16 GiB,
+and we provide an API to prefetch cache lines to enable efficient
+batch-processing of queries.
+As a side-effect, we also added prefetching to some other libraries.
 
 *Results.*
-For both data structures, we implement many variants that have different
-space-time tradeoffs and use different ways of encoding the L1 and L2 values.
+For both data structures, we implement a number of variants that have different
+space-time trade-offs.
 When used in a for loop, BiRank is up to $1.5\times$ faster than the next-fastest rust
 implementation of equal size, with the speedup being larger when using many
 threads.
@@ -162,136 +155,149 @@ the memory throughput, and BiRank is $2\times$ faster than all others because it
 only needs to read 1 instead of 2 cache lines from RAM.
 
 Similarly, QuadRank is at least $1.5\times$ faster than the next-fastest Rust
-library (QWT [cite:@quad-wavelet-tree]), and $2\times$ faster after adding
+library, QWT [cite:@quad-wavelet-tree], and $2\times$ faster after adding
 prefetch instructions, again being bottlenecked by the RAM throughput.
 
 Inspired by genedex [cite:@genedex], we further develop a small
 toy-implementation of a count-only FM-index that uses batching and
-multithreading. This leads to an implementation that is $1.5\times$ faster when
-using QuadRank compared to QWT's quad vector at 12.5% space overhead, and
-$4\times$ faster than genedex at 100% space overhead.
+multithreading. At 12.5% overhead, our implementation is $1.5\times$ faster when
+using QuadRank compared to using QWT's quad vector.
+And at 100% space overhead, we are $4\times$ faster than genedex.
 
 * Background
 We briefly go over some previous papers containing rank structures for either
 $\sigma=2$ or $\sigma=4$ in chronological order and list their main technical contributions.
 Both the poppy [cite:@poppy] and pasta [cite:@pasta] papers contain a nice
 overview as well.
-We note that many of these papers develop a rank
-structure in the context of the larger /rank and select/ problem, where there
-are slightly different design trade-offs.
+Note that many of these papers develop a rank structure in the context of the
+larger /rank and select/ problem, where there are different design trade-offs.
 Additionally, work on /compressed/ bitmaps is omitted here.
-
-We follow the L0/L1 (superblock)/L2 (block) notation of [cite/t:@poppy] and
-[cite/t:@pasta] for the (up to) 3 levels of the tree.
 
 Most data structures are schematically depicted in [[ranks]].
 
+*Terminology.*
+For later reference, we summarize our terminology, mostly following [cite/t:@poppy] and [cite/t:@pasta].
+The raw data is split into /superblocks/ (the first level, L1) that are further
+split into /blocks/ (L2).
+For each superblock, an L1 /offset/ is stored, representing the number of 1-bits
+before the superblock. For each block, an L2 /delta/ is stored, typically representing the
+number of 1-bits preceding it inside the superblock.
+The /overhead/ of a data structure is the increase in space consumption relative
+to the size of the input data.
+We use bp (base pair) as the unit for 2-bit encoded DNA characters, and
+occasionally use the Rust syntax =u64= for a 64-bit variable and =u64x4= for a
+256-bit SIMD register containing 4 64-bit words.
+A /symbol/ is an element of the alphabet $\Sigma$, whereas
+a /character/ is an element of a string.
+
 *Classic succinct approach.*
 As a baseline, [cite/t:@succinct-data-structures]
-store the bitvector, and then two levels of blocks alongside this.
-The bitvector is split into /blocks/ of length $\lfloor\log(n)/2\rfloor$ bits,
-and $\lfloor\log n\rfloor$ blocks together form a /superblock/.
-The first level L1 of the tree then contains a $\lceil\log n\rceil$-bit /offset/ for each
+store the bitvector, and two levels of blocks alongside this.
+/Blocks/ consist of $\lfloor\log(n)/2\rfloor$ bits,
+and $\lfloor\log n\rfloor$ blocks form a /superblock/.
+The first level L1 of the tree then contains a $\lceil \log n\rceil$ bit /offset/ for each
 superblock, counting the number of set bits preceding it.
-The second level L2
-stores for each block a $\lceil\log \log n\rceil$-bit /delta/ counting the number of one
-bits preceding it inside its superblock.
+The second level L2 stores for each block a $\lceil\log \log n\rceil$ bit
+/delta/ counting the number of one bits preceding it inside its superblock.
 
 *A practical approach.*
-[cite/t:@practical-rank-select] are observe that the classic method above
+[cite/t:@practical-rank-select] observe that the classic method above
 has 66.85% overhead in practice for $n=2^{30}$.
-They replace a $\sqrt{n}$-size lookup table for popcounts by a sum of
+They replace a size $\sqrt{n}$ lookup table for popcounts by a sum of
 precomputed per-byte lookups. (Meanwhile, CPUs natively support 64-bit =popcount=
 instructions.)
-They suggest to use a 2-level tree with 32-bit L1 values covering a 256-bit
-superblock that is split into 8 32-bit blocks, for each of which an 8-bit L2
-delta is stored.
-Further, they suggest to use a /single/-level tree
-storing a 32-bit L1 offset after every e.g. $4\cdot 32$ bits. A linear scan of popcounting up
-to $4$ 32-bit words takes more compute, but has the benefit of cache locality and only
-requires 2 instead of 3 memory accesses.
+They use 256-bit superblocks with a 32-bit offset, containing 8
+32-bit blocks, each with their own 8-bit delta.
+Alternatively, they introduce a /single/-level tree
+storing a 32-bit L1 offset after every e.g. $4\cdot 32$ bits, omitting L2.
+This requires popcounting more words, but has the benefit of improved
+cache-locality compared to a two-level tree.
 
 *Rank9: interleaving levels.*
 /Rank9/ [cite:@rank9] has 25% overhead and /interleaves/ the L1 and L2 levels of the classic tree.
-It is designed specifically with 512-bit cache lines in mind: each block is 64
-bits, and 8 blocks form a /basic block/. For each basic block, the interleaved
-tree stores a 64-bit integer with the offset of the basic block, and 7
-9-bit deltas (the reason for the name) in an additional 64-bit word.
-This needs two cache misses per query, and is very fast in practice,
-specifically because it only needs to popcount a single 64-bit word, which is done
+Each block is 64
+bits, and 8 blocks form a 512-bit superblock, exactly matching a cache line.
+For each superblock, the interleaved
+tree stores a 64-bit integer with the offset of the superblock, and 7
+9-bit deltas (for all but the first block) in an additional 64-bit word.
+This needs two cache misses per query (for the L1 array and bits), and is very fast in practice.
+Specifically it only needs to popcount a single 64-bit word, which is done
 using /broadword programming/ (also known as SWAR, SIMD Within A Register).
 
-*Rank and select.*
-[cite/t:@simple-rank-select] develop a data structure for rank and select, and
-use the extra information stored for the select queries to speed up the linear
-scan in the method of [cite/t:@practical-rank-select].
+# *Rank and select.*
+# [cite/t:@simple-rank-select] develop a data structure for rank and select, and
+# use the extra information stored for the select queries to speed up the linear
+# scan in the method of [cite/t:@practical-rank-select].
 
 *Poppy: reducing space.*
 /Poppy/ [cite:@poppy] is optimized for space and has only 3.125% overhead.
 First, it makes the observation that performance is largely determined by the
 number of cache misses. Thus, it uses larger blocks of 512 bits. It then re-uses
-Rank9's interleaved index with two modifications. First, 64-bit superblocks (L1)
-cover 4 basic blocks,
-containing one 32-bit offset (L1) and 3 10-bit counts (L2) per 512-bit block. To handle 64-bit
-outputs, it stores an additional zero layer (L0) of the tree with the 64 bit offset
-after every $2^{32}$ input bits.
+Rank9's interleaved index with two modifications.
+Each superblocks contains 4 blocks, and for each superblock it stores a 32-bit
+offset (L1) followed by 3 10-bit popcounts of the first 3 blocks.
+Queries then require a prefix-sum over these counts.
+To handle 64-bit outputs, it stores an additional zero layer (L0) of the tree,
+with a full 64 bit offset after every $2^{32}$ input bits.
 
-*DNA alphabet.*
-BWA-MEM [cite:@bwa-mem] implements a 100% overhead rank data structure on $\sigma=4$ DNA
-that is fully inline, requiring only a single cache-miss per query.
-In each cache line, it stores 4 64-bit offsets, followed by 256 bits encoding
-128 characters.
+*BWA-MEM: DNA alphabet.*
+BWA-MEM [cite:@bwa-mem] implements a 100% overhead rank data structure on $\sigma=4$ DNA.
+It interleaves L1 offsets with the data, and requires only a single cache-miss per query.
+In each cache line, it stores 4 64-bit offsets (one for each DNA character),
+followed by 256 bits encoding 128 bp.
 
 *SDSL.* The succinct data structure library (SDSL) [cite:@sdsl] implements Rank9
 and introduces =rank_support_v5=, which has 6.25% overhead. It uses superblocks of
-2048 bits. For each, it stores a 64-bit offset (L1) and 5 11-bit deltas (packed
-into 64 bits) to all but the first of 6 $6\cdot 64$-bit blocks.
+2048 bits. For each, it interleaves a 64-bit offset (L1) and 5 11-bit deltas (packed
+into 64 bits) to all but the first of 6 blocks covering $6\cdot 64$ bit.
+=rank_support_il= interleaves 64-bit offsets with 512-bit blocks.
 
 *EPR-dictionaries: arbitrary $\sigma$.*
 EPR-dictionaries [cite:@epr-dictionaries] work for arbitrary alphabet. For
 $\sigma=4$, they use 64-bit (32 bp) blocks and have 42% overhead, and
-effectively store a 2-level rank structure for each character.
-Compared to earlier work, the main novelty is to store the packed representation
-of the text, rather than $\sigma$ 1-hot encoded bitvectors, each with their own
-rank structure.
+interleave an independent 2-level rank structure for each character.
+Compared to earlier work, space is saved by storing a packed representation
+of the text instead of $\sigma$ 1-hot encoded bitvectors.
 
 *B-trees.*
 [cite/t:@rank-select-mutable-bitmaps] diverge from the classic approach and
 introduce a rank and select structure based
-on highly tuned B-trees that takes 3.6% extra space. Here, each rank query traverses
-around $\log_{16} n$ levels of the tree, with the middle levels packing 16
+on highly tuned B-trees that have 3.6% overhead. Each rank query traverses
+roughly $\log_{16} n$ levels of the tree, with the middle levels packing 16
 32-bit values in a cache line. Due to efficient caching of the top levels of the
 tree, performance is similar to poppy, although not as fast as rank9.
 
 *AWFM: transposed layout and batching/prefetching.*
-The AWFM-index and its Rust implementation AWRY [cite:@awry-optimized-fm-index] builds on FM-index on a size $\sigma=6$
+The AWFM-index and its Rust implementation AWRY [cite:@awry-optimized-fm-index] builds an FM-index on a size $\sigma=6$
 alphabet of 4 DNA characters as well as a sentinel and ambiguity symbol.
-It uses blocks of 256 3-bit characters, preceded by 5 64-bit offsets padded to
+It uses blocks of 256 3-bit characters, preceded by 5 64-bit offsets that are padded to
 512 bits. Each block is encoded using a /strided/ or /transposed layout/:
 instead of concatenating the 3 bits of each character, it stores 3 256-bit
 vectors containing bit 0, bit 1, and bit 2 of each character.
 This allows for more efficient popcounting.
-The FM-index processes queries in batches of size 4, and prefetches* memory
+The FM-index processes queries in batches of size 4, and prefetches memory
 needed for the next rank operation as soon as possible.
 
-*Pasta: larger L2 values and faster queries.* /PastaFlat/ [cite:@pasta;@pasta-preprint] has the same space 3.125% overhead as Poppy,
-but improves rank query time by 8%. Specifically, it avoids Poppy's need to take a prefix
-sum over L2 counts: it doubles the size of each superblock to 128 bits covering
+*Pasta: larger L2 values and faster queries.*
+/PastaFlat/ [cite:@pasta;@pasta-preprint] has the same 3.125% space overhead as Poppy,
+but improves query time by 8% by  avoiding Poppy's need to take a prefix
+sum over L2 counts. Pasta doubles the metadata for each superblock to 128 bits, covering
 8 512-bit blocks of 4096 bits in total. It stores a 44-bit offset (L1) followed by 7 12-bit deltas (L2) from the start of the
 superblock to each block.
 A second structure, /PastaWide/ (3.198% overhead) uses 16-bit values for L2, which allows faster
 select queries using SIMD instructions.
-Each superblock covers 128 blocks and stores a 64-bit L1 value, this time /not/
+Here, each superblock covers 128 blocks and stores a 64-bit L1 value, this time /not/
 interleaved with the L2 values, and the L0 level is dropped.
 
 *Quad vectors: extending PastaFlat to $\sigma=4$.*
 /Quad wavelet trees/ internally use /quad vectors/
 [cite:@quad-wavelet-tree-preprint;@quad-wavelet-tree], which have a layout very
 similar to PastaFlat.
-Super blocks cover 8 512-character blocks and store $\sigma$ times 128 bits of data.
-This takes $4\times$ more space, but since the text double in space as
+Super blocks cover eight 512 bp blocks and stores 128 bits of data for each of
+the 4 symbols.
+This takes $4\times$ more space per character, but since the text doubles in space as
 well, the overhead only doubles to 6.25%.
-Alternatively, 256-character blocks can be used to reduce the number of cache
+Alternatively, 256 bp (512 bit) blocks can be used to reduce the number of cache
 misses, using 12.5% overhead.
 
 *SPIDER: interleaving bits for minimal cache-misses.*
@@ -302,118 +308,110 @@ L1 superblocks store a 64-bit offset for each 128 blocks, taking only 0.1% extra
 space and thus likely fitting in a cache.
 
 *Paired-blocks: halving the overhead.*
-/Paired-blocks/ [cite:@engineering-rank] is an idea that halves the memory
-usage again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L2) deltas to the start of /each/ block,
-here we store 16-bit deltas to the middle of each /pair/ of blocks.
-Similarly, the 64-bit L1 offset is to the middle of the superblock.
+/Paired-blocks/ (pfBV) [cite:@engineering-rank] is an idea that halves the memory
+usage again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L2)
+deltas to the start of /each/ 512-bit block,
+here we store 16-bit deltas to the middle of each /pair/ of 512-bit blocks.
 Then, the second block can add a prefix-popcount to this as usual, while
-the first block can /subtract/ a suffix-popcount instead.
+the first block can /subtract/ a /suffix/-popcount instead.
+Similarly, the 64-bit L1 offset is to the /middle/ of a twice-as-large superblock.
 This is similar to the /alternate counters/ idea for the FM-index by
 [cite/t:@fm-gpu], where, for alphabet size 4, each block stores half the offsets.
-A small complication with this design is that conditionally shifting away a
+A small complication with this design is that conditionally popcounting a
 prefix /or/ suffix of bits is slightly slower. Instead, [cite/t:@engineering-rank]
-introduce a /mask lookup table/ that stores the mask for each position.
+introduce a lookup table that stores a precomputed mask for each position.
 Lastly, for $\sigma=4$, this paper uses the transposed layout of
 AWFM, but calls it /scattered/ instead.
 
 #+name: ranks
-#+caption: Schematic overview of rank data structures. The top and bottom half are for $\sigma=2$ and $\sigma=4$ respectively. Each line shows the overhead and a single /superblock/ (not to scale) of each data structure. In black, on the right, are the /basic blocks/ containing (bitpacked) data. L1 /offsets/ (teal) are either absolute, or sometimes relative to a 64-bit L0 value (green). They usually count the number of 1-bits/characters before the start of the superblock (teal dot), or to the middle of the superblock for paired and pfBV. L2 /deltas/ (yellow) count from the start of the superblock to the start of each block (yellow dots). Only for poppy do they count individual blocks (yellow lines). For paired, pfBV, BiRank, and QuadRank, L2 deltas are to the middle of each (pair of) block(s). AWFM, (p)fBV, and QuadRank store the text /transposed/, alternating 64-bit words of high/low bits.
+#+caption: Schematic overview of rank data structures. The top and bottom half are for $\sigma=2$ and $\sigma=4$ respectively. Each line shows a data structure (and notable (re)implementations) with its overhead and the layout of a single /superblock/ (not to scale).
+#+caption: Each structure stores up to 3 vectors containing (interleaved) superblocks offsets, block deltas, and raw bits.
+#+caption: On the right (black) are the /blocks/ containing (bitpacked) data. Each superblock contains a single L1 /offset/ (teal) that is either absolute, or sometimes relative to a 64-bit L0 value (green). They usually count the number of 1-bits/characters before the start of the superblock as indicated by the teal dot, or to the middle of the superblock for paired variants. L2 /deltas/ (yellow) count from the start/middle of the superblock to the start of each block (yellow dots). Only for poppy they count individual blocks (yellow lines). For paired, paired fBV, BiRank, and QuadRank, L2 deltas are to the middle of each (pair of) block(s). AWFM, (paired) fBV, and QuadRank store the text /transposed/, alternating words of low and high bits.
 #+attr_html: :class inset large
-[[file:./figs/ranks.svg]]
+[[file:./figs/rank-overview.svg]]
 
 ** Further implementations
-While we're at it, we now list some Rust crates containing additional (re)implementations
-do not necessarily directly correspond to a paper.
+:PROPERTIES:
+:CUSTOM_ID: implementations
+:END:
+We now list some specific Rust crates containing (re)implementations of rank structures.
 
-*QWT.* QWT [cite:@qwt-repo] implements =RSQVector256= and =RSQVector512=
+*QWT.* =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) implements =RSQVector256= and =RSQVector512=
 corresponding to the Quad Vectors in the paper [cite:@quad-wavelet-tree] with
 12.5% and 6.25% overhead. It further contains =RSWide=, which implements the
 PastaFlat structure of [cite/t:@pasta] (omitting the L0 layer), and =RSNarrow=,
 which exactly implements Rank9.
 
-*Sux.* Sux [cite:@sux-repo] contains an implementation of Rank9, as well as five
-versions of /RankSmall/[fn::https://docs.rs/sux/latest/sux/rank_sel/struct.RankSmall.html].
-These are all variants on Rank9, but use Poppy's L0 to allow for 32-bit L1
-values. They vary in the number of =u32= used to store the L2 values, and the
+*Sux.* =sux= ([[https://github.com/vigna/sux-rs][github:vigna/sux-rs]]) [cite:@sux-repo] contains an implementation of Rank9, as well as five
+versions of /RankSmall/.
+These are all variants on Rank9, but use Poppy's 64-bit L0 to allow for 32-bit L1
+values. They vary in the number of =u32= used to store the L2 values and the
 width of the L2 values. A special case is =RankSmall3= (3.125% overhead), which stores 3 11-bit
-values in a single 32-bit word by using 0-extension for the implicit 0-bit of
+values in a single 32-bit word by using 0-extension for the implicit high 0-bit of
 the first value.
 
-*Genedex.* Genedex [cite:@genedex] implements variants of the data structures of
-[cite/t:@engineering-rank]. It is designed for $\sigma>2$, but also supports
-$\sigma=2$. It uses blocks of 64 or 512 characters. Each block stores $\log_2
-\sigma$ 64- or 512-bit words containing the bits in transposed layout. 
-For each block, =Flat{64,512}= stores $\sigma$ 64-bit (or 32-bit) L1 offsets (and L0 and L2 are unused).
-=Condensed64= and =Condensed512= /do/ use L2 and generalize PastaWide by storing
-$\sigma$ 16-bit deltas in L2 and $\sigma$ 64-bit offsets in L1 for each superblock.
-Note that for $\sigma=4$, 512-character blocks span two cache lines.
-
-The genedex crate further provides an FM-index implementation that uses batching of queries,
-resulting in the currently fastest Rust FM-index.
-
-*Bitm.* Bitm is part of bsuccinct [cite:@bsuccinct]. Its =RankSimple= (6.25%
+*Bitm.* =bitm= ([[https://github.com/beling/bsuccinct-rs][github:beling/bsuccinct-rs]]) is part of bsuccinct [cite:@bsuccinct]. Its =RankSimple= (6.25%
 overhead) stores a 32-bit L1 offset for every 512 bit block.
-=RankSelect101111=[fn::https://docs.rs/bitm/0.5.2/bitm/struct.RankSelect101111.html] (read: 10-11-11) has 3.125% overhead and is the same as
+=RankSelect101111= (read: 10-11-11) has 3.125% overhead and is the same as
 =RankSmall3= of sux.
 
-*Non-evaluated implementations.*
-We excluded the following implementations from the evals since they are not
-(close to) Pareto optimal:
-- *Bio*[fn::https://docs.rs/bio/3.0.0/bio/data_structures/rank_select/struct.RankSelect.html] [cite:@rust-bio] has a =RankSelect=
-  structure that stores a 64-bit offset after every configurable number of 32-bit
-  words, but the implementation is inefficient both in terms of space and time.
-- *RsDict*[fn::https://github.com/sujayakar/rsdict] is based on
-  [cite/t:@simple-rank-select] and uses a compact encoding, leading to a
-  large time overhead.
-- *Sucds*[fn::https://github.com/kampersanda/sucds/tree/main] provides an
-  implementation of Rank9, which is already covered by Sux.
-- *Succinct*[fn::https://github.com/tov/succinct-rs] provides both Rank9 (already
-  covered) and JacobsonRank (slower and larger).
-- *Vers*[fn::https://github.com/Cydhra/vers/tree/master] provides =RsVec=, which
-  implements PastaWide, but with superblocks spanning $2^{13}$ rather than $2^{16}$ bits.
+*Genedex.* =genedex= ([[https://github.com/feldroop/genedex][github:feldroop/genedex]]) [cite:@genedex] implements variants of the data structures of
+[cite/t:@engineering-rank]. It is designed for $\sigma>2$, but also supports
+$\sigma=2$.
+=Flat512= stores the text using 4 indicator bitvectors and uses 4 interleaved copies of SPIDER, one for each symbol.
+=Flat64= is the same but with 64-character blocks.
+=Condendensed512= implements the flattened bit vectors (fBV) of
+[cite/t:@engineering-rank], with blocks representing 512 transposed
+characters, and using $\sigma$ interleaved copies of PastaWide.
+# The genedex crate further provides the currently fastest Rust-based FM-index
+# implementation that uses batching of queries.
 
-** Summary of terminology
-- offset: absolute number of 1-bits before a block
-- delta: number of 1-bits from start of super block to current block
-- L0: optional 64-bit values
-- L1: super block offsets
-- L2: block deltas or counts
-- blocks: the bits themselves
+*Further Rust implementations.*
+We did not include the following libraries in the evaluations because they are not (close to) Pareto optimal.
+ *Bio* [cite:@rust-bio] has a =RankSelect=
+structure that stores a 64-bit offset after every few 32-bit words, but is not
+very optimized.
+ *RsDict* implements a compact
+encoding [cite:@simple-rank-select], making it relatively slow.
+ *Sucds* implements Rank9, which is already covered.
+ *Succinct* provides both Rank9 and
+JacobsonRank, which is both slower and larger.
+ *Vers_vecs* implements PastaWide, but with superblocks spanning $2^{13}$ rather than $2^{16}$ bits.
 
 * BiRank
-BiRank is a rank data structure over binary input. It can be constructed
-from a slice of already-packed data (=BiRank::new(&[u8])=), or it can grow an
-existing allocation using =BiRank::new_from_ownded(Vec<u8>)=, so that very
-little memory overhead is needed.
-It provides one function =rank_unchecked(&self, q: u64) -> u64= that
-takes a position in $[0, n]$ and returns the number of =1= bits /before/ it:
+BiRank is a rank data structure over binary input.
+It can be constructed in parallel from a slice of already-packed data ([[birank-api]]) and
+provides  It provides =rank_unchecked= and =prefetch= functions.
+
+#+name: birank-api
+#+caption: Overview of the data stored by BiRank and the functions it provides.
 #+begin_src rust
-trait BinaryRank {
-    fn new(bits: &[u8]) -> Self;
-    fn new_from_owned(bits: Vec<u8>) -> Self;
-    fn rank(&self, q: u64) -> u64; // Return the number of 1 bits _before_ pos q.
-    fn prefetch(&self, q: u64);    // Start loading the cache line containing bit q.
+type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned.
+struct BiRank {
+    superblocks: Vec<u32>, // 32-bit L1 offset after division by 2^11.
+    blocks: Vec<Block>,    // 512-bit blocks interleaving 16-bit deltas with 496 data bits.
+}
+impl BiRank {
+    fn new(bits: &[u8]) -> Self { ... }   // Parallel construction from bit-packed data.
+    fn rank(&self, q: u64) -> u64 { ... } // 0<=q<=n. Returns the number of 1 bits _before_ pos q.
+    fn prefetch(&self, q: u64) { ... }    // Starts loading the cache line containing bit q.
 }
 #+end_src
 
 *Goal: single cache-miss queries.*
 Our primary design goal is to minimize the number of cache misses on large (many
 GB) inputs, to enable efficient usage in high-throughput settings where the
-memory bandwidth is the bottleneck. A single cache-miss to read the
-current block is inevitable, and so we want to avoid any further cache misses.
+memory bandwidth is the bottleneck. A single cache-miss is inevitable, and so we must avoid any further cache misses.
 This means that any additional data should fit in L3, and thus be at most, say,
-16MB for many-GB inputs.
+16MB for many-GB inputs. This already excludes e.g. the 1.6% overhead of Paired,
+which would only support 1 GiB of input.
 
 *Interleaved L2.*
-The smallest relative size of L1 and L2 deltas is obtained by storing a single 16-bit
-value per pair of cache line-sized blocks, as done by Paired.
-Unfortunately, this 1.6% space overhead would already overflow the cache for
-inputs over 1 GiB. Thus, we use SPIDER's [cite:@spider] technique of interleaving the
-16-bit L2 values with the bits, so they are read as part of the first cache line
+Like SPIDER [cite:@spider], BiRank stores two vectors, one consisting of L1
+superblock offsets, and one consisting of blocks with 16-bit inlined L2 deltas.
+16-bit L2 deltas with the bits, so they are read as part of the first cache line
 (line 6 of [[birank-code]]), alongside $512-16=496$ input bits.
 This has an overhead of $16 / 496 = 3.226\%$.
-To correct for the 16 initial bits during queries, we increment $q$ by 16 before
-further processing it (line 7).
 
 *L2-delta to the middle.*
 To reduce the amount of work needed for popcounting, we apply a variant of the paired-blocks
@@ -425,7 +423,7 @@ the second half (lines 8 and 10). We either subtract or add this to the delta (l
 which is optimized into a branchless =cmov= instruction.
 
 *Masking.*
-Instead of a for-loop and bit-shifting, we prefer a branchless technique that
+Instead of a for loop over the words in the block and bit-shifting, we prefer a branchless technique that
 always covers all 256 bits.
 Uncounted bits are masked out (line 9) via a 256-bit mask that is
 precomputed for each $0\leq q\leq 512$, again following
@@ -433,15 +431,15 @@ precomputed for each $0\leq q\leq 512$, again following
 512]= (line 2-4), which fits in a typical 32 KiB L1 cache.
 
 #+name: birank-code
-#+caption: Simplified code snippet for computing the rank of a single block.
+#+caption: Simplified code snippet for computing the rank of a prefix of a single block.
 #+begin_src rust
-type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned
-// pos   0: 111...111, pos   1: 011...111, ..., pos 255: 000...001
-// pos 256: 000...000, pos 257: 100...000, ..., pos 511: 111...110
+// Little-endian mask values:
+// MASKS[  0]: 111...111, MASKS[  1]: 011...111, ..., MASKS[255]: 000...001
+// MASKS[256]: 000...000, MASKS[257]: 100...000, ..., MASKS[511]: 111...110
 static MASKS: [[u64; 4]; 512] = ...;
 fn rank(block: &Block, mut q: u64) -> u64 {
     let delta = block[0][0] & (u16::MAX as u64); // read the first 16 bits
-    q += 16;
+    q += 16;                      // skip the 16 delta bits.
     let half = block[q/256];
     let masked = half & MASKS[q]; // bit-wise and of array elements.
     let popcount = masked[0].count_ones() + masked[1].count_ones() +
@@ -453,38 +451,47 @@ fn rank(block: &Block, mut q: u64) -> u64 {
 *Size of a superblock.*
 Each superblock must contain at most $2^{16}$ bits, so that the 16-bit L2 deltas
 can represent them. Thus, we could fit $\lfloor 2^{16} / 496\rfloor = 132$
-blocks inside each superblock, but we round this down to 128 so the superblock
+blocks inside each superblock, but we round this down to 128 so that the superblock
 index is a right-shift of the block index.
-32-bit superblocks have relative size $32 / (128\cdot 496) =
+32-bit superblock offsets have relative size $32 / (128\cdot 496) =
 0.05\%$ of the input bitvector, so that a 16 MiB L3 cache can support a 32 GiB input.
 The total overhead becomes $0.05\% + 3.226\% = 3.28\%$.
 
 *Shifted 32-bit L1 offset.*
-Poppy [cite:@poppy] uses a 64-bit zeroth level, so that 32-bit
+Poppy [cite:@poppy] uses an additional 64-bit zeroth level, so that 32-bit
 L1 values are sufficient. Even though the L0 layer is already small, with one
 value per $2^{32}$ bits of input, we can remove it completely.
 Let $o<2^{43}$ be the offset to the start of a superblock.
-We will store $o/2^{11}$ in the 32-bit L1 value. The remainder, $o\bmod 2^{11}$,
-is added to the 16-bit L2 deltas for each block in the superblock.
+We will store $\lfloor o/2^{11}\rfloor$ in the 32-bit L1 value. The remainder, $o\bmod 2^{11}$,
+is added to the 16-bit L2 delta for each block in the superblock.
 This is possible, because those ranks are at most $(128-1) \cdot 496 < 2^{16} - 2^{11}$.
 
-*TODO: L1-offset to the middle.*
-One technique to halve the required number of L1 values is by using the pairing
-technique [cite/t:@engineering-rank] again on the level of superblocks: 
-we can make pairs of consecutive superblocks and store the offset to the
-boundary between them. Then, L2 deltas should be subtracted from this for the
-first block in the pair, and added for the second block in the pair.
+*Pairing L1 blocks.*
+[cite/t:@engineering-rank] use the pairing technique at /two/ levels: not only
+L2 deltas are to the middle of a block, but also L1 offsets are to the middle of
+a superblock, which can then double in size.
+This halves the size of the L1 superblock array. Blocks in the right half of the superblock
+store the usual delta from the middle. In the left half, the original suggestion
+is to popcount a range of bits /ending/ at the middle.
+We take a different approach: we count a /prefix/ of the first half, and
+let each block store an delta relative to $o-h$, where $o$ is the offset of the
+middle of the superblock, and $h$ is the /total/ number of bits in the first half
+of the superblock. Then, at query time, we conditionally subtract $h$ from the
+answer for queries in the left half of a superblock.
+While the reduced cache usage could be beneficial, in practice, the gains are
+inconsistent and small at best.
 
 *Prefetching.*
 In order to facilitate efficient batched algorithms (see [[#fm-index]]), we provide
 a =prefetch(q)= function that starts loading the two cache line needed for =rank(q)=
-from memory. Since each block contains 496 bits, we simply prefetch the block at index $\lfloor
-q/496\rfloor$ and the superblock L1 offset at index $\lfloor q/496\rfloor / 128$.
+from memory. Since each block contains 496 bits, we simply prefetch =self.blocks[q/496]=
+and =self.superblocks[(q/496)/128]=. For simplicity and reliability, we prefetch
+into all levels of the cache hierarchy.
 
 ** Variants
 We consider a few larger but faster variants of BiRank.
 
-1. *BiRank16* (3.28%) is as described above and inline a 16-bit value in each
+1. *BiRank16* (3.28%) is the original as described above and inlines a 16-bit value in each
    cache line.
 2. *BiRank32* (6.67%) is identical but stores a 32-bit value instead, doubling the overhead.
    This allows for a much ($\approx 2^{16}\times$) smaller L1 array.
@@ -494,39 +501,50 @@ We consider a few larger but faster variants of BiRank.
     and a 9-bit L3 delta ($\leq 256$) from there to 3/4th.
 5. *BiRank64* (14.3%) directly stores a 64-bit value instead, completely removing the need
    for a separate L1 level.
-   In fact, any bit-width $9\leq w\leq 64$ could be chosen to balance overhead in
-   the bitvector with the size of the L1 array.
 6. *BiRank32x2* (14.3%) doubles the overhead again and stores two 32-bit L2 values, shrinking
    the L1 array.
-7. *BiRank64x2* (33.3%) /again/ doubles the overhead, and removes the L1 level.
+7. *BiRank64x2* (33.3%) /again/ doubles the overhead, and completely removes the L1 level.
+8. (TODO) *BiRankR9* (33.3%) is an inline version of Rank9: it inlines a 64-bit
+   L1 offset, followed by a 64-bit word containing 6 9-bit deltas to the start
+   of each remaining 64-bit word.
+
+# TODO: Figure?
 
 * QuadRank
 QuadRank is the extension of BiRank to the 2-bit $\sigma=4$ (DNA) alphabet.
-It can be constructed from bitpacked data. Rank queries can now be either for a
-specific symbol, or for all 4 symbols at once.[fn::Note that we do not include a
-dedicated function to count a range, as is commonly used by the FM-index,
-because the associated branch-misses would hurt performance.]
+It can be constructed in parallel from bitpacked data. Rank queries can now be either for a
+specific symbol, or for all 4 symbols at once.
+Note that we do not include a dedicated function to count a range, as is
+commonly used by the FM-index, because the associated branch-misses would hurt
+performance.
+
 #+caption: QuadRank API.
 #+begin_src rust
+type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned.
+struct QuadRank {
+    superblocks: Vec<[u32;4]>, // 32-bit L1 offset for each symbol after division by 2^13.
+    blocks: Vec<Block>,        // 512-bit blocks interleaving 4 16-bit deltas with 448 data bits.
+}
 trait QuadRank {
-    fn new(characters: &[u8]) -> Self;
-    fn new_from_owned(characters: Vec<u8>) -> Self;
-    fn rank1(&self, q: u64, c: u8) -> u64;  // Return the count of `c` _before_ pos q.
-    fn rank4(&self, q: u64) -> [u64; 4];    // Return the count of each symbol before pos q.
-    fn prefetch(&self, q: u64);  // Start loading the cache line containing character q.
+    fn new(characters: &[u8]) -> Self;      // Parallel construction from bitpacked input.
+    fn rank1(&self, q: u64, c: u8) -> u64;  // Returns the count of `c` _before_ pos q.
+    fn rank4(&self, q: u64) -> [u64; 4];    // Returns the count of each symbol before pos q.
+    fn prefetch(&self, q: u64);  // Starts loading the cache line containing character q.
 }
 #+end_src
+
 As with BiRank, QuadRank is optimized for having as few cache misses as possible.
-In particular, the data-layout is the same, but with the L1 and L2 data
-replicated for each character: each cache-line contains 4 16-bit deltas and 224
+In particular, the data-layout is nearly the same, but with the L1 and L2 data
+replicated for each symbol: each cache-line contains 4 16-bit deltas and 224
 characters (448 bits), and after every 256 cache lines ($256\cdot 224 = 57344 <
-2^{16}$) a superblock of 4 32-bit L1 values is stored, which are now divided by $2^{13}$.
+2^{16}$) a superblock of 4 32-bit L1 values is stored, which are now divided by
+$2^{13}$, since $128 \cdot 448 + 2^{13} = 2^{16}$).
 
-The overhead for L2 and L1 is
-$4\cdot 16 / 448 + 4\cdot 32/(256\cdot 448) = 14.29\% + 0.11\% = 14.40\%$, and
-in particular, a 16 MiB cache can support nearly 16 GiB of input.
+The inlined L2 overhead is $4\cdot 16 / 448 = 14.29\%$ and the L1 overhead is
+$(4\cdot 32) / (256 \cdot 448) = 0.11\%$, for 14.40% overhead in total.
+A 16 MiB L2 array can support nearly 16 GiB of input.
 
-Since we would like to return the rank of all 4 symbols, more time is spent on
+Since we would like to return the rank of all 4 symbols at once, relatively more time is spent on
 popcounting than in the binary case. Since the data layout is mostly the same,
 we now focus on a number of optimizations to compute all ranks efficiently.
 
@@ -534,45 +552,45 @@ we now focus on a number of optimizations to compute all ranks efficiently.
 Compared to the layout for binary input, the main difference is that we now
 store the
 input data in /transposed/ (or /strided/) layout
-[cite:@awry-optimized-fm-index;@engineering-rank] (rather than /packed/): ignoring the inline L2 data
+[cite:@awry-optimized-fm-index;@engineering-rank] (as opposed to /packed/). Ignoring the inline L2 data
 for the moment, the 256 characters in a block are split into 4 groups of 64.
 Each group of 64 characters is encoded as two 64-bit values, one consisting of
-the negation of all low bits, and one of the negation all high bits.
+the /negation/ of all low bits, and one of the /negation/ all high bits.
 Lastly these 4 pairs of 64-bit words are
-concatenated. The 4 16-bit L2 values replace the bits corresponding to the 32
+concatenated. The 4 16-bit L2 values replace the 64 bits corresponding to the 32
 first characters, with 2 values replacing high bits and 2 values replacing low
-bits. The query position is incremented by 32 to skip over these. TODO see figure.
+bits, as shown in the bottom row of [[ranks]].
 
 The main benefit of this layout is that it makes more efficient use of popcount
 instructions: with the packed layout, each word only covers 32 characters,
-whereas now this increases to 64.
+whereas now this increases to 64, so that word-sized popcounts are used efficiently.
 
 As an example, for input string =0123= with packed encoding =00011011=, we store
 =l=1010= (negated low bits) and =h=1100= (negated high bits). To query all
-occurrences of =2=, we split its value =10= into ~cl=-0=0~ and ~ch=-1=11..11~.
+occurrences of =2= ([[quadrank-code]] lines 12,13,17), we split its value =10= into ~cl=-0=0~ and ~ch=-1=11..11~.
 Then we compute ~(l^cl)&(h^ch)=1010&0011=0010~, which we can popcount to get the
 number of =2= characters.
 
 *rank1.* Computing the rank for a single character is as before: we retrieve the
-32-bit L1 offset, multiply it by $2^{13}$ (we can afford to use a larger
-shift now, as $128 \cdot 448 + 2^{13} = 2^{16}$), then add the 16-bit delta for
-the current character. Lastly, we add or remove the count for 128 characters in either the first or
-second half of the cache line, processed in two chunks of 64 characters.
+32-bit L1 offset, multiply it by $2^{13}$, and then add the 16-bit delta for
+the current block and character (lines 6,7). Lastly, we add or remove the count for up to 128 characters in either the first or
+second half of the cache line, processed in two chunks of 64 characters (lines 9,10,14,19).
 
-*4-way popcount.* To return the rank of all 4 characters, we essentially do the
+*4-way popcount.* To return the rank of all 4 symbols, we essentially do the
 above method 4 times in parallel in =u64x4= 256-bit AVX2 SIMD registers. In particular,
 =cl= and =ch= are replaced by constants =[!0, 0, !0, 0]= and =[!0, !0, 0, 0]=
-that represent one character per lane. To popcount the number of 1-bits in each
+that represent one symbol per lane. To popcount the number of 1-bits in each
 lane, we use Mula's algorithm [cite:@sse_popcount;@avx2_popcount]. Essentially,
 this splits each byte into two 4-bit nibbles and for each does a
 =_mm256_shuffle_epi8= instruction to do a 16-way lookup returning the
 precomputed number of ones. It then adds these two values, resulting in per-byte
 popcounts, and finally uses the =_mm256_sad_epu8= instruction to take a
 horizontal sum of the 8 bytes in each 64-bit lane. 
-
 We convert the counts to =u32x4= and then
 conditionally negate them using =_mm_sign_epi32(counts, u32x4::splat(q-128))=,
 which multiplies each lane by the sign of =q-128= (i.e., -1, 0, or 1).
+
+TODO: Math/pseudocode here and elsewhere?
 
 #+name: quadrank-code
 #+caption: Simplified code snippet for computing the rank of a single quadblock.
@@ -606,128 +624,99 @@ methods that reduce the amount of characters to be counted from 128 to 64.
 There is more variation here than in the binary case: we can use packed (P) or
 transposed layout (T), and we can avoid using the pairing technique
 (Bidirectional vs Forward) to save a small
-overhead for negating values. This is just a small selection of possibilities,
+CPU overhead for negating values. This is just a small selection of possibilities,
 and not all implementations are equally optimized.
 
 - *QuadRank16* (TB, 14.40%) is as described above and inlines 4 16-bit values
   containing the rank to the middle of each block.
 - *QuadRank32* (TB, 33%) instead uses 4 32-bit values, making the L1 array much smaller.
-- *QuadRank24_8* (TB, 33%) leaves space for $3\cdot 64$ characters and splits this
-  into 3 sub-blocks, storing an L2 delta to the boundary between the first two, and
-  a L3 delta to the end. This way, only a 64-character popcount remains.
+- *QuadRank24_8* (TB, 33%) leaves space for 3 groups of 64 characters and splits this
+  into 3 sub-blocks, storing an L2 delta to the end of the first and third
+  group. This way, only a 64-character popcount remains.
 - *QuadRank7_18_7* (PB, 33%) uses a normal packed layout. It stores an 18-bit L2 to
   the middle of 6 32-character blocks, and two 7-bit L3 deltas to 1/6th and
   5/6th.
-- *QuadRank64* (TB, 50%) stores 4 64-bit values, as does BWA-MEM, removing the L1 array. This only
+- *QuadRank64* (TB, 100%) stores 4 64-bit values, as does BWA-MEM, removing the L1 array. This only
   leaves space for 128 characters, so each half is now only 64 of them.
-- *QuadRank32_8x4* (PF, 50%) also uses packed layout. It stores a 32-bit L2 delta to the
+- *QuadRank32_8x4* (PF, 100%) uses packed layout. It stores a 32-bit L2 delta to the
   start of the block, and 4 8-bit L3 deltas to each 32-character sub-block.
-- *QuadRank32x2* (PF, 50%) stores 2 32-bit L2 deltas to the start and halfway point,
+- *QuadRank32x2* (PF, 100%) stores 2 32-bit L2 deltas to the start and halfway point,
   and does a forward scan.
 
-TODO:
-- introduce & use bp instead of 'character'
-  
-* Application: Batching FM-index
-:PROPERTIES:
-:CUSTOM_ID: fm-index
-:END:
-
-To showcase an application of our high-throughput data structure, we develop a
-toy implementation[fn::https://github.com/RagnarGrootKoerkamp/quadrank/blob/master/fm-index/src/fm.rs] of an FM-index for the $\sigma=4$ DNA alphabet.
-Inspired by Movi [cite:@movi;@movi2] and genedex [cite:@genedex]
-we process queries in batches and prefetch memory for upcoming rank queries.
-For simplicity, our implementation only counts the number of matches and does
-not support locating them. It only supports exact forward searching, and does not
-implement bidirectional search or search schemes [cite:@search-schemes;@columba;@search-schemes-sahara].
-We use a prefix lookup table for the first 8
-characters, and handle a single sentinel (=$=) character by storing its position
-in the Burrows-Wheeler transform (BWT) [cite:@bwa-mem;@fm-gpu;@bwt].
-
-The main function =query_batch= takes a batch of $B=32$ queries and returns an
-array of 32 BWT-ranges indicating where each query matches.
-Similar to genedex, we keep an array of the indices of /active/ queries whose interval is not
-empty yet. As long as there are active queries, we loop over all active queries
-twice. First, we detect queries that were completed and /swap-pop/ them from the
-active list, and then prefetch the memory needed for the rank queries. Then, in
-a second loop, we perform the rank queries and LF-mapping for each
-active query. We do /not/ optimize pairs of rank queries for small ranges to
-avoid branch-misses.
-
-We briefly tried alternative ways to batch queries, such as replacing a query by
-a new one as soon as it runs out of matches, but this did not improve
-performance.
-
-TODO: pseudocode?
+TODO: Figures?
    
 * Results
 Both our implementation of BiRank and QuadRank and the
 evaluations can be found at https://github.com/RagnarGrootKoerkamp/quadrank.
-All experiments are run on an AVX2 Intel Core i7-10750H CPU with 6 cores and
+All experiments are run on an AVX2 Intel Core i7-10750H Skylake CPU with 6 cores and
 hyper-threading enabled. The frequency is pinned to 3.0GHz. Cache sizes are 32
 KiB L1 and 256 KiB L2 per core, and 12 MiB shared L3 cache. Main memory is 64
-GiB DDR4 at 3200MHz, split over two 32 GiB banks.
+GiB as dual-channel 32 GiB 3200MHz DDR4 sticks, although the memory controller
+runs at 2933 MHz.
 
-We only compare Rust implementations, as cross-language function calls would
+Benchmarks on a 92-core AMD Zen 4 EPYC with 12 DDR5 memory channels can be found
+in the appendix ([[#epyc]]). The appendix also
+contains additional plots analysing the CPU time for very small inputs
+([[#small-n]]) as well as the scaling of query throughput for increasing input sizes ([[#scaling-n]]).
+
+We only compare Rust implementations, since our aim is to provide a ready-to-use
+Rust library as well. Furthermore, cross-language function calls would
 likely prevent the compiler from optimizing all code equally, and
 re-implementing comparable benchmarks in C++ and getting all libraries to work
 was deemed too much work.
 
-[TODO: The appendix contains additional experiments on AVX512 AMD zen 5 laptop CPU with DDR5
-memory, as well as on a AVX512 EPYC server with XX cores and YY memory.]
-  
 ** BiRank
 :PROPERTIES:
 :CUSTOM_ID: evals-birank
 :END:
-We compare BiRank and its variants against a number of other Rust libraries:
-- =sux= ([[https://github.com/vigna/sux-rs][github:vigna/sux-rs]]) [cite:@rank9;@sux-rs], implementing =Rank9= and =RankSmall{0,1,2,3,4}=.
-  =RankSmall3= is comparable to Poppy [cite:@poppy].
-- =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) [cite:@quad-wavelet-tree], implementing =RSNarrow= (which is Rank9) and
-  =RSWide= (which is PastaFlat).
-- =genedex= ([[https://github.com/feldroop/genedex][github:feldroop/genedex]]) [cite:@genedex], =Condensed{64,512}=
-  (implementing PastaWide but with double the memory).
-- =bitm= [cite:@bsuccinct] implements =RankSelect101111= which again is similar
-  to Poppy and equal to =RankSmall3=.
+We compare BiRank and its variants against the Rust crates mentioned in [[#implementations]].
 
 In order to make the evaluations with prefetching fair, we have created PRs
-adding support for this to each of these
-libraries.[fn::https://github.com/vigna/sux-rs/pull/98,
+adding support for this to each of them.[fn::https://github.com/vigna/sux-rs/pull/98,
 https://github.com/rossanoventurini/qwt/pull/6,
-https://github.com/feldroop/genedex/pull/4.]
+https://github.com/feldroop/genedex/pull/4,
+https://github.com/beling/bsuccinct-rs/pull/14.]
 
-*Excluded.*
-SPIDER ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]) [cite:@spider] was not yet re-implemented in Rust, and so we made a
-variant of BiRank that approximately implements SPIDER's linear-scan for
-popcounting inside a block. Unfortunately, the evaluation scripts are not
+*Excluded libraries.*
+SPIDER ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]) [cite:@spider] was not yet implemented in Rust, so we made a
+variant of BiRank that approximately uses SPIDER's linear-scan for
+popcounting inside a block. Unfortunately, no evaluation scripts are 
 available and the code seems to be untested,
-and so we were unable to compare the performance of the original C implementation.
-
-Paired-blocks ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) [cite:@engineering-rank] also has only been implemented in C++,
-since genedex does not implement the pairing. Nevertheless, genedex was reported
-to be faster (personal communication).
-
-We also exclude the dynamic B-tree ([[https://github.com/jermp/mutable_rank_select][github:jermp/mutable_rank_select]])
-[cite/t:@rank-select-mutable-bitmaps], but consider a Rust-reimplementation of
+so we were unable to compare the performance of the original C implementation.
+Paired-blocks ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) [cite:@engineering-rank] also has only
+been implemented in C++. Nevertheless, genedex was reported to be faster (personal communication).
+Lastly, we exclude the dynamic B-tree ([[https://github.com/jermp/mutable_rank_select][github:jermp/mutable_rank_select]])
+of [cite/t:@rank-select-mutable-bitmaps], but consider a Rust-reimplementation of
 this work a promising direction for future work on select specifically.
 
+---
+LEFT HERE
 
-#+caption: Throughput in a loop on a small input that fits in L2 cache. The red dashed line indicates the minimum time to read a cache line from RAM. 
-#+attr_html: :class inset small
-file:./plots/plot-2-small.png
+*Memory-bound experiments.*
+We move on to large 4 GB (32 Gb) inputs in [[birank-st]].
+In order to see how each data structure does under high load, we test with 1, 6,
+and 12 threads (on a 6 core machine). In each case, we test 1) the /latency/,
+where each query depends on the result of the previous one, 2) the /throughput/
+or a for loop, and 3) the throughput of a for loop where we prefetch memory 32
+iterations ahead.
 
-Notes:
-- Rank9 is fast
-- Spider is slow
-- Our methods are consistently faster than the emperical 7.5ns needed to fetch a cache line.
-- SmallRank@3.125% = poppy
+There are different lower-bounds: the measured latency of the RAM is around 80
+ns/read, which gives a lower-bound of 80/$t$ ns for $t$ threads.
+A single thread only supports a throughput of random access RAM reads of around
+7.5 ns/cache line.
+When using multiple threads, the overall RAM bandwidth of 2.5 ns per random
+access read becomes a bottleneck.
 
-[old caption] space overhead vs time tradeoff for various rank implementations in Rust for varying number of threads. The red lines show latency (first col) and throughput (rest) bounds given by the RAM.
-#+caption: Space-time tradeoff for rank structures on binary input of total size 4GB.
-#+caption: Red lines indicate: (left) the 80ns RAM latency divided by the number of threads, (top) the measured maximum RAM throughput of 1 thread, 7.5ns/cache line, and (rest) the measured maximum total RAM throughput, 2.5 ns/cache line.
-#+caption: In the right column, the transparent markers again show the time for just looping, without our added support for prefetching.
+#+name: birank-st
+#+caption: Space-time tradeoff for rank structures on binary input of total size 4 GB (32 Gb).
+#+caption: The top/middle/bottom row show results for 1/6/12 threads on a CPU with 6 cores.
+#+caption: The left/middle/right column show results for the latency, the throughput of a for loop, and the for loop throughput with prefetching.
+#+caption: Red lines indicate: (left) the roughly 80 ns RAM latency divided by the number of threads, (top mid/right) the 7.5 ns/read maximum random-access RAM throughput of 1 thread, and (rest) the 2.5 ns/cache line total random-access RAM throughput.
+#+caption: In the right column, the transparent markers repeat the for-loop throughput.
 #+attr_html: :class inset large
-file:./plots/plot-2-32G.png
+file:./plots/plot-laptop-st-2-large.png
+
+
 
 Notes:
 - Latency is nearly constant and independent of the method used, since the CPU
@@ -758,51 +747,21 @@ TODO: Legend for small/large dots
 Note: other methods are not optimized for returning all 4 counts, whereas in our
 case that is only slightly slower.
 
-#+caption: Space-time trade-off for size 4 alphabet on small L2-cache sized input.
-#+caption: Small markers indicate time for a =rank(i, c)= query that counts only one symbol, while large markers always return all four ranks.
-#+attr_html: :class inset small
-file:./plots/plot-4-small.png
-
 - Computing all 4 counts is relatively slow for the other methods.
 
+#+name: quadrank-st
 #+caption: Space-time trade-off for size 4 alphabet on 4GB input.
 #+attr_html: :class inset large
-file:./plots/plot-4-16G.png
-** FM-index
-- Setup: /exact/ map simulated 150bp illumina reads with 1% error rate to 500Mbp
-  of viral data. So mapping likely fails after roughly 50 characters.
-TODO:
-- no batching, no prefetching
-- batching, no prefetching
-- check: 12 threads
-*** Perf
-- optimize interval queries when s and t are close?
-- optimize parallel mapping
-  - batch as-is seems best
-  - batch_all, to fill gaps as they open up, appears slower?
-  - batch_interleave, to mix memory and cpu work, needs more attention
-*** Evals
-- compare ext:
-  - AWRY => https://github.com/UM-Applied-Algorithms-Lab/AWRY/issues/44
-  - SDSL => broken so far
-*** Features
-- locate queries via sampled suffix array
-- inexact matching
-- in-text verification
-- bidirectional fm
-
-
-
-#+attr_html: :class inset
-file:./plots/comparison.png
+file:./plots/plot-laptop-st-4-large.png
 
 * Conclusion
 
 ** Future work
-- AVX512
+- optimize for AVX512, NEON, and zen
 - Future work: In AVX512, there is a dedicated popcount instruction that could be used instead.
+  - also, vpternd
 - Further develop FM-index
-- 
+- prefix-rank
 
 * Acknowledgements
 - Heng Li
@@ -811,25 +770,228 @@ file:./plots/comparison.png
   - Simon
   - Felix
   - Giulio
+  - Piotr Beling
+  - Florian Kurpicz
 
 * Appendix
-- Move FM-index here?
-** Further evals (epyc, DDR5, avx512)
+** Math
+*** BiRank
+Given is a text $T = t_0\dots t_{n-1}$ of $n$ binary symbols $\{0,1\}$.
+For a query $q$ ($0\leq q\leq n$),
+$\rank(q) = \sum_{i\in \{0,\dots,q-1\}} [t_i = 1]=\sum_{i\in [q]} t_i$ counts
+the number of 1-bits in the first $q$ characters of the text.
+BiRank uses blocks of $B=496$ bits and superblocks of $S=128\cdot B$
+bits.
+We store an array of $\lceil n/S\rceil$ superblock offsets $s_i =
+\left\lfloor{\rank(i\cdot S)}/{2^{11}}\right\rfloor$.
+In each block, we store a 16-bit delta $b_j$ from the value stored at start of the superblock to the
+middle of the block:
+$$
+b_j := \rank(j\cdot B + B/2) - 2^{11}\cdot s_{\lfloor j/128\rfloor} .
+$$
+By construction, these values are indeed bounded by $b_j \leq S + 2^{11} < 2^{16}$.
+
+A query for position $q$ first determines the block $j_q = \lfloor q/B\rfloor$
+and superblock $i_q = \lfloor q/S\rfloor$. Then the interval of positions for
+its block is $\{j_q\cdot B, \dots, j_q\cdot B+B-1\}$, and
+we can lookup the rank of the middle as $2^{11}\cdot s_{i_q} + b_{j_q} = \rank(j\cdot B+B/2)$.
+We then make a case distinction on whether $q$ lies left or right of the middle
+to determine the final value
+$$
+\rank(q) = 2^{11}\cdot s_{i_q} + b_{j_q} + \begin{cases}
+\phantom{-}\sum_{k\in \{j_q B+B/2, \dots, q-1\}} t_i & \textrm{if }q \geq j_q \cdot B + B/2\\
+-\sum_{k\in \{q, \dots, j_q B+B/2-1\}} t_i & \textrm{if }q < j_q \cdot B + B/2
+\end{cases}.
+$$
+Note that these summations are over at most $B/2=248$ bits (or 256 in
+practice), which can be done efficiently using at most (or exactly, in practice)
+4 popcount instructions.
+
+*** Paired superblocks
+
+TODO
+
+** Additional results
+*** Throughput for small n
+:PROPERTIES:
+:CUSTOM_ID: small-n
+:END:
+
+*CPU-bound experiment.*
+In [[birank-small]], we first benchmark all methods in a for loop on a single thread
+on a small 128KB random input (1.024Mbit) that comfortably fits in the L2 cache. This
+means that memory latency/throughput is unlikely to be a bottleneck, and thus
+gives an idea of the amount of compute each method needs to do as a lower bound.
+We report the /inverse throughput/ (which we will just call throughput), which
+is the amortized time per query when executing 10 M random queries in a for
+loop: =for q in queries { black_box(rank(q)) }=.
+
+As expected, we see a space-time tradeoff, with methods that need more space
+typically being faster. Rank9 (25% overhead) is the fastest, while RankSmall0 is
+small but slow. The BiRank variants are all roughly equally as fast, with the
+BiRank16 variant (3.28% overhead) being slightly slower, but still 2x faster
+than other methods. Notably, it needs less than 7.5ns/query, which is roughly
+the maximum (inverse) throughput of random accesses to the CPUs RAM.
+
+
+#+name: birank-small
+#+caption: Log-log space-time trade-off plot of the throughput of doing rank queries in a for loop. The input is small (128KB) and fits in L2 cache. The red dashed line indicates the maximum throughput of reading a random a cache line from RAM.
+#+attr_html: :class inset small
+file:./plots/plot-laptop-st-2-small.png
+
+#+name: quadrank-small
+#+caption: Space-time trade-off for size 4 alphabet on small L2-cache sized input.
+#+caption: Small markers indicate time for a =rank(i, c)= query that counts only one symbol, while large markers always return all four ranks.
+#+attr_html: :class inset small
+file:./plots/plot-laptop-st-4-small.png
+*** Scaling with size
+:PROPERTIES:
+:CUSTOM_ID: scaling-n
+:END:
+#+name: birank-scaling
+#+caption: Scaling with input size for size 2 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-laptop-n-2.png
+
+#+name: quadrank-scaling
+#+caption: Scaling with input size for size 4 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-laptop-n-4.png
+*** AMC EPYC evals
+:PROPERTIES:
+:CUSTOM_ID: epyc
+:END:
+- 92 cores; 192 threads; 96MB L3 cache per 8 cores
+- DDR5
+- AVX2
+#+name: birank-scaling-epyc
+#+caption: Scaling with input size for size 2 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-server-st-2-large.png
+
+#+name: quadrank-scaling-epyc
+#+caption: Scaling with input size for size 4 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-server-st-4-large.png
+
+#+name: birank-scaling-epyc
+#+caption: Scaling with input size for size 2 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-server-n-2.png
+
+#+name: quadrank-scaling-epyc
+#+caption: Scaling with input size for size 4 alphabet.
+#+attr_html: :class inset large
+file:./plots/plot-server-n-4.png
+
+** Application: Batching FM-index
+:PROPERTIES:
+:CUSTOM_ID: fm-index
+:END:
+
+To showcase an application of our high-throughput data structure, we develop a
+toy implementation[fn::https://github.com/RagnarGrootKoerkamp/quadrank/blob/master/fm-index/src/fm.rs] of an FM-index for the $\sigma=4$ DNA alphabet.
+Inspired by Movi [cite:@movi;@movi2] and genedex [cite:@genedex]
+we process queries in batches and prefetch memory for upcoming rank queries.
+For simplicity, our implementation only counts the number of matches and does
+not support locating them. It only supports exact forward searching, and does not
+implement bidirectional search or search schemes [cite:@search-schemes;@columba;@search-schemes-sahara].
+We use a prefix lookup table for the first 8
+characters, and handle a single sentinel (=$=) character by storing its position
+in the Burrows-Wheeler transform (BWT) [cite:@bwa-mem;@fm-gpu;@bwt].
+
+The main function =query_batch= takes a batch of $B=32$ queries and returns an
+array of 32 BWT-ranges indicating where each query matches.
+Similar to genedex, we keep an array of the indices of /active/ queries whose interval is not
+empty yet. As long as there are active queries, we loop over all active queries
+twice. First, we detect queries that were completed and /swap-pop/ them from the
+active list, and then prefetch the memory needed for the rank queries. Then, in
+a second loop, we perform the rank queries and LF-mapping for each
+active query. We do /not/ optimize pairs of rank queries for small ranges to
+avoid branch-misses.
+
+We briefly tried alternative ways to batch queries, such as replacing a query by
+a new one as soon as it runs out of matches, but this did not improve
+performance.
+
+TODO: pseudocode?
+
+*** Results
+- Setup: /exact/ map simulated 150bp illumina reads with 1% error rate to 500Mbp
+  of viral data. So mapping likely fails after roughly 50 characters.
+TODO:
+- no batching, no prefetching
+- batching, no prefetching
+- check: 12 threads
+**** Perf
+- optimize interval queries when s and t are close?
+- optimize parallel mapping
+  - batch as-is seems best
+  - batch_all, to fill gaps as they open up, appears slower?
+  - batch_interleave, to mix memory and cpu work, needs more attention
+**** Evals
+- compare ext:
+  - AWRY => https://github.com/UM-Applied-Algorithms-Lab/AWRY/issues/44
+  - SDSL => broken so far
+**** Features
+- locate queries via sampled suffix array
+- inexact matching
+- in-text verification
+- bidirectional fm
+
+#+attr_html: :class inset
+file:./plots/comparison.png
 
 * TODO
-- construct from vec
+ANONYMIZE!!!
+** code
+DONE
 - L1 paired/to the middle
+  - Implemented, but not consistently better.
+TODO:
+- construct from vec
 - Optimize mask lookup:
   - Shuffle-based lookup
   - 8-byte version, then overwrite 1 non0/non1 byte
   - 8x long 000111000 vec with byte-aligned load
+- Add a inline Rank9 version of BinaryBlock64x2: 64bit global offset and 6 9bit deltas.
+- flip the bits in low half of split blocks, so popcounting is always from the
+  left, so we can reduce the masks by 2.
+  - NOTE: This can remove the =_mm256_sad_epu8= instruction and might very well
+    make things quite a bit faster!!! => no that's not true
+** paper
+- cite [cite:@evolution-of-mathematical-software]
+- Florian's feedback:
+  #+begin_quote
+ I understand what the dots in the Blocks mean but it might not be clear at first glance. Some things I might would change or at least try:
+- Use different notation when storing deltas in the L1-blocks. Maybe even just a $\Delta$ symbol?
+- Maybe indicate what the L1/L2 blocks are storing. I know that this is done by color right now, but I think a small arrow would be nice.
+- Maybe replace the dots for the Blocks with $\Sigma$ to show that it is the prefix sum?
+  #+end_quote
+  
 
 Omitted for now:
 - 3* [cite:@rank-select-theory-practice]
 
-Evals:
-- input-size scaling plot
-- tiny numbers in plots to distinguish results
+Misc:
+- Funding statement?
 
+** evals
+- rerun benches for Flat64 and Flat512
+- sux: ranksmall4: fix prefetch to read both lines
+  - wontfix
 
+- Run up to 16GB arrays or so for those methods that support it.
+  - add a =try_new= constructor or so
+
+- server freqs:
+  - 3600 usual; down to ~3400 with 192 threads and ~3000 with 192 threads and streaming
+- Note that loading queries itself also is 1/8th cacheline per read
+- investigate spider on server
+  - AMD has better branch prediction???
+  - https://en.eeworld.com.cn/mp/Icbank/a156333.jspx
+  - https://chipsandcheese.com/p/amds-zen-4-part-1-frontend-and-execution-engine
+- AVX512?
+- plot figure sizes smaller, so fonts & symbols are larger
+- mention that not all variants are tested
 #+print_bibliography:
