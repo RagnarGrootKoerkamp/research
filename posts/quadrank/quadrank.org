@@ -51,8 +51,9 @@ dual-channel DDR4 RAM
 bandwidth becomes a hard limit on the total throughput. With prefetching, both
 methods outperform all other methods apart from SPIDER [cite:@spider] by 2$\times$.
 
-When using QuadRank in a toy count-only FM-index, this results into up to 4$\times$
-speedup over Genedex, a state-of-the-art batching FM-index implementation.
+When using QuadRank with prefetching in a toy count-only FM-index, QuadFm, this
+results in a smaller size and up 4$\times$ speedup over Genedex, a state-of-the-art batching
+FM-index implementation.
 
 * Introduction
 Given a fixed text $T=t_0\dots t_{n-1}$ of length $n$ over an alphabet $\Sigma$ of size $\sigma$, a
@@ -164,11 +165,11 @@ Similarly, QuadRank is at least 1.5$\times$ faster than the next-fastest Rust
 library, QWT [cite:@quad-wavelet-tree], and 2$\times$ faster after adding
 prefetch instructions, again being bottlenecked by the RAM throughput.
 
-Inspired by genedex [cite:@genedex], we further develop a small
-toy-implementation of a count-only FM-index that uses batching and
-multithreading. At 12.5% overhead, our implementation is 1.5$\times$ faster when
-using QuadRank compared to using QWT's quad vector.
-And at 100% space overhead, we are 4$\times$ faster than genedex.
+Inspired by genedex [cite:@genedex], we develop QuadFm, a
+toy-implementation of a count-only FM-index that uses batching, prefetching, and
+multithreading. At 14.4% overhead (2.29 bits/bp), our implementation is over 1.5$\times$ faster 
+using QuadRank compared to using QWT's quad vector,
+and at 100% space overhead, QuadFm is 4$\times$ faster than genedex.
 
 * Background
 We briefly go over some previous papers containing rank structures for either
@@ -764,7 +765,7 @@ loop is 1.5$\times$ to 2$\times$ faster than sequential processing.
 With prefetching, this increases to a 3$\times$ speedup over sequential
 processing, and this specifically benefits our memory-bandwidth-frugal methods.
 
-These results also translate to significant speedups when used in an FM-index,
+These results also translate to up to 4$\times$ speedups when used in an FM-index,
 and we hope that batching and multithreading become standard in both
 applications and benchmarks.
 
@@ -786,8 +787,8 @@ support for $\mathsf{locate}$ queries as well.
 I thank Heng Li for motivating me to start this project in an attempt to
 speed up BWA-MEM. I also thank those who were involved in discussions
 surrounding this project or gave feedback on the text:
-Piotr Beling, Felix Leander Droop, Simon Gene Gottlieb, Florian Kurpicz,
-Rob Patro, and Giulio Ermanno Pibiri.
+Rick Beeloo, Piotr Beling, Felix Leander Droop, Simon Gene Gottlieb, Florian Kurpicz,
+Rob Patro, Giulio Ermanno Pibiri, and Peter Sanders.
 
 * Code snippets
 :PROPERTIES:
@@ -1009,13 +1010,13 @@ file:./plots/plot-server-st-4-large.png
 # #+attr_html: :class inset large
 # file:./plots/plot-server-n-4.png
 
-* TODO Application: Batching FM-index
+* TODO QuadFm: A Batching FM-index
 :PROPERTIES:
 :CUSTOM_ID: fm-index
 :END:
 
 To showcase an application of our high-throughput data structure, we develop a
-toy implementation[fn::https://github.com/RagnarGrootKoerkamp/quadrank/blob/master/fm-index/src/fm.rs] of an FM-index for the $\sigma=4$ DNA alphabet.
+toy implementation QuadFm[fn::https://github.com/RagnarGrootKoerkamp/quadrank/blob/master/fm-index/src/quad_fm.rs] of an FM-index for the $\sigma=4$ DNA alphabet.
 Inspired by Movi [cite:@movi;@movi2] and genedex [cite:@genedex]
 we process queries in batches and prefetch memory for upcoming rank queries.
 For simplicity, our implementation only counts the number of matches and does
@@ -1026,8 +1027,8 @@ We use a prefix lookup table for the first 8
 characters, and handle a single sentinel character (=$=) by storing its position
 in the Burrows-Wheeler Transform (BWT) [cite:@bwa-mem;@fm-gpu;@bwt].
 
-The main function =query_batch= takes a batch of $32$ queries and returns an
-array of 32 BWT-intervals indicating where each query matches.
+The main function =query_batch= takes a batch of $32$ queries and returns for
+each the BWT-interval where each query matches.
 Similar to genedex, during the processing, we keep an array of the indices of /active/ queries whose interval is not
 empty yet. As long as there are active queries, we loop over those queries
 twice. First, we detect queries that were completed and /swap-pop/ them from the
@@ -1036,51 +1037,63 @@ a second loop, we perform the rank queries and LF-mapping for each
 active query. We do /not/ optimize pairs of rank queries for small ranges, to
 avoid branch-misses.
 
-We briefly tried alternative ways to batch queries, such as replacing a query by
-a new one as soon as it runs out of matches, but this did not improve
-performance.
+# We briefly tried alternative ways to batch queries, such as replacing a query by
+# a new one as soon as it runs out of matches, but this did not improve
+# performance.
 
 ** Results
-- Setup: /exact/ map simulated 150bp illumina reads with 1% error rate to 500Mbp
-  of viral data. So mapping likely fails after roughly 50 characters.
-TODO:
-- no batching, no prefetching
-- batching, no prefetching
-- 1/6/12 threads
-- sequential/batch/batch+prefetch
-*** Evals
-- compare ext:
-  - AWRY => https://github.com/UM-Applied-Algorithms-Lab/AWRY/issues/44
-  - SDSL => broken so far
+We test our FM-index implementation by building it for a 3.1 Gbp human genome [cite:@chm13v2].
+We simulated 500\,000 150 bp reads and applied 1% uniform random substitution
+errors to them. We then count the number of occurrences of each read in both forward and reverse-complement direction.
 
-#+attr_html: :class inset
-file:./plots/comparison.png
+We compare the size and query throughput of QuadFm against AWRY
+[cite:@awry-optimized-fm-index] and Genedex [cite:@genedex], which
+are both configured to also use an 8-character prefix lookup table and a large suffix-array
+sampling factor. In particular, Genedex already supports query batching.
+We instantiate QuadRank with each of the rank structures for $\sigma=4$.
+As before, we benchmark on 1, 6, and 12 threads on the laptop CPU, and test
+in three modes: /sequential/, where queries are done 1-by-1, /batch/, which does
+32 queries in parallel, and /batch+prefetch/, which additionally prefetches
+cache lines for the next iteration over all queries.
+
+In [[fm-evals]], we see that genedex (blue) is faster than AWRY (purple). Genedex is
+consistently around 1 bit/bp larger than using the same rank structures in
+QuadFm (black), since it uses a size-5 alphabet to handle the sentinel, but otherwise
+they are comparable in performance. Using QuadRank makes QuadFm
+both smaller and up to 40% faster in multithreaded settings.
+Prefetching consistently doubles the throughput, and with 12 threads, QuadFm with
+QuadRank16 (2.29 bits/bp) is over 4$\times$
+faster than Genedex' smallest variant (3.2 bits/bp) and 1.65$\times$ faster
+than its fastest variant (6.75 bits/bp).
+
+#+name: fm-evals
+#+caption: Size and throughput of counting exact matches of 150 simulated queries with a 1% error rate in an FM-index on a human genome.
+#+attr_html: :class inset large
+file:./plots/plot-fm.png
+
 
 * TODO
-ANONYMIZE!!!
-** code
-TODO:
-- Optimize mask lookup:
-  - Shuffle-based lookup
-  - 8-byte version, then overwrite 1 non0/non1 byte
-  - 8x long 000111000 vec with byte-aligned load
-- reverse the bits in low half of split blocks, so popcounting is always from the
-  left, so we can reduce the masks by 2.
-- Do a epi64-native conditional negation of lanes, rather than converting to
-  u32x4 for =sign=.
-** paper
-- Florian's feedback:
-  #+begin_quote
- I understand what the dots in the Blocks mean but it might not be clear at first glance. Some things I might would change or at least try:
-- Use different notation when storing deltas in the L1-blocks. Maybe even just a $\Delta$ symbol?
-- Maybe indicate what the L1/L2 blocks are storing. I know that this is done by color right now, but I think a small arrow would be nice.
-- Maybe replace the dots for the Blocks with $\Sigma$ to show that it is the prefix sum?
-  #+end_quote
+ANONIMIZE!!!
+# ** code
+# TODO:
+# - Optimize mask lookup:
+#   - Shuffle-based lookup
+#   - 8-byte version, then overwrite 1 non0/non1 byte
+#   - 8x long 000111000 vec with byte-aligned load
+# - reverse the bits in low half of split blocks, so popcounting is always from the
+#   left, so we can reduce the masks by 2.
+# - Do a epi64-native conditional negation of lanes, rather than converting to
+#   u32x4 for =sign=.
+# - bench sview: https://crates.io/crates/sview-fmindex
+# ** paper
+# - Florian's feedback:
+#   #+begin_quote
+#  I understand what the dots in the Blocks mean but it might not be clear at first glance. Some things I might would change or at least try:
+# - Use different notation when storing deltas in the L1-blocks. Maybe even just a $\Delta$ symbol?
+# - Maybe indicate what the L1/L2 blocks are storing. I know that this is done by color right now, but I think a small arrow would be nice.
+# - Maybe replace the dots for the Blocks with $\Sigma$ to show that it is the prefix sum?
+#   #+end_quote
 
-Omitted for now:
-- 3* [cite:@rank-select-theory-practice]
-
-** evals
-- rerun benches for Flat64 and Flat512
-- server benches at 4 GiB input
+# Omitted for now:
+# - 3* [cite:@rank-select-theory-practice]
 #+print_bibliography:
