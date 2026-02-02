@@ -124,7 +124,7 @@ design our data structures to use the memory bandwidth maximally efficient.
 *Contributions.*
 We develop two data structures, BiRank and QuadRank, that support
 high-throughput rank queries over texts over alphabets of size 2 and 4.
-Our Rust library is available at https://github.com/RagnarGrootKoerkamp/quadrank.
+# Our Rust library is available at https://github.com/RagnarGrootKoerkamp/quadrank.
 # of length up to $2^{43}$ bits (1 TiB) or $2^{45}$ characters (8 TiB). respectively).
 
 Both of them integrate a number of existing techniques (see next section),
@@ -502,10 +502,11 @@ are chosen for the evaluations.
 6. *BiRank32x2** (14.3%) doubles the overhead again and stores two 32-bit L2 values, shrinking
    the L1 array.
 7. *BiRank64x2** (33.3%) /again/ doubles the overhead, and completely removes the L1 level.
-8. (TODO) *BiRankR9* (33.3%) is an inline version of Rank9: it inlines a 64-bit
+8. *BiRankR9* (33.3%) is an inline version of Rank9: it inlines a 64-bit
    L1 offset, followed by a 64-bit word containing 6 9-bit deltas to the start
    of each remaining 64-bit word.
 
+# TODO: implement R9
 # TODO: Figure?
 
 
@@ -601,7 +602,7 @@ been chosen for the evaluation.
 - *QuadRank32x2* (PF, 100%) stores 2 32-bit L2 deltas to the start and halfway point,
   and does a forward scan.
 
-TODO: Figures?
+# TODO: Figures?
    
 * Results
 Both our implementation of BiRank and QuadRank and the
@@ -987,7 +988,7 @@ At the same time, this reduces the impact of prefetching from 2$\times$ to 1.5$\
 
 For $\sigma=4$, we see that larger data structures are often /slower/.
 We hypothesize that this is because the 1.1GiB L3 cache can hold a larger
-fraction of the data when the overhead is small (<25% of 4 GiB TODO UPDATE).
+fraction of the data when the overhead is small.
   
 #+name: birank-scaling-epyc
 #+caption: Scaling with input size for size 2 alphabet.
@@ -1010,13 +1011,13 @@ file:./plots/plot-server-st-4-large.png
 # #+attr_html: :class inset large
 # file:./plots/plot-server-n-4.png
 
-* TODO QuadFm: A Batching FM-index
+* QuadFm: A Batching FM-index
 :PROPERTIES:
 :CUSTOM_ID: fm-index
 :END:
 
 To showcase an application of our high-throughput data structure, we develop a
-toy implementation QuadFm[fn::https://github.com/RagnarGrootKoerkamp/quadrank/blob/master/fm-index/src/quad_fm.rs] of an FM-index for the $\sigma=4$ DNA alphabet.
+toy implementation QuadFm of an FM-index for the $\sigma=4$ DNA alphabet.
 Inspired by Movi [cite:@movi;@movi2] and genedex [cite:@genedex]
 we process queries in batches and prefetch memory for upcoming rank queries.
 For simplicity, our implementation only counts the number of matches and does
@@ -1072,8 +1073,8 @@ than its fastest variant (6.75 bits/bp).
 file:./plots/plot-fm.png
 
 
-* TODO
-ANONIMIZE!!!
+# * TODO
+# ANONIMIZE!!!
 # ** code
 # TODO:
 # - Optimize mask lookup:
