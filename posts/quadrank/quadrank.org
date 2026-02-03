@@ -41,7 +41,7 @@ In QuadRank (14.4% overhead), we extend these techniques to the $\sigma=4$ (DNA)
 
 Both data structures typically require only a single cache miss per query, making
 them highly suitable for high throughput and memory bound settings.
-To enable batch-processing, we support /prefetching/ the cache line required to answer a query.
+To enable efficient batch-processing, we support /prefetching/ the cache lines required to answer upcoming queries.
 
 *Results.*
 BiRank and QuadRank are around 1.5$\times$ and 2$\times$ faster than
@@ -160,7 +160,6 @@ Prefetching memory improves the throughput of many libraries by around 1.5$\time
 improves BiRank by 2$\times$. In this setting, all methods are bottlenecked by
 the memory throughput, and BiRank is 2$\times$ faster than all others because it
 only needs to read 1 instead of 2 cache lines from RAM.
-
 Similarly, QuadRank is at least 1.5$\times$ faster than the next-fastest Rust
 library, QWT [cite:@quad-wavelet-tree], and 2$\times$ faster after adding
 prefetch instructions, again being bottlenecked by the RAM throughput.
@@ -279,7 +278,7 @@ tree, performance is similar to poppy, although not as fast as rank9.
 The AWFM-index and its Rust implementation AWRY [cite:@awry-optimized-fm-index] builds an FM-index on a size $\sigma=6$
 alphabet of 4 DNA characters as well as a sentinel and ambiguity symbol.
 It uses blocks of 256 3-bit characters, preceded by 5 64-bit offsets that are padded to
-512 bits. Each block is encoded using a /strided/ or /transposed layout/:
+512 bits. Each block is encoded using a similar /strided/ or /transposed layout/:
 instead of concatenating the 3 bits of each character, it stores 3 256-bit
 vectors containing bit 0, bit 1, and bit 2 of each character.
 This allows for more efficient popcounting.
@@ -343,7 +342,7 @@ AWFM, but calls it /scattered/ instead.
 :CUSTOM_ID: implementations
 :END:
 In anticipation of the evaluations,
-we now list some specific Rust (re)implementations of rank structures.
+we list some specific Rust (re)implementations of rank structures.
 
 *QWT.* =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) implements =RSQVector256= and =RSQVector512=
 corresponding to the Quad Vectors in the paper [cite:@quad-wavelet-tree] with
@@ -396,8 +395,7 @@ the number of 1-bits in the first $q$ characters of the text.
 BiRank is a data structure that answers $\rank(q)$ queries in constant time
 using 3.28% space overhead.
 It can be constructed in parallel on multiple threads from a slice of already-packed data and
-provides =rank_unchecked= and =prefetch= functions that assume the argument is
-in $[0, n]$.
+provides =rank= and =prefetch= functions.
 
 *Single cache-miss queries.*
 We aim to minimize the number of cache misses on large (many GB) inputs,
@@ -650,14 +648,14 @@ this work a promising direction for future work on select specifically.
 
 *Setup.*
 For each run, we first build each data structure on a random 4 GiB input and
-generate 10 million random queries.
-Then we run three types of benchmarks. In the first, we measure the average /latency/ of
-each query, by making each query dependent on the result of the previous one.
+generate 10 million random query positions.
+Then we run three types of benchmarks. In the first, we measure the average *latency* of
+sequential queries, by making each query dependent on the result of the previous one.
 In the second, we measure the /inverse throughput/ (i.e., amortized time per
-query, which we will just call throughput) when processing all queries in a for
-loop: =for i in 0..n { BiRank::rank(queries[i]) }=.
-Lastly, we add prefetching, where we prefetch the required cache lines 32
-iterations ahead: =for i in 0..n { BiRank::prefetch(queries[i+32]); BiRank::rank(queries[i]);
+query, which we will just call throughput) when processing the random queries in
+a *for loop*: =for i in 0..Q { BiRank::rank(queries[i]) }=.
+Lastly, we add *prefetching*, where we prefetch the required cache lines 32
+iterations ahead: =for i in 0..Q { BiRank::prefetch(queries[i+32]); BiRank::rank(queries[i]);
 }=[fn::In practice, we must also prefetch the upcoming query values themselves.
 We keep the memory system so busy that it does not have time to do this by
 itself, leading to cache misses on the query values themselves if we do not
@@ -672,7 +670,7 @@ Each measurement is repeated 3 times, and the median is reported.
 #+caption: The left/middle/right column show results for the latency, the throughput of a for loop, and the throughput of a for loop with prefetching.
 #+caption: Red lines indicate: (left) the roughly 80 ns RAM latency divided by the number of threads, (top mid/right) the 7.5 ns/read maximum random-access RAM throughput of 1 thread, and (rest) the 2.5 ns/cache line total random-access RAM throughput.
 #+caption: In the right column, the transparent markers repeat the for-loop throughput.
-#+caption: The legend entries are sorted by increasing overhead.
+#+caption: The legend is sorted by increasing overhead.
 #+attr_html: :class inset large
 #+attr_latex: :placement [t]
 file:./plots/plot-laptop-st-2-large.png
@@ -689,10 +687,10 @@ all other cases, we are limited by the 2.5 ns/cache line throughput of the RAM
 *Analysis.* 
 The first observation is that the latency of all methods is similar, as this is
 always limited by the memory latency. Furthermore, processing queries in a loop
-is consistently faster: around 4$\times$ in a loop, and up to 8$\times$ with
-prefetching, when using a single thread. Using 12 threads halves the gap, but
-nevertheless, this indicates that processing multiple independent queries in each thread
-should be preferred. 
+is around 4$\times$ faster with 1 thread, and up to 8$\times$ with
+added prefetching. Using 12 threads halves the gap, but
+nevertheless, processing multiple independent queries in each thread
+should be preferred to exploit instruction-level parallelism. 
 
 Looking at the middle column, we see that BiRank is just slightly better than other
 methods when using a single thread. This grows to 1.4$\times$ speedup when
@@ -752,14 +750,14 @@ them to size-4 alphabets. We benchmarked them in a high-throughput setting,
 with many threads and batching of multiple queries inside each thread.
 
 For binary input, the previous best data structure is
-SPIDER [cite:@spider], but this did not come with a directly reusable
-implementation. BiRank is usually slightly faster than our reimplementation of SPIDER.
+SPIDER [cite:@spider].
+BiRank is usually slightly faster than our reimplementation of SPIDER.
 When multithreading, both
 are around 1.5$\times$ faster than other methods.
 Additional prefetching improves all methods, and
 doubles the throughput of BiRank, making it 2$\times$ faster than
 all other methods with prefetching.
-This is because BiRank requires only a single cache miss per query, compared to
+BiRank benefits from single-cache-miss per query, compared to
 two for most other methods, and thus makes optimal use of the limited memory bandwidth.
 For QuadRank, the improvement over existing methods is
 already 1.5$\times$ without multithreading, and again 2$\times$ with prefetching.
@@ -780,12 +778,11 @@ it is likely that more modern platforms (Golden Cove, 2021 or zen 5, 2024) admit
 For AVX512, there are dedicated popcount instructions that could be used, while
 ARM NEON only supports 128-bit instructions and will need further work.
 
-More features could also be added, such as in-place parallel construction that
-grows an existing allocation.
-Additionally, a $\mathsf{prefix\_rank}(q, c)$ operation could be added,
-that counts the number of occurrences of characters /at most/ $c$.
-Lastly, our toy FM-index could be developed into a full data structure with
-support for $\mathsf{locate}$ queries as well.
+Additional features could be in-place parallel construction and
+a $\mathsf{prefix\_rank}(q, c)$ operation that counts the number of occurrences
+of characters /at most/ $c$ to support the bidirectional FM-index.
+Lastly, our FM-index could be extended with
+support for $\mathsf{locate}$ queries.
 
 * Acknowledgements
 I thank Heng Li for motivating me to start this project in an attempt to
@@ -1072,11 +1069,13 @@ than its fastest variant (6.75 bits/bp).
 
 #+name: fm-evals
 #+caption: Size and throughput of counting exact matches of 150 simulated queries with a 1% error rate in an FM-index on a human genome.
+#+caption: Vertical grey lines indicate the 2 bits/bp lower bound.
 #+attr_html: :class inset large
 file:./plots/plot-fm.png
 
 
 # * TODO
+# - EXPLAIN SEQUENTIAL=LATENCY vs LOOP~BATCH vs PREFETCH and ILP
 # ANONIMIZE!!!
 # ** code
 # TODO:
