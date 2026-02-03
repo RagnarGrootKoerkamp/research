@@ -25,19 +25,19 @@ building block in many succinct data structures.
 For example, the FM-index [cite:@fm-index] is a widely used data
 structure that uses rank queries to locate all occurrences of a pattern in a text.
 
-In bioinformatics applications, the goal is usually to process a given input as
+In bioinformatics applications, the goal is usually to process large inputs as
 fast as possible. Thus, data structures should have high /throughput/ when used
 with /many threads/.
 
 *Contributions.*
 We first survey existing results on rank data structures.
-For the $\sigma=2$ binary alphabet, we then develop BiRank with 3.28% space overhead.
-It merges the central ideas of two recent papers: (1)
+For the $\sigma=2$ binary alphabet, we then develop BiRank, which has 3.28% space overhead.
+BiRank merges the central ideas of two recent papers: (1)
 we interleave (inline) offsets in each cache line of the underlying bit vector
 [cite:@spider], reducing cache-misses, and (2)
-these offsets are to the /middle/ of each block so that only half of it needs
+these offsets are to the /middle/ of each block so that only half of each needs
 popcounting [cite:@engineering-rank].
-In QuadRank (14.4% space overhead), we extend these techniques to the $\sigma=4$ (DNA) alphabet.
+In QuadRank (14.4% overhead), we extend these techniques to the $\sigma=4$ (DNA) alphabet.
 
 Both data structures typically require only a single cache miss per query, making
 them highly suitable for high throughput and memory bound settings.
@@ -45,14 +45,14 @@ To enable batch-processing, we support /prefetching/ the cache line required to 
 
 *Results.*
 BiRank and QuadRank are around 1.5$\times$ and 2$\times$ faster than
-similar-overhead methods that do not use inlining.
+similar-overhead methods that do not use interleaving.
 Prefetching gives an additional 2$\times$ speedup, at which point the
 dual-channel DDR4 RAM
 bandwidth becomes a hard limit on the total throughput. With prefetching, both
 methods outperform all other methods apart from SPIDER [cite:@spider] by 2$\times$.
 
 When using QuadRank with prefetching in a toy count-only FM-index, QuadFm, this
-results in a smaller size and up 4$\times$ speedup over Genedex, a state-of-the-art batching
+results in a smaller size and up to 4$\times$ speedup over Genedex, a state-of-the-art batching
 FM-index implementation.
 
 * Introduction
@@ -94,14 +94,14 @@ and this paper started as an attempt to speed this up.
 *Wavelet tree.*
 For alphabets of arbitrary size, /wavelet trees/ [cite:@wavelet-tree]
 or the /wavelet matrix/ [cite:@wavelet-matrix]
-can be used
-instead, which both need $\lg_2 \sigma$ queries to a binary rank structure. Recently,
+can be used for succinct rank queries.
+They both need $\lg_2 \sigma$ queries to a binary rank structure. Recently,
 quad wavelet trees [cite:@quad-wavelet-tree] have been introduced, following
 earlier theoretical [cite:@compressed-representations] and practical
 [cite:@multiary-wavelet-trees] results on multi-ary wavelet trees.
 Quad wavelet trees use rank over a /quad vector/ as a building block,
 and thus need only $\log_4 \sigma$ rank queries, leading to 2$\times$ to
-3$\times$ speedups.
+3$\times$ speedups over binary wavelet trees.
 
 *Multithreading and batching.*
 In the past, increasing CPU frequencies led to faster code, but nowadays,
@@ -131,7 +131,7 @@ Both of them integrate a number of existing techniques (see next section),
 and are /not/ designed to support select queries, allowing for more optimizations.
 Specifically, BiRank has 3.28% overhead and integrates (1) inlining of L2 into the bitvector
 [cite:@spider], which reduced cache misses, (2) 
-paired-blocks with mask-lookup [cite:@engineering-rank], halving the number of popcounts,
+pairing with mask-lookup [cite:@engineering-rank], halving the number of popcounts,
 and (3) an additional zeroth tree level [cite:@poppy] that is modified to be
 only half its usual size.
 
@@ -178,7 +178,7 @@ Both the poppy [cite:@poppy] and pasta [cite:@pasta] papers contain a nice
 overview as well.
 Note that many of these papers develop a rank structure in the context of the
 larger /rank and select/ problem, where there are different design trade-offs.
-Additionally, work on /compressed/ bitmaps is omitted here.
+Additionally, work on /compressed/ bitvectors is omitted here.
 
 Most data structures are schematically depicted in [[ranks]].
 
@@ -200,7 +200,7 @@ a /character/ is an element of a string.
 
 *Classic succinct approach.*
 As a baseline, [cite/t:@succinct-data-structures]
-store the bitvector, and two levels of blocks alongside this.
+store the bitvector, and additionally two levels of blocks alongside this.
 /Blocks/ consist of $\lfloor\log(n)/2\rfloor$ bits,
 and $\lfloor\log n\rfloor$ blocks form a /superblock/.
 The first level L1 of the tree then contains a $\lceil \log n\rceil$ bit /offset/ for each
@@ -315,9 +315,9 @@ each cache line stores a 16-bit L2 delta, and 496 input bits.
 L1 superblocks store a 64-bit offset for each 128 blocks, taking only 0.1% extra
 space and thus likely fitting in a cache.
 
-*Paired-blocks: halving the overhead.*
-/Paired-blocks/ (pfBV) [cite:@engineering-rank] is an idea that halves the memory
-usage again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L2)
+*Pairing: halving the overhead.*
+/Pairing/ (pfBV) [cite:@engineering-rank] is an idea that halves the memory
+overhead again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L2)
 deltas to the start of /each/ 512-bit block,
 here we store 16-bit deltas to the middle of each /pair/ of 512-bit blocks.
 Then, the second block can add a prefix-popcount to this as usual, while
@@ -334,7 +334,7 @@ AWFM, but calls it /scattered/ instead.
 #+name: ranks
 #+caption: Schematic overview of rank data structures. The top and bottom half are for $\sigma=2$ and $\sigma=4$ respectively. Each line shows a data structure (and notable (re)implementations) with its overhead and the layout of a single /superblock/ (not to scale).
 #+caption: Each structure stores up to 3 vectors containing (interleaved) superblocks offsets, block deltas, and raw bits.
-#+caption: On the right (black) are the /blocks/ containing (bitpacked) data. Each superblock contains a single L1 /offset/ (teal) that is either absolute, or sometimes relative to a 64-bit L0 value (green). They usually count the number of 1-bits/characters before the start of the superblock as indicated by the teal dot, or to the middle of the superblock for paired variants. L2 /deltas/ (yellow) count from the start/middle of the superblock to the start of each block (yellow dots). Only for poppy they count individual blocks (yellow lines). For paired, paired fBV, BiRank, and QuadRank, L2 deltas are to the middle of each (pair of) block(s). AWFM, (paired) fBV, and QuadRank store the text /transposed/, alternating words of low and high bits.
+#+caption: On the right (black) are the /blocks/ containing (bitpacked) data. Each superblock contains a single L1 /offset/ (teal) that is either absolute, or sometimes relative to a 64-bit L0 value (green). They usually count the number of 1-bits/characters before the start of the superblock as indicated by the teal dot, or to the middle of the superblock for pairing variants. L2 /deltas/ (yellow) count from the start/middle of the superblock to the start of each block (yellow dots). Only for poppy they count individual blocks (yellow lines). For pairing, pairing fBV, BiRank, and QuadRank, L2 deltas are to the middle of each (pair of) block(s). AWFM, (pairing) fBV, and QuadRank store the text /transposed/, alternating words of low and high bits.
 #+attr_html: :class inset large
 [[file:./figs/rank-overview.svg]]
 
@@ -342,7 +342,8 @@ AWFM, but calls it /scattered/ instead.
 :PROPERTIES:
 :CUSTOM_ID: implementations
 :END:
-We now list some specific Rust crates containing (re)implementations of rank structures.
+In anticipation of the evaluations,
+we now list some specific Rust (re)implementations of rank structures.
 
 *QWT.* =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) implements =RSQVector256= and =RSQVector512=
 corresponding to the Quad Vectors in the paper [cite:@quad-wavelet-tree] with
@@ -405,7 +406,7 @@ memory bandwidth is the bottleneck.
 A single cache-miss is inevitable, and so we must avoid any further cache misses.
 This means that any additional data should fit in L3 cache, which is not the
 case for non-interleaved layouts.
-For example, Paired has 1.6% overhead, which would only support 1 GiB of input
+For example, pairing has 1.6% overhead, which would only support 1 GiB of input
 with a 16 MiB L3 cache.
 
 *Interleaved L2.*
@@ -446,7 +447,7 @@ superblocks have an overhead of $32 / S = 0.05\%$. Thus, the total overhead is
 GiB.
 
 *L2-delta to the middle.*
-To reduce the amount of work needed for popcounting, we apply a variant of the paired-blocks
+To reduce the amount of work needed for popcounting, we apply a variant of the pairing
 technique [cite:@engineering-rank]: the 16-bit L2 value is not the delta from
 the start of the superblock to the
 /start/ of the current block ($\rank(j\cdot B)$), but instead to the /middle/ of
@@ -489,7 +490,7 @@ For simplicity and reliability, we prefetch into all levels of the cache hierarc
 We consider a few larger but faster variants of BiRank. The ones marked with a *
 are chosen for the evaluations.
 
-1. *BiRank16** (3.28%) is the original as described above and inlines a 16-bit value in each
+1. *BiRank16** (3.28% overhead) is the original as described above and inlines a 16-bit value in each
    cache line.
 2. *BiRank32* (6.67%) is identical but stores a 32-bit value instead, doubling the overhead.
    This allows for a much ($\approx 2^{16}\times$) smaller L1 array.
@@ -530,7 +531,7 @@ We now divide by $2^{13}$, since $S + (2^{13}-1) < 2^{16}$, which allows inputs
 up to $2^{45}$ characters or 8 TiB.
 The overhead over the $b_i$ deltas is $4\cdot 16 / (2B) = 14.29\%$ and the
 overhead of the offsets is $(4\cdot 32) / (2S) = 0.11\%$, for 14.40% overhead in total.
-A 16 MiB L3 cache can support over 14 GiB of input.
+A 16 MiB L3 cache can support over 14 GiB (61 Gbp) of input.
 
 To compute the rank of all 4 symbols at once,
 relatively more time is spent on popcounting than in the binary case.
@@ -581,12 +582,12 @@ Since returning all 4 counts takes more compute, we specifically focus on
 methods that reduce the amount of characters to be counted from 128 to 64.
 There is more variation here than in the binary case: we can use packed (P) or
 transposed layout (T), and we can avoid using the pairing technique
-(Bidirectional vs Forward) to save the small CPU overhead for negating values.
+(bidirectional (B) vs forward (F)) to save the small CPU overhead for negating values.
 This is just a small selection of possibilities,
 and not all implementations are equally optimized. Those marked with a * have
 been chosen for the evaluation.
 
-- *QuadRank16** (TB, 14.40%) is as described above and inlines 4 16-bit values
+- *QuadRank16** (TB, 14.40% overhead) is as described above and inlines 4 16-bit values
   containing the rank to the middle of each block.
 - *QuadRank32* (TB, 33%) instead uses 4 32-bit values, making the L1 array much smaller.
 - *QuadRank24_8** (TB, 33%) leaves space for 3 groups of 64 characters and splits this
@@ -623,7 +624,7 @@ We only compare Rust implementations, since our aim is to provide a ready-to-use
 Rust library as well. Furthermore, cross-language function calls would
 likely prevent the compiler from optimizing all code equally, and
 re-implementing comparable benchmarks in C++ and getting all libraries to work
-was deemed too much work.
+was deemed infeasible.
 
 ** BiRank
 :PROPERTIES:
@@ -641,7 +642,7 @@ SPIDER ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]) [c
 variant of BiRank that approximately uses SPIDER's linear-scan for
 popcounting inside a block. Unfortunately, we were unable to compare the
 performance against the original C implementation.
-Paired-blocks ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) [cite:@engineering-rank] also has only
+Pairing ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) [cite:@engineering-rank] also has only
 been implemented in C++. Nevertheless, genedex was reported to be faster (personal communication).
 Lastly, we exclude the dynamic B-tree ([[https://github.com/jermp/mutable_rank_select][github:jermp/mutable_rank_select]])
 of [cite/t:@rank-select-mutable-bitmaps], but consider a Rust-reimplementation of
@@ -681,7 +682,7 @@ The results are in [[birank-plot]].
 There are different lower-bounds on the throughput: the measured latency of the RAM is around 80
 ns/read, which gives a lower-bound of 80/$t$ ns/query for $t$ threads (dotted red
 lines). When using only a single thread, we are further bound by its maximum
-random access throughput of around 7.5 ns per cache line (dotted red lines). In
+random access throughput of around 7.5 ns per cache line (dashed red lines). In
 all other cases, we are limited by the 2.5 ns/cache line throughput of the RAM
 (solid red lines).
 
@@ -752,23 +753,25 @@ with many threads and batching of multiple queries inside each thread.
 
 For binary input, the previous best data structure is
 SPIDER [cite:@spider], but this did not come with a directly reusable
-implementation. BiRank is usually slightly faster than our reimplementation.
+implementation. BiRank is usually slightly faster than our reimplementation of SPIDER.
 When multithreading, both
-are around 1.5x faster than other methods.
-Prefetching improves all methods, and
-doubles the throughput of BiRank and QuadRank, making them 2$\times$ faster than
-other methods with prefetching.
-For DNA input, QuadRank is consistently at least 2$\times$ faster than other
-implementations with overhead <15%. 
+are around 1.5$\times$ faster than other methods.
+Additional prefetching improves all methods, and
+doubles the throughput of BiRank, making it 2$\times$ faster than
+all other methods with prefetching.
+This is because BiRank requires only a single cache miss per query, compared to
+two for most other methods, and thus makes optimal use of the limited memory bandwidth.
+For QuadRank, the improvement over existing methods is
+already 1.5$\times$ without multithreading, and again 2$\times$ with prefetching.
 
-In a multithreaded setting, processing multiple independent queries in a for
-loop is 1.5$\times$ to 2$\times$ faster than sequential processing.
-With prefetching, this increases to a 3$\times$ speedup over sequential
-processing, and this specifically benefits our memory-bandwidth-frugal methods.
+Using batching and prefetching with our memory-bandwidth-frugal
+methods allows up to 3$\times$ higher throughput than sequential processing, and
+this increases to 6$\times$ speedup on a server with many more cores but higher memory
+latency.
 
-These results also translate to up to 4$\times$ speedups when used in an FM-index,
-and we hope that batching and multithreading become standard in both
-applications and benchmarks.
+These results also translate to up to 4$\times$ speedups over the
+state-of-the-art when used in an FM-index, and we hope that multithreading,
+batching, and prefetching become standard in both applications and benchmarks.
 
 *Future work.*
 Future work remains in generalizing and optimizing the library for other
@@ -878,7 +881,7 @@ fn rank1(block: &Block, mut q: u64, c: u8) -> u64 {
 :CUSTOM_ID: pairing-math
 :END:
 
-Here we give a variant on the idea of paired superblocks of [cite/t:@engineering-rank].
+Here we give a variant on the idea of pairing superblocks of [cite/t:@engineering-rank].
 Just like we store block offsets $b_j$ to the middle of a block and then branch
 on adding or removing to/from that, we can also let the superblock offsets $s_i$
 be to the middle of a double-sized superblock. Let $S' = 2S=256\cdot B$. We
@@ -976,7 +979,7 @@ Results for 192 threads are nearly identical to using 96 threads.
 similar trend as the earlier results: BiRank and QuadRank are consistently
 faster, with the improvement of BiRank becoming more pronounced as we add more threads.
 With prefetching, BiRank saturates the memory bandwidth when using 92 threads,
-and is then 2x faster than nearly all other methods. One notable difference with the
+and is then 2$\times$ faster than nearly all other methods. One notable difference with the
 laptop benchmarks is that here, SPIDER is as fast as BiRank when using
 prefetching, suggesting that on zen 4, the associated branch misses do not cost nearly as much.
 A further difference is that benefit of independent queries over sequential
