@@ -40,7 +40,7 @@ popcounting [cite:@engineering-rank].
 In QuadRank (14.4% overhead), we extend these techniques to the $\sigma=4$ (DNA) alphabet.
 
 Both data structures typically require only a single cache miss per query, making
-them highly suitable for high throughput and memory bound settings.
+them highly suitable for high-throughput and memory-bound settings.
 To enable efficient batch-processing, we support /prefetching/ the cache lines required to answer upcoming queries.
 
 *Results.*
@@ -173,7 +173,7 @@ and at 100% space overhead, QuadFm is 4$\times$ faster than genedex.
 * Background
 We briefly go over some previous papers containing rank structures for either
 $\sigma=2$ or $\sigma=4$ in chronological order and list their main technical contributions.
-Both the poppy [cite:@poppy] and pasta [cite:@pasta] papers contain a nice
+Both the [cite:@poppy] and [cite:@pasta] contain a nice
 overview as well.
 Note that many of these papers develop a rank structure in the context of the
 larger /rank and select/ problem, where there are different design trade-offs.
@@ -199,7 +199,7 @@ a /character/ is an element of a string.
 
 *Classic succinct approach.*
 As a baseline, [cite/t:@succinct-data-structures]
-store the bitvector, and additionally two levels of blocks alongside this.
+stores the bitvector, and additionally two levels of blocks alongside this.
 /Blocks/ consist of $\lfloor\log(n)/2\rfloor$ bits,
 and $\lfloor\log n\rfloor$ blocks form a /superblock/.
 The first level L1 of the tree then contains a $\lceil \log n\rceil$ bit /offset/ for each
@@ -583,7 +583,7 @@ transposed layout (T), and we can avoid using the pairing technique
 (bidirectional (B) vs forward (F)) to save the small CPU overhead for negating values.
 This is just a small selection of possibilities,
 and not all implementations are equally optimized. Those marked with a * have
-been chosen for the evaluation.
+been chosen for the evaluations.
 
 - *QuadRank16** (TB, 14.40% overhead) is as described above and inlines 4 16-bit values
   containing the rank to the middle of each block.
@@ -605,7 +605,7 @@ been chosen for the evaluation.
    
 * Results
 Both our implementation of BiRank and QuadRank and the
-evaluations can be found at https://anonymous.4open.science/r/quadrank-F7BC/README.md.
+evaluations can be found at [[https://github.com/ragnargrootkoerkamp/quadrank][github.com/ragnargrootkoerkamp/quadrank]].
 All experiments are run on an AVX2 Intel Core i7-10750H Skylake CPU with 6 cores and
 hyper-threading enabled. The frequency is pinned to 3.0GHz. Cache sizes are 32
 KiB L1 and 256 KiB L2 per core, and 12 MiB shared L3 cache. Main memory is 64
@@ -630,10 +630,10 @@ was deemed infeasible.
 :END:
 We compare BiRank and its variants against the Rust crates mentioned in [[#implementations]].
 In order to make the evaluations with prefetching fair, we have created PRs
-adding support for this to each of them.[fn::https://github.com/vigna/sux-rs/pull/98,
-https://github.com/rossanoventurini/qwt/pull/6,
-https://github.com/feldroop/genedex/pull/4,
-https://github.com/beling/bsuccinct-rs/pull/14.]
+adding support for this to each of them.[[[fn::https://github.com/vigna/sux-rs/pull/98][github:vigna/sux-rs/pull/98]],
+[[https://github.com/rossanoventurini/qwt/pull/6][github:rossanoventurini/qwt/pull/6]],
+[[https://github.com/feldroop/genedex/pull/4][github:feldroop/genedex/pull/4]],
+[[https://github.com/beling/bsuccinct-rs/pull/14][github:beling/bsuccinct-rs/pull/14]].]
 
 *Excluded libraries.*
 SPIDER ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]) [cite:@spider] was not yet implemented in Rust, so we made a
@@ -662,7 +662,7 @@ itself, leading to cache misses on the query values themselves if we do not
 prefetch them.]
 We then repeat these three benchmarks when running in parallel on 1, 6, and 12
 threads, where each thread has its own set of 10 M queries.
-Each measurement is repeated 3 times, and the median is reported.
+Each reported measurement is the median of 3 runs.
 
 #+name: birank-plot
 #+caption: Log-log space-time trade-offs for rank structures on binary input of total size 4 GB.
@@ -673,7 +673,7 @@ Each measurement is repeated 3 times, and the median is reported.
 #+caption: The legend is sorted by increasing overhead.
 #+attr_html: :class inset large
 #+attr_latex: :placement [t]
-file:./plots/plot-laptop-st-2-large.png
+file:./plots/plot-laptop-st-2-large.svg
 
 *Lower bounds.*
 The results are in [[birank-plot]].
@@ -732,7 +732,7 @@ optimized for this case.
 #+caption: Compared to [[birank-plot]], here we benchmark both $\rankone(q, c)$ (small markers), and $\rankall$ (large markers).
 #+attr_html: :class inset large
 #+attr_latex: :placement [t]
-file:./plots/plot-laptop-st-4-large.png
+file:./plots/plot-laptop-st-4-large.svg
 
 Overall, the situation here is similar to the binary case.
 In high-throughput settings, QuadRank can again saturate the memory bandwidth
@@ -796,7 +796,7 @@ Rob Patro, Giulio Ermanno Pibiri, and Peter Sanders.
 :CUSTOM_ID: snippets
 :END:
 # The layout and API of BiRank and QuadRank is shown in [[birank-api]] and [[quadrank-api]].
-Simplified code for computing the rank inside a QuadRank block is shown in [[quadrank-code]].
+# Simplified code for computing the rank inside a QuadRank block is shown in [[quadrank-code]].
 
 # #+name: birank-api
 # #+caption: Overview of the data layout of BiRank and the functions it provides.
@@ -848,28 +848,28 @@ Simplified code for computing the rank inside a QuadRank block is shown in [[qua
 # #+end_src
 
 #+name: quadrank-code
-#+caption: Simplified code snippet for computing the character count in a prefix of a single block in QuadBlock.
+#+caption: Simplified code for computing the character count of a prefix of a block in QuadRank16.
 #+begin_src rust
-type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned
+type Block = [[u64; 4]; 2];        // 2 halves of 4 64-bit values.
 // Little-endian mask values:
 // pos   0: 111...111, pos   1: 011...111, ..., pos 127: 000...001
 // pos 128: 000...000, pos 129: 100...000, ..., pos 255: 111...110
 static MASKS: [[u64; 2]; 256] = ...;
 fn rank1(block: &Block, mut q: u64, c: u8) -> u64 {
-    let block_u16: &[u16; 32] = transmute(&block); // Cast block to u16's.
-    let delta = block_u16[c + (c&2)] as u64;       // Jump over transposed data.
-    q += 32;                         // Adjust for skipping 32 characters.
-    let half = block[q/128];         // Read the low or high half of bits.
-    let masks: [u64; 2] = MASKS[q];  // Read bitmask for the relevant bits.
-    let mut popcount = 0;
-    let cl = -(c as u64 & 1);        // Cast 0 or 1 to 0 or u64::MAX.
-    let ch = -(c as u64 >> 1);
-    for i in 0..2 {
-        let l = half[2*i  ] ^ cl;
-        let h = half[2*i+1] ^ ch;    // l&h indicates occurrences of c.
-        popcount += (l & h & masks[i]).count_ones();
-    }                                // Subtract or add to the delta to the middle.
-    if q < 128 { delta - popcount } else { delta + popcount }
+  let block_u16: &[u16; 32] = transmute(&block); // Cast block to u16's.
+  let delta = block_u16[c + (c&2)] as u64;  // Jump over transposed data.
+  q += 32;                         // Adjust for skipping 32 characters.
+  let half = block[q/128];         // Read the low or high half of bits.
+  let masks: [u64; 2] = MASKS[q];  // Read bitmask for the relevant bits.
+  let mut popcount = 0;
+  let cl = -(c as u64 & 1);        // Cast 0 or 1 to 0 or u64::MAX.
+  let ch = -(c as u64 >> 1);
+  for i in 0..2 {
+    let l = half[2*i  ] ^ cl;
+    let h = half[2*i+1] ^ ch;      // l&h indicates occurrences of c.
+    popcount += (l & h & masks[i]).count_ones();
+  }                                // The if is optimized into a cmov.
+  if q < 128 { delta - popcount } else { delta + popcount }
 }
 #+end_src
 
@@ -912,7 +912,7 @@ Queries are modified accordingly to remove this extra term again:
 \end{align*}
 
 * Additional results
-** Throughput for small n
+** Throughput for small inputs
 :PROPERTIES:
 :CUSTOM_ID: small-n
 :END:
@@ -939,13 +939,13 @@ $\rankall$ queries.
 #+name: birank-small
 #+caption: Space-time trade-off plot of the inverse throughput of rank queries in a for loop on a small 128 KiB binary input that fits in L2 cache.
 #+attr_html: :class inset large
-file:./plots/plot-st-2-small.png
+file:./plots/plot-st-2-small.svg
 
 #+name: quadrank-small
 #+caption: Space-time trade-off plot of the inverse throughput of rank queries in a for loop on a small 128 KiB input over alphabet size 4 that fits in L2 cache.
 #+caption: Small markers indicate the time for a $\rankone$ query that counts only one symbol, while large markers always return all four ranks for $\rankall$.
 #+attr_html: :class inset large
-file:./plots/plot-st-4-small.png
+file:./plots/plot-st-4-small.svg
 
 # *** Scaling with size
 # :PROPERTIES:
@@ -954,12 +954,12 @@ file:./plots/plot-st-4-small.png
 # #+name: birank-scaling
 # #+caption: Scaling with input size for size 2 alphabet.
 # #+attr_html: :class inset large
-# file:./plots/plot-laptop-n-2.png
+# file:./plots/plot-laptop-n-2.svg
 
 # #+name: quadrank-scaling
 # #+caption: Scaling with input size for size 4 alphabet.
 # #+attr_html: :class inset large
-# file:./plots/plot-laptop-n-4.png
+# file:./plots/plot-laptop-n-4.svg
 ** AMD EPYC evals
 :PROPERTIES:
 :CUSTOM_ID: epyc
@@ -993,23 +993,23 @@ fraction of the data when the overhead is small.
 #+name: birank-scaling-epyc
 #+caption: Scaling with input size for size 2 alphabet.
 #+attr_html: :class inset large
-file:./plots/plot-server-st-2-large.png
+file:./plots/plot-server-st-2-large.svg
 
 
 #+name: quadrank-scaling-epyc
 #+caption: Scaling with input size for size 4 alphabet.
 #+attr_html: :class inset large
-file:./plots/plot-server-st-4-large.png
+file:./plots/plot-server-st-4-large.svg
 
 # #+name: birank-scaling-epyc
 # #+caption: Scaling with input size for size 2 alphabet.
 # #+attr_html: :class inset large
-# file:./plots/plot-server-n-2.png
+# file:./plots/plot-server-n-2.svg
 
 # #+name: quadrank-scaling-epyc
 # #+caption: Scaling with input size for size 4 alphabet.
 # #+attr_html: :class inset large
-# file:./plots/plot-server-n-4.png
+# file:./plots/plot-server-n-4.svg
 
 * QuadFm: A Batching FM-index
 :PROPERTIES:
@@ -1044,7 +1044,7 @@ avoid branch-misses.
 
 ** Results
 We test our FM-index implementation by building it for a 3.1 Gbp human genome [cite:@chm13v2].
-We simulated 500\,000 150 bp reads and applied 1% uniform random substitution
+We simulated $500\,000$ 150 bp reads and applied 1% uniform random substitution
 errors to them. We then count the number of occurrences of each read in both forward and reverse-complement direction.
 
 We compare the size and query throughput of QuadFm against AWRY
@@ -1071,12 +1071,12 @@ than its fastest variant (6.75 bits/bp).
 #+caption: Size and throughput of counting exact matches of 150 simulated queries with a 1% error rate in an FM-index on a human genome.
 #+caption: Vertical grey lines indicate the 2 bits/bp lower bound.
 #+attr_html: :class inset large
-file:./plots/plot-fm.png
+file:./plots/plot-fm.svg
 
 
 # * TODO
 # - EXPLAIN SEQUENTIAL=LATENCY vs LOOP~BATCH vs PREFETCH and ILP
-# ANONIMIZE!!!
+# - mention BWA-MEM in conclusion?
 # ** code
 # TODO:
 # - Optimize mask lookup:
