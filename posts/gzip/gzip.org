@@ -1,0 +1,59 @@
+#+title: DEFLATE, gzip, zlib, libz, et al.
+#+filetags: devops linux
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+# #+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2026-02-09 Mon>
+
+* File formats
+
+This stuff is all insanely confusing. My summary:
+- DEFLATE :: The 'original' compression method. Works in 32kB blocks, and for
+  each stores a small header with the compression mode and optional huffman
+  encoded dictionary. It applies Lempel-Ziv'77 compression of replacing common texts
+  by back-references. It uses a 32kiB context window for this, which may extend
+  beyond the start of the block.
+- zlib :: An implementation of DEFLATE. The file format wraps the raw deflate
+  blocks in a header and footer.
+- gzip (GNU zip) :: Another file format around DEFLATE, consisting of a small header containing
+  eg the original file name, then a list of DEFLATE blocks, and lastly a CRC32 checksum.
+- blocked gzip (BGZF, blocked gzip format) :: A file format developed for bioinformatics that is
+  just multiple GZIP files concatenated. This allows faster compression and
+  decompression by parallellizing over independent blocks, as well as random
+  access via a small auxiliary index of block starts.
+  This is backwards compatible with plain gzip.
+
+* Implementations
+
+- =zlib= :: The original C library.
+- =zlib-ng= :: Modern C implementation of zlib using SIMD.
+- =libz-sys= crate :: Rust bindings to =zlib= and =zlib-ng=.
+- =zlib-rs= crate :: Pure Rust re-implementation.
+- =zlib-rs-sys= crate :: zlib-compatible C-API to =zlib-rs=
+- =flate2= crate :: High level Rust crate with uniform bindings to multiple zlib implementations.
+
+* Containers
+  
+#+caption: Overview of the containers in a (blocked) GZIP file.
+#+caption: Mim stores checkpoints at the start of DEFLATE blocks, which do /not/ coincide with the start of GZIP blocks!
+#+attr_html: :class inset large
+[[file:./gzip.svg]]
+
+* Zran
+=zran= ([[https://github.com/madler/zlib/blob/master/examples/zran.h][zlib/zran.h]], [[https://github.com/madler/zlib/blob/master/examples/zran.c][zlib/zran.c]]) is a small library that comes with zlib that allows random access
+decompression by storing the (up to) last 32kiB of data before spaced out DEFLATE blocks, so
+decompression can start from the middle. DEFLATE blocks at the start of a gzip
+block do not have a context window.
+Uses =Z_BLOCK= to decompress up to a DEFLATE block boundary, =inflatePrime= to
+insert unprocessed padding bits, and =inflateSetDictionary= to set the 32kiB
+context window.
+
+* Mim
+=mim= extends zran by also storing Fasta/Fastq information for each checkpoint.
+Specifically, it stores the absolute position in the text and index of the first
+record starting after each checkpoint.
+
+Unfortunately, =inflateSetDictionary= is currently only available via the =zlib-rs-sys=
+C-compatible API.
