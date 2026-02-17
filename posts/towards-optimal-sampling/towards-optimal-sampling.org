@@ -1,0 +1,81 @@
+#+title: Towards Optimal Sampling Schemes
+#+filetags: minimizers wip note
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2026-02-17 Tue>
+
+These are some quick notes on progress towards optimal sampling schemes.
+
+It builds on my [[../minimizers/minimizers.org][thesis chapter]] [cite:@thesis] (which is based on [[../practical-minimizers/practical-minimizers.org][practical minimizers]]), as well
+as the [[../minimizer-lower-bound/minimizer-lower-bound.org][sampling-density lower bound]] [cite:@sampling-lower-bound].
+
+* Exactly optimal sampling schemes
+Currently, no /family/ of /exactly/ optimal schemes exists:
+- Greedymini [cite:@greedymini] finds some optimal schemes for $k=w+1$ for
+  specific parameters.
+- Modmini [cite:@modmini] approaches optimality in the $k\to\infty$ limit.
+- Bd-anchors [cite:@bdanchors] are for $k=1$ (or sort-of-equivalent, $w\to\infty$) and approach optimality in the
+  $\sigma\to\infty$ limit.
+
+In the lower bound paper [cite:@sampling-lower-bound], we observe that when
+$k\equiv 1\mod w$, an ILP always sampling schemes that /exactly/ match the lower
+bound (regardless of $\sigma$).
+
+#+caption: ILP results are the black circles. The solid circles indicate cases where they match the red lower bound. In particular this is the case whenever $k\equiv 1\mod w$ (as well as $w=\sigma=2$).
+#+attr_html: :class inset large
+[[file:../minimizers/figs/lower-bound.svg]]
+
+This motivates us to search for optimal $k=1$ schemes as a
+first step to finding more general optimal schemes for $k\equiv 1\mod w$.
+(One would hope that some mod-minimizer-like trick can be applied to the $k=1$
+schemes here.)
+
+An alternative approach could be to prove bounds on the near-optimality of the
+SUS-anchor schemes of [[../practical-minimizers/practical-minimizers.org][practical minimizers]], but proving exact
+(combinatorial) optimality sounds easier than the analysis needed to prove
+bounds on near-optimality.
+
+#+caption: Density of $k=1$, $\sigma=4$ selection schemes.
+#+attr_html: :class inset large
+[[file:../minimizers/figs/4-selection.svg]]
+
+* Lower bound
+The density of a sampling scheme is measured on a long random string.
+Equivalently, for /forward/ schemes, we can also consider the probability that 
+a /context/ of length $\ell+1 = (w+k-1)+1=w+k$ is /charged/.
+Equivalently again, we can also consider the average density of charged
+contexts, or the average density of sampled positions, on a cyclic (circular)
+string of length at least $\ell$.
+
+Now assume $k=1$. If we take a circle of $\ell+1=w+1$ characters, we must sample at
+least 2 of them (each sample is a position/character), since each position is
+only contained in $\ell=w$ of the $w+1$ windows. This gives rise to the
+$2/(w+1)$ lower bound. (The paper has a more precise analysis with additional
+terms for the cases where the $w+1$-long string is repetitive, in which case
+additional samples are inevitable.)
+A scheme with density that matches the lower bound must have equality
+everywhere, which means that it must sample exactly 2 positions on /every/
+primitive (non-repetitive) circular string of length $w+1$.
+
+This is now a purely combinatorial problem ;)
+
+* Optimal schemes
+
+If we assume a $\sigma=2$ alphabet, the [[../minimizers/minimizers.org::#sus-anchor-eval][anti-lexicographic SUS-anchors]] do great:
+in each window, they sample the smallest suffix, where we implicitly append a
+large (rather than small) sentinel at the end of the string. The
+anti-lexicographic part means that we would like the first character to be as
+large as possible, and the remaining characters to be as small as possible.
+
+Now this scheme is not exactly optimal yet. I have increasingly complicated
+manual variations of the scheme that are optimal up to $w=12$ or $w=13$ or so (for
+$k=1$ and $\sigma=2$). It would be great to have simple and clean schemes
+for which we can prove exactly optimality, rather than endlessly fiddling with
+either very tricky schemes, or having to count/bound the exact number of cycles
+in which they are not optimal yet (sample 3 or more positions).
+
+
+#+print_bibliography:
