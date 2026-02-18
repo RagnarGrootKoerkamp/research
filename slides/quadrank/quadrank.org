@@ -67,35 +67,39 @@
 :END:
 - Linear scan:
   - $O(n/w)$ time using $w$ bit popcount, no space overhead.
-# TODO: Fig
+    
+#+attr_html: :src /ox-hugo/1-linear.svg :style width:100%;margin-bottom:-5%
+[[file:./figs/1-linear.svg]]
+
 - Precompute all 64-bit answers $r_i := \rank(i)$: 
   - $O(1)$ time, $64\times$ overhead.
-# TODO: Fig
+
+#+attr_html: :src /ox-hugo/2-precompute.svg :style width:100%
+[[file:./figs/2-precompute.svg]]
     
 * Middle-ground: block-based offsets
 :PROPERTIES:
 :CUSTOM_ID: blocks
 :END:
 - Use $B=512$ bit blocks, and store all $b_j := \rank(j\cdot B)$.
-# TODO: Fig
+#+attr_html: :src /ox-hugo/3-blocks.svg :style width:100%;margin-bottom:-2%
+[[file:./figs/3-blocks.svg]]
 - Query $q = j\cdot B + q'$:
-  $$
-  \rank(q) = b_j + \sum_{jB\leq i < jB+q'} t_i
-  $$
-- $O(B/w) = O(512/64) = O(1)$ time,
+  $\rank(q) = b_j + \sum_{jB\leq i < jB+q'} t_i$.
+- $O(B/w) = O(512/64) = O(1)$ time.
 - $64/512 = 12.5\%$ space overhead.
 - 2 cache misses:
-  - in $n/8$ bit array: $b_j$
-  - in $n$ bit array: $t_{jB}\dots t_{jB+q'}$
+  - in $n/8$ bit array: offset $b_j$
+  - in $n$ bit array: block $j$ bits
 
-* Middle-ground: limitations
-:PROPERTIES:
-:CUSTOM_ID: blocks-2
-:END:
-- Reduce redundancy in adjacent 64-bit offsets $b_{i}$ and $b_{i+1}$, which
-  differ by at most 512.
-- Can we do 1 cache miss?
-- Reduce the (up to) 512-bit popcount?
+# * Middle-ground: limitations
+# :PROPERTIES:
+# :CUSTOM_ID: blocks-2
+# :END:
+# - Reduce redundancy in adjacent 64-bit offsets $b_{i}$ and $b_{i+1}$, which
+#   differ by at most 512.
+# - Can we do 1 cache miss?
+# - Reduce the (up to) 512-bit popcount?
 
 * Reducing overhead: PastaWide [and others]
 :PROPERTIES:
@@ -104,7 +108,8 @@
 - 2 levels:
   - L2 with 16-bit /delta/ every block: 3.125% overhead
   - L1 with 64-bit /offset/ every 128 blocks: 0.1% overhead
-# TODO: Fig
+#+attr_html: :src /ox-hugo/4-pasta.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute
+[[file:./figs/4-pasta.svg]]
 
 * Reducing cache misses: SPIDER
 :PROPERTIES:
@@ -112,8 +117,9 @@
 :END:
 - Inline the 16-bit L2 deltas bits into each cache line
   - Remaining 0.1% overhead L1 array fits in cache.
-  
-# TODO: Fig
+
+#+attr_html: :src /ox-hugo/5-spider.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute
+[[file:./figs/5-spider.svg]]
 
 * Reducing the popcount: Pairing
 :PROPERTIES:
@@ -122,7 +128,8 @@
 - Delta is to the /middle/ instead of /start/ of a block.
   - Count only 256 bits in first or second half of block.
 
-# TODO: Fig
+#+attr_html: :src /ox-hugo/6-pairing.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute
+[[file:./figs/6-pairing.svg]]
 
 * All together now: BiRank
 :PROPERTIES:
@@ -133,12 +140,14 @@
 - 32-bit /reduced/ L1 offsets: 0.05% overhead
   - Low 11 bits are stored in deltas
   - Input up to $2^{43}$ bits
+  - 16 MiB cache supports 32 GiB input
 
-# TODO: Fig
+#+attr_html: :src /ox-hugo/7-birank.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute
+[[file:./figs/7-birank.svg]]
 
 * What is /fast/?
 :PROPERTIES:
-:CUSTOM_ID: fast
+:CUSTOM_ID: metric
 :END:
 Latency: 80 ns/q
 #+begin_src rust
@@ -167,18 +176,26 @@ for i in 0..queries.len() {
 :END:
 #+attr_html: :class plot :src /ox-hugo/plot-laptop-st-2-large.svg
 [[file:./plots/plot-laptop-st-2-large.svg]]
+
+* Memory-bandwidth efficient = Fast
+:PROPERTIES:
+:CUSTOM_ID: bandwidth
+:END:
+
 * QuadRank
 :PROPERTIES:
 :CUSTOM_ID: quadrank
 :END:
 - Support $\sigma=4$ (=ACGT=) alphabet, and $\rank(q, c)$ for arbitrary $c$.
-- Also: $$\rank_4(q) := [\rank(q, \texttt A),\rank(q, \texttt C),\rank(q, \texttt G),\rank(q, \texttt T)].$$
+$$\rank_4(q) := [\rank(q, \texttt A),\rank(q, \texttt C),\rank(q, \texttt G),\rank(q, \texttt T)].$$
 - Input is 2 bits per symbol.
 - Like BiRank, but replicate all metadata $4\times$.
 - Store input in /transposed/ layout: low bits separate from high bits.
 - Efficient SIMD implementation of 4-parallel popcounting.
+- 16 MiB cache supports 14 GiB = 61Gbp input
 
-# TODO FIG
+#+attr_html: :src /ox-hugo/8-quadrank.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:0%;position:absolute
+[[file:./figs/8-quadrank.svg]]
 
 * QuadRank results
 :PROPERTIES:
