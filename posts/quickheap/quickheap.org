@@ -472,20 +472,30 @@ miss (of cost $\sqrt {2^i}$, see [[https://www.ilikebigbits.com/2014_04_21_myth_
 the quickheap pushes to one of $O(\log n)$ known (cached) locations, pops
 from a single location, and has memory-efficient partitioning as well.
 
-** Still TODO
-- I have not yet implemented the ideas from the randomized quickheap [cite/t:@stronger-quickheaps] to
+* Still TODO
+- Implement the ideas from the randomized quickheap [cite/t:@stronger-quickheaps] to
   prevent the worst-case quadratic growth.
-- I'd like to run experiments on some more realistic datasets. I could compare
-  Dijkstra with the radix heap and quickheap, but then I need some interesting
-  graphs to test on.
-- Prim's minimal spanning tree algorithm ([[https://en.wikipedia.org/wiki/Prim%27s_algorithm][wikipedia]]) is a case where the radix
-  heap will not work, and might be a good case to show the improvement of the
-  quickheap over d-ary heaps. But again, this needs some graphs to test on.
+  - Or other theoretical rebalancing ideas?
+- Run experiments on some more realistic datasets:
+  - Dijkstra with the radix heap vs quickheap
+  - Prim's minimal spanning tree algorithm ([[https://en.wikipedia.org/wiki/Prim%27s_algorithm][wikipedia]]) is a case where the radix
+    heap will not work, and might be a good case to show the improvement of the
+    quickheap over d-ary heaps.
 - Are there non-graph applications of heaps? Things like an 'event queue' come
   to mind: when processing a sorted list of intervals, we push the end of the
   interval after processing the start. But again a radix heap (or even a bucket
   heap) is probably better here, unless the timestamps are very high precision.
 - https://github.com/raphinesse/s3q/issues/1#issuecomment-3194478295
 - https://github.com/raphinesse/s3q/releases/tag/thesis-tuned-spq
+- Further extensions:
+  - Multithreading? Handing out batches of elements at a time and slightly
+    losing optimality guarantees.
+
+Possible publications:
+- ESA B, deadline April 21
+- PPoPP, deadline autumn 2026
+- SEA deadline Jan 2027
+
+
 
 #+print_bibliography:
