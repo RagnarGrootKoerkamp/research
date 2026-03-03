@@ -1,0 +1,448 @@
+#+title: Route Planning using Customizable Contraction Hierarchies
+#+filetags: @lablog data-structure route-panning hpc wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2026-03-02 Mon>
+
+These are some notes on /customizable contraction hierarchies/, based on talks
+with Michael Zündorf and the survey paper by [cite/t/f:@contraction-hierarchies-survey].
+
+* Problem Statement: Customizable Route Planning (CRP)
+Given is a static directed graph modelling a road network (e.g. the map of Europe). Separately, we get a
+list of edge weights that can change frequently (say, every few minutes).
+The goal is to build a data structure that efficiently supports the following two
+operations:
+1. Update all the edge weights.
+2. Compute the length of the shortest path between two nodes $s$ and $t$.
+
+The /customizable/ in the name of the problem refers to the fact that edge
+weights can be changed.
+
+* Contraction Hierarchies (CH)
+The [[https://en.wikipedia.org/wiki/Contraction_hierarchies][Wikipedia page]] on contraction hierarchies seems quite complete; just go and
+read that.
+
+The mathematical tl;dr is: we are given a total order $\prec$ (also called the
+/rank/, let's say $r(u)$) on the nodes, such
+that typically, 'unimportant' nodes come early (small rank) and 'important'
+nodes come late (large rank).
+Then, we repeatedly /contract/ the smallest node $u$ by turning its set of
+neighbours into a clique. For edges $uv$ and $uw$, we set or lower the weight of
+$vw$ to $\min(l(u,v) + l(v,w), l(v,w))$.
+This way, we can skip over $v$ when computing shortest paths between other vertices.
+
+** /Classic/ Contraction Hierarchies
+
+The classic approach of the 2010's builds the CH bottom-up. It repeatedly finds
+"good" nodes to contract, which are those that only generate a few new edges
+between their neighbours. In particular, when a node $u$ is contracted, not /all/
+pairwise edges between its neighbours are added/updated. Instead, only those
+edges are added/changed for which the shortest path goes through $u$. This
+requires computing all-vs-all distances between the neighbours of $u$, and thus
+depends on the weights of the edges.
+
+In the end, the high rank nodes typically represent for example highways near
+cities, or more generally 'bottlenecks' that have a lot of shortest paths going
+through them.
+
+A drawback of this approach is that it needs the weights up-front, and that it
+needs to do a lot of shortest-path queries during construction, in order to
+prevent adding too many edges.
+
+** /Customizable/ Contraction Hierarchies (CCH)
+
+/Customizable/ contraction hierarchies use a similar but slightly different
+approach that does not require knowing the edge weights. This means that eagerly
+pruning edges is not possible, and thus, all edges must be added pessimistically.
+As a consequence, the hierarchy/ranks must be chosen in such a way to minimize
+the number of edges that is added.
+
+Instead of building the CH bottom-up, here we build the CH top-down.  One way to
+find them is the following idea of InertialFlow [cite:@inertialflow]: take a
+route network and contract the 25% most Northern and Southern vertices. Then
+find a minimal cut between these two parts and use those nodes as the top levels
+of the hierarchy. This splits the graph into two parts (North and South), so now
+we can recurse of the two halves by splitting each in East and West, and so on.
+
+* Analogy with trees
+
+Suppose we know the input graph is a tree. Then we can find the distance between
+any nodes $s$ and $t$ by computing the distance from $s$ and $t$ to each of
+their ancestors, and taking the sum of these at the lowest common ancestor.
+In particular, when the tree is balanced, this runs in $\lg n$ time.
+
+Unfortunately, graphs are not trees, and the same does not quite work.
+For CCHs, we turn a graph into a tree by taking a set of nodes (a cut) that we
+contract and then consider as the root. Since this is a cut, the remainder of
+the graph is disconnected and falls apart into two sub-trees on which we recurse.
+
+At the end, each node of this tree of contracted sets will be (roughly) a
+clique, and there are additional edges from each node to a subset of its
+ancestors.
+Then, we can use the same query algorithms as for trees: compute the distance
+from each node to all its ancestors, and then find the (not necessarily lowest)
+common ancestor with minimal sum.
+
+* Shortest Paths in CHs
+
+Let $s = u_1, u_2, \dots, u_k=t$ be a shortest path from $s$ to $t$. Then there
+is some node $u_m$ with maximal rank. We can then find the increasing subsequence $s=u_1 \prec
+u_{i_2}\prec u_{i_3}\prec \dots\prec u_m$ of nodes that are not preceded
+by any node of larger rank. And symmetrically we can find $u_m\succ \dots \succ
+u_{j_3} \succ u_{j_2} \succ u_k = t$ of all nodes on the path not succeeded by a
+node with larger rank.
+Because of the CH construction, there will be /shortcuts/ between all
+consecutive elements of these subsequences, and we can skip over low-rank
+intermediate nodes. Thus, we can do single upward search from $s$ and $t$
+to find the minimum distance to all higher-ranked nodes they can reach, and then
+find the minimum total distance over all nodes where they meet.
+
+For CH, this is done by using Dijkstra and only relaxing edges to higher-ranked
+nodes. A priority queue is needed to visit the nodes in order of distance to $s$
+(or $t$).
+
+* Parents: Faster Shortest Paths in CCHs
+
+Since CCHs contain /all/ edges above each node, a different approach is possible
+that does not need the priority queue. In order to visit /all/ nodes above $s$,
+we can store for each node $u$ a /parent/ pointer to the lowest ranked node $p$
+above $u$. Since $p$ has edges to all other up-neighbours of $u$, those will
+eventually be visited as well. In the end, following parent pointers from $s$
+will traverse exactly all higher-ranked vertices reachable from it.
+
+This removes the need for a priority queue, and makes the algorithm highly predictable.
+
+* Input Graph
+
+We use the PTV-DIMACS-Europe-Graph mentioned [[https://i11www.iti.kit.edu/resources/roadgraphs.phap][here]]:
+#+begin_src txt
+   Size (B) file
+ 72,040,692 europe.lat
+ 72,040,692 europe.lng
+ 72,040,692 europe.ifc.order -- newer/better
+ 72,040,692 europe.order
+ 72,040,696 europe.first_out
+168,754,656 europe.head
+168,754,656 europe.dist
+#+end_src
+Each file is a binary little-endian dump of a =&[u32]=, without leading length.
+- =lat= and =lng= are the latitude and longitude of each node.
+- The two =*.order= files are different orders for the CH.
+- =first_out= indicates the index of the first edge for each node.
+- =head= indicates for each edge the node that it points to.
+- =dist= indicates the length of each edge.
+
+
+* Initial Algorithm
+The construction mostly follows the original code at [[https://github.com/mzuenni/Separator-Based-Alternative-Paths-in-CCHs][github:mzuenni/Separator-Based-Alternative-Paths-in-CCHs]].
+** Permute input
+First, we re-number all nodes and edges by increasing rank.
+** Chordal Completion and Parents
+Iterate over all nodes in order of low to high rank, and turn their upper neighbours into a clique.
+From low rank (id) to high, the parent is the lowest neighbour of higher rank,
+and we append the upper-neighbours of each node to its parent.
+** Customize
+1. First, copy the input weights into the larger CCH graph. Note that all edges
+   are directed here.
+2. For each node $u$ from low to high, 'relax' the edges between its upper-neighbours.
+3. Drop edges that are never optimal. For each node $u$ from high to low,
+   iterate over the triangles between its upper neighbours, and in each, relax
+   the lower and middle edge. (The upper edge was already relaxed before.)
+   If an edge is relaxed, mark it for deletion but first keep it around for
+   further propagation. Finally, prune all the deleted edges.
+** Query
+As a lazy initial approach for a query from $s$ to $t$:
+- For each, initialize a vector with distances to all other nodes.
+- Then relax all nodes given by parent pointers until the root is reached.
+- Then iterate over /all/ nodes and find the one with minimum sum of distances
+  to $s$ and $t$.
+
+* Optimizing things
+- Reading the graph is a few seconds.
+- Relaxing upper edges is 18s
+- Finding redundant edges is 18s
+- Compressing edges is 1s
+- 100 queries is 2s
+- total time: 44s
+
+A quick =perf record; perf report= after enabling debug symbols via
+=[profile.release] debug=true= shows that around 70% of time is spent on
+iterating through neighbour lists to search =xy= edges completing a triangle
+from =u=.
+
+** Binary searching in =find_edge=
+Since edges are already sorted by out-neighbour anyway, we can also find them
+via binary search.
+
+#+begin_src diff
+ fn find_edge_index(&self, u: NodeId, v: NodeId) -> usize {
+     assert!(u < v);
+     let edge_range = self.edge_range(u);
+     edge_range.start
+         + self.edges[edge_range]
+-            .iter()
+-            .position(|e| e.head == v)
++            .binary_search_by_key(&v, |e| e.head)
+             .unwrap()
+ }
+#+end_src
+
+This reduces the total time to 22s, with only 7s for each of the relax and prune
+stage, but still, most of the time is in the binary
+search.
+
+** =HashMap= of edges
+We better replace the binary search with a =HashMap= directly telling us the index of each edge.
+
+#+begin_src diff
+     for u in 0..self.n {
+         for i in self.edge_range(u) {
+             let v = self.edges[i].head;
+             self.edge_idx.insert((u, v), i as u32);
+         }
+     }
+ ...
+
+ fn find_edge_index(&self, u: NodeId, v: NodeId) -> usize {
+     assert!(u < v);
+-    let edge_range = self.edge_range(u);
+-    edge_range.start
+-        + self.edges[edge_range]
+-            .iter()
+-            .position(|e| e.head == v)
+-            .binary_search_by_key(&v, |e| e.head)
+-            .unwrap()
++    self.edge_idx[&(u, v)] as usize
+ }
+#+end_src
+
+Surprisingly, this takes 7s to build, and then 23s for relax and prune each, for
+65s total. Not good.
+
+** Ranges of neighbours
+Because of the CCH structure, most triangles are inside the cliques formed in
+each cut. This means that many nodes have large intervals of consecutive
+neighbours. So we can store for each node a list of start nodes of each interval, and then binary
+search that instead. This reduces the total time to 19s.
+
+** Linear scan
+It turns out that during the relaxing and pruning, =find_edge_index= is always called repeatedly for a single =x=
+and increasing =v=, so we can replace repeated searches by a single linear scan.
+This lowers the entire contruction to 7s.
+
+** Proper query algorithm
+So far, I was allocating two size-n vectors for each query and doing a separate
+search from $s$ and $t$. By interleaving the searches, we can efficiently reuse
+a single allocation and incrementally clean up used values. Query time starts at
+230us/q for random pairs.
+
+** Pruning edges
+If we enable pruning of sub-optimal edges, query time drops to 108us/q.
+
+** Pruning
+When we found some $st$ path of length $d$, we can skip expanding nodes at
+distance at least $d$ from either $s$ or $t$. The gains are marginal though,
+from 108 us to 103 us (and these numbers have high variance).
+
+** Unconditional edge relaxing
+To avoid branch misses, we write relaxed edge values unconditionally:
+#+begin_src diff
+-if new_dist < dv {
+-    self.dist[v as usize][dir] = new_dist;
+-}
++self.dist[v as usize][dir] = dv.min(new_dist);
+#+end_src
+
+
+** Early edge break
+For each node, we can sort outgoing edges by length, and only process the prefix
+that results in relaxations with cost at most the best s-t path so far.
+This gives around 10% speedup, from 97 us/q to 88 us/q.
+
+** DFS-ordering the nodes
+Currently the nodes are already ordered by their rank, but in a layer-by-layer
+way. Instead we can use a DFS order to get more locality.
+
+Unfortunately, this appears to give pretty much no speedup, and actually slows
+things down slightly: 85 us/q to 89 us/q.
+
+** Not inclining queries
+If we mark the query function as =#[inline(never)]=,
+times go down from 89 us/q to 81 us/q. I only did this to isolate the results in
+=perf=, so not exactly sure why it helps.
+
+* Some stats
+With default =.order=:
+- 18.0M nodes
+- 42.2M directed input edges
+- 18.1M added undirected edges for chordal closure
+- 17.4M pruned undirected edges for perfect customization
+
+With =.ifc.order=:
+- 16.7M added edges for chordal closure
+- 16.6M pruned edges for perfect customization
+- 42.3M edges remaining, only slightly more than the input (but the input will
+  contain many edges in both directions).
+
+* Serializing the final structure
+
+For iteration speed on queries, we dump the final customized data structure to
+disk so we can just load it directly instead of manually processing it each time.
+We use [[https://docs.rs/epserde/][epserde]], which just dumps the binary representation to disk. It needs
+zero-copy annotations like this:
+#+begin_src rust
+#[derive(Clone, Copy, epserde::Epserde)]
+#[repr(C)]
+#[epserde_zero_copy]
+struct Node {
+    ...
+}
+#+end_src
+We write and read the file (both in <1s, compared to ~15s preprocessing) using
+#+begin_src rust
+    fn save(&mut self, path: &Path) {
+        self.input_edges.clear();
+        self.dist.clear();
+        let mut file = std::fs::File::create(path.with_added_extension("cch")).unwrap();
+        unsafe { self.serialize(&mut file).unwrap() };
+    }
+    #[allow(unused)]
+    fn read(path: &Path) -> Self {
+        let mut path = path.with_added_extension("cch");
+        unsafe { Self::load_full(&path).unwrap() }
+    }
+#+end_src
+
+* Merging adjacent edges
+Many nodes are connected to ranges of consecutive vertices. We will try to
+process these using SIMD. First we transpose the distances vector so that
+adjacent nodes have their distances adjacent as well.
+
+- Initial query time: 92 us/q
+- Transposed =dist=: 110 us/q
+- Iterating all ranges separately: 178 us/q
+- Unchecked indexing: 159 us/q
+- Merging the first and second phase into one, so we only have to do write the
+  code once: 166 us/q
+- Flattened edge weights: 177 us/q
+- Relaxing 8 edges at once using SIMD: 94 us/q
+- Merging ranges with gap <=4: 69 us/q
+- Including the first =NodeId= with the range, avoiding a memory indirection: 56 us/q
+- =splat= for the masking outside the inner loop: 53 us/q
+
+** Perf stat
+
+#+begin_src
+                 0      context-switches:u               #      0.0 cs/sec  cs_per_second
+                 0      cpu-migrations:u                 #      0.0 migrations/sec  migrations_per_second
+             8,629      page-faults:u                    #   4354.4 faults/sec  page_faults_per_second
+          1,981.65 msec task-clock:u                     #      1.0 CPUs  CPUs_utilized
+       128,476,110      branch-misses:u                  #     12.1 %  branch_miss_rate         (49.97%)
+     1,061,440,297      branches:u                       #    535.6 M/sec  branch_frequency     (50.04%)
+     6,211,675,304      cpu-cycles:u                     #      3.1 GHz  cycles_frequency       (50.05%)
+    10,194,937,762      instructions:u                   #      1.6 instructions  insn_per_cycle  (50.04%)
+#+end_src
+
+- 12% branch misses is a lot!
+- 1.6 instructions/cycle is quite low
+
+The hot-loop over all ranges for a node and the edges in each range now looks
+like this. Note that the percentages in the first column are quite large.
+#+begin_src asm
+   3.13 │4b0:┌─→movl         (%r8),%r9d
+   1.78 │    │  movl         0x4(%r8),%r12d
+   0.95 │    │  movl         0x8(%r8),%r15d
+   1.10 │    │  movl         %r15d,%r11d
+   0.56 │    │  subl         %r12d,%r11d
+   1.77 │    │  nop
+   0.54 │4d0:│  movl         %r9d,%r14d
+   4.26 │    │  vmovd        %r11d, %xmm3         -- splat1
+   2.82 │    │  vpbroadcastd %xmm3, %ymm3         -- splat2
+   8.87 │    │  vpcmpgtd     %ymm0, %ymm3, %ymm3
+  21.15 │    │  vpaddd       (%rax,%r12,4), %ymm2, %ymm4
+   7.90 │    │  vblendvps    %ymm3, %ymm4, %ymm1, %ymm3
+  11.55 │    │  vpminsd      (%rdx,%r14,4), %ymm3, %ymm3
+   4.06 │    │  addq         $0x8,%r12
+   3.46 │    │  vmovdqu      %ymm3, (%rdx,%r14,4)
+   3.16 │    │  addl         $0x8,%r9d
+        │    │  addl         $-0x8,%r11d
+   1.87 │    │  cmpq         %r15,%r12
+   2.20 │    │↑ jb           4d0
+   0.68 │    │  addq         $0xc,%r8
+   0.15 │    ├──cmpq         %rcx,%r8
+   1.48 │    └──jne          4b0
+#+end_src
+
+We see that two instructions are 'wasted' splatting the iteration count. Fixing
+that makes things slightly cleaner.
+
+More generally, we do a bunch of bookkeeping to handle ranges with
+non-multiple-of-8 lengths. Instead, we can also just bloat the set of edges so
+that all ranges have multiple-of-8 lengths.
+
+** All ranges are multiples of 8
+We can 'expand' all small groups of edges to cover ranges of size 8, adding up
+to 7 dummies if needed. This blows up the size of the data structure in memory,
+as the number of edges increases from 42.2M to 230.7M,
+but gets rid of the blending operations. This lowers the time to 48 us/q.
+
+Still, we have 8% branch misses and now only 1.4 instructions/cycle.
+
+** All ranges have size 8
+Only few ranges are actually larger than 8, so instead, we can also just make
+all ranges have exactly size 8 and replace a double for loop by just a single
+loop where each range corresponds to a single SIMD iteration.
+This increases the number of ranges from 27385521 to 28838911, and lowers
+queries to 39 us/q just by reducing branch misses, and if we drop the inner loop
+completely, we get 34 us/q.
+
+The inner loop now looks like this, and we see that 80% of time is here.
+
+#+begin_src asm
+   8.39 │470:┌─→movl         (%r8),%r11d                  # read v
+   0.74 │    │  movl         0x4(%r8),%r12d               # read edge idx
+  39.69 │    │  vpaddd       (%r9,%r12,4), %ymm0, %ymm1   # add weight do dist(x)
+  13.12 │    │  vpminsd      (%r15,%r11,4), %ymm1, %ymm1  # min(w+dist(x), dist(v))
+  10.79 │    │  vmovdqu      %ymm1, (%r15,%r11,4)         # update dist(v)
+        │    │  addq         $0xc,%r8                     # increment range iterator by 12 bytes=3 u32
+   6.24 │    ├──cmpq         %rcx,%r8
+        │    └──jne          470
+#+end_src
+
+The reading of the edge idx is redundant here: every range covers exactly 8
+weights, so we can replace this by a =+=8= instead, which gives 30 us/q.
+
+#+begin_src asm
+   2.79 │470:┌─→movl         (%rcx,%rax),%r8d             # read v
+  32.17 │    │  vpaddd       (%r13,%rax,4), %ymm0, %ymm1  # dist[x] + w[xv]
+  18.70 │    │  vpminsd      (%r11,%r8,4), %ymm1, %ymm1   # min(dist[v], dist[x] + w[xv])
+   9.38 │    │  vmovdqu      %ymm1, (%r11,%r8,4)          # write dist[v]
+   1.14 │    │  addq         $0x8,%rax                    # jump to next range
+   0.56 │    ├──cmpq         %rax,%r9
+   7.31 │    └──jne          470
+#+end_src
+
+In fact, we don't even need the range start and end at all any more, and just
+the original range of edges of the node suffices. This reduces the =addq= to
+only add =4=, for a single =u32=. Result: 28 us/q.
+
+Anyway, the assembly is very pretty and very hot:
+72% of time is spent here, branch misses are down to 3.5%, and instructions per
+cycle is up to 1.8 (but still far from 4).
+
+** Interleaving s and t search
+It turns out that (at least for random queries) only a small (~10%) fraction of time is
+spent after they meet.
+
+
+* TODO
+- special in-clique handling
+- parallel construction
+- change order to cluster edges, so we have fewer ranges?
+
+
+#+print_bibliography:
+
