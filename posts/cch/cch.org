@@ -433,15 +433,150 @@ Anyway, the assembly is very pretty and very hot:
 72% of time is spent here, branch misses are down to 3.5%, and instructions per
 cycle is up to 1.8 (but still far from 4).
 
-** Interleaving s and t search
-It turns out that (at least for random queries) only a small (~10%) fraction of time is
-spent after they meet.
 
+** Finding the bottleneck
+It's unclear to me what the current bottleneck is (CPU or memory). Let's try to
+find out using =perf stats='s /topdown/ analysis, following https://perfwiki.github.io/main/top-down-analysis/.
+
+#+begin_src sh
+perf stat -M TopdownL1 cargo run -r
+# or
+perf stat --topdown cargo run -r
+#+end_src
+
+then after we can use
+#+begin_src sh
+perf stat -M tma_*_group cargo run -r
+# or
+perf stat --topdown --td-level 2 cargo run -r
+#+end_src
+
+#+begin_src txt
+> perf stat -M TopdownL1 cargo run -r
+     7,628,649,785      INST_RETIRED.ANY:u               #     29.2 %  tma_retiring             (62.47%)
+        70,770,602      CPU_CLK_UNHALTED.REF_XCLK:u                                             (62.50%)
+     2,600,333,947      IDQ_UOPS_NOT_DELIVERED.CORE:u    #      6.4 %  tma_frontend_bound     
+                                                         #      nan %  tma_backend_bound        (62.52%)
+   <not supported>      INT_MISC.RECOVERY_CYCLES_ANY:u                                        
+        70,454,622      CPU_CLK_UNHALTED.ONE_THREAD_ACTIVE:u                                        (62.54%)
+    10,210,250,089      CPU_CLK_UNHALTED.THREAD:u                                               (62.55%)
+       590,781,380      UOPS_RETIRED.MACRO_FUSED:u                                              (50.00%)
+    11,888,222,748      UOPS_RETIRED.RETIRE_SLOTS:u                                             (50.00%)
+    12,543,109,900      UOPS_ISSUED.ANY:u                                                       (49.96%)
+#+end_src
+
+
+We now need to relax permissions:
+#+begin_src sh
+echo 0 | sudo tee /proc/sys/kernel/nmi_watchdog
+#+end_src
+
+#+begin_src txt
+> perf stat --topdown --td-level 3
+
+18.7%  tma_other_light_ops
+ 0.0%  tma_fp_arith
+14.2%  tma_ports_utilization
+ 0.0%  tma_other_mispredicts
+14.6%  tma_dram_bound
+ 0.9%  tma_l2_bound
+ 0.0%  tma_other_nukes
+ 8.2%  tma_fused_instructions
+ 2.6%  tma_few_uops_instructions
+ 0.1%  tma_microcode_sequencer
+ 2.3%  tma_non_fused_branches
+15.5%  tma_memory_operations
+ 1.0%  tma_mite
+10.5%  tma_dsb
+ 2.0%  tma_l3_bound
+ 6.1%  tma_l1_bound
+ 0.1%  tma_icache_misses
+ 3.3%  tma_branch_resteers
+ 0.4%  tma_store_bound
+ 0.3%  tma_serializing_operation
+ 0.1%  tma_ms_switches
+ 0.0%  tma_lcp
+ 0.0%  tma_itlb_misses
+ 1.2%  tma_dsb_switches
+ 0.0%  tma_divider 
+#+end_src
+
+The picture seems to be quite mixed, with no clear target for improvement.
+Both CPU and L1/RAM are a bottleneck at different times it seems.
+
+* Bugfixing
+I finally added a Dijkstra implementation as a baseline. Unfortunately, results
+are very different... Turns out there's a bug in the pruning of edges where I
+iterated over the wrong vertex. 
+
+Also, I was pruning edges in both directions, even if I marked them for deletion
+in only one direction. 
+
+With all that fixed, and with making sure I apply
+the same permutation to the input of Dijkstra, all is good now.
+
+* Further ideas
+** Failed: Doubling the graph
+In fact, we /can/ pruned edges that are only redundant in one direction, by
+doubling the graph and storing separate data for the up and down graph. I
+implemented this, but it comes out quite a bit slower, probably because it
+requires more IO to read the edges. (It might be better with an interleaved
+layout, which I didn't test yet.)
+
+** edge pruning
+We can sort the blocks of 8 outgoing edges from each node by the minimum weight,
+and then early break as soon as all remaining edges have too large weight.
+
+This seems 1 to 2 us/q faster, but whether pruning actually happens depends a
+lot on the queries. For random queries, s and t only meet very late, while in
+specific cases, it can be up to 50%.
+
+** Expanding a node and its parent in parellel
+We can manually relax the node from $u$ to $p$, and then unify their neighbours
+and relax them in a single loop. This saves some iteration overhead and storing
+and reading some distances, as long as the neighbour sets are sufficiently similar.
+
+First results are 20% or so slower (50 instead of 40 us/q). Transposing the weights array to have
+weights for $u$ and $p$ adjacent in two halves of a cacheline helps a tiny bit,
+but not enough.
+
+It's a bit unfortunate that the inner-loop assembly has a bunch of =mov= that
+weren't there before:
+#+begin_src asm
+   3.30 │1b60:┌─→movl         (%rcx,%r8),%r9d                  -- read edge head
+   1.96 │     │  movq         0x8(%rax),%r10     -- extra: read dist vector pointer
+   0.16 │     │  movq         0x80(%rdx),%r11    -- extra: read edge weight vector pointer
+   3.52 │     │  addq         %rdi,%r11                        -- adjudge edge index     
+  16.02 │     │  vpaddd       -0x20(%r11,%r8,8), %ymm0, %ymm2  -- dist from u
+  38.77 │     │  vpaddd       (%r11,%r8,8), %ymm1, %ymm3       -- dist from p
+   3.80 │     │  vpminsd      %ymm3, %ymm2, %ymm2              -- min(dist u, dist p)
+   5.25 │     │  vpminsd      (%r10,%r9,4), %ymm2, %ymm2       -- min(cur dist, u/p dist)
+   3.83 │     │  vmovdqu      %ymm2, (%r10,%r9,4)              -- write new dist
+   0.06 │     │  addq         $0x8,%r8                               
+   0.20 │     ├──cmpq         %r8,%rsi                               
+   3.37 │     └──jne          1b60                                   
+#+end_src
+
+We can get rid of these extra =mov= instructions by replacing
+=self.weights.get_unchecked= by =self.weights.as_ptr().offset(...).read()=,
+which forces the compiler to inline the variables (even with the higher register
+pressure of the double-expanding), and gives back a few (2-3 us/q) that we lost.
 
 * TODO
+- metadata for path recovery
+- Interleaving up and down search, somehow
 - special in-clique handling
+- 'super' parents to detect separators, prefetch node data for the next one, and
+  use SIMD for pruning
 - parallel construction
 - change order to cluster edges, so we have fewer ranges?
+  - reorder based on down-neighbourhood
+- Expand u and its parent in parallel
+- unify nbs of u and parent
+- stats: average degree on path to root before/after pruning
+- transpose distances and interleave up and down costs
+- detect best dist on relax instead of expand
+- potentials: for each edge, do something with the cheapest upward edge?
 
 
 #+print_bibliography:
