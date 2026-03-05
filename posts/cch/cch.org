@@ -523,7 +523,7 @@ implemented this, but it comes out quite a bit slower, probably because it
 requires more IO to read the edges. (It might be better with an interleaved
 layout, which I didn't test yet.)
 
-** edge pruning
+** Edge pruning
 We can sort the blocks of 8 outgoing edges from each node by the minimum weight,
 and then early break as soon as all remaining edges have too large weight.
 
@@ -531,7 +531,7 @@ This seems 1 to 2 us/q faster, but whether pruning actually happens depends a
 lot on the queries. For random queries, s and t only meet very late, while in
 specific cases, it can be up to 50%.
 
-** Expanding a node and its parent in parellel
+** Failed: Expanding a node and its parent in parallel
 We can manually relax the node from $u$ to $p$, and then unify their neighbours
 and relax them in a single loop. This saves some iteration overhead and storing
 and reading some distances, as long as the neighbour sets are sufficiently similar.
@@ -562,6 +562,68 @@ We can get rid of these extra =mov= instructions by replacing
 which forces the compiler to inline the variables (even with the higher register
 pressure of the double-expanding), and gives back a few (2-3 us/q) that we lost.
 
+* Current best results
+- With everything up to and including sorting of edges.
+- Without separate up and down graphs.
+- Without expanding nodes and their parents in parallel.
+
+We test on /Dijkstra rank/ queries, where we run a Dijkstra search from 1000 random
+start nodes and then use as destination the $2^i$'th expanded vertex. This gives
+queries that are close together for small $i$ and far apart for large $i$.
+
+Running at fixed 3.6 GHz on a i7-10750H laptop CPU.
+We compare against the C++ implementation of Michael Zündorf at 
+[[https://github.com/mzuenni/Separator-Based-Alternative-Paths-in-CCHs][github:mzuenni/Separator-Based-Alternative-Paths-in-CCHs]].
+  
+#+caption: Average time (us/query) for 1000 queries at /Dijkstra rank/ $2^i$.
+#+attr_html: :class small
+| dist | time C++ baseline | time us|
+| 2^ 0 | 1    |           2 |
+| 2^ 1 | 2    |           3 |
+| 2^ 2 | 1    |           3 |
+| 2^ 3 | 2    |           3 |
+| 2^ 4 | 2    |           3 |
+| 2^ 5 | 2    |           3 |
+| 2^ 6 | 2    |           4 |
+| 2^ 7 | 3    |           4 |
+| 2^ 8 | 3    |           4 |
+| 2^ 9 | 5    |           5 |
+| 2^10 | 5    |           5 |
+| 2^11 | 8    |           7 |
+| 2^12 | 10   |           7 |
+| 2^13 | 13   |           9 |
+| 2^14 | 16   |          10 |
+| 2^15 | 19   |          13 |
+| 2^16 | 24   |          14 |
+| 2^17 | 30   |          17 |
+| 2^18 | 36   |          20 |
+| 2^19 | 46   |          24 |
+| 2^20 | 60   |          29 |
+| 2^21 | 76   |          35 |
+| 2^22 | 93   |          41 |
+| 2^23 | 95   |          42 |
+| 2^24 | 50   |          24 |
+
+Results are slightly (10% to 2x) faster than CH in Fig 5 of
+[cite:@engineered-cch], and up 2 to 2.5x faster than CCH-tree-fast for large 
+Dijkstra ranks, and also 2x faster than the baseline C++ implementation.
+
+But also, note that this comparison is not quite fair yet, since the baseline
+also stores metadata to recover the optimal path, while we don't.
+
+** Bottleneck
+At this point, I'm still not quite sure whether things are CPU or memory bound,
+and it seems to be a bit of both. If anything, one thing to improve could be the
+data layout, to use cache lines as efficient as possible. For example, the
+blocks of neighbouring nodes could be aligned to 32 bytes (half a cacheline) to
+avoid needlessly crossing cacheline boundaries. That is, each block should
+always start at a =NodeId= that is a multiple of 8.
+
+Other possible improvements could be prefetching of:
+- Distances to nodes, although these are largely overlapping already anyway.
+- Edge weights, since these are fresh for each node.
+- Node data and parent pointers, since this is a chain of 500 to 2000 pointers.
+
 * TODO
 - metadata for path recovery
 - Interleaving up and down search, somehow
@@ -571,12 +633,11 @@ pressure of the double-expanding), and gives back a few (2-3 us/q) that we lost.
 - parallel construction
 - change order to cluster edges, so we have fewer ranges?
   - reorder based on down-neighbourhood
-- Expand u and its parent in parallel
-- unify nbs of u and parent
 - stats: average degree on path to root before/after pruning
 - transpose distances and interleave up and down costs
 - detect best dist on relax instead of expand
 - potentials: for each edge, do something with the cheapest upward edge?
+- 
 
 
 #+print_bibliography:
