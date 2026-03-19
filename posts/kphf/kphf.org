@@ -261,7 +261,7 @@ The number of tries to find a good function is then
 $$
 T/G = \frac{(n/B)^S}{\binom{S}{s_1,\dots, s_B}} = \frac{(n/B)^S}{S!} \prod_i s_i!
 $$
-Thus, we want to minimize the cost//badness/ $\prod s_i$.
+Thus, we want to minimize the cost/ /badness/ $\prod s_i$.
 
 Specifically, if we have some current badness $b$ and we have a seed for a
 bucket with $\ell$ keys that puts them in (distinct) bins with $s^1, \dots,
@@ -280,8 +280,34 @@ How many bits/key do we need? Then derive bucket function from that.
   by $s\times$, when aiming for minimal k-PHF in the end.
 - We can /spend/ 1 bit to put a key in a bucket with 2x more empty slots.
 - Choose a seed that optimizes =entropy(seed) + entropy(remaining work)=.
-- Somehow encode all these seeds efficiently. To use consensus we'd need to
-  actually consider multiple tries for each seed.
+  - =entropy(seed)= can (hopefully?) be approximated as $\lg_2 s$?
+- In particular, we would like that =entropy(chosen seeds) + entropy(remaining
+  work)= remains roughly constant during construction, as we insert keys one-by-one.
+  For some seeds we'll be lucky and it goes down, whereas for others we'll be
+  unlucky and it goes up.
+- Somehow encode all these seeds efficiently.
+  - To use consensus we'd need to actually consider multiple tries for each
+    seed, and weigh them relative to each other.
+  - With bucketing, we group multiple keys together, to hopefully reduce the
+    variance in the size of the seeds.
+- Can we compute the expected entropy of the $i$th seed? From that, we can say
+  that we want 8-bit buckets, and then compute the optimal bucket function.
+- What about backtracking for bucketed construction? 
+
+** Non-minimal case
+- In the non-minimal case, computing the required entropy is harder, as it
+  requires iterating over all possible distributions of the remaining empty
+  slots. (At least we are not yet aware of an efficient way of doing this.)
+- Even worse, after some elements have been placed, we get a matrix of =C[i][j]=
+  indicating that =C[i][j]= bins are currently filled with =i= keys and get
+  =j= empty slots. We have to iterate over all such matrices that sum to the
+  correct total number of (empty) slots.
+  - Then for each matrix we can compute the number of /good/ functions resulting
+    in this matrix, and sum these.
+  - The entropy is then related to the log of the total number of good functions.
+- Maybe a DP can make this efficient in practice? Or maybe we can ignore most
+  terms after showing via tail-bounds that they have negligible contribution to the sum?
+
 
 * Practical idea?
 Inspired by IcebergHT [cite:@iceberg-ht], see
