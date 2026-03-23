@@ -336,6 +336,61 @@ Even stronger:
 - Since the keys are sorted by fingerprint, we roughly know where to look, and
   so we can start probing from the expected location outwards.
    
+* Lower bound proofs
+
+** Proof of 1-PHF worst-case lower bound
+The current proof of the lower bound on the space of a minimal 1-PHF is as follows:
+1. Let the universe be $U$ of size $u$, and the input be a set of $n$
+   keys in $U$. Assume $u \gg n^2$, so that $\binom un \approx u^n$ holds
+   sufficiently well.
+2. There are $X=\binom un$ input sets.
+3. Each seed encodes some function $f: U \to [n]$. Such a function is /good/ for
+   $\prod_{i\in [n]} |f^{-1}|(i)\leq (u/n)^n=:Y$ key sets.
+4. Thus, to cover all $X$ possible inputs, we need at least $X/Y$ functions, and
+   thus, there /exists/ an input that requires at least $\lg (X/Y)$ bits for the seed.
+
+** Proof of 1-PHF expected-case lower bound
+Note that the conclusion does not say anything about the number of seed bits for
+a /random/ key set, just on the /worst case/ key set. We'd like to fix this.
+
+
+1. We assume that the key set is a uniform random subset of size $n$ of $U$.
+2. Note that while the set of keys is now random, the function we construct is
+   still deterministic: each seed $s$ implies a specific function $f_s: U \to
+   [n]$.
+3. Each seed $s\in \mathbb N$ works with some probability $p_s \leq Y/X$. These
+   probabilities are /not/ independent, and the inputs that a seed
+   works for /can/ overlap.
+4. For each input, we /fix/ the seed that we assign to it. (Typically the smallest
+   one that works, but we do not require this.)
+5. Now each seed has some number $Y_s\leq Y$ of inputs assigned to it, and
+   $\sum_s Y_s = X$.
+6. It remains to encode a seed, which is lower bounded by the entropy of the
+   distribution given by $p_s = Y_s/X$.
+7. This evaluates to
+   $$E := \sum_s - p_s \lg p_s = \sum_s \frac {Y_s}X \cdot \lg \frac XY \geq \sum_s
+   \frac {Y_S}X \cdot \lg \frac X{Y_S} =
+   \lg \frac XY,$$
+   which is exactly the same as before.
+
+The week part of this proof is step 4.
+In any setting where there is some deterministic algorithm that assigns a key to
+an input, this assumption is satisfied.
+But would we somehow require less space if
+the construction algorithm is randomized?
+
+How about this modification:
+1. Run the construction algorithm, which may be randomized, and let $p^K_s$ be the
+   probability that it outputs seed $s$ on input $K$.
+2. Let $p_s := \binom un^{-1} \sum_{K\in \binom Un} p^K_s$ be the probability that it outputs
+   seed $s$ on a random input.
+3. Then again we have $p_s \leq Y/X$ and the entropy needed to encode $s$ is the
+   same as before.
+
+Still it feels like this has a problem: with the randomized construction we are
+allowed to encode any working seed, and we want to let the entropy-efficient
+encoding decide on which particular value is stored, rather than the
+construction algorithm?
 
 #+print_bibliography:
 
