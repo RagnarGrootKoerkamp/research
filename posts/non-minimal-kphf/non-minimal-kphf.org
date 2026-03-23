@@ -1,0 +1,262 @@
+#+title: k-Perfect Hashing: Theory, Practice, and Applications
+#+filetags: wip mphf
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 2
+#+date: <2026-03-23 Mon>
+
+$\newcommand{\bin}{\mathsf{Bin}}$
+
+* Abstract
+* Intro
+* Prelims
+$[n] := \{0, \dots, n-1\}$
+$\lg = \log_2$
+* Lower and upper bounds
+As warmup, we first do (a refinement of) 1-PHF lower and upper bound.
+** Refining the lower bound for 1-PHF
+TODO: Cite first lower bound paper (and survey?).
+
+#+begin_theorem "MPHF lower bound"
+Given a universe $U$ of size $u$ and a uniform random set $K\in \binom Un$ with $u\gg
+n^2$, the entropy to encode a minimal perfect hash function $K\to [n]$ is $n \lg
+e + O(\lg n)$.
+#+end_theorem
+
+#+begin_proof
+In order to give a lower bound on the space usage of a minimal perfect hash
+function, we assume that the set of keys $K$ is a uniform random subset of size
+$n=|K|$ of a large universe $U$ of size $u=|U|$ with $u\gg n^2$. (This
+restriction is needed to avoid cases like $u=n$, where the MPHF can simply be the
+identity, and implies via the birthday paradox that random hash collisions
+between the $n$ keys are rare.)
+The construction algorithm takes as input the set $K$, and then outputs some
+function $f_S: K \mapsto [n]$. We are interested in /the entropy of the state (seed) $s$ of $f$/.
+
+The total number of inputs (keys sets) is $X := \binom un$. On the other hand, a single
+function $f_s$ is an MPHF for only $\prod_{i\in [n]} |f_s^{-1}(i)|$ functions,
+when $K$ has exactly one element mapping to each element of $[n]$.
+This is maximized when all $|f_s^{-1}(i)|$ are equal to $u/n$, from which it
+follows that any particular $f_s$ works for at most $Y:=(u/n)^n$ inputs.
+
+It directly follows that at least $X/Y$ different states are needed, and thus
+that there is an input that requires $\lg (X/Y)$ bits to encode its state.
+We obtain
+\begin{align*}
+\lg (X/Y) &= \lg \left(\binom un\right) / (u/n)^n \approx \lg ((u^n)/n!)/(u/n)^n \\
+&= \lg (n^n/n!) = n \lg n - (n\lg n! + n \lg e + O(\lg n)) = n \lg e + O(\lg n)
+\end{align*}
+where the first approximation holds because $u \gg n^2$ and the second one is
+the Stirling approximation.
+
+[TODO: replace $\approx$ by $+O()$]
+
+We now extend this proof beyond the worst case. Let $p_s$ be the probability
+that the (possibly randomized) construction algorithm outputs $f_s$. As before,
+we have $p_s \leq Y/X$. It follows that the entropy satisfies
+\begin{equation*}
+E = - \sum_s  p_s \lg p_s = \sum_s p_s \lg (1/p_s) \geq \sum_s p_s \lg (X/Y) = \lg (X/Y) \approx n\lg e + O(\lg n),
+\end{equation*}
+showing that the expected case equals the worst-case.
+#+end_proof
+
+** Upper bound for 1-PHF
+#+begin_theorem "MPHF upper bound"
+For any $K\subseteq U$, an MPHF can be encoded in expected $n \lg e + O(\lg n)$ bits.
+#+end_theorem
+#+begin_proof
+It turns out that a simple greedy randomized algorithm gives a matching upper
+bound: we can simply try random $f_s$ for $s=0,1,2,\dots$ until success. Each
+seed succeeds with probability $p:=n!/n^n$, which means the first successful
+seed follows a geometric distribution with entropy
+$$
+E = \frac 1p (-p\lg p - (1-p) \lg (1-p)) = \lg (1/p) + \frac {1-p}p \lg (1/(1-p))
+$$
+The first term approaches $\lg (1/p) = \lg (n^n/n!) = n \lg e + O(\lg n)$, again
+via Stirling approximation, while the second term converges to $1 = O(\lg n)$.
+#+end_proof
+
+   
+** Intermezzo: Balls into Bins and the Truncated Poisson distribution
+
+
+[TODO: Rewrite from $\geq d$ to $\leq k$.]
+
+Before proceeding with bounds for non-minimal k-perfect hashing, we show a
+balls-into-bins result, based on [cite:@hit-every-bin].
+# [cite:@r-associated-stirling-numbers]
+
+Let $n,k ∈ \mathbb N$, and $\alpha \in \mathbb R$ with $0\leq \alpha \leq k$. Let $E$ be the event that
+throwing $n$
+balls into $B=n/\alpha$ bins results in at most $k$ balls in every bin. More formally,
+$c₁,…,c_B \sim \mathcal U(\{1,…,B\})$ are independent random variables where
+$c_j$ denotes the bin of the $j$th ball for $1 ≤ j ≤ n$. Then $X_i = |\{ j ∈
+\{1,…,n\} \mid c_j = i\}|$ is the load of the $i$th bin for $1 ≤ i ≤ B$ and $E =
+[\cap_{i\in [n]} X_i \leq k]$.
+
+To state the main result we require a distribution $\Phi(\alpha,k)$ that is a
+Poisson distribution truncated to values $\leq k$ and tuned to have expectation $α$. Formally $Z \sim \Phi(\alpha,k)$ satisfies
+\begin{equation}
+     \Pr[Z = i] = \begin{cases}
+        0 & i > k\\
+        \frac{1}{ζ}\frac{λ^i}{i!}
+    \end{cases}\label{eq:def-\Phi}
+\end{equation}
+where $ζ = \sum_{i \leq k} \frac{λ^i}{i!}$ is a normalization factor and $λ = λ(\alpha,k)$ is tuned such that $𝔼[Z] = \alpha$.
+ 
+#+begin_theorem "Balls into small bins"
+- If $\alpha$ and $k$ are constants with $\alpha < k$ then $\Pr[E] = \Theta(b^B) \text{ where } b = \frac{\alpha^αζ}{e^αλ^{\alpha}}$.
+- For $\alpha = k$ (not necessarily constant) $\Pr[E] = \Theta(b^B \sqrt{kB}) \text{ where } b = \frac{k^k}{e^k k!}$.
+#+end_theorem
+
+# In \cref{app:tables} we provide code for computing $b = b(\alpha,d)$ and tabulate some values.
+# related work skipped for now
+# upper bound skipped for now
+# figure skipped for now
+
+
+#+begin_proof
+If $\alpha = k$ then $E$ occurs if and only if every bin receives /exactly/ $d$ balls. The probability mass function of the multinomial distribution and Stirlings Approximation of $(kB)!$ gives
+\begin{align*}
+    \Pr[E] &= \Pr[(X₁,…,Xₙ) = (k,\dots, k)] = \frac{(kB)!}{(k!)^B} · B^{-kB}\\
+    &= \frac{Θ\big((kB)^{kB}·e^{-Bk}\sqrt{Bk}\big)}{(k!)^B B^{kB}}
+    = Θ\bigg( \Big(\frac{k^{k}}{e^{k}k!}\Big)^B \sqrt{Bk} \bigg).
+\end{align*}
+
+The standard technique of Poissonisation exploits that the multinomial distribution of $(X₁,…,X_B)$ can be attained by taking independent Poisson random variables $Y_1,…,Y_B$ and conditioning them on $\sum_{i = 1}^B Y_i = αB$. We use Poissonisation with a twist.
+
+# The idea is illustrated in \cref{fig:proof-idea}.
+An outcome $(x₁,…,x_B) ∈ ℕ^B$  contributing to $E$ must satisfy two conditions: The sum $x₁+…+x_B$ must be $αB$ and each $x_i$ must be at most $k$. The vector $(X₁,…,X_B)$ follows a multinomial distribution and automatically satisfies the sum condition, but not the minimum condition. The proof considers a sequence $Z₁,…,Z_B \sim \Phi(\alpha,k)$ of independent truncated Poisson random variables. The vector $(Z₁,…,Z_B)$ automatically satisfies the minimum condition, but not the sum condition. This amounts to a mathematically simpler way to capture the outcomes we want.
+
+[TODO: Add some context that the $Z_i$ indeed are the distribution of the bin
+loads, and that the 'residual' probability of hitting the exact right size is
+large now at $O(1/\sqrt B)$, whereas in the non-truncated setting, this is
+exponentially unlikely. On the scale of exponentially small probabilities,
+hitting the exact right number of balls when we independently put $Z_i$
+balls in each bin is nearly guaranteed to happen.]
+
+
+Let $R$ denote the set of possible outcomes of $\vec{X} = (X₁,…,X_B)$ that are consistent with $E$, meaning
+\[ R = \{ \vec{x} ∈ (ℕ \setminus \{0,1,…,k-1\})^B \mid \sum_{i = 1}^B x_i = n \}.\]
+Using that $(X₁,…,X_B)$ has multinomial distribution gives
+\begin{align}
+    \Pr[E]
+    &= \Pr[\vec{X} ∈ R] = \sum_{\vec{x} ∈ R} \Pr[\vec{X} = \vec{x}]
+     = \sum_{\vec{x} ∈ R} \binom{n}{x₁\,…\,x_B} B^{-n}\notag\\
+    &= \sum_{\vec{x} ∈ R} \frac{n!}{x₁!·…·x_B!} B^{-n}
+     = \frac{n!}{B^{n}} \sum_{\vec{x} ∈ R} \frac{1}{x₁!·…·x_B!}.\label{eq:prob-E}
+\end{align}
+Now consider independent $Z₁,…,Z_B \sim \Phi(\alpha,k)$ for $Φ(\alpha,k)$ as defined in \cref{eq:def-\Phi}. Let $\vec{Z} = (Z₁,…,Z_B)$ and $N_Z = \sum_{i = 1}^B Z_i$. By construction the events $\vec{Z} ∈ R$ and $N_Z = αB$ are equivalent. For any $\vec{x} ∈ R$ we can compute
+\begin{align*}
+    \Pr[\vec{Z} &= \vec{x} \mid N_Z = n]
+     = \frac{\Pr[\vec{Z} = \vec{x} ∧ N_Z = n]}{\Pr[N_Z = n]}
+     = \frac{\Pr[\vec{Z} = \vec{x}]}{\Pr[N_Z = n]}
+     = \frac{\prod_{i = 1}^B \Pr[Z_i = x_i]}{\Pr[N_Z = n]}\\
+    &= \frac{\prod_{i = 1}^B \frac{1}{ζ} · \frac{λ^{x_i }}{x_i!}}{\Pr[N_Z = n]}
+     = \frac{λ^{n}}{ζ^n\Pr[N_Z = n]} \frac{1}{x₁!·…·x_B!}.
+\end{align*}
+By summing this equation over all $\vec{x} ∈ R$ we get
+\[
+    1 = \frac{λ^{n}}{ζ^B\Pr[N_Z = n]} \sum_{\vec{x} ∈ R}\frac{1}{x₁!·…·x_B!}
+\]
+We rearrange this equation for $\sum_{\vec{x} ∈ R}\frac{1}{x₁!·…·x_B!}$ and plug
+the result into \cref{eq:prob-E}. We now assume that $α$ is constant, we use
+Stirling's approximation of $n!$ and we use that $\Pr[N_Z = n] =
+\Theta(1/\sqrt{B})$, which follows directly from the Local Limit Theorem
+[cite:@local-limit-theorem;Eq 1.9 @classical-local-limit-theorems;Thm 2.8 @local-limit-theorem-notes].
+This gives
+\begin{align*}
+    \Pr[E] &= \frac{n!}{B^{n}} \frac{ζ^B\Pr[N_Z = n]}{λ^{n}}
+    = \frac{n^{n}e^{-n}\Theta(\sqrt{B})ζ^B \Theta(1/\sqrt{B})}{B^{n} λ^{n}}
+    = \Big(\frac{\alpha^{\alpha}ζ}{e^{\alpha}λ^\alpha}\Big)^B·Θ(1),
+\end{align*}
+concluding the proof.
+#+end_proof
+
+
+
+
+** New lower bound
+*Lower bound for minimal k-PHF*
+For minimal $k$-perfect hashing, the situation is nearly the same as 1-PHF.
+We now have $B:=n/k$ bins and $X = B^n$ functions.
+Otherwise, all that changes is the bound on the number of functions for which a
+seed $s$ works. This is again maximized when all parts of $f^{-1}$ have the same
+size, and equals
+$$Y = \binom {u/n}k^B \approx ((u/n)^k/k!)^B = u^n/(n\cdot k!)^B.$$
+The rest of the analysis is as before.
+
+*Lower bound for non-minimal k-PHF*
+Now, the situation is more complicated. We want to compute the total number of
+distributions of $n$ balls into $B$ bins, where $kB = n/\alpha > n$ and
+$\alpha=1-\varepsilon$ is the load factor.
+
+[TODO: Lemma that $Y$ is indeed maximized when all $f^{-1}(i)$ have the same
+size. Works by considering two parts that differ in size by at least 2, and then
+making them more equal, by which the number of good functions $f$ increases.
+Note that this is all slightly more tricky now since we consider non-minimal
+k-PHF, so from both parts we select at most $k$, and together some number $x$
+of remaining keys.]
+
+By the theorem above, we get that the probability that putting $n$ balls into $B=n/\alpha$
+bins satisfies the $\leq k$ load factors is $p=Y/X = \Theta(b^n)$ for some
+constant $b$.
+
+Via the same argument as before, this implies that the entropy of the k-PHF
+state is at least $\log p^{-1}$.
+
+Some values are in the table below:
+
+| load $\alpha$ |     k=1 |     k=2 |     k=4 |       k=8 |           k=16 |             k=32 |           k=64 |            k=128 |
+|           0.1 | 0.07466 | 0.00849 | 0.00022 | 0.0000003 | 0.000000000001 |                  |                |                  |
+|           0.2 | 0.15498 | 0.03112 | 0.00259 |   0.00004 |     0.00000002 | 0.00000000000002 |                |                  |
+|           0.3 | 0.24202 | 0.06581 | 0.00989 |   0.00052 |       0.000003 |     0.0000000004 |                |                  |
+|           0.4 | 0.33724 | 0.11221 | 0.02444 |   0.00267 |        0.00008 |        0.0000002 | 0.000000000003 |                  |
+|           0.5 | 0.44269 | 0.17114 | 0.04833 |   0.00857 |        0.00068 |         0.000012 |    0.000000009 | 0.00000000000001 |
+|           0.6 | 0.56140 | 0.24472 | 0.08410 |   0.02095 |        0.00318 |          0.00020 |       0.000002 |     0.0000000006 |
+|           0.7 | 0.69828 | 0.33704 | 0.13568 |   0.04360 |        0.01028 |          0.00149 |        0.00009 |        0.0000009 |
+|           0.8 | 0.86221 | 0.45624 | 0.21044 |   0.08294 |        0.02699 |          0.00677 |        0.00113 |          0.00009 |
+|           0.9 | 1.07359 | 0.62179 | 0.32631 |   0.15418 |        0.06498 |          0.02404 |        0.00755 |          0.00188 |
+|          0.95 | 1.21522 | 0.73972 | 0.41651 |   0.21663 |        0.10374 |          0.04552 |        0.01815 |          0.00647 |
+|          0.98 | 1.32751 | 0.83742 | 0.49629 |   0.27699 |        0.14560 |          0.07194 |        0.03332 |          0.01444 |
+|          0.99 | 1.37558 | 0.88056 | 0.53318 |   0.30680 |        0.16811 |          0.08765 |        0.04339 |          0.02036 |
+|         0.999 | 1.43271 | 0.93321 | 0.58010 |   0.34702 |        0.20111 |          0.11335 |        0.06222 |          0.02895 |
+|           1.0 | 1.44269 | 0.94265 | 0.58893 |   0.35509 |        0.20832 |          0.11967 |        0.06761 |          0.03770 |
+
+** New upper bound matching lower bound
+We again show a matching upper bound.
+The balls-into-bins theorem directly gives the probability $p$ that a random
+function is a non-minimal k-PHF, and so we make repeated attempts until success.
+As before, the entropy of the geometric distribution is simply $\log p^{-1}$,
+which matches the lower bound.
+
+* Practice: k-perfect PtrHash
+** PtrHash
+- $n$ keys
+- $\lambda$ keys/bucket
+- bucket function
+- greedily find seeds bucket-by-bucket
+- backtracking
+** k-perfect bucket placement
+- New dynamic: greedily choosing the first working seed is not globally optimal!
+- Better: 
+
+* Application: single-cache miss hashset
+- compare against
+  - hashbrown (default Rust absl flat hashset)
+  - custom fixed-size linear probing with cachelines and SIMD
+  - custom fixed-size quadratic probing with cachelines and SIMD
+  - non-minimal k-PHF with $k\in{1,2,4,8,16,32}$
+- Experiments:
+  - different load factors $\{0.99, 0.98, 0.95, 0.90 0.80\}$.
+  - construction
+  - 1%/10%/50%/90%/99% random positive vs negative queries
+  - =u32= and =u64=
+- Metrics:
+  - construction time
+  - space overhead
+  - 
+
+#+print_bibliography:
