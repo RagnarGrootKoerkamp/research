@@ -392,5 +392,34 @@ allowed to encode any working seed, and we want to let the entropy-efficient
 encoding decide on which particular value is stored, rather than the
 construction algorithm?
 
+** Lower bound for minimal k-PHF
+For minimal $k$-perfect hashing, the situation is nearly the same.
+We now have $B:=n/k$ bins and $X = B^n$ functions.
+Otherwise, all that changes is the bound on the number of functions for which a
+seed $s$ works. This is again maximized when all parts of $f^{-1}$ have the same
+size, and equals
+$$Y = \binom {u/n}k^B \approx ((u/n)^k/k!)^B = u^n/(n\cdot k!)^B.$$
+The rest of the analysis is as before.
+
+** Lower bound for non-minimal k-PHF
+Now, the situation is more complicated. We want to compute the total number of
+distributions of $n$ balls into $B$ bins, where $kB = n/\alpha > n$ and
+$\alpha=1-\varepsilon$ is the load factor.
+
+In [cite:@hit-every-bin], it is shown that when throwing balls into bins,
+conditioning on every bin containing $\geq d$ balls yields a truncated
+Poisson distribution for the number of balls in each bin, with $\lambda$ such
+that it yields the right expected value.
+The same argument should directly work for the $\leq k$
+restriction we have here. Note also that the argument is exact, since it is
+essentially a counting argument.
+
+Thus, we get that the probability that putting $n$ balls into $B=(n/\alpha)/k$
+bins satisfies the $\leq k$ load factors is $\Theta(b^n)$ for some constant $b$,
+and by extension, the number of such functions is $Y=B^n\cdot \Theta(b^n) = \Theta((bB)^n)$.
+
+The rest is as before.
+
+
 #+print_bibliography:
 
