@@ -40,7 +40,7 @@ We first survey existing results on rank data structures.
 For the $\sigma=2$ binary alphabet, we then develop BiRank, which has 3.28% space overhead.
 BiRank merges the central ideas of two recent papers: (1)
 we interleave (inline) offsets in each cache line of the underlying bit vector
-[cite:@spider], reducing cache-misses, and (2)
+[cite:@spider], reducing cache misses, and (2)
 these offsets are to the /middle/ of each block so that only half of each needs
 popcounting [cite:@engineering-rank].
 In QuadRank (14.4% overhead), we extend these techniques to the $\sigma=4$ (DNA) alphabet.
@@ -63,7 +63,7 @@ FM-index implementation.
 
 *Conclusion.*
 Optimizing data structures for high throughput, by minimizing
-cache-misses and branch-misses and adding support for prefetching, can result in
+cache misses and branch-misses and adding support for prefetching, can result in
 significant speedups when benchmarks are adjusted accordingly.
 
 * Introduction
@@ -149,7 +149,7 @@ only half its usual size.
 
 QuadRank extends the ideas of BiRank, but has roughly 4$\times$ larger space
 overhead (14.4%)
-since it stores metadata for each symbol. It combines the cache-locality of the
+since it stores metadata for each symbol. It combines the cache locality of the
 implementation in BWA-MEM [cite:@bwa-mem] with the low overhead of
 quad vectors [cite:@quad-wavelet-tree-preprint] and a transposed bit layout for
 faster queries [cite:@awry-optimized-fm-index;@engineering-rank].
@@ -243,7 +243,7 @@ They use 256-bit superblocks with a 32-bit offset, containing 8
 Alternatively, they introduce a /single/-level tree
 storing a 32-bit L1 offset after every e.g. $4\cdot 32$ bits, omitting L2.
 This requires popcounting more words, but has the benefit of improved
-cache-locality compared to a two-level tree.
+cache locality compared to a two-level tree.
 
 *Rank9: interleaving levels.*
 /Rank9/ [cite:@rank9] has 25% overhead and /interleaves/ the L1 and L2 levels of the classic tree.
@@ -274,7 +274,7 @@ with a full 64 bit offset after every $2^{32}$ input bits.
 
 *BWA-MEM: DNA alphabet.*
 BWA-MEM [cite:@bwa-mem] implements a 100% overhead rank data structure on $\sigma=4$ DNA.
-It interleaves L1 offsets with the data, and requires only a single cache-miss per query.
+It interleaves L1 offsets with the data, and requires only a single cache miss per query.
 In each cache line, it stores 4 64-bit offsets (one for each DNA character),
 followed by 256 bits encoding 128 bp.
 
@@ -333,7 +333,7 @@ well, the overhead only doubles to 6.25%.
 Alternatively, 256 bp (512 bit) blocks can be used to reduce the number of cache
 misses, using 12.5% overhead.
 
-*SPIDER: interleaving bits for minimal cache-misses.*
+*SPIDER: interleaving bits for minimal cache misses.*
 /SPIDER/ [cite:@spider] has only 3.3% overhead and reduces the number of cache misses from 2 to (nearly) 1
 by interleaving L2 with the bitvector itself (like BWA-MEM), instead of interleaving L1 and L2:
 each cache line stores a 16-bit L2 delta, and 496 input bits.
@@ -429,7 +429,7 @@ querying QuadRank in [[#snippets]].
 We aim to minimize the number of cache misses on large (many GB) inputs,
 to enable efficient usage in high-throughput settings where the
 memory bandwidth is the bottleneck.
-A single cache-miss is inevitable, and so we must avoid any further cache misses.
+A single cache miss is inevitable, and so we must avoid any further cache misses.
 This means that any additional data should fit in L3 cache, which is not the
 case for non-interleaved layouts.
 For example, pairing has 1.6% overhead, which would only support 1 GiB of input
@@ -557,7 +557,7 @@ performance, and cache lines are automatically reused anyway.
 
 As with BiRank, QuadRank is optimized for having as few cache misses as possible.
 In particular, the data-layout is nearly the same, but with the L1 and L2 data
-replicated for each symbol: each cache-line contains 4 16-bit deltas $b_{j,c}$
+replicated for each symbol: each cache line contains 4 16-bit deltas $b_{j,c}$
 and $B_4=(512-4\cdot 16)/2=224$ characters.
 Superblocks cover 256 blocks ($S_4:=256\cdot B < 2^{16}$), and for each we store
 4 shifted 32-bit offsets
@@ -652,7 +652,8 @@ running at 2933 MHz.
 Benchmarks on a 92-core AMD Zen 4 EPYC with 12 DDR5 memory channels can be found
 in the appendix and give mostly similar results ([[#epyc]]). The appendix also
 contains additional plots analysing the CPU time for very small inputs
-([[#small-n]]).
+([[#small-n]]), as well as statistics on the number of measured last-level cache
+misses per query ([[#cache-misses]]).
 # as well as the scaling of query throughput for increasing input sizes ([[#scaling-n]]).
 
 We only compare Rust implementations, since our aim is to provide a ready-to-use
@@ -797,7 +798,7 @@ are around 1.5$\times$ faster than other methods.
 Additional prefetching improves all methods, and
 doubles the throughput of BiRank, making it 2$\times$ faster than
 all other methods with prefetching.
-BiRank benefits from single-cache-miss per query, compared to
+BiRank benefits from single cache-miss queries, compared to
 two for most other methods, and thus makes optimal use of the limited memory bandwidth.
 For QuadRank, the improvement over existing methods is
 already 1.5$\times$ without multithreading, and again 2$\times$ with prefetching.
@@ -812,7 +813,7 @@ state-of-the-art when used in an FM-index, and we hope that multithreading,
 batching, and prefetching become standard in both applications and benchmarks.
 
 In general, we observe that designing data structures for high-throughput, by minimizing
-cache-misses and branch-misses and adding support for prefetching, can give big
+cache misses and branch-misses and adding support for prefetching, can give big
 gains when benchmarks are adjusted accordingly.
 
 *Future work.*
@@ -956,6 +957,50 @@ Queries are modified accordingly to remove this extra term again:
 \end{align*}
 
 * Additional results
+** Cache misses per query
+:PROPERTIES:
+:CUSTOM_ID: cache-misses
+:END:
+
+[[cache-misses-2]] and [[cache-misses-4]] contain experimental measurements of the
+number of last-level cache misses each method has on an input of size 4GiB,
+that is, the average number of cache lines fetched from RAM per query.
+  
+#+name: cache-misses-2
+#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for alphabet size 2.
+#+attr_html: :class small
+| Ranker                 | Space overhead (%) | Cache misses per $\rank$ |
+| sux::Rank9             |               25.0 |                     2.05 |
+| sux::RankSmall0        |               18.8 |                     2.17 |
+| sux::RankSmall1        |               12.5 |                     2.03 |
+| sux::RankSmall2        |                6.3 |                     2.25 |
+| sux::RankSmall3        |                3.1 |                     2.11 |
+| sux::RankSmall4        |                1.6 |                     2.31 |
+| qwt::RSNarrow          |               25.0 |                     2.05 |
+| qwt::RSWide            |                3.1 |                     1.99 |
+| genedex::Condensed64   |               50.2 |                     3.73 |
+| genedex::Condensed512  |                6.4 |                     3.27 |
+| bitm::RankSelect101111 |                3.1 |                     2.25 |
+| birank::Spider         |                3.3 |                   *1.02* |
+| BiRank64x2             |               33.3 |                   *1.01* |
+| BiRank32x2             |               14.3 |                   *1.01* |
+| BiRank16x2             |                6.7 |                   *1.02* |
+| BiRank16               |                3.3 |                   *1.02* |
+
+#+name: cache-misses-4
+#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for alphabet size 4.
+#+attr_html: :class small
+| Ranker                | Space overhead (%) | Cache misses per $\rank$ | per $\rankall$ |
+| genedex::Flat64       |              166.9 |                     1.38 |           2.02 |
+| genedex::Flat512      |              106.6 |                     1.35 |           2.32 |
+| genedex::Condensed64  |               50.2 |                     2.46 |           2.58 |
+| genedex::Condensed512 |                6.4 |                     3.34 |           3.41 |
+| qwt::RSQ256           |               12.5 |                     2.01 |           2.00 |
+| qwt::RSQ512           |                6.3 |                     2.22 |           2.35 |
+| QuadRank64            |              100.0 |                   *1.01* |         *1.01* |
+| QuadRank24_8          |               33.3 |                   *1.01* |         *1.00* |
+| QuadRank16            |               14.4 |                   *1.05* |         *1.05* |
+
 ** Throughput for small inputs
 :PROPERTIES:
 :CUSTOM_ID: small-n
@@ -1125,9 +1170,7 @@ file:./plots/plot-fm.svg
 #   - that is, the u32 sacrifices 1 bit, but then because the u16 deltas are
 # smaller, we can have more of them in each superblock (256 instead of 128),
 # halving the size of the superblock metadata.
-# - cache-miss statistics
 # - EXPLAIN SEQUENTIAL=LATENCY vs LOOP~BATCH vs PREFETCH and ILP
-# - mention BWA-MEM in conclusion?
 # - add 'Space overhead' header to fig
 # ** code
 # TODO:
@@ -1140,15 +1183,6 @@ file:./plots/plot-fm.svg
 # - Do a epi64-native conditional negation of lanes, rather than converting to
 #   u32x4 for =sign=.
 # - bench sview: https://crates.io/crates/sview-fmindex
-# ** paper
-# - Florian's feedback:
-#   #+begin_quote
-#  I understand what the dots in the Blocks mean but it might not be clear at first glance. Some things I might would change or at least try:
-# - Use different notation when storing deltas in the L1-blocks. Maybe even just a $\Delta$ symbol?
-# - Maybe indicate what the L1/L2 blocks are storing. I know that this is done by color right now, but I think a small arrow would be nice.
-# - Maybe replace the dots for the Blocks with $\Sigma$ to show that it is the prefix sum?
-#   #+end_quote
 
-# Omitted for now:
-# - 3* [cite:@rank-select-theory-practice]
 #+print_bibliography:
+
