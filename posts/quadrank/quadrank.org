@@ -144,7 +144,7 @@ needed for the motivating FM-index application, thus allowing for more optimizat
 Specifically, BiRank has 3.28% overhead and integrates (1) inlining of counts into the bitvector
 [cite:@spider], which reduces cache misses, (2) 
 /pairing/ with mask-lookup [cite:@engineering-rank], halving the number of popcounts,
-and (3) an additional zeroth layer [cite:@poppy] that is modified to be
+and (3) an additional third layer [cite:@poppy] that is modified to be
 only half its usual size.
 
 QuadRank extends the ideas of BiRank, but has roughly 4$\times$ larger space
@@ -188,7 +188,7 @@ state-of-the-art FM-index implementation.
 * Background
 We briefly go over some previous papers containing rank structures for either
 $\sigma=2$ or $\sigma=4$ in chronological order and list their main technical contributions.
-Both the [cite:@poppy] and [cite:@pasta] contain a nice
+Both [cite:@poppy] and [cite:@pasta] contain a nice
 overview as well.
 Note that many of these papers develop a rank structure in the context of the
 larger /rank and select/ problem, where there are different design trade-offs.
@@ -197,18 +197,19 @@ Additionally, work on /compressed/ bitvectors is omitted here.
 Most data structures are schematically depicted in [[ranks]].
 
 *Terminology.*
-For later reference, we summarize our terminology, mostly following [cite:@poppy] and [cite:@pasta].
-The raw data is split into /superblocks/ (the first level, L1) that are further
-split into /blocks/ (L2). /Block/ is used for both the raw bits themselves, as well as the
+For later reference, we summarize our terminology.
+The raw data is split into /superblocks/ (the second level, L2) that are further
+split into /blocks/ (L1). /Block/ is used for both the raw bits themselves, as well as the
 cache line containing them.
-For each superblock, an L1 /offset/ is stored, representing the number of 1-bits
-before the superblock. For each block, an L2 /delta/ is stored, typically representing the
+For each superblock, an L2 /offset/ is stored, representing the number of 1-bits
+before the superblock. For each block, an L1 /delta/ is stored, typically representing the
 number of 1-bits preceding it inside the superblock.
 Conceptually, these levels form a /summary tree/, named as such by
-[cite:@rank-select-theory-practice], which numbers the layers bottom-up instead
-of top-down as we do:
-The root has all superblocks (L1) as children,
-each superblock has its contained blocks (L2) as children,
+Kurpicz et al. [cite:@rank-select-theory-practice]. We follow their notation,
+and number the levels of the tree /bottom-up/, breaking tradition with e.g. the
+presentation in [cite:@poppy] and [cite:@pasta].
+The root has all superblocks (L2) as children,
+each superblock has its contained blocks (L1) as children,
 and each block has the contained bits as children.
 
 
@@ -225,9 +226,9 @@ As a baseline, Jacobson [cite:@succinct-data-structures]
 stores the bitvector, and additionally two levels of blocks alongside this.
 /Blocks/ consist of $\lfloor\log(n)/2\rfloor$ bits,
 and $\lfloor\log n\rfloor$ blocks form a /superblock/.
-The first level L1 of the tree then contains a $\lceil \log n\rceil$ bit /offset/ for each
+Level L2 of the tree then contains a $\lceil \log n\rceil$ bit /offset/ for each
 superblock, counting the number of set bits preceding it.
-The second level L2 stores for each block a $\lceil\log \log n\rceil$ bit
+Level L1 stores for each block a $\lceil\log \log n\rceil$ bit
 /delta/ counting the number of 1-bits preceding it inside its superblock.
 The number of 1-bits in a (prefix of) a block is obtained via a lookup in a
 precomputed table of size $2^{(\log n)/2} = \sqrt n$.
@@ -241,18 +242,18 @@ instructions.)
 They use 256-bit superblocks with a 32-bit offset, containing 8
 32-bit blocks, each with their own 8-bit delta.
 Alternatively, they introduce a /single/-level tree
-storing a 32-bit L1 offset after every e.g. $4\cdot 32$ bits, omitting L2.
+storing a 32-bit L2 offset after every e.g. $4\cdot 32$ bits and omitting L1.
 This requires popcounting more words, but has the benefit of improved
 cache locality compared to a two-level tree.
 
 *Rank9: interleaving levels.*
-/Rank9/ [cite:@rank9] has 25% overhead and /interleaves/ the L1 and L2 levels of the classic tree.
+/Rank9/ [cite:@rank9] has 25% overhead and /interleaves/ the L2 and L1 levels of the classic tree.
 Each block is 64
 bits, and 8 blocks form a 512-bit superblock, exactly matching a cache line.
 For each superblock, the interleaved
 tree stores a 64-bit integer with the offset of the superblock, and 7
 9-bit deltas (for all but the first block) in an additional 64-bit word.
-This needs two cache misses per query (for the L1 array and bits), and is very fast in practice.
+This needs two cache misses per query (for the L2 array and bits), and is very fast in practice.
 Specifically it only needs to popcount a single 64-bit word, which is done
 using /broadword programming/ (also known as SWAR, SIMD Within A Register).
 
@@ -267,20 +268,20 @@ First, it makes the observation that performance is largely determined by the
 number of cache misses. Thus, it uses larger blocks of 512 bits. It then re-uses
 Rank9's interleaved index with two modifications.
 Each superblocks contains 4 blocks, and for each superblock it stores a 32-bit
-offset (L1) followed by 3 10-bit popcounts of the first 3 blocks.
+offset (L2) followed by 3 10-bit popcounts of the first 3 blocks.
 Queries then require a prefix-sum over these counts.
-To handle 64-bit outputs, it stores an additional zero layer (L0) of the tree,
+To handle 64-bit outputs, it stores an additional layer (L3) of the tree,
 with a full 64 bit offset after every $2^{32}$ input bits.
 
 *BWA-MEM: DNA alphabet.*
 BWA-MEM [cite:@bwa-mem] implements a 100% overhead rank data structure on $\sigma=4$ DNA.
-It interleaves L1 offsets with the data, and requires only a single cache miss per query.
+It interleaves L2 offsets with the data, and requires only a single cache miss per query.
 In each cache line, it stores 4 64-bit offsets (one for each DNA character),
 followed by 256 bits encoding 128 bp.
 
 *SDSL.* The succinct data structure library (SDSL) [cite:@sdsl] implements Rank9
 and introduces =rank_support_v5=, which has 6.25% overhead. It uses superblocks of
-2048 bits. For each, it interleaves a 64-bit offset (L1) and 5 11-bit deltas (packed
+2048 bits. For each, it interleaves a 64-bit offset (L2) and 5 11-bit deltas (packed
 into 64 bits) to all but the first of 6 blocks covering $6\cdot 64$ bit.
 =rank_support_il= interleaves 64-bit offsets with 512-bit blocks.
 
@@ -311,16 +312,16 @@ This allows for more efficient popcounting.
 The FM-index processes queries in batches of size 4, and prefetches memory
 needed for the next rank operation as soon as possible.
 
-*Pasta: larger L2 values and faster queries.*
+*Pasta: larger L1 values and faster queries.*
 /PastaFlat/ [cite:@pasta;@pasta-preprint] has the same 3.125% space overhead as Poppy,
 but improves query time by 8% by  avoiding Poppy's need to take a prefix
-sum over L2 counts. Pasta doubles the metadata for each superblock to 128 bits, covering
-8 512-bit blocks of 4096 bits in total. It stores a 44-bit offset (L1) followed by 7 12-bit deltas (L2) from the start of the
+sum over L1 counts. Pasta doubles the metadata for each superblock to 128 bits, covering
+8 512-bit blocks of 4096 bits in total. It stores a 44-bit offset (L2) followed by 7 12-bit deltas (L1) from the start of the
 superblock to each block.
-A second structure, /PastaWide/ (3.198% overhead) uses 16-bit values for L2, which allows faster
+A second structure, /PastaWide/ (3.198% overhead) uses 16-bit values for L1, which allows faster
 select queries using SIMD instructions.
-Here, each superblock covers 128 blocks and stores a 64-bit L1 value, this time /not/
-interleaved with the L2 values, and the L0 level is dropped.
+Here, each superblock covers 128 blocks and stores a 64-bit L2 value, this time /not/
+interleaved with the L1 values, and the L3 level is dropped.
 
 *Quad vectors: extending PastaFlat to $\sigma=4$.*
 /Quad wavelet trees/ internally use /quad vectors/
@@ -335,19 +336,19 @@ misses, using 12.5% overhead.
 
 *SPIDER: interleaving bits for minimal cache misses.*
 /SPIDER/ [cite:@spider] has only 3.3% overhead and reduces the number of cache misses from 2 to (nearly) 1
-by interleaving L2 with the bitvector itself (like BWA-MEM), instead of interleaving L1 and L2:
-each cache line stores a 16-bit L2 delta, and 496 input bits.
-L1 superblocks store a 64-bit offset for each 128 blocks, taking only 0.1% extra
+by interleaving L1 with the bitvector itself (like BWA-MEM), instead of interleaving L1 with L2:
+each cache line stores a 16-bit L1 delta, and 496 input bits.
+L2 superblocks store a 64-bit offset for each 128 blocks, taking only 0.1% extra
 space and thus likely fitting in a cache.
 
 *Pairing: halving the overhead.*
 /Pairing/ (pfBV) [cite:@engineering-rank] is an idea that halves the memory
-overhead again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L2)
+overhead again, to 1.6%. Compared to PastaWide, instead of storing 16-bit (L1)
 deltas to the start of /each/ 512-bit block,
 here we store 16-bit deltas to the middle of each /pair/ of 512-bit blocks.
 Then, the second block can add a prefix-popcount to this as usual, while
 the first block can /subtract/ a /suffix/-popcount instead.
-Similarly, the 64-bit L1 offset is to the /middle/ of a twice-as-large superblock.
+Similarly, the 64-bit L2 offset is to the /middle/ of a twice-as-large superblock.
 This is similar to the /alternate counters/ idea for the FM-index
 [cite:@fm-gpu], where, for alphabet size 4, each block stores half the offsets.
 A small complication with this design is that conditionally popcounting a
@@ -359,7 +360,7 @@ AWFM, but calls it /scattered/ instead.
 #+name: ranks
 #+caption: Schematic overview of rank data structures. The top and bottom half are for $\sigma=2$ and $\sigma=4$ respectively. Each line shows a data structure (and notable (re)implementations) with its overhead and the layout of a single /superblock/ (not to scale).
 #+caption: Each structure stores up to 3 vectors containing (interleaved) superblocks offsets, block deltas, and raw bits.
-#+caption: On the right (black) are the /blocks/ containing (bitpacked) data. Each superblock contains a single L1 /offset/ (teal) that is either absolute, or sometimes relative to a 64-bit L0 value (green). They usually count the number of 1-bits/characters before the start of the superblock as indicated by the teal dot, or to the middle of the superblock for pairing variants. L2 /deltas/ (yellow) count from the start/middle of the superblock to the start of each block (yellow dots). Only for poppy they count individual blocks (yellow lines). For pairing, pairing fBV, BiRank, and QuadRank, L2 deltas are to the middle of each (pair of) block(s). AWFM, (pairing) fBV, and QuadRank store the text /transposed/, alternating words of low and high bits.
+#+caption: On the right (black) are the /blocks/ containing (bitpacked) data. Each superblock contains a single L2 /offset/ (teal) that is either absolute, or sometimes relative to a 64-bit L3 value (green). They usually count the number of 1-bits/characters before the start of the superblock as indicated by the teal dot, or to the middle of the superblock for pairing variants. L1 /deltas/ (yellow) count from the start/middle of the superblock to the start of each block (yellow dots). Only for poppy they count individual blocks (yellow lines). For pairing, pairing fBV, BiRank, and QuadRank, L1 deltas are to the middle of each (pair of) block(s). AWFM, (pairing) fBV, and QuadRank store the text /transposed/, alternating words of low and high bits.
 #+attr_html: :class inset large
 [[file:./figs/rank-overview.svg]]
 
@@ -373,19 +374,19 @@ we list some specific Rust (re)implementations of rank structures.
 *QWT.* =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) implements =RSQVector256= and =RSQVector512=
 corresponding to the Quad Vectors in the paper [cite:@quad-wavelet-tree] with
 12.5% and 6.25% overhead. It further contains =RSWide=, which implements the
-PastaFlat structure [cite:@pasta] (omitting the L0 layer), and =RSNarrow=,
+PastaFlat structure [cite:@pasta] (omitting the L3 layer), and =RSNarrow=,
 which exactly implements Rank9.
 
 *Sux.* =sux= ([[https://github.com/vigna/sux-rs][github:vigna/sux-rs]]) [cite:@sux-repo] contains an implementation of Rank9, as well as five
 versions of /RankSmall/.
-These are all variants on Rank9, but use Poppy's 64-bit L0 to allow for 32-bit L1
-values. They vary in the number of =u32= used to store the L2 values and the
-width of the L2 values. A special case is =RankSmall3= (3.125% overhead), which stores 3 11-bit
+These are all variants on Rank9, but use Poppy's 64-bit L3 to allow for 32-bit L2
+values. They vary in the number of =u32= used to store the L1 values and the
+width of the L1 values. A special case is =RankSmall3= (3.125% overhead), which stores 3 11-bit
 values in a single 32-bit word by using 0-extension for the implicit high 0-bit of
 the first value.
 
 *Bitm.* =bitm= ([[https://github.com/beling/bsuccinct-rs][github:beling/bsuccinct-rs]]) is part of bsuccinct [cite:@bsuccinct]. Its =RankSimple= (6.25%
-overhead) stores a 32-bit L1 offset for every 512 bit block.
+overhead) stores a 32-bit L2 offset for every 512 bit block.
 =RankSelect101111= (read: 10-11-11) has 3.125% overhead and is the same as
 =RankSmall3= of sux.
 
@@ -435,20 +436,20 @@ case for non-interleaved layouts.
 For example, pairing has 1.6% overhead, which would only support 1 GiB of input
 with a 16 MiB L3 cache.
 
-*Interleaved L2.*
-Thus, like SPIDER [cite:@spider], BiRank inlines a 16-bit L2 delta $b_j$ into
+*Interleaved L1.*
+Thus, like SPIDER [cite:@spider], BiRank inlines a 16-bit L1 delta $b_j$ into
 each block/cache line $j$ (lines 7-8 of [[quadrank-code]]), so that each of $\lceil n/B\rceil$ blocks covers $B:=512-16=496$ bits.
 The $\lceil n/S\rceil$ superblocks cover $S:=128\cdot B$ bits each, and a second much smaller array
-stores a 32-bit L1 offset $s_i$ for each superblock $i$.
+stores a 32-bit L2 offset $s_i$ for each superblock $i$.
 
-*Shifted 32-bit L1 offset.*
-Poppy [cite:@poppy] uses an additional 64-bit zeroth level, so that 32-bit
-L1 values are sufficient. Even though the L0 layer is already very small, we remove it completely.
+*Shifted 32-bit L2 offset.*
+Poppy [cite:@poppy] uses an additional 64-bit third level L3, so that 32-bit
+L2 values are sufficient. Even though this L3 layer is already very small, we remove it completely.
 Rather than directly encoding $\rank(i\cdot S)$, the rank at the start of the
 $i$'th
 superblock, we store
 $$s_i := \lfloor \rank(i\cdot S)/2^{11}\rfloor$$
-in the 32-bit L1
+in the 32-bit L2
 value. The remainder $\rank(i\cdot S)\bmod 2^{11}$ will be added to the 16-bit
 $b_j$ delta for each block in the superblock.
 This configuration supports inputs up to $2^{43}$ bits, or 1 TiB, since
@@ -472,9 +473,9 @@ superblocks have an overhead of $32 / S = 0.05\%$. Thus, the total overhead is
 3.28%, and the superblock array fits in a 16 MiB L3 cache for inputs up to 32 
 GiB.
 
-*L2-delta to the middle.*
+*L1-delta to the middle.*
 To reduce the amount of work needed for popcounting, we apply a variant of the pairing
-technique [cite:@engineering-rank]: the 16-bit L2 value is not the delta from
+technique [cite:@engineering-rank]: the 16-bit L1 value is not the delta from
 the start of the superblock to the
 /start/ of the current block ($\rank(j\cdot B)$), but instead to the /middle/ of
 the current block ($\rank(j\cdot B + 240)$, after taking into account a 16-bit
@@ -528,18 +529,18 @@ are the best for each overhead and chosen for the evaluations.
 1. *BiRank16** (3.28% overhead) is the original as described above and inlines a 16-bit value in each
    cache line.
 2. *BiRank32* (6.67%) is identical but stores a 32-bit value instead, doubling the overhead.
-   This allows for a much ($\approx 2^{16}\times$) smaller L1 array.
+   This allows for a much ($\approx 2^{16}\times$) smaller L2 array.
 3. *BiRank16x2** (6.72%) stores /two/ 16-bit deltas, to 1/4th and 3/4th into the block.
    Then, only a quarter of the cache line (2 64-bit words) has to be popcounted.
-4. *BiRank23_9* (6.67%) takes a middle ground: it stores a 23-bit L2 delta to 1/4th of the block,
-    and a 9-bit L3 delta ($\leq 256$) from there to 3/4th.
+4. *BiRank23_9* (6.67%) takes a middle ground: it stores a 23-bit L1 delta to 1/4th of the block,
+    and a 9-bit "L0.5" delta ($\leq 256$) from there to 3/4th.
 5. *BiRank64* (14.3%) directly stores a 64-bit value instead, completely removing the need
-   for a separate L1 level.
-6. *BiRank32x2** (14.3%) doubles the overhead again and stores two 32-bit L2 values, shrinking
-   the L1 array.
-7. *BiRank64x2** (33.3%) /again/ doubles the overhead, and completely removes the L1 level.
+   for a separate L2 level.
+6. *BiRank32x2** (14.3%) doubles the overhead again and stores two 32-bit L1 values, shrinking
+   the L2 array.
+7. *BiRank64x2** (33.3%) /again/ doubles the overhead, and completely removes the L2 level.
 8. *BiRankR9* (33.3%) is an inline version of Rank9: it inlines a 64-bit
-   L1 offset, followed by a 64-bit word containing 6 9-bit deltas to the start
+   L2 offset, followed by a 64-bit word containing 6 9-bit deltas to the start
    of each remaining 64-bit word.
 
 # TODO: implement R9
@@ -556,7 +557,7 @@ commonly used for the FM-index, because the associated branch-misses would hurt
 performance, and cache lines are automatically reused anyway.
 
 As with BiRank, QuadRank is optimized for having as few cache misses as possible.
-In particular, the data-layout is nearly the same, but with the L1 and L2 data
+In particular, the data-layout is nearly the same, but with the L2 and L1 data
 replicated for each symbol: each cache line contains 4 16-bit deltas $b_{j,c}$
 and $B_4=(512-4\cdot 16)/2=224$ characters.
 Superblocks cover 256 blocks ($S_4:=256\cdot B < 2^{16}$), and for each we store
@@ -624,18 +625,18 @@ the fastest for each overhead and have been chosen for the evaluations.
 
 - *QuadRank16** (TB, 14.40% overhead) is as described above and inlines 4 16-bit values
   containing the rank to the middle of each block.
-- *QuadRank32* (TB, 33%) instead uses 4 32-bit values, making the L1 array much smaller.
+- *QuadRank32* (TB, 33%) instead uses 4 32-bit values, making the L2 array much smaller.
 - *QuadRank24_8** (TB, 33%) leaves space for 3 groups of 64 characters and splits this
-  into 3 sub-blocks, storing an L2 delta to the end of the first and third
+  into 3 sub-blocks, storing an L1 delta to the end of the first and third
   group. This way, only a 64-character popcount remains.
-- *QuadRank7_18_7* (PB, 33%) uses a normal packed layout. It stores an 18-bit L2 to
-  the middle of 6 32-character blocks, and two 7-bit L3 deltas to 1/6th and
+- *QuadRank7_18_7* (PB, 33%) uses a normal packed layout. It stores an 18-bit L1 to
+  the middle of 6 32-character blocks, and two 7-bit "L0.5" deltas to 1/6th and
   5/6th.
-- *QuadRank64** (TB, 100%) stores 4 64-bit values, as does BWA-MEM, removing the L1 array. This only
+- *QuadRank64** (TB, 100%) stores 4 64-bit values, as does BWA-MEM, removing the L2 array. This only
   leaves space for 128 characters, so each half is now only 64 of them.
-- *QuadRank32_8x4* (PF, 100%) uses packed layout. It stores a 32-bit L2 delta to the
-  start of the block, and 4 8-bit L3 deltas to each 32-character sub-block.
-- *QuadRank32x2* (PF, 100%) stores 2 32-bit L2 deltas to the start and halfway point,
+- *QuadRank32_8x4* (PF, 100%) uses packed layout. It stores a 32-bit L1 delta to the
+  start of the block, and 4 8-bit "L0.5" deltas to each 32-character sub-block.
+- *QuadRank32x2* (PF, 100%) stores 2 32-bit L1 deltas to the start and halfway point,
   and does a forward scan.
 
 # TODO: Figures?
@@ -848,7 +849,7 @@ Rob Patro, Giulio Ermanno Pibiri, and Peter Sanders.
 # #+begin_src rust
 # type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned.
 # struct BiRank {
-#     superblocks: Vec<u32>, // 32-bit L1 offset after division by 2^11.
+#     superblocks: Vec<u32>, // 32-bit L2 offset after division by 2^11.
 #     blocks: Vec<Block>,    // 512-bit blocks interleaving 16-bit deltas with 496 data bits.
 # }
 # impl BiRank {
@@ -881,7 +882,7 @@ Rob Patro, Giulio Ermanno Pibiri, and Peter Sanders.
 # #+begin_src rust
 # type Block = [[u64; 4]; 2]; // 2 halves of 4 64-bit values; cache line-aligned.
 # struct QuadRank {
-#     superblocks: Vec<[u32;4]>, // 32-bit L1 offset for each symbol after division by 2^13.
+#     superblocks: Vec<[u32;4]>, // 32-bit L2 offset for each symbol after division by 2^13.
 #     blocks: Vec<Block>,        // 512-bit blocks interleaving 4 16-bit deltas with 448 data bits.
 # }
 # trait QuadRank {
@@ -1164,8 +1165,6 @@ file:./plots/plot-fm.svg
 
 
 # * TODO
-# - Reverse layer numbering?
-#   - The new theory-practice paper reverses the numbering of layers. Consider doing the same here.
 # - Niccolo: For each superblock, store whether the u16 deltas count zeros or ones.
 #   - that is, the u32 sacrifices 1 bit, but then because the u16 deltas are
 # smaller, we can have more of them in each superblock (256 instead of 128),
