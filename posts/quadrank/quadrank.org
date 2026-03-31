@@ -674,6 +674,27 @@ adding support for this to each of them.[fn:: [[https://github.com/vigna/sux-rs/
 [[https://github.com/feldroop/genedex/pull/4][github:feldroop/genedex/pull/4]],
 [[https://github.com/beling/bsuccinct-rs/pull/14][github:beling/bsuccinct-rs/pull/14]].]
 
+*Benchmark setup.*
+For each run, we first build each data structure on a random 4 GiB input (in
+parallel, if possible) and generate 10 million random query positions.
+Then we run three types of benchmarks. In the first, we measure the average *latency* of
+sequential queries, by making each query dependent on the result of the previous one.
+In the second, we measure the /inverse throughput/ (i.e., amortized time per
+query, which we will just call throughput) when processing random queries in
+a *for loop*: =for i in 0..Q { BiRank::rank(queries[i]) }=.
+We stress here that CPUs can use pipelining and out-of-order execution to execute multiple
+(up to at least 4) iterations of the loop in parallel.
+Thus, we add a third mode where we explicitly process many items at once and we add
+*prefetching*, where we prefetch the required cache lines 32
+iterations ahead: =for i in 0..Q { BiRank::prefetch(queries[i+32]); BiRank::rank(queries[i]);
+}=[fn::In practice, we must also prefetch the upcoming query values themselves.
+We keep the memory system so busy that it does not have time to do this by
+itself, leading to cache misses on the query values themselves if we do not
+prefetch them.]
+We then repeat these three benchmarks when running in parallel on 1, 6, and 12
+threads, where each thread has its own independent set of 10 M queries.
+Each reported measurement is the median of 3 runs.
+
 *Excluded libraries.*
 SPIDER ([[https://github.com/williams-cs/spider][github:williams-cs/spider]]) [cite:@spider] was not yet implemented in Rust, so we made a
 variant of BiRank that approximately uses SPIDER's linear-scan for
@@ -682,26 +703,8 @@ performance against the original C implementation.
 Pairing ([[https://github.com/seqan/pfBitvectors][github:seqan/pfBitvectors]]) [cite:@engineering-rank] also has only
 been implemented in C++. Nevertheless, genedex was reported to be faster (personal communication).
 Lastly, we exclude the dynamic B-tree ([[https://github.com/jermp/mutable_rank_select][github:jermp/mutable_rank_select]])
-of [cite:@rank-select-mutable-bitmaps], but consider a Rust-reimplementation of
+of [cite:@rank-select-mutable-bitmaps], but consider a Rust reimplementation of
 this work a promising direction for future work on select specifically.
-
-*Setup.*
-For each run, we first build each data structure on a random 4 GiB input and
-generate 10 million random query positions.
-Then we run three types of benchmarks. In the first, we measure the average *latency* of
-sequential queries, by making each query dependent on the result of the previous one.
-In the second, we measure the /inverse throughput/ (i.e., amortized time per
-query, which we will just call throughput) when processing the random queries in
-a *for loop*: =for i in 0..Q { BiRank::rank(queries[i]) }=.
-Lastly, we add *prefetching*, where we prefetch the required cache lines 32
-iterations ahead: =for i in 0..Q { BiRank::prefetch(queries[i+32]); BiRank::rank(queries[i]);
-}=[fn::In practice, we must also prefetch the upcoming query values themselves.
-We keep the memory system so busy that it does not have time to do this by
-itself, leading to cache misses on the query values themselves if we do not
-prefetch them.]
-We then repeat these three benchmarks when running in parallel on 1, 6, and 12
-threads, where each thread has its own set of 10 M queries.
-Each reported measurement is the median of 3 runs.
 
 #+name: birank-plot
 #+caption: Log-log space-time trade-offs for rank structures on binary input of total size 4 GB.
@@ -1163,25 +1166,19 @@ than its fastest variant (6.75 bits/bp).
 #+attr_html: :class inset large
 file:./plots/plot-fm.svg
 
-
-# * TODO
-# - Niccolo: For each superblock, store whether the u16 deltas count zeros or ones.
-#   - that is, the u32 sacrifices 1 bit, but then because the u16 deltas are
-# smaller, we can have more of them in each superblock (256 instead of 128),
-# halving the size of the superblock metadata.
-# - EXPLAIN SEQUENTIAL=LATENCY vs LOOP~BATCH vs PREFETCH and ILP
-# - add 'Space overhead' header to fig
-# ** code
-# TODO:
-# - Optimize mask lookup:
-#   - Shuffle-based lookup
-#   - 8-byte version, then overwrite 1 non0/non1 byte
-#   - 8x long 000111000 vec with byte-aligned load
-# - reverse the bits in low half of split blocks, so popcounting is always from the
-#   left, so we can reduce the masks by 2.
-# - Do a epi64-native conditional negation of lanes, rather than converting to
-#   u32x4 for =sign=.
-# - bench sview: https://crates.io/crates/sview-fmindex
+* Further code optimization ideas
+- Optimize mask lookup:
+  - Shuffle-based lookup
+  - 8-byte version, then overwrite 1 non0/non1 byte
+  - 8x long 000111000 vec with byte-aligned load
+- Niccolo: For each superblock, store whether the u16 deltas count zeros or ones.
+  - that is, the u32 sacrifices 1 bit, but then because the u16 deltas are
+    smaller, we can have more of them in each superblock (256 instead of 128),
+    halving the size of the superblock metadata.
+- reverse the bits in low half of paired blocks, so popcounting is always from the
+  left, so we can reduce the size of the masks by 2x.
+- Do a epi64-native conditional negation of lanes, rather than converting to
+  u32x4 for =sign=.
 
 #+print_bibliography:
 
