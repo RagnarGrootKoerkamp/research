@@ -368,8 +368,7 @@ AWFM, but calls it /scattered/ instead.
 :PROPERTIES:
 :CUSTOM_ID: implementations
 :END:
-In anticipation of the evaluations,
-we list some specific Rust (re)implementations of rank structures.
+In anticipation of the evaluations, we list some specific Rust implementations.
 
 *QWT.* =qwt= ([[https://github.com/rossanoventurini/qwt][github:rossanoventurini/qwt]]) implements =RSQVector256= and =RSQVector512=
 corresponding to the Quad Vectors in the paper [cite:@quad-wavelet-tree] with
@@ -445,9 +444,7 @@ stores a 32-bit L2 offset $s_i$ for each superblock $i$.
 *Shifted 32-bit L2 offset.*
 Poppy [cite:@poppy] uses an additional 64-bit third level L3, so that 32-bit
 L2 values are sufficient. Even though this L3 layer is already very small, we remove it completely.
-Rather than directly encoding $\rank(i\cdot S)$, the rank at the start of the
-$i$'th
-superblock, we store
+Rather than directly encoding $\rank(i\cdot S)$, the rank at the start of a superblock, we store
 $$s_i := \lfloor \rank(i\cdot S)/2^{11}\rfloor$$
 in the 32-bit L2
 value. The remainder $\rank(i\cdot S)\bmod 2^{11}$ will be added to the 16-bit
@@ -969,9 +966,11 @@ Queries are modified accordingly to remove this extra term again:
 [[cache-misses-2]] and [[cache-misses-4]] contain experimental measurements of the
 number of last-level cache misses each method has on an input of size 4GiB,
 that is, the average number of cache lines fetched from RAM per query.
+As expected, BiRank and Quadrank have 1 cache miss per query, while nearly all other
+methods require at least 2 cache misses.
   
 #+name: cache-misses-2
-#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for alphabet size 2.
+#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for $\sigma=2$.
 #+attr_html: :class small
 | Ranker                 | Space overhead (%) | Cache misses per $\rank$ |
 | sux::Rank9             |               25.0 |                     2.05 |
@@ -992,7 +991,7 @@ that is, the average number of cache lines fetched from RAM per query.
 | BiRank16               |                3.3 |                   *1.02* |
 
 #+name: cache-misses-4
-#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for alphabet size 4.
+#+caption: Average number of last-level cache misses per query on an input of 4 GiB, for $\sigma=4$.
 #+attr_html: :class small
 | Ranker                | Space overhead (%) | Cache misses per $\rank$ | per $\rankall$ |
 | genedex::Flat64       |              166.9 |                     1.38 |           2.02 |
