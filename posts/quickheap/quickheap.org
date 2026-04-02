@@ -496,6 +496,325 @@ Possible publications:
 - PPoPP, deadline autumn 2026
 - SEA deadline Jan 2027
 
+* Literature
+[cite:@binomial-heap]
+- introduces the binomial queue (not 'binomial heap' apparently, because the
+  structure is a forest of heaps?)
+  
+[cite:@binomial-heap-analysis]
+- binomial heap has time $O(I + D \lg I)$ for $I$ insertions and $D$ deletions
+
+[cite:@fibonacci-heap]
+- amortized $O(1)$ insert
+- amortized $O(\lg n)$ deletemin
+- (same perf as binomial heap)
+- but also has constant time decrease-key
+
+[cite:@external-memory-priority-queue]
+- IO-model: best = 1/B log (N/B) IO/s. I think we reach that too.
+- without decrease-key: 1/B log(N/B) / log(M/B) is possible, lower bound for
+comparison-based sorting
+- we don't care about decrease-key
+- 1/B log B / (log log N) lower bound when decrease-key is supported
+- O(1/B log N/B / log log N) possible
+- N: max size
+- Fibonacci heap is optimal for comparison-only model.
+  - Complexity O(a + b lg n), a = inserts, b=deletes
+- integers: each op in log log (N), or expected amortized sqrt(log log N).
+- IO model:
+  - M: small memory size (in #words)
+  - big memory of blocks of B words
+  - each word has w=lg(N) bits
+
+[cite:@equivalence-priority-queues-sorting]
+- comparison based sorting in at least n lg n
+- so priority queue of size n has 'update'=push+pop complexity at least lg n
+
+[cite:@cache-oblivious-priority-queue]
+
+[cite:@priority-queue-survey]
+- mostly theoretical
+[cite:@external-memory-priority-queue-decreasekey]
+
+[cite:@complexity-of-priority-queue-maintenance]
+- push-pop on array of size $m$ is at least $\lg m$.
+- binomial heap is optimal is # comparisons
+
+[cite:@sequence-heap]:
+- Peter's 2000 paper
+- merge buffers and such
+[cite:@superscalar-queue]  
+- more like quicksort, with 'global' pivots and overflow buffers
+- probably SOTA implementation; benchmark with FFI
+- queue version of [cite:@super-scalar-sample-sort]? 
+- some benchmark notes here: https://github.com/raphinesse/s3q/issues/1
+[cite:@bottom-up-heapsort] 
+- not exactly sure what's new here on quick scan
+- mostly for sorting; ~ $n \lg n + 0.35 n$ comparisons
+- bounded by $1.5n\lg n - 0.4n$
+
+https://hjemmesider.diku.dk/~jyrki/Presentation/Dagstuhl-2013-09-23.pdf
+- Nice compact slide overview
+  - lower bound: Omega(1) insert, lg(N)-(1) comparisons per extract-min
+- metrics:
+  - element moves
+  - instructions
+  - branch mispredictions
+  - cache misses
+- adding decrease operations makes a separate class
+
+[cite:@benchmarking-heaps]
+- ACM opinion piece on binary heap vs B-heap
+- B-heap: branching factor 2, but eytzinger-like layout for better memory locality
+  
+[cite:@back-to-basics-priority-queues] 
+- Cites some ~1995 papers as most recent general benchmarks. By now, 2014 is
+  also kinda old in fact.
+- seems like a nice/good paper in general
+- empirical study by Tarjan and others
+#+begin_quote
+The theory community has proposed several new heap
+variants in the recent past which have remained largely
+untested experimentally. We take the field back to the
+drawing board, with straightforward implementations of
+both classic and novel structures using only standard,
+well-known optimizations.
+#+end_quote
+- random insert + pop is degenerate
+- L1 cache misses predict runtime
+- either insert or delete must be at least $\Omega(\lg n)$ (and cites Knuth for
+  this)
+#+begin_quote
+In practice, the
+worst-case of log n is often not encountered or can be
+treated as a constant, and for this reason simpler struc-
+tures with logarithmic bounds have traditionally been
+favored over more complicated, constant-time alterna-
+tives.
+#+end_quote
+- measures branch misses and cache misses
+- **no** algorithm engineering
+- Fibonacci heaps sometimes outperform d-ary heaps?!
+#+begin_quote
+Even a well-engineered implementation like
+Sanders’ sequence heap [29] can be bested by our un-
+tuned implementations if the workload favors a different
+method.
+#+end_quote
+- workloads:
+  - heapsort
+  - bad: random u32 inserts
+  - key-decrease to random between cur and min, or to min
+  - n inserts, cn push-pop, c in {1,32,1024}
+  - Dijkstra
+  - Nagamochi-Ibaraki min-cut
+  - structured and random graphs
+  - 'trace files' that first record the operations in a graph, and then execute
+    these stand-alone
+- only report results on largest problem size
+- pairing heaps: O(log k) pop if minimum was inserted k heap operations ago
+- [28] (1997) cited for min+rand(0, C) workload
+- implicit heaps are bad when decrease-key gives a new min
+- small heap sizes: implicit best
+- large heap sizes: amartized structures like pairing heap
+- comparison to sequence heap:
+  - seq heap 2x faster than implicit 4-ary tree on heapsort
+  - seq heap 4x faster than pairing heap on random indel (c=32)
+  - seq heap 1.3x slower than pairing    on random indel (c=1024)
+  - seq heap 1.2x slower than simple-2   on one network simulation instance
+- => my conclusion: sequence heap is pretty good! And we should include it.
+
+[cite:@smooth-heaps]
+- forest of heaps
+- is a treap, somehow
+- theoretical only
+
+[cite:@monotone-priority-queue-review]
+- Dial's algorithm: Bucket queue when edge weights are bounded
+- TODO: Cite bucket queue paper?
+- There is also multi-level bucket queue, with 'super-buckets' of $\sqrt C$ buckets.
+- or generalized to $k$ levels
+  - at that point just use a radix heap
+- /hot-queue/: multi-level bucket queue, with a small heap as the first layer/bucket.
+- radix-heap with fibonacci heap
+
+- anyway: just cite this for info on monotone queues. We are comparison-based
+  and non-monotone
+
+[cite:@fpga-priority-queue]
+- title says SIMD, but really it's FPGA
+  
+[cite:@priority-queues-for-branch-and-bound] 
+- Parallel
+
+[cite:@parallel-bucket-priority-queue]
+- parallel; buckets; weak paper
+
+[cite:@self-adjusting-heaps]
+- new good algorithm for PQ with decrease-key
+- analyses slim and smooth heaps
+
+[cite:@priority-queues-decreasing-keys]
+- specifically focuses on the case of decreasing keys
+- analyse what happens if we don't have the decrease-key operation
+- basically: for Dijkstra, store only nodeIDs and compare distances by looking
+  them up on-the-fly in the distance vector.
+- extractmin gives an item with /current/ key value less than /original/ value
+  of all other items.
+
+[cite:@slim-smooth-heap-analysis]
+- the arxiv version of the paper was withdrawn
+
+[cite:@external-memory-priority-queue-optimal-insertions]
+- Nice recent paper
+- TODO: Useful overview of external memory setting
+- We can charge deletions to insertions, so they can even have amortized cost 0!
+- IO-optimal structures exist already
+- This paper: O(1/B) inserts, ie moving the cost to the deletions
+- constant-time decrease-min is not possible in IO model
+- Small <=M buffer of smallest elements less than a pivot.
+- Fig 1 is nice!
+- /semi-sorted list/: List of sequences, such that $X\preceq Y$ ie $x\leq y$ for
+  all $x\in X, y\in Y$.
+- NOTE: Figure 2 looks **a lot** like what we do!
+
+[[file:./ext-mem-fig2.png]]
+
+#+begin_quote
+The presented data structure is inherently cache-aware. This raises a natural question:
+does there exist a cache-oblivious priority queue that achieves the same amortized bounds
+on comparisons and I/Os?
+#+end_quote
+
+- Also, currently highly amortized. Are worst-case guarantees possible?
+
+[cite:@weak-heap-sort]
+- array-based implementation of weak heap, after introduction in [cite:@weak-heap-introduction]
+- less than $n \lg n + 0.1n$ comparisons for a heap sort
+- expected around $(n-0.5)\lg n - 0.4 n$
+- lower bound for sorting is $n\lg n - n \lg e = n\lg n - 1.44 n$
+#+begin_quote
+No exact average case results exist for any of the Heapsort variants because the 
+intermediate heaps formed during the execution of the algorithms quickly become 
+nonrandom and it is not clear how to analyze this phenomenon. 
+#+end_quote
+- weak heap: root has no left subtree; nodes with <2 children are in the bottom
+  2 layers; heap property only holds for /right/ subtree. The left subtree /can/
+  have smaller values.
+
+[cite:@improved-weak-heap]
+#+begin_quote
+insert in O(1) amortized time. The
+main idea is to temporarily store the inserted elements in a buffer, and, once the
+buffer is full, to move its elements to the heap using an efficient bulk-insertion
+procedure
+#+end_quote
+- close to optimal number of comparisons, but not the fastest
+  
+[cite:@engineering-weak-heaps]
+- fewer branch misses
+- O(1) amortized insert via a buffer
+  - two buffers give wrost-case insert
+  
+[cite:@benchmarking-weak-heaps] 
+- weak queue has faster delete-min than binary-heap
+
+[cite:@funnel-heap]
+- cache-oblivious IO-model priority queue
+- binary mergers are IO-efficient
+
+[cite:@log-funnel-heap]
+- TODO
+- See also email contact with author
+
+[cite:@bucket-heap]
+- Introduces the bucket heap for BFS and shortest paths
+- cache-oblivious
+
+[cite:@cache-oblivious-buffer-heap]
+- long paper :")
+- Again familiar exponential-growth structure, but this time with 2 stack:
+  - one with elements
+  - and one with updates
+[[file:./buffer-heap.png]]
+- cache-oblivious
+- amortized $O(1/B \lg (N/M))$ operations
+- ensure invariants in figure are maintained. If an element or update buffer
+  becomes to large, apply updates, and move what remains into the layer below
+- redistribute: move largest key from buffer into the empty before in front.
+  Repeat until buffer 0 is filled.
+- unclear how it finds pivots / how it extracts exactly the right number of
+  elements from each buffer
+
+
+[cite:@partition-based-simple-heaps]
+- Very similar:?!
+[[file:./partition-based-heap.png]]
+
+- Nice concise previous-work
+- $O(\lg n)$ extract-min, $O(\lg \lg n)$ insert and decrease-key
+  - This sounds a lot like our $O(\lg \lg n)$ for binary-searching $\lg n$
+    layers, in the case where we do rebalancing.
+
+Not exactly sure what this means:
+#+begin_quote
+[QuickHeaps] Being designed for the much harder problem of keeping
+an entire binary search tree in shape, the resulting concatenation rules for quickheaps are
+complicated.
+#+end_quote
+- Quickheap has favorable performance in external memory model
+- QuickHeap excludes pointers/DecreaseKey
+- [One does get the feeling that this quickheap paragraph was added in hindsight?]
+    
+- Keys are partitioned into sets $S_1, \dots, S_\ell$ such that $S_i \preceq S_j$
+  for $i<j$. Each set is a doubly-linked-list, with stable pointers
+- pivots may not be present in the heap anymore
+- $\lg n$ pivots
+- binary search in $\lg \lg n$ time over the list of pivots for insert
+- Tricky part: ensuring $\lg n$ layers
+- /Lazy partition heaps/: the sets may become arbitrarily large
+- Sets may not be too much larger than all preceding sets though.
+- Multiple variants to maintain $\ell \leq \lg n$ invariant.
+  - Fibonacci variant: each layer is at most $F_i$ large or so, so that merging up
+    is natural. Lower bound on size of non-empty sets
+ 
+- /pivot-forgetting rule/: If the two sets separated by a pivot together are
+  smaller than the number of elements smaller than these two sets, then merge them.
+- The number of layers is at most $\ell \leq 2\lg n + 1$
+- $s(S_i)$: number of elements before $S_i$.
+- potential: $\beta \cdot (\sum_i |S_i| - s(S_i))$.
+
+- Section 3: set must be larger than the number of smaller elements
+- Section 4: Some complicated rules around Fibonacci numbers. I don't get the point.
+  - At most 8 consecutive empty. No 2 consecutive non-empty layers.
+- Section 5 version: Sets are at most $3\cdot 2^i$. Any number can be empty.
+  - Too large layer is pushed up, either by merging with the next larger layer
+    or shifting both up.
+  - Pulling layers works by shifting down if small enough, and a select/pivot otherwise.
+- Using fusion trees, binary search over $\lg n$ pivots can be done in constant
+  time! (We sorta get the same with a $\lg_W \lg n$ B-tree?)
+   
+[[file:./lazy-partition-heaps.png]]
+
+
+- Appendix has a proof-of-concept implementation
+
+#+begin_quote
+Using our rule as the concatenation rule in quickheaps promises to yield a highly practical
+and robust priority queue implementation, combining the best of previously known quickheaps
+variants. A detailed empirical evaluation is planned for future work.
+#+end_quote
+  
+** General remarks
+- There's also a bunch of work on multi-threaded/concurrent queues, which we
+  ignore but maybe cite a few anyway.
+- Most papers are only theoretical, or focus on the number of comparisons,
+  rather than the total running time
+- Future work: types >64 bits, eg (key, value) 
+- I'm pretty sure we can modify our thing to be IO-optimal as well if we have a
+  small insertion buffer.
+- Not sure if we can get $O(1)$ insertions though.
+
 
 
 #+print_bibliography:
