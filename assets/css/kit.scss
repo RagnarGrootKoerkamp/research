@@ -1,7 +1,12 @@
 $kit-green: rgb(0, 150, 130) !default;
 $kit-green-bg: rgb(216, 239, 236) !default;
 $kit-iceblue50: rgb(168, 185, 196);
+$kit-blue: rgb(70, 100, 170);
+$kit-blue-bg: rgb(227, 232, 242); // kit-blue15
+$kit-gray: rgb(168, 185, 196); // kit-iceblue50
+$kit-gray-bg: rgb(229, 234, 237); // kit-iceblue50!30
 $kit-royalblue: rgb(0, 45, 76);
+$kit-royalblue-bg: rgb(236, 240, 242); // kit-iceblue30 at 50% on white
 $kit-footer: rgb(128, 150, 166);
 $highlight: rgb(0, 150, 130) !important;
 
@@ -20,6 +25,21 @@ $highlight: rgb(0, 150, 130) !important;
     h1 {
         background-color: initial;
         color: $kit-green;
+    }
+
+    #sec-title-slide {
+        .kit-logo {
+            position: absolute;
+            bottom: 1%;
+            right: 15%;
+            height: 10%;
+        }
+        .ae-logo {
+            position: absolute;
+            bottom: 0%;
+            right: 0%;
+            height: 15%;
+        }
     }
 
     .slide-number {
@@ -78,5 +98,105 @@ $highlight: rgb(0, 150, 130) !important;
 
     section > p {
         margin-bottom: 10px;
+    }
+
+    // Two-column layout for special blocks and proofs.
+    // Usage: #+ATTR_REVEAL: :extra_attr class="two-col"
+    section.two-col {
+        // CSS columns fill top-to-bottom, left column first
+        column-count: 2;
+        column-gap: 1em;
+
+        // Title/heading spans both columns
+        h1,
+        h2,
+        h3 {
+            column-span: all;
+        }
+
+        .special-block,
+        .proof {
+            break-inside: avoid;
+            margin: 0 0 0.5em;
+        }
+    }
+
+    // ── Special blocks (theorem, definition, lemma, …) ──────────────────────
+    // Structure: <div class="special-block <type>">
+    //              <span class="special-block-title">
+    //                <span class="special-block-number">Definition 1</span>
+    //                <span class="special-block-name">Big-O</span>.
+    //              </span>
+    //              <p>…</p>
+    //            </div>
+
+    .special-block {
+        padding: 0.35em 0.5em 0.4em;
+        margin: 0.4em 0;
+        background-color: $kit-royalblue-bg;
+
+        .special-block-title {
+            display: block;
+            background-color: $kit-royalblue;
+            color: white;
+            font-weight: bold;
+            padding: 0.2em 0.5em;
+            // Extend title bar to the edges of the padded container
+            margin: -0.35em -0.5em 0.35em;
+
+            .special-block-name {
+                font-style: italic;
+            }
+        }
+    }
+
+    // Gray theme: observation blocks
+    .special-block.observation,
+    .special-block.note {
+        background-color: $kit-gray-bg;
+
+        .special-block-title {
+            background-color: $kit-gray;
+        }
+    }
+
+    // Blue theme: theorem, corollary, proposition blocks
+    .special-block.theorem,
+    .special-block.mytheorem,
+    .special-block.corollary,
+    .special-block.proposition {
+        background-color: $kit-blue-bg;
+
+        .special-block-title {
+            background-color: $kit-blue;
+        }
+    }
+
+    // Green theme: algorithm and problem blocks
+    .special-block.algorithm,
+    .special-block.problem,
+    .special-block.openproblem {
+        background-color: $kit-green-bg;
+
+        .special-block-title {
+            background-color: $kit-green;
+        }
+    }
+
+    // Proof blocks have no .special-block-title; generate the header via ::before
+    .proof {
+        padding: 0.35em 0.5em 0.4em;
+        margin: 0.4em 0;
+        background-color: $kit-green-bg;
+
+        &::before {
+            content: "Proof";
+            display: block;
+            background-color: $kit-green;
+            color: white;
+            font-weight: bold;
+            padding: 0.2em 0.5em;
+            margin: -0.35em -0.5em 0.35em;
+        }
     }
 }
