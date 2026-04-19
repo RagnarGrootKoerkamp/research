@@ -126,6 +126,15 @@
 
 (setq user-full-name "Ragnar Groot Koerkamp")
 
+;; https://jeffkreeftmeijer.com/ox-html-stable-ids
+(use-package ox-html-stable-ids
+  :straight
+  (ox-html-stable-ids :type git :host github :repo "jeffkreeftmeijer/ox-html-stable-ids.el")
+  )
+(org-html-stable-ids-add)
+(setq org-html-stable-ids t)
+
+
 ;;;
 ;;; org-special-blocks-extra
 ;;;
