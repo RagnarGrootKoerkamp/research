@@ -15,7 +15,7 @@ clean:
 
 .PHONY: serve
 serve:
-	hugo server --minify --disableFastRender --navigateToChanged --buildFuture --baseURL localhost:1313
+	hugo server --minify --disableFastRender --buildFuture --baseURL localhost:1313
 
 .PHONY: open
 open:
