@@ -143,13 +143,19 @@
 
      (org-defblock ,prefix (ref nil) ()
                    ,(format "Reference a %s special block." name)
-                   (format
-                    (cond
-                     ((org-export-derived-backend-p org-export-current-backend 'latex)
-                      ,(format "\\ref{%s:%%s}" prefix)) ; use standard ref in LateX
-                     ((org-export-derived-backend-p org-export-current-backend 'html)
-                      ,(format "<a href=\"#%s:%%s\">%s %%d</a>" prefix display-name))) ; in HTML the number has to be print manually, finding the position of the label in the list
-                    ref (1+ (cl-position (format "%s" ref) ,(intern (format "special-block-%s-labels" prefix)) :test 'equal)))))) ; sum one because lists are zero based
+                   (let* ((num (1+ (cl-position (format "%s" ref)
+                                                ,(intern (format "special-block-%s-labels" prefix))
+                                                :test 'equal))))
+                     (cond
+                      ((org-export-derived-backend-p org-export-current-backend 'latex)
+                       (format ,(format "\\ref{%s:%%s}" prefix) ref))
+                      ((org-export-derived-backend-p org-export-current-backend 'reveal)
+                       (format ,(format "<a href=\"#%s:%%s\" onclick=\"event.preventDefault();var e=document.getElementById('%s:%%s');Reveal.slide(Reveal.getIndices(e).h,Reveal.getIndices(e).v);\">%s %%d</a>"
+                                        prefix prefix display-name)
+                               ref ref num))
+                      ((org-export-derived-backend-p org-export-current-backend 'html)
+                       (format ,(format "<a href=\"#%s:%%s\">%s %%d</a>" prefix display-name)
+                               ref num)))))))
 
 (defmacro deftheorem (name display-name prefix)
   "Defines a new theorem type called NAME (rendered as DISPLAY-NAME in HTML) which labels start with PREFIX.
@@ -195,7 +201,7 @@ As can be seen in [[prefix:lbl]]
 (deftheorem algorithm "Algorithm" alg)
 
 ;; Reset special-block-*-labels{-cdr} before export.
-(add-hook 'org-export-before-parsing-functions
+(add-hook 'org-export-before-processing-functions
           (lambda (backend)
             (setq special-block-thm-labels '())
             (setq special-block-thm-labels-cdr nil)
