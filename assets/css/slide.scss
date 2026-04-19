@@ -54,7 +54,7 @@ html.reveal-full-page {
             // padding-bottom: 0.5em;
         }
         h2 {
-            border: none;
+            border: none !important;
         }
 
         // h2.date,
@@ -69,6 +69,7 @@ html.reveal-full-page {
     h4,
     h5,
     h6 {
+        text-transform: initial;
         .section-number-1,
         .section-number-2,
         .section-number-3 {
@@ -80,10 +81,14 @@ html.reveal-full-page {
         }
     }
 
+    h1,
+    h2,
+    h3 {
+        border-bottom: 5px solid $highlight;
+    }
     h1 {
         font-size: 1.7rem;
         line-height: 5rem;
-        border-bottom: 5px solid $highlight;
         background-color: $background;
         width: 100%;
     }
@@ -91,14 +96,12 @@ html.reveal-full-page {
     h2 {
         font-size: 1.4rem;
         line-height: 1.6rem;
-        border-bottom: 5px solid $highlight;
         margin-bottom: 0.75rem;
     }
 
     h3 {
         font-size: 1.4rem;
         line-height: 1.6rem;
-        border-bottom: 5px solid $highlight;
         width: fit-content;
         margin-bottom: 0.75rem;
         // text-decoration: underline;
@@ -225,12 +228,17 @@ html.reveal-full-page {
         height: 100%;
     }
 
-    section > h2:only-child {
+    section > h2:only-child,
+    section > h2:has(+ .slide-footer) {
         // Center vertically
         position: absolute;
         width: 1920px;
-        bottom: 50%;
+        top: 40%;
         text-align: center;
+
+        .slide-footer {
+            display: none;
+        }
     }
 
     #slide-publications {

@@ -15,7 +15,7 @@ clean:
 
 .PHONY: serve
 serve:
-	hugo server --minify --disableFastRender --navigateToChanged --baseURL localhost:1313
+	hugo server --minify --disableFastRender --navigateToChanged --buildFuture --baseURL localhost:1313
 
 .PHONY: open
 open:
@@ -30,7 +30,7 @@ build-content:
 .PHONY: build-site
 build-site:
 	rm -rf public/*
-	hugo --minify --cleanDestinationDir --baseURL $(BASE_URL)
+	hugo --minify --cleanDestinationDir --buildFuture --baseURL $(BASE_URL)
 
 .PHONY: build
 build: build-content build-site
