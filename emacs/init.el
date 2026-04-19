@@ -138,7 +138,7 @@
 
 (defmacro defspeciallink (name display-name prefix)
   `(progn
-     (defvar ,(intern (format "special-block-%s-labels" prefix)) '()) ; to store this theroem labels
+     (defvar ,(intern (format "special-block-%s-labels" prefix)) '()) ; to store this theorem labels
      (defvar ,(intern (format "special-block-%s-labels-cdr" prefix)) nil)
 
      (org-defblock ,prefix (ref nil) ()
@@ -199,6 +199,10 @@ As can be seen in [[prefix:lbl]]
 (deftheorem openproblem "Open problem" prob)
 (deftheorem conjecture "Conjecture" conj)
 (deftheorem algorithm "Algorithm" alg)
+
+;; With this, org-special-block-extras-mode is not needed.
+;; Things will break though if that mode is activated and then deactivated again.
+(add-hook 'org-export-before-parsing-functions 'org--support-special-blocks-with-args)
 
 ;; Reset special-block-*-labels{-cdr} before export.
 (add-hook 'org-export-before-processing-functions
