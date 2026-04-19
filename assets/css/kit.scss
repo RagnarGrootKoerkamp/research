@@ -82,18 +82,28 @@ $highlight: rgb(0, 150, 130) !important;
     hr {
         border-color: $kit-green-bg;
     }
-    ul + p {
+
+    section > ul + p {
         padding-top: 10px;
-        border-top: 1px inset $kit-green-bg;
+        // border-top: 1px inset $kit-green-bg;
     }
 
-    ul {
+    section > ul {
+        margin-left: 0;
         font-size: smaller;
     }
 
     ul ul {
         font-size: inherit;
+        color: rgb(140, 140, 140);
         // font-size: smaller;
+        margin-top: 0.2em;
+        margin-bottom: 0.5em;
+        margin-left: 0em;
+    }
+
+    section > ul > li + li {
+        margin-top: 0.5em;
     }
 
     section > p {
@@ -121,6 +131,42 @@ $highlight: rgb(0, 150, 130) !important;
         }
     }
 
+    ul {
+        width: 100%;
+    }
+    ul.two-col {
+        column-count: 2;
+        column-gap: 1.5em;
+        column-rule: 1px solid $kit-green-bg;
+
+        > li {
+            break-inside: avoid;
+            margin-left: 0.5em;
+        }
+    }
+
+    .figure {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+        text-align: center;
+        img {
+            max-height: 80%;
+        }
+    }
+
+    .float-right {
+        position: absolute;
+        top: 10%;
+        right: 0%;
+        height: 80%;
+        img {
+            max-height: 80%;
+            max-width: 60%;
+        }
+    }
+
     // ── Special blocks (theorem, definition, lemma, …) ──────────────────────
     // Structure: <div class="special-block <type>">
     //              <span class="special-block-title">
@@ -131,6 +177,7 @@ $highlight: rgb(0, 150, 130) !important;
     //            </div>
 
     .special-block {
+        font-size: smaller;
         padding: 0.35em 0.5em 0.4em;
         margin: 0.4em 0;
         background-color: $kit-royalblue-bg;
@@ -147,6 +194,19 @@ $highlight: rgb(0, 150, 130) !important;
             .special-block-name {
                 font-style: italic;
             }
+
+            .special-block-number:has(+ .special-block-name) {
+                &::after {
+                    content: ":";
+                }
+            }
+        }
+
+        .MathJax_Display:nth-child(2) {
+            margin-top: 0;
+        }
+        .MathJax_Display:nth-last-child(2) {
+            margin-bottom: 0;
         }
     }
 
@@ -186,6 +246,10 @@ $highlight: rgb(0, 150, 130) !important;
         }
     }
 
+    .special-block + p {
+        // margin-top: 1em;
+    }
+
     // Proof blocks have no .special-block-title; generate the header via ::before
     .proof {
         padding: 0.35em 0.5em 0.4em;
@@ -201,5 +265,27 @@ $highlight: rgb(0, 150, 130) !important;
             padding: 0.2em 0.5em;
             margin: -0.35em -0.5em 0.35em;
         }
+    }
+
+    // .slides {
+    //     section {
+    //         height: 90%;
+    //         display: flex !important;
+    //         flex-direction: column;
+    //         justify-content: space-evenly;
+    //     }
+    // }
+
+    .fragment {
+        will-change: initial !important;
+    }
+
+    span.note {
+        font-size: smaller;
+        color: grey !important;
+    }
+
+    #slide-bibliography {
+        font-size: 0.6em;
     }
 }
