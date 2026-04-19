@@ -54,6 +54,47 @@
 (use-package citeproc
   :straight (:type git :host github :repo "andras-simonyi/citeproc-el" :nonrecursive t))
 
+(use-package ox-reveal
+  :straight (:type git :host github :repo "yjwen/org-reveal" :files ("*.el")))
+
+(require 'ox-reveal)
+(setq org-reveal-root "https://cdn.jsdelivr.net/npm/reveal.js")
+(setq org-reveal-hlevel 0)
+
+;; Fix: org-special-block-extras wraps custom block output in #+begin_export reveal,
+;; but ox-reveal inherits org-html-export-block which only handles "HTML" type blocks.
+;; "REVEAL" type blocks are silently dropped, so the <div> wrappers disappear and
+;; only the raw text content survives as a plain paragraph.
+(defun my/org-reveal-export-block (export-block _contents _info)
+  "Pass through HTML and REVEAL type export blocks as raw HTML."
+  (when (member (org-element-property :type export-block) '("HTML" "REVEAL"))
+    (org-remove-indentation (org-element-property :value export-block))))
+(let ((backend (org-export-get-backend 'reveal)))
+  (unless (assq 'export-block (org-export-backend-transcoders backend))
+    (setf (org-export-backend-transcoders backend)
+          (cons '(export-block . my/org-reveal-export-block)
+                (org-export-backend-transcoders backend)))))
+
+;; Support #+reveal_export_file_name as a reveal-specific output path,
+;; so it doesn't conflict with #+export_file_name used by other backends.
+;; Resolves to an absolute path and creates parent directories as needed.
+(advice-add 'org-reveal-export-to-html :around
+            (lambda (orig-fn &rest args)
+              (let ((reveal-file
+                     (save-excursion
+                       (goto-char (point-min))
+                       (when (re-search-forward
+                              "^[ \t]*#\\+REVEAL_EXPORT_FILE_NAME:[ \t]+\\(\\S-+\\)" nil t)
+                         (expand-file-name (match-string-no-properties 1)
+                                           (file-name-directory buffer-file-name))))))
+                (if reveal-file
+                    (progn
+                      (make-directory (file-name-directory reveal-file) t)
+                      (cl-letf (((symbol-function 'org-export-output-file-name)
+                                 (lambda (_ext &rest _) reveal-file)))
+                        (apply orig-fn args)))
+                  (apply orig-fn args)))))
+
 (setf org-hugo-base-dir base-dir)
 
                                         ; Disable auto-inserting References section heading.
@@ -78,12 +119,13 @@
 ;;; org-special-blocks-extra
 ;;;
 (use-package org-special-block-extras
-  :ensure t
-  ;; Loads a bunch of bloat, but required to make the things below work.
-  :hook (org-mode . org-special-block-extras-mode)
-  )
+  :ensure t)
+
+;; Do not inject tooltipster CSS/JS into every slide's <head>.
+(setq org-special-block-add-html-extra nil)
 
 (org-mode)
+(org-special-block-extras-mode 1)
 
 (defmacro special-block-labels-push (prefix label)
   (let ((labels (format "special-block-%s-labels" prefix))
@@ -175,15 +217,35 @@ As can be seen in [[prefix:lbl]]
 ;;; Public functions
 ;;;
 
+(defun build/org-files ()
+  "Return all org files under base-dir, excluding emacs/ and submodule/ directories."
+  (directory-files-recursively
+   (file-name-as-directory base-dir) "\\.org$" nil
+   (lambda (x) (and (not (string-match-p "emacs" x))
+                    (not (string-match-p "submodule" x))))))
+
 (defun build/export-all ()
-  "Export all org-files (including nested) under base-org-files."
+  "Export all org-files to Hugo markdown and reveal.js slides."
   (let ((search-path (file-name-as-directory base-dir)))
-    (message (format "[build] Looking for files at %s" search-path))
-    (dolist (org-file (directory-files-recursively search-path "\.org$" nil (lambda (x) (and (not (string-match-p "emacs" x)) (not (string-match-p "submodule" x))))))
+    (message "[build] Looking for files at %s" search-path)
+    (dolist (org-file (build/org-files))
       (with-current-buffer (find-file org-file)
-        (message (format "[build] Exporting %s" org-file))
+        (message "[build] Exporting (hugo) %s" org-file)
         (org-hugo-export-wim-to-md :all-subtrees nil nil nil)))
+    (build/export-slides)
     (message "Done!")))
+
+(defun build/export-slides ()
+  "Export org files with #+reveal_export_file_name as reveal.js slides."
+  (message "[build] Looking for reveal slides")
+  (dolist (org-file (build/org-files))
+    (with-temp-buffer
+      (insert-file-contents org-file)
+      (when (re-search-forward "^[ \t]*#\\+REVEAL_EXPORT_FILE_NAME:" nil t)
+        (with-current-buffer (find-file org-file)
+          (message "[build] Exporting (reveal) %s" org-file)
+          (org-reveal-export-to-html)))))
+  (message "Done exporting slides!"))
 
 (provide 'build/export-all)
 
