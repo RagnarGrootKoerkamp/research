@@ -75,6 +75,17 @@
           (cons '(export-block . my/org-reveal-export-block)
                 (org-export-backend-transcoders backend)))))
 
+;; Fix: org-reveal-link blindly rewrites ALL <a href="#"> → <a href="#/slide-">,
+;; including our custom [[dfn:*]] links which already output the correct href.
+;; For our special-block link types, call org-html-link directly to bypass rewriting.
+(defvar my/special-block-link-types '("dfn" "thm" "lem" "prob" "conj" "alg")
+  "Link types registered by defspeciallink; exempt from org-reveal-link's #/slide- rewrite.")
+(advice-add 'org-reveal-link :around
+            (lambda (orig-fn link desc info)
+              (if (member (org-element-property :type link) my/special-block-link-types)
+                  (org-html-link link desc info)
+                (funcall orig-fn link desc info))))
+
 ;; Support #+reveal_export_file_name as a reveal-specific output path,
 ;; so it doesn't conflict with #+export_file_name used by other backends.
 ;; Resolves to an absolute path and creates parent directories as needed.
@@ -168,7 +179,7 @@ As can be seen in [[prefix:lbl]]
   `(progn
      (defspeciallink ,name ,display-name ,prefix)
 
-     (org-defblock ,name (title "" label nil unnumbered nil)
+     (org-defblock ,name (title "" label nil unnumbered nil skip nil)
                    ,(format "Define %s special block." name)
                    (unless unnumbered (special-block-labels-push ,prefix label)) ; add label to list
                    (cond
@@ -178,6 +189,8 @@ As can be seen in [[prefix:lbl]]
                              (format ,(format "\\label{%s:%%s}" prefix) (or label ""))
                              (format "\n%s" contents)
                              ,(format "\\end{%s" name) (when unnumbered "*") "}"))
+                    ((and skip (org-export-derived-backend-p org-export-current-backend 'reveal))
+                     "")
                     ((org-export-derived-backend-p org-export-current-backend 'html)
                      (format
                       (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\"><span class=\"special-block-number\">%s" prefix name display-name)
@@ -198,6 +211,10 @@ As can be seen in [[prefix:lbl]]
 (deftheorem openproblem "Open problem" prob)
 (deftheorem conjecture "Conjecture" conj)
 (deftheorem algorithm "Algorithm" alg)
+(deftheorem example "Example" exmpl)
+(deftheorem myquestion "Question" qqq)
+(deftheorem assumption "Assumption" assump)
+(deftheorem observation "Observation" obsv)
 
 ;; With this, org-special-block-extras-mode is not needed.
 ;; Things will break though if that mode is activated and then deactivated again.
@@ -218,6 +235,14 @@ As can be seen in [[prefix:lbl]]
             (setq special-block-conj-labels-cdr nil)
             (setq special-block-alg-labels '())
             (setq special-block-alg-labels-cdr nil)
+            (setq special-block-exmpl-labels '())
+            (setq special-block-exmpl-labels-cdr nil)
+            (setq special-block-qqq-labels '())
+            (setq special-block-qqq-labels-cdr nil)
+            (setq special-block-assump-labels '())
+            (setq special-block-assump-labels-cdr nil)
+            (setq special-block-obsv-labels '())
+            (setq special-block-obsv-labels-cdr nil)
             ))
 
 
