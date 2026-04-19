@@ -168,25 +168,24 @@ As can be seen in [[prefix:lbl]]
   `(progn
      (defspeciallink ,name ,display-name ,prefix)
 
-     (org-defblock ,name (title "TITLE" label nil unnumbered nil)
+     (org-defblock ,name (title "" label nil unnumbered nil)
                    ,(format "Define %s special block." name)
                    (unless unnumbered (special-block-labels-push ,prefix label)) ; add label to list
                    (cond
                     ((org-export-derived-backend-p org-export-current-backend 'latex)
-                     (format
-                      (concat ,(format "\\begin{%s" name) (when unnumbered "*") "}"
-                              ,(format "[%%s]\\label{%s:%%s}" prefix)
-                              "\n%s"
-                              ,(format "\\end{%s" name) (when unnumbered "*") "}")
-                      (or title "") (or label "") contents))
+                     (concat ,(format "\\begin{%s" name) (when unnumbered "*") "}"
+                             (when (org-string-nw-p title) (format "[%s]" title))
+                             (format ,(format "\\label{%s:%%s}" prefix) (or label ""))
+                             (format "\n%s" contents)
+                             ,(format "\\end{%s" name) (when unnumbered "*") "}"))
                     ((org-export-derived-backend-p org-export-current-backend 'html)
                      (format
                       (concat ,(format "<div id=\"%s:%%s\" class=\"special-block %s\"><span class=\"special-block-title\"><span class=\"special-block-number\">%s" prefix name display-name)
                               (unless unnumbered (format " %d" (length ,(intern (format "special-block-%s-labels" prefix)))))
                               "</span>"
-                              (when title " <span class=\"special-block-name\">") "%s" (when title "</span>") ".</span>"
+                              (when (org-string-nw-p title) " <span class=\"special-block-name\">") "%s" (when (org-string-nw-p title) "</span>") ".</span>"
                               ,(format "%%s</div>"))
-                      (or label "") (or title "") contents))
+                      (or label "") (or (org-string-nw-p title) "") contents))
                     )
                    )))
 
