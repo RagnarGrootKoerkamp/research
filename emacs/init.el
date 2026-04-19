@@ -125,7 +125,7 @@
 (setq org-special-block-add-html-extra nil)
 
 (org-mode)
-(org-special-block-extras-mode 1)
+;; (org-special-block-extras-mode 1)
 
 (defmacro special-block-labels-push (prefix label)
   (let ((labels (format "special-block-%s-labels" prefix))
