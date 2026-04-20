@@ -48,6 +48,7 @@
 - Why do we care about models?
 - Big-\(O\) notation
 - The complexity of sorting
+- Properties data structures
 - The word RAM model
   - Variations
   - Limitations
@@ -65,7 +66,7 @@ We want to design fast algorithms, but when is an algorithm /fast/?
 - Instead: use a simplified abstract /model/ of the CPU.
   - Allows exact lower and upper bounds.
 
-* Big-O notation
+* Big-O notation (recap)
 
 #+reveal: split:t
 
@@ -92,7 +93,7 @@ n &= O(n)
 \\
 n &= O(n^2)
 &
-10^{100}\cdot n &= O(n^{1.0001})
+(\lg n)^{100}\cdot n &= O(n^{1.0001})
 \\
 1/n &= O(1)
 &
@@ -117,9 +118,9 @@ n &= O(n^2)
 #+reveal: split:t
 
 - $O(n \lg n)$?
-- $O(n \sqrt {\lg n})$?
 # - $O(n \lg \lg n)$?
 - $O(n \lg w)$?
+- $O(n \sqrt {\lg n})$?
 - $O(n \sqrt {\lg \lg n})$?
 - Linear $O(n)$?
 - Constant $O(1)$?
@@ -134,19 +135,19 @@ All of the above!
   - Merge sort indeed uses $O(n \lg n)$ of them.
   - Or QuickSort, with $O(n \lg n)$ comparisons /in
     expectation/.
-- $O(n \sqrt {\lg n})$
-  - Fusion trees [cite:@fusion-trees] 
 - $O(n \lg w)$
   - Expected complexity of Van Emde-Boas trees
     
     [cite:@van-emde-boas-trees].
+- $O(n \sqrt {\lg n})$
+  - Fusion trees [cite:@fusion-trees] 
 - $O(n \sqrt {\lg \lg n})$, $O(n\sqrt{\lg w})$
-  - Fastest (?) /randomized/ algorithm  
+  - Fastest /randomized/ algorithm  
     
     [cite:@integer-sorting-n-sqrt-log-log-n-time]
 - Linear $O(n)$
   - Linear /space/? Sure!
-  - Bucket sort when all values are $O(n)$.
+  - Counting sort when all values are $O(n)$.
   - Radix sort on 64-bit integers.
   - Randomized when $w \geq (\lg n)^{2+\varepsilon}$
 
@@ -166,7 +167,6 @@ All of the above!
 [[file:./quicksort.png]]
 
 
-
 ** "Complexity"
 #+reveal: split:t
 
@@ -174,6 +174,7 @@ All of the above!
 - Lower or upper bound?
   - Complexity of a /problem/ is at least $\Omega(\dots)$.
   - Complexity of an /algorithm/ at most $O(\dots)$.
+  - "The complexity": matching lower and upper bound.
 - Which metric?
   - "Operations"
   - Comparisons
@@ -191,10 +192,74 @@ All of the above!
 - What algorithmic properties?
   - Deterministic
   - Randomized
+* Properties of data structures
+** Space usage
+
+Let $S$ be the minimum space required to represent some data.
+#+begin_definition Compact data structure
+A /compact/ data structure uses $O(S)$ bits of space.
+#+end_definition
+
+#+begin_definition Succinct data structure
+A /succinct/ data structure uses $S + o(S)$ bits of space.
+#+end_definition
+
+Example: many Rank & Select data structures are succinct.
+
+#+begin_definition Implicit data structure
+An /implicit/ data structure uses $S + O(1)$ bits of space.
+#+end_definition
+
+Example: bit arrays.
+
+** Dynamic data structures
+
+#+begin_definition Dynamic data structure
+Allows mutating the structure.
+#+end_definition
+
+Example: hash tables.
+
+#+begin_definition Static data structure
+Build once, then read-only queries.
+#+end_definition
+
+Example: minimal perfect hash functions.
+
+#+begin_definition Incremental data structure
+Insert-only; deletions not allowed.
+#+end_definition
+
+Example: bloom filters.
+
+** Running time
+From stronger to weaker:
+#+begin_definition Worst-case running time
+An algorithm has /worst-case/ running time $O(f(n))$ when for /every possible/
+input, it is guaranteed to finishes in $O(f(n))$ time.
+#+end_definition
+#+begin_definition Expected running time
+An algorithm has /expected/ running time $O(f(n))$ when for /every possible/
+input, the /expected/ running time is $O(f(n))$.
+#+end_definition
+#+begin_definition Running time with high probability
+An algorithm has running time $O(f(n))$ /with high probability/ (w.h.p.) when for /every possible/
+input, the running time is $O(f(n))$ with probability $1-o(1)$.
+#+end_definition
+
+
+#+reveal: split:t
+
+#+begin_definition Amortized running time
+An operation on a data structure has /amortized/ running time $O(f(n))$ when for /every possible/
+sequence of $i$ operations with amortized complexities $f_i$, the total
+running time is $O(\sum_i f_i)$.
+#+end_definition
+
+Example: pushing on a vector is worst-case $O(n)$, but amortized $O(1)$.
 
 * Models of computation
 ** The RAM model
-
 #+begin_definition Random-access machine (RAM) model
 Models a machine that has an /infinite/ list of /registers/.
 
@@ -206,6 +271,15 @@ Models a machine that has an /infinite/ list of /registers/.
 #+begin_myquestion
 Any problems with this?
 #+end_myquestion
+
+#+begin_answer :skip t
+Infinite memory, infinite registers, and constant-time access are strong assumptions.
+#+end_answer
+
+** The /real/ RAM model
+#+begin_definition 
+Like the RAM model, but each register can store a /real/ number.
+#+end_definition
 
 ** The /word/ RAM model
 #+begin_definition 
@@ -223,6 +297,10 @@ Most commonly used model.
 #+begin_myquestion
 Any remaining problems with /this/?
 #+end_myquestion
+
+#+begin_answer :skip t
+Word RAM still assumes constant-time access. Constant time \(w\)-bit multiplication?
+#+end_answer
 
 ** We must talk about $w$
 #+reveal: split:t
@@ -326,6 +404,8 @@ $$
 $$
 and external merge-sort achieves this.
 #+end_theorem
+
+# TODO: Cache-oblivious
 
 * Takeaways
 #+begin_observation 
