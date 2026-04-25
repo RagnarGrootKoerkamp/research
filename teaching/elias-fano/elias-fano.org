@@ -1,11 +1,74 @@
-#+title: Elias-Fano
+#+title: Elias-Fano coding
+#+subtitle: Advanced Data Structures -- Summer 2026 -- Lecture 2
+#+author: Ragnar Groot Koerkamp
 #+hugo_section: teaching
-#+filetags: teaching data-structure advanced-data-structures
-#+OPTIONS: ^:{} num: num:t
+#+filetags: @teaching
+#+OPTIONS: ^:{} num: num:0 toc:0
+#+toc: headlines 1
 #+hugo_front_matter_key_replace: author>authors
-#+hugo_paired_shortcodes: %notice %detail
-#+toc: headlines 3
-#+hugo_level_offset: 1
-#+date: <2026-01-25 Sun>
+#+date: <2026-04-27 Mon 14:00>
 
+
+#+reveal_theme: white
+#+reveal_extra_css: /css/slide.min.css
+#+reveal_extra_css: /css/kit.min.css
+#+reveal_init_options: width:1920, height:1080, margin: 0.06, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+#+REVEAL_PLUGINS: (notes highlight)
+#+REVEAL_HIGHLIGHT_CSS: /css/vs.min.css
+#+reveal_reveal_js_version: 4
+
+#+REVEAL_TITLE_SLIDE: <h1>%t</h1>
+#+REVEAL_TITLE_SLIDE: <p class="subtitle">%s</p>
+#+REVEAL_TITLE_SLIDE: <h2 class="author"><span class="underline">Ragnar {Groot Koerkamp}</span>, Stefan Walzer, Stefan Hermann</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date">%d</h2>
+#+REVEAL_TITLE_SLIDE: <a class="source" href="https://curiouscoding.nl/teaching">curiouscoding.nl/teaching</a>
+#+REVEAL_TITLE_SLIDE: <img class="kit-logo" src="/images/kit.png"></img>
+#+REVEAL_TITLE_SLIDE: <img class="ae-logo" src="/images/alg-engineering-group.png"></img>
+
+# UPDATE
+#+reveal_slide_footer: <span class="date">April, 2026</span> <span class="title">Ragnar Groot Koerkamp: Rank & Select</span> <img src="/images/kit.png" class="kit-logo"></img>
+
+# For slides only!
+# UPDATE and create Dir
+#+reveal_export_file_name: ../../static/teaching/elias-fano/slides/index.html
+
+#+MACRO: note @@html:<span class="note">$1</font>@@
+
+# Export using C-c C-e R R
+
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+# -------------------------------------------------
+
+* Previous slides: [[../../models-of-computation/slides/][Bit vectors, Rank & Select]]
+- Bit vector: storing bits
+- Rank: counting 1 bits
+- Select: finding 1 bits
+
+* Elias-Fano coding [cite:@elias;@fano;@elias-fano] 
+
+#+begin_theorem Elias-Fano coding
+A set of $n$ integers up to $U$ can be stored in
+$$
+\lg_2 \binom Un + 2n
+$$
+bits.
+#+end_theorem
+
+
+
+* Further reading
+- Original papers: [cite:@elias;@fano]
+- Modern paper using it: [cite:@elias-fano]
+- Dynamic version: [cite:@dynamic-elias-fano]
+- =sux::EliasFano= [[https://docs.rs/sux/latest/sux/dict/elias_fano/struct.EliasFano.html][implementation]]
+
+* Bibliography
 #+print_bibliography:
+
+
+# Local Variables:
+# eval: (toggle-org-reveal-export-on-save)
+# End:

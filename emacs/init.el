@@ -222,6 +222,7 @@ As can be seen in [[prefix:lbl]]
 (deftheorem algorithm "Algorithm" alg)
 (deftheorem example "Example" exmpl)
 (deftheorem myquestion "Question" qqq)
+(deftheorem answer "Answer" asnw)
 (deftheorem assumption "Assumption" assump)
 (deftheorem observation "Observation" obsv)
 
@@ -252,6 +253,8 @@ As can be seen in [[prefix:lbl]]
             (setq special-block-assump-labels-cdr nil)
             (setq special-block-obsv-labels '())
             (setq special-block-obsv-labels-cdr nil)
+            (setq special-block-answ-labels '())
+            (setq special-block-answ-labels-cdr nil)
             ))
 
 

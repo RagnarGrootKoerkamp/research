@@ -1,0 +1,268 @@
+#+title: Rank & Select
+#+subtitle: Advanced Data Structures -- Summer 2026 -- Lecture 2
+#+author: Ragnar Groot Koerkamp
+#+hugo_section: teaching
+#+filetags: @teaching
+#+OPTIONS: ^:{} num: num:0 toc:0
+#+toc: headlines 1
+#+hugo_front_matter_key_replace: author>authors
+#+date: <2026-04-27 Mon 14:00>
+
+
+#+reveal_theme: white
+#+reveal_extra_css: /css/slide.min.css
+#+reveal_extra_css: /css/kit.min.css
+#+reveal_init_options: width:1920, height:1080, margin: 0.06, minScale:0.2, maxScale:2.5, disableLayout:false, transition:'none', slideNumber:'c/t', controls:false, hash:true, center:false, navigationMode:'linear', hideCursorTime:2000
+#+REVEAL_PLUGINS: (notes highlight)
+#+REVEAL_HIGHLIGHT_CSS: /css/vs.min.css
+#+reveal_reveal_js_version: 4
+
+#+REVEAL_TITLE_SLIDE: <h1>%t</h1>
+#+REVEAL_TITLE_SLIDE: <p class="subtitle">%s</p>
+#+REVEAL_TITLE_SLIDE: <h2 class="author"><span class="underline">Ragnar {Groot Koerkamp}</span>, Stefan Walzer, Stefan Hermann</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date">%d</h2>
+#+REVEAL_TITLE_SLIDE: <a class="source" href="https://curiouscoding.nl/teaching">curiouscoding.nl/teaching</a>
+#+REVEAL_TITLE_SLIDE: <img class="kit-logo" src="/images/kit.png"></img>
+#+REVEAL_TITLE_SLIDE: <img class="ae-logo" src="/images/alg-engineering-group.png"></img>
+
+# UPDATE
+#+reveal_slide_footer: <span class="date">April, 2026</span> <span class="title">Ragnar Groot Koerkamp: Rank & Select</span> <img src="/images/kit.png" class="kit-logo"></img>
+
+# For slides only!
+# UPDATE and create Dir
+#+reveal_export_file_name: ../../static/teaching/rank-select/slides/index.html
+
+#+MACRO: note @@html:<span class="note">$1</font>@@
+
+# Export using C-c C-e R R
+
+#+begin_export html
+<script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+#+end_export
+
+# -------------------------------------------------
+
+* Last week: [[../../models-of-computation/slides/][Models of computation]]
+- Big-O notation
+- Word RAM model
+  - Applications & limitations
+
+* Today
+- Bit vectors
+  - storing bits
+- Rank
+  - counting 1-bits
+- Select
+  - finding 1-bits
+- Engineering Rank
+  - making it fast
+- Elias-Fano coding
+  - storing integers efficiently
+  
+
+* Bit vectors
+#+reveal: split:t
+
+#+begin_definition 
+A static /bit vector/ is an /implicit/ data structure storing $n$ bits $b_0, \dots, b_{n-1}$ with constant overhead.
+
+- $\mathsf{get}(i)$: returns $i$'th bit $b_i$
+#+end_definition
+
+Implemented using e.g. =Vec<u64>=.
+
+#+begin_src rust
+fn get(data: &Vec<u64>, i: usize) -> bool {
+    let word = data[i / 64];         // compiled to >> 6
+    let idx = i % 64;                // compiled to & 0b0011_1111
+    return ((word >> idx) & 1) > 0;
+}
+#+end_src
+
+Little Endian: the /low/-order bits are first in memory.
+
+
+$$
+\newcommand{\rank}{\mathsf{rank}}
+\newcommand{\select}{\mathsf{select}}
+$$
+
+
+* Binary Rank & Select
+#+reveal: split:t
+
+#+begin_definition 
+A /rank/ query on a bit vector counts 1-bits before a position $i$.
+
+- $\rank(i) := \sum_{0\leq j < i} b_j$
+#+end_definition
+
+#+begin_definition 
+A /select/ query on a bit vector returns the position of the $j$'th 1.
+
+- $\select(j) :=$ index $i$ such that $b_i=1$ and $\rank(i) = j$.
+#+end_definition
+
+Also: $\rank_0$ and $\select_0$ for counting/finding 0-bits.
+
+#+attr_html: :class two-col
+#+begin_myquestion
+What is $\select_1(\rank_1(i))$?
+
+And $\rank_1(\select_1(j))$?
+#+end_myquestion
+
+#+reveal: split:t
+
+#+begin_answer
+$\rank_1(\select_1(j))$ equals $j$.
+
+$\select_1(\rank_1(i))$ finds the position of the first 1 at position $\geq i$.
+#+end_answer
+
+* Binary Rank & Select: Goal
+#+begin_theorem Goal of this lecture
+There exists a data structure that answers rank and select queries:
+- in constant $O(1)$ time,
+- using succinct $o(n)$ bits of additional space.
+#+end_theorem
+
+* Rank: first steps
+#+begin_example Compute everything
+Compute the answer on-demand:
+- No space overhead
+- $O(n/\lg n)$ query time
+  - We pop-count $w=\Theta(\lg n)$ bits at a time.
+#+end_example
+
+#+begin_example Store everything
+Pre-compute and store all answers:
+- $n$ /words/ overhead
+- $O(1)$ query time
+#+end_example
+
+* Rank: Binary search
+
+#+begin_example 
+Store positions of all 1-bits. Then binary search to get the number of them at position $\lt i$:
+- $k$ words overhead, for $k := \rank(n)$.
+- $O(\lg k)$ query time
+#+end_example
+
+* Rank: Checkpoints
+#+begin_example 
+Store a /checkpoint/ every $s$ bits: $R_k := \rank(k\cdot s)$.
+- $n/s$ /words/ overhead
+- $O(s/\lg n)$ query time:
+  $$\rank(i) = R_{\lfloor\frac is\rfloor} + \sum_{s\lfloor\frac is\rfloor \leq j < i} b_j$$
+  
+For $s=w = \Theta(\lg n)$:
+#+attr_reveal: :frag t
+- $n/w$ words, or $O(n)$ bits overhead.
+  - /Compact/, but not /succinct/
+- $O(1)$ queries
+#+end_example
+#+attr_reveal: :frag t
+- Adjacent checkpoints $R_k$ are similar!
+* Rank: A succinct version [cite:@succinct-data-structures]
+
+#+begin_definition Succinct rank
+- Blocks of size $s = w$.
+- Super blocks of size $s' = w^2$.
+- Store \(w\)-bit super block ranks $R'_k := \rank(k\cdot s')$.
+  - $\lceil n/s'\rceil \cdot w = O(n/\lg n) = o(n)$ bits
+- Store \(\lg s'\)-bit block ranks relative to super block:
+  $$R_k = \rank(k\cdot s) - R'_{\lfloor k/w\rfloor} \leq s'.$$
+  - $\lceil n/s\rceil \cdot \lg(s') = O(n/w \cdot \lg w) = o(n)$ bits
+  
+- Constant time queries:
+  $$\rank(i) = R'_{\lfloor i/s'\rfloor} + R_{\lfloor{i/s\rfloor}} + \sum_{s\lfloor\frac is\rfloor \leq j < i} b_j$$
+#+end_definition
+
+* Rank: Emulating popcount
+- Originally, constant time \(w\)-bit popcount was not assumed.
+#+attr_reveal: :frag t
+- Instead, we can take $s = (\lg n)/2$, and pre-compute popcounts for all $2^s$ masks:
+  - $2^s = \sqrt{n}$ patterns
+  - $s$ offsets per pattern
+  - $\lg s$ bits per count
+  $$2^s \cdot s \cdot \lg s = O(\sqrt n \cdot \lg n \cdot \lg\lg n) = o(n).$$
+
+* Engineering Rank: minimizing space usage
+In practice, we don't need /succinct/. /Compact/ with small overhead is enough.
+See [[https://curiouscoding.nl/slides/quadrank/][QuadRank slides]].
+
+#+attr_reveal: :frag t
+- Store a 64-bit checkpoint every 512-bits of data:
+  - $64/512 = 12.5\%$ space overhead;
+  - pop-counting 512 bits is sufficiently fast.
+#+attr_reveal: :frag t
+- Smaller: 16-bit checkpoints, and \(s'=2^{16}\)-bit super blocks storing 64-bit
+  checkpoints. [cite:@pasta]
+  - $16/512 + 64/2^{16} = 3.2\%$ overhead.
+#+attr_reveal: :frag t
+- Faster count: checkpoints to the /middle/ of each block: [cite:@engineering-rank]
+  - same space
+  - popcount only 256 bits.
+#+attr_reveal: :frag t
+- Fewer cache misses: store checkpoints /inside/ each block: [cite:@spider]
+  - 1 instead of 2 cache misses
+  - $16/(512-16) + 64/2^{16} = 3.3\%$ overhead.
+#+attr_reveal: :frag t
+- Simple & fast classic: Rank 9 [cite:@rank9]
+  - 64-bit blocks with 9-bit checkpoints; 7 of them make a =u64=.
+# - Smaller metadata: 32-bit counts is enough [cite:@quadrank-preprint]
+
+* Select
+#+reveal: split:t
+Assume we have $k$ 1-bits.
+- Compute all answers on-demand: $O(n/\lg n)$ queries.
+- Store all answers: $O(k)$ words.
+  - Sufficient if $k = o(n / \lg n)$.
+
+#+begin_definition Select in word
+The position of $i$'th 1-bit in a word can be found in constant time (in the "modern" word RAM model) using
+#+begin_src rust
+(1 << i).deposit_bits(word).trailing_zeros()
+#+end_src
+which uses =pdep= and =tzcnt= instructions ([[https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set#BMI2_(Bit_Manipulation_Instruction_Set_2)][wikipedia]], [[https://doc.rust-lang.org/std/primitive.u64.html#method.deposit_bits][deposit_bits]]).
+#+end_definition
+
+* Succinct Select [cite:@clark-select]
+#+begin_definition "Clark's select"
+- Variable-sized super-blocks $B_i$ containing $b:=\lg ^2 n$ 1-bits
+  $$\select(i) = \sum_{0\leq j < \lfloor i/b\rfloor} |B_j| + \select(B_{\lfloor
+  i/b\rfloor}, i - \lfloor i/b\rfloor).$$
+  - Prefix sums take $n/b \cdot w = O(n/\log n) = o(n)$ bits.
+- /Sparse/ blocks with $|B| \geq \lg^4 n$:
+  - Store answers directly in $bw = \Theta(\lg^3n)$ bits.
+  - $\lg^4$ bits in block, so $o(n)$ overall.
+- /Dense/ blocks with $|B| < \lg^4 n$: /next slide/
+#+end_definition
+#+reveal: split:t
+#+begin_definition "(Clark's select ctd.) handling sparse blocks"
+/Dense/ blocks with $|B| < \lg^4 n$:
+
+Split again into variable-sized blocks of $b'=\sqrt{\lg n}$ ones.
+  - Prefix sums take $\lg \lg^4 n$ bits per element, $O(k/b' \cdot \lg \lg^4 n) = o(n)$ total
+- If sparse, size $\geq \frac 12\lg n$: 
+  - Store $b'$ \(\lg(\lg^4 n)\)-bit numbers, $o(\lg n)$ total
+- If dense, size $<\frac 12\lg n$:
+  - Use =select_in_word=
+  - Clark's select stores a lookup table like for popcount.
+#+end_definition
+
+* Further reading
+- QuadRank [[https://curiouscoding.nl/slides/quadrank/][slides]] and paper [cite:@quadrank-preprint]
+- Ben Langmead's [[https://www.langmead-lab.org/teaching.html#burrows-wheeler-indexing][teaching material]] on bitvectors, rank, and select.
+  - With YouTube videos.
+    
+* Next: [[../../elias-fano/slides/][Elias-Fano coding]]
+
+* Bibliography
+#+print_bibliography:
+
+
+# Local Variables:
+# eval: (toggle-org-reveal-export-on-save)
+# End:
