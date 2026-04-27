@@ -92,13 +92,15 @@ $$
 #+reveal: split:t
 
 #+begin_definition 
-A /rank/ query on a bit vector counts 1-bits before a position $i$.
+A /rank/ query on a bit vector counts 1-bits /before/ a position $i$ (for $0\leq
+i\leq n$).
 
 - $\rank(i) := \sum_{0\leq j < i} b_j$
 #+end_definition
 
 #+begin_definition 
-A /select/ query on a bit vector returns the position of the $j$'th 1.
+A /select/ query on a bit vector returns the position of the $j$'th 1
+(zero-based, for $0\leq j < \rank(n)$).
 
 - $\select(j) :=$ index $i$ such that $b_i=1$ and $\rank(i) = j$.
 #+end_definition
@@ -131,8 +133,8 @@ There exists a data structure that answers rank and select queries:
 #+begin_example Compute everything
 Compute the answer on-demand:
 - No space overhead
-- $O(n/\lg n)$ query time
-  - We pop-count $w=\Theta(\lg n)$ bits at a time.
+- $O(n/\log n)$ query time
+  - We pop-count $w=\Theta(\log n)$ bits at a time.
 #+end_example
 
 #+begin_example Store everything
@@ -146,17 +148,17 @@ Pre-compute and store all answers:
 #+begin_example 
 Store positions of all 1-bits. Then binary search to get the number of them at position $\lt i$:
 - $k$ words overhead, for $k := \rank(n)$.
-- $O(\lg k)$ query time
+- $O(\log k)$ query time
 #+end_example
 
 * Rank: Checkpoints
 #+begin_example 
 Store a /checkpoint/ every $s$ bits: $R_k := \rank(k\cdot s)$.
 - $n/s$ /words/ overhead
-- $O(s/\lg n)$ query time:
+- $O(s/\log n)$ query time:
   $$\rank(i) = R_{\lfloor\frac is\rfloor} + \sum_{s\lfloor\frac is\rfloor \leq j < i} b_j$$
   
-For $s=w = \Theta(\lg n)$:
+For $s=w = \Theta(\log n)$:
 #+attr_reveal: :frag t
 - $n/w$ words, or $n$ bits overhead.
   - /Compact/, but not /succinct/
@@ -171,11 +173,11 @@ For $s=w = \Theta(\lg n)$:
 - Super blocks of size $s' = w^2$.
 #+attr_reveal: :frag t
 - Store \(w\)-bit super block ranks $R'_k := \rank(k\cdot s')$.
-  - $\lceil n/s'\rceil \cdot w = O(n/\lg n) = o(n)$ bits
+  - $\lceil n/s'\rceil \cdot w = O(n/\log n) = o(n)$ bits
 #+attr_reveal: :frag t
-- Store \(\lg s'\)-bit block ranks relative to super block:
+- Store \(\log_2 s'\)-bit block ranks relative to super block:
   $$R_k = \rank(k\cdot s) - R'_{\lfloor k/w\rfloor} \leq s'.$$
-  - $\lceil n/s\rceil \cdot \lg(s') = O(n/w \cdot \lg w) = o(n)$ bits
+  - $\lceil n/s\rceil \cdot \log_2(s') = O(n/w \cdot \log_2 w) = o(n)$ bits
   
 #+attr_reveal: :frag t
 - Constant time queries:
@@ -185,11 +187,11 @@ For $s=w = \Theta(\lg n)$:
 * Rank: Emulating popcount
 - Originally, constant time \(w\)-bit popcount was not assumed.
 #+attr_reveal: :frag t
-- Instead, we can take $s = (\lg n)/2$, and pre-compute popcounts for all $2^s$ masks:
+- Instead, we can take $s = (\log_2 n)/2$, and pre-compute popcounts for all $2^s$ masks:
   - $2^s = \sqrt{n}$ patterns
   - $s$ offsets per pattern
-  - $\lg s$ bits per count
-  $$2^s \cdot s \cdot \lg s = O(\sqrt n \cdot \lg n \cdot \lg\lg n) = o(n).$$
+  - $\log_2 s$ bits per count
+  $$2^s \cdot s \cdot \log_2 s = O(\sqrt n \cdot \log_2 n \cdot \log_2\log_2 n) = o(n).$$
 
 * Engineering Rank: minimizing space usage
 In practice, we don't need /succinct/. /Compact/ with small constant overhead is enough.
@@ -218,9 +220,9 @@ See [[https://curiouscoding.nl/slides/quadrank/][QuadRank slides]].
 * Select
 #+reveal: split:t
 Assume we have $k$ 1-bits.
-- Compute all answers on-demand: $O(n/\lg n)$ queries.
+- Compute all answers on-demand: $O(n/\log n)$ queries.
 - Store all answers: $O(k)$ words.
-  - Sufficient if $k = o(n / \lg n)$.
+  - Sufficient if $k = o(n / \log n)$.
 
 #+begin_definition Select in word
 The position of $i$'th 1-bit in a word can be found in constant time (in the "modern" word RAM model) using
@@ -232,27 +234,46 @@ which uses =pdep= and =tzcnt= instructions ([[https://en.wikipedia.org/wiki/X86_
 
 * Succinct Select [cite:@clark-select]
 #+begin_definition "Clark's select"
-- Variable-sized super-blocks $B_i$ containing $b:=\lg ^2 n$ 1-bits
-  $$\select(i) = \sum_{0\leq j < \lfloor i/b\rfloor} |B_j| + \select(B_{\lfloor
-  i/b\rfloor}, i - \lfloor i/b\rfloor).$$
+- Variable-sized super-blocks $B_i$ containing $b:=\log ^2 n$ 1-bits
+  $$\select(i) = \left(\sum_{0\leq j < \lfloor i/b\rfloor} |B_j|\right) + \select(B_{\lfloor
+  i/b\rfloor}, i - b\lfloor i/b\rfloor).$$
   - Prefix sums take $n/b \cdot w = O(n/\log n) = o(n)$ bits.
-- /Sparse/ blocks with $|B| \geq \lg^4 n$:
-  - Store answers directly in $bw = \Theta(\lg^3n)$ bits.
-  - $\lg^4$ bits in block, so $o(n)$ overall.
-- /Dense/ blocks with $|B| < \lg^4 n$: /next slide/
+- /Sparse/ blocks with $|B| \geq \log^4 n$:
+  - Store answers directly in $bw = \Theta(\log^3n)$ bits.
+  - $\log^4$ bits in block, so $o(n)$ overall.
+- /Dense/ blocks with $|B| < \log^4 n$: /next slide/
 #+end_definition
 #+reveal: split:t
 #+begin_definition "(Clark's select ctd.) handling sparse blocks"
-/Dense/ blocks with $|B| < \lg^4 n$:
+/Dense/ blocks with $|B| < \log^4 n$:
 
-Split again into variable-sized blocks of $b'=\sqrt{\lg n}$ ones.
-  - Prefix sums take $\lg \lg^4 n$ bits per element, $O(k/b' \cdot \lg \lg^4 n) = o(n)$ total
-- If sparse, size $\geq \frac 12\lg n$: 
-  - Store $b'$ \(\lg(\lg^4 n)\)-bit numbers, $o(\lg n)$ total
-- If dense, size $<\frac 12\lg n$:
+Split again into variable-sized blocks of $b'=\sqrt{\log n}$ ones.
+  - Prefix sums take $\log \log^4 n$ bits per element, $O(k/b' \cdot \log \log^4 n) = o(n)$ total
+- If sparse, size $\geq \frac 12\log n$: 
+  - Store $b'$ \(\log_2(\log^4 n)\)-bit numbers, $o(\log n)$ total
+- If dense, size $<\frac 12\log n$:
   - Use =select_in_word=
   - Clark's select stores a lookup table like for popcount.
 #+end_definition
+
+#+reveal: split:t
+
+#+begin_definition "(Clark's select ctd.) queries"
+To answer $\select(j)$:
+- Find the super block $\lfloor j/b\rfloor$.
+- If sparse: read answer.
+- If dense: find block $\lfloor j/b' \rfloor$.
+  - Read offset of superblock.
+  - Read offset of block inside superblock.
+  - If sparse block: read the position relative to the block.
+  - If dense block: popcount inside the block. 
+#+end_definition
+
+#+begin_theorem 
+There exists a data structure with $o(n)$ space overhead that allows $O(1)$ rank
+and select queries.
+#+end_theorem
+
 
 * Select in practice: Darray
 - Super blocks containing $b = 2^{10}$ ones.

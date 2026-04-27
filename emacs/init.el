@@ -222,7 +222,7 @@ As can be seen in [[prefix:lbl]]
 (deftheorem algorithm "Algorithm" alg)
 (deftheorem example "Example" exmpl)
 (deftheorem myquestion "Question" qqq)
-(deftheorem answer "Answer" asnw)
+(deftheorem answer "Answer" answ)
 (deftheorem assumption "Assumption" assump)
 (deftheorem observation "Observation" obsv)
 
