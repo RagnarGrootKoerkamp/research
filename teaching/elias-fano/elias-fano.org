@@ -42,26 +42,163 @@
 
 # -------------------------------------------------
 
-* Previous slides: [[../../models-of-computation/slides/][Bit vectors, Rank & Select]]
+* Previous slides: [[../../rank-select/slides/][Bit vectors, Rank & Select]]
 - Bit vector: storing bits
 - Rank: counting 1 bits
 - Select: finding 1 bits
+  
+* Goal: Storing lists of integers
+
+#+begin_block
+How do we efficiently store a list of integers
+$$
+0\leq x_0 \leq x_1 \leq \dots \leq x_{n-1} < U.
+$$
+#+end_block
+
+#+begin_theorem Lower bound
+Using [[https://en.wikipedia.org/wiki/Stars_and_bars_(combinatorics)][/stars and bars/]], there are $\binom{U+n-1}{n}$ of choosing $n$ elements
+(with duplicates) from $\{0, 1, \dots, U-1\}$.
+
+#+attr_reveal: :frag t
+$$
+n \lg \left(\frac{U+n-1}{n}\right) \leq \lg \binom{U+n-1}{n}  \leq n \lg \left(e\cdot \frac{U+n-1}{n}\right)
+$$
+so it can be done with $\lg e + \lg\left(\frac{U+n-1}{n}\right)$ bits per key.
+
+#+attr_reveal: :frag t
+For $n = o(\sqrt U)$ and $n\to\infty$,
+$$
+\frac 1n \lg \binom{U+n-1}{n}  \to \lg \left(e\cdot \frac{U}{n}\right).
+$$
+#+end_theorem
+
+** Storing many small integers ($n \gg U$)
+
+#+begin_myquestion
+What if $n \gg U$?
+#+end_myquestion
+#+begin_answer
+#+attr_reveal: :frag t
+When $n\gg U$, store how often each element each element occurs.
+#+attr_reveal: :frag t
+- $U \lg n$ bits
+#+end_answer
+
+** Storing dense lists ($n\approx U$)
+#+begin_myquestion
+What if $n \approx U$?
+
+(Hint: What if all elements are distinct?)
+#+end_myquestion
+#+begin_answer
+#+attr_reveal: :frag t
+When all elements are distinct: store $U$ bits indicating for each $1$ or $0$.
+#+attr_reveal: :frag t
+- $n$ bits
+
+#+attr_reveal: :frag t
+Otherwise: encode all the counts in unary and concatenate them, e.g., a count of 3 becomes =1110=.
+#+attr_reveal: :frag t
+- $U + n$ bits
+#+attr_reveal: :frag t
+- Lower bound for $n=u$: $n\lg\frac{U+n-1}{n} \approx n\lg2 = n$
+  - Less than 1 bit/key wasted.
+#+end_answer
+
+** Storing sparse lists ($n\ll U$)
+#+begin_myquestion
+What if $n \ll U$?
+#+end_myquestion
+#+begin_answer
+#+attr_reveal: :frag t
+Store directly:
+#+attr_reveal: :frag t
+- $n \lg U$ bits.
+#+attr_reveal: :frag t
+- Lower bound for $n\ll u$: $n\lg\left(e\cdot \frac Un\right) \approx n\lg(eU/n)
+  = n(\lg U + \lg e -
+  \lg n)$
+  - $\lg n - \lg e$ bits/key wasted!
+#+end_answer
+#+begin_myquestion
+#+attr_reveal: :frag t
+Where is the "waste"/inefficiency?
+#+end_myquestion
+#+begin_answer
+#+attr_reveal: :frag t
+Consecutive elements share the $\approx \lg n$ high bits!
+#+end_answer
 
 * Elias-Fano coding [cite:@elias;@fano;@elias-fano] 
 
-#+begin_theorem Elias-Fano coding
-A set of $n$ integers up to $U$ can be stored in
+#+begin_theorem Elias-Fano (EF) coding
+A list of $n$ integers $0\leq x_0\leq x_1\leq \dots \leq x_{n-1} < U$ can be stored in
 $$
-\lg_2 \binom Un + 2n
+n (\lg_2 (U/n) +2)
 $$
-bits.
+bits while supporting $O(1)$ access time.
+
+This is only $2-\log_2(e) = 0.5573$ bits/key away from the lower bound when $n =
+o(\sqrt U)$!
 #+end_theorem
 
+#+attr_reveal: :frag t
+Idea:
+#+attr_reveal: :frag t
+- We have budget to store the $\ell = \lfloor \log(U/n)\rfloor$ bits explicitly.
+#+attr_reveal: :frag t
+- But how do we encode all $\log U - \ell \approx \log n$ high bits using
+  $\approx 2$ bits/key?
+#+attr_reveal: :frag t
+- Using the $n\approx U$ case!
+  
+* Elias-Fano coding
 
+#+begin_definition 
+Split each integer into a \(\ell=\lfloor \log(U/n)\rfloor\)-bit /low/ part and \((\log U - \ell)\)-bit
+/high/ part.
+- Store all low bits explicitly in $n \ell$ bits.
+#+attr_reveal: :frag t
+- Write how often each high part occurs in unary.
+  - $\lceil U/2^\ell\rceil$ high parts with
+    $$n \leq \lceil U/2^\ell \rceil < 2n.$$
+  - In total $n + \lceil U/2^\ell\rceil \leq 3n$ bits.
+#+attr_reveal: :frag t
+- Thus space usage below
+  $$n \ell + 3n = n(\lfloor \log (U/n)\rfloor+3)$$
+#+attr_reveal: :frag t
+- More refined analysis shows that actually, $\log(U/n)+2$ is sufficient!
+#+end_definition
 
-* Further reading
+* Interpretations of the high-bit encoding
+- Each input number corresponds to a 1.
+- Each "bucket" for the high parts corresponds to a 0.
+- 0 separates the unary count in number of 1 for each high part.
+- The number of 0 directly before a 1 is the jump the high part makes from the previous value.
+- The total number of 0s before a 1 is the value of the high part.
+
+* Querying Elias-Fano
+#+begin_definition 
+To get $x_i$:
+- Read the $i$'th group of $\ell$ low bits.
+#+attr_reveal: :frag t
+- Get the high part of the $i$'th value:
+  - Count zeros before the $i$'th 1 (counting from 0):
+  $$\mathsf{high}(i) = \mathsf{select}_1(i) - i$$
+#+end_definition
+
+* Variants
+- As discussed: storing sorted lists of integers.
+#+attr_reveal: :frag t
+- For /strictly increasing/ integers: replace $x_i$ by $x_i-i$.
+#+attr_reveal: :frag t
+- To store a non-sorted list with small sum: store prefix sums.
+
+* Further reading / sources
+- Giulio Pibiri's [[https://jermp.github.io/assets/pdf/notes/elias_fano_notes.pdf][notes on Elias-Fano]]
+- Modern paper reviving/applying it: [cite:@elias-fano]
 - Original papers: [cite:@elias;@fano]
-- Modern paper using it: [cite:@elias-fano]
 - Dynamic version: [cite:@dynamic-elias-fano]
 - =sux::EliasFano= [[https://docs.rs/sux/latest/sux/dict/elias_fano/struct.EliasFano.html][implementation]]
 
