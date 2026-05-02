@@ -24,23 +24,43 @@ body {
         border-radius: 0;
         border: none;
         background: inherit;
-        line-height: 1.8em;
+        // line-height: 1.8em;
         a {
-            padding: 0.1rem 0.4rem;
-            border-radius: 0.6rem;
-            border: 1px solid $highlight;
-            background: $background;
+            // padding: 0.1rem 0.4rem;
+            // border-radius: 0.6rem;
+            // border: 1px solid $highlight;
+            // background: $background;
             color: inherit;
+
+            // new
+            // border-bottom: 1px solid $highlight;
+            // color: grey;
+            text-decoration: underline;
+            text-decoration-color: lightgray;
+            // text-decoration-thickness: 2px;
+
+            &:hover {
+                color: black;
+                text-decoration-color: black;
+            }
+
+            .taxonomy-count {
+                color: grey;
+            }
         }
     }
-    .category {
-        a {
-            background: $cat_background;
-            border-color: $cat_highlight;
-        }
+    // .separator {
+    //     display: none;
+    // }
+}
+
+.post-meta {
+    div {
+        // display: inline-block;
+        // margin-right: 1.5rem;
     }
-    .separator {
-        display: none;
+    .fa-solid {
+        // display: none;
     }
 }
 
@@ -280,9 +300,19 @@ div.canvas canvas {
 }
 
 a {
-    /* Prevent annoying black flashes */
+    // Prevent annoying black flashes
     transition-property: color;
+    transition: none;
+    color: #1565b0;
+    // color: inherit;
 }
+// .content a:not(.title):not(.title-link) {
+//     // text-decoration: $highlight underline;
+//     // text-decoration: #1565b0 underline;
+//     &:hover {
+//         color: $highlight;
+//     }
+// }
 
 mjx-container {
     overflow-x: auto;
@@ -410,8 +440,14 @@ a.footnote-ref:has(+ span.fn-tooltip:hover) {
     background: $highlight;
 }
 
-// Styling for homepage decription lists.
 .list {
+    // styling for homepage and /posts lists
+    ul {
+        margin-top: 1rem;
+        margin-bottom: 3rem;
+    }
+
+    // Styling for homepage decription lists.
     dl {
         margin: 0.5em 0 0.5em 0;
         display: grid;
@@ -736,46 +772,52 @@ figure > img {
     border-radius: 0.9rem;
 }
 
-.content .container ul li {
-    flex-wrap: wrap;
+// post lists in homepage and /posts
+.content .container ul.post-list li {
+    display: block;
+    text-indent: 12.5rem hanging;
+    // display: block;
+    // flex-wrap: wrap;
+    .date {
+        // flex: initial;
+        font-size: smaller;
+        width: 12rem;
+        margin-right: 1.5rem;
+    }
+    // display: inline-block;
+    a.title {
+        display: inline;
+        // flex: initial;
+        // line-height: 3rem;
+    }
     .tags {
+        // flex: initial;
+        display: inline-block;
+        padding-left: 1.5rem;
+        font-size: smaller;
+        color: gray;
         .fa-tag {
             display: none;
         }
-        flex-basis: 100%;
-        padding-left: 36%;
-        width: 0;
-        font-size: 15px;
+        .tag {
+            margin-right: 0.2m;
+        }
     }
     @media only screen and (max-width: 768px) {
+        text-indent: initial;
         .tags {
             padding-left: 0;
-            flex-basis: 100%;
+            // flex-basis: 100%;
             width: 100%;
         }
+    }
+    & + li {
+        margin-top: 0.3rem;
     }
 }
 
 article > div > p:nth-child(1) > mjx-container[display="true"],
 article > div > p:nth-child(2) > mjx-container[display="true"] {
-    display: none;
-}
-
-.category[data-tag="results"] a,
-.category[data-tag="ideas"] a,
-.category[data-tag="paper"] a,
-.category[data-tag="thesis"] a,
-.tag[data-tag="highlight"] a {
-    border-color: $new_highlight !important;
-    background-color: $new_background !important;
-}
-
-.tag[data-tag="note"] a {
-    border-color: $note_highlight !important;
-    background-color: $note_background !important;
-}
-
-.tag[data-tag="highlight"] a {
     display: none;
 }
 
@@ -920,4 +962,14 @@ a.external-link:after {
 
 span.underline {
     text-decoration: underline;
+}
+
+.paper-list {
+    dd {
+        color: grey;
+        a {
+            color: inherit;
+            text-decoration: lightgrey underline;
+        }
+    }
 }
