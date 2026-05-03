@@ -7,18 +7,20 @@
 #+hugo_level_offset: 1
 #+date: <2026-01-25 Sun>
 
-This post will collect template files for setting up
-GitHub CI for testing and releasing Rust libraries and binaries to:
+This post collects the GitHub and BioConda CI configurations I use for
+maintaining and releasing Sassy. This includes releasing to:
 - crates.io ([[#cratesio][libraries]], [[#cratesio-bin][binaries]])
 - [[#github][GitHub releases]]
 - [[#binstall][cargo binstall]]
 - [[#pypi][PyPI]]
 - [[#bioconda][Bioconda]]
 
-We also have some workarounds for dealing with [[#avx2][AVX2 SIMD instructions]].
+We also have some specific settings to ensure the distributed binaries use [[#avx2][AVX2
+SIMD instructions]], as well as some configuration to distribute x86-64 binaries
+that transparently switch to a AVX-512 enabled implementation when possible.
+(*TODO*: Write on cargo-multivers for shipping AVX-512 compatible binaries.)
   
-Source files for all snippets can be found at [[https://github.com/RagnarGrootKoerkamp/research/tree/master/posts/ci/][github:RagnarGrootKoerkamp/research/posts/ci]].
-
+Source files for all snippets can be found at [[https://github.com/RagnarGrootKoerkamp/research/tree/master/posts/release-flow/][github:RagnarGrootKoerkamp/research/posts/release-flow]].
 
 *Example repositories* that use (a subset of) the setup shown here:
 - Libraries:
@@ -29,6 +31,9 @@ Source files for all snippets can be found at [[https://github.com/RagnarGrootKo
   - Barbell (bioconda): https://github.com/rickbeeloo/barbell
   - Deacon (bioconda): https://github.com/bede/deacon
 
+*TODO*: I came across this [[https://github.com/epage/_rust/tree/main][template repository]] by Ed Page. Pretty sure we can
+learn some things from that.
+    
 * Testing
 :PROPERTIES:
 :CUSTOM_ID: testing
@@ -80,6 +85,8 @@ Specifically, I use the configuration below to:
 #+caption: An example =release.toml= setup for =cargo release=.
 #+include: "./release.toml" src toml
 
+*TODO*: This config can also be set directly in =Cargo.toml=.
+
 ** crates.io
 :PROPERTIES:
 :CUSTOM_ID: cratesio
@@ -96,7 +103,7 @@ Releasing binaries is more involved: we must pre-compile them for specific
 target platforms and then distribute those to common archives:
 - GitHub release artefacts,
 - Bioconda,
-- Pypi.
+- PyPI.
 
 We release for three architectures:
 - x86-64 linux,
