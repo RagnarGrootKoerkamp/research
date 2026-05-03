@@ -57,45 +57,52 @@
 </section>
 
 <section class="container list">
-  {{ .Content }} {{ range $tag := (slice "wip" "popular" "recent" "highlight")
-  }} {{ if or hugo.IsServer (not (eq $tag "wip")) }} {{ if eq $tag "popular" }}
-  <h3>Popular</h3>
-  {{ else if eq $tag "recent" }}
-  <h3>Recent</h3>
-  {{ else if eq $tag "highlight" }}
-  <h3>Featured</h3>
-  {{else}}
-  <h3>{{$tag | humanize }} posts</h3>
-  {{end}}
-  <ul class="post-list">
-    {{ if eq $tag "recent" }} {{ range first 5 (where site.RegularPages ".Type"
-    "posts") }} {{ if not (in .Params.Tags "wip") }}
-    <li>
-      <span class="date">
-        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
-      </span>
-      <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
-        >{{ .Title }}</a
-      >
-      {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
-      {{end }}
-    </li>
-    {{ end }} {{ end }} {{ else }} {{ range (where site.RegularPages ".Type"
-    "posts") }} {{ if in .Params.Tags $tag }}
-    <li>
-      <span class="date">
-        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
-      </span>
-      <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}"
-        >{{ .Title }}</a
-      >
-      {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }}
-      {{end }}
-    </li>
-    {{ end }} {{ end }} {{end}}
-  </ul>
-  {{ end }} {{ end }}
+    {{ .Content }}
+    {{ range $tag := (slice "wip" "popular" "recent" "thesis" "paper" "highlight") }}
+    {{ if or hugo.IsServer (not (eq $tag "wip")) }}
+    {{ if eq $tag "popular" }}
+        <h3>Popular</h3>
+    {{ else if eq $tag "recent" }}
+        <h3>Recent</h3>
+    {{ else if eq $tag "highlight" }}
+        <h3>Featured</h3>
+    {{ else if eq $tag "thesis" }}
+        <h3>Thesis chapters</h3>
+    {{ else if eq $tag "paper" }}
+        <h3>Papers</h3>
+    {{else}}
+        <h3>{{$tag | humanize }} posts</h3>
+    {{end}}
+    <ul class="post-list">
+    {{ if eq $tag "recent" }}
+        {{ range first 10 (where site.RegularPages ".Type" "posts") }}
+            {{ if not (in .Params.Tags "wip") }}
+                <li>
+                    <span class="date">
+                        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
+                    </span>
+                    <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}">{{ .Title }}</a >
+                    {{ with .Params }}{{ partial "taxonomy/categories_and_tags.html" . }} {{end }}
+                </li>
+            {{ end }}
+        {{ end }}
+    {{ else }}
+        {{ range (where site.RegularPages ".Type" "posts") }}
+            {{ if or (in .Params.Tags $tag) (in .Params.Categories $tag) }}
+                <li>
+                    <span class="date">
+                        {{ .Date.Format (.Site.Params.dateFormat | default "January 2006" ) }}
+                    </span>
+                    <a class="title" href="{{ .Params.externalLink | default .RelPermalink }}">{{ .Title }}</a >
+                    {{ with .Params }} {{ partial "taxonomy/categories_and_tags.html" . }} {{end }}
+                </li>
+            {{ end }}
+        {{ end }}
+    {{end}}
+    </ul>
+    {{ end }}
+    {{ end }}
 
-  <h3>All posts</h3>
-  See <a href="/posts/">all posts</a>.
+    <h3>All posts</h3>
+    See <a href="/posts/">all posts</a>.
 </section>
