@@ -131,7 +131,7 @@ $highlight: rgb(0, 150, 130) !important;
         }
     }
 
-    ul {
+    section > ul {
         width: 100%;
     }
     ul.two-col {
@@ -187,6 +187,7 @@ $highlight: rgb(0, 150, 130) !important;
     //              <p>…</p>
     //            </div>
 
+    .proof,
     .special-block {
         font-size: smaller;
 
@@ -198,6 +199,7 @@ $highlight: rgb(0, 150, 130) !important;
         margin: 0.4em 0;
         background-color: $kit-royalblue-bg;
 
+        &.proof::before,
         .special-block-title {
             display: block;
             background-color: $kit-royalblue;
@@ -223,6 +225,15 @@ $highlight: rgb(0, 150, 130) !important;
         }
         .MathJax_Display:nth-last-child(2) {
             margin-bottom: 0;
+        }
+
+        // Proof blocks have no .special-block-title; generate the header via ::before
+        &.proof {
+            background-color: $kit-green-bg;
+            &::before {
+                content: "Proof";
+                background-color: $kit-green;
+            }
         }
     }
 
@@ -268,23 +279,6 @@ $highlight: rgb(0, 150, 130) !important;
 
     .special-block ul ul {
         color: rgb(110, 110, 110);
-    }
-
-    // Proof blocks have no .special-block-title; generate the header via ::before
-    .proof {
-        padding: 0.35em 0.5em 0.4em;
-        margin: 0.4em 0;
-        background-color: $kit-green-bg;
-
-        &::before {
-            content: "Proof";
-            display: block;
-            background-color: $kit-green;
-            color: white;
-            font-weight: bold;
-            padding: 0.2em 0.5em;
-            margin: -0.35em -0.5em 0.35em;
-        }
     }
 
     // .slides {
