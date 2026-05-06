@@ -1,0 +1,94 @@
+#+title: Range Minimum Queries Project
+#+hugo_section: teaching
+#+filetags: @teaching
+#+OPTIONS: ^:{} num: num:0 toc:0
+#+hugo_front_matter_key_replace: author>authors
+#+HUGO_LEVEL_OFFSET: 2
+#+date: <2026-05-11 Mon 14:00>
+
+The project is to implement the following RMQ algorithms:
+- compute on the fly
+- precompute all queries
+- sparse array
+- block based approach (with varying block size)
+- Cartesian trees (optional) (with varying block size)
+
+Optimizing the code is encouraged but optional.
+
+Then, write a report comparing the methods via 3 plots:
+- how does query *time* scale with $n$?
+- how does *space* usage scale with $n$?
+- what is the space-time *trade-off* for $n=10^8$?
+
+* Input data
+Input data is provided in the following file format:
+#+begin_src 
+<n> <q>  # n and number of queries
+a_1      # 1 <= n <= 10^8 values 
+a_2      # 0 <= a_i < 2^64
+...
+a_n
+s_1 e_1  # 0 <= q <= 10^7 query pairs
+s_2 e_2  # 1 <= s_i <= t_i <= n
+...
+s_q e_q
+#+end_src
+For example:
+#+begin_src 
+4 2
+10
+5
+8
+4
+1 3
+3 4
+#+end_src
+
+The provided test cases contain both random data and queries, as well as edge
+cases that your code should work on (e.g. increasing/decreasing data, only very
+long query ranges, only very short query ranges, ...).
+
+Note that for the final evaluation, we will build, test, and run your code
+against 'private' test data to verify its correctness and to get speed
+measurements for all submissions on the same hardware.
+
+We provide input files for $n$ up to $10^8$, each with $10^6$ queries, but you
+can also test with your own randomly generated queries.
+
+* Benchmarks
+Your code should read the input, build the data structure, and /only then/ time how
+long it takes to answer all queries. Then it should write the results (the
+average time per query for each $n$) to a csv file.
+
+
+* Deliverables
+A =abcd12.zip= file named after your student ID containing, in the root:
+- =report.pdf=: a report (in English) containing:
+  - *Introduction*: Briefly explains the files you submitted;
+  - *Methods*: Briefly explains the algorithms you implemented.
+    State the space and query time complexity of each method.
+    - In case you did more than the minimum: explain any optimizations you did;
+  - *Results*: This is the focus of the report.
+    - Contains the (at least) three plots.
+    - *Analyse the results*: do the results match your expectations? If so, how
+      closely? If not, why do they not match? 
+    - Which algorithms are Pareto-optimal? Which algorithms are best for small
+      space? For speed? And what would you choose as general-purpose balanced
+      tradeoff? Motivate your choice.
+    - What parameters/block sizes are best?
+    - How fast is the fastest method *in absolute ns/query*?
+      Can you explain this number?
+      Do you think this could be optimized further?
+      What (hardware?) limit is the bottleneck?
+- A =makefile= (or =justfile=):
+  - =make build= should build the code.
+  - =make test= should test the code against all input files.
+  - =make run= should run all the benchmarks and write to =data/{time,space,tradeoff}.csv=.
+  - =make plot= should read =data.csv= and write =plots/{time,space,tradeoff}.png=.
+  - =make= does the 4 above, in order.
+
+Please use this provided skeleton as a starting point: TODO ZIP.
+
+* AI policy
+Using AI is allowed (but discouraged) for the code.
+Using AI is *not allowed* for the writing of the report.
