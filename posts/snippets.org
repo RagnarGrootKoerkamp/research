@@ -151,3 +151,17 @@ print(
 #+attr_latex: :booktabs t :placement [t] :align r|rrr
 <table>
 #+end_src
+
+* IPE
+** Make all text =\textsf=
+#+begin_src LaTeX
+\renewcommand\familydefault{\sfdefault}
+#+end_src
+
+** Export all named views
+=justfile= rule to export all views
+#+begin_src justfile
+export file="figs.ipe":
+    rm -f *.svg
+    grep view {{file}} | grep -o 'name="[a-zA-Z0-9_-]*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -view NAME {{file}} NAME.svg
+#+end_src
