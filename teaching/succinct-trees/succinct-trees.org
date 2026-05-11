@@ -145,9 +145,9 @@ $$
 - a /right/ child of a node is a /sibling/ in the ordered tree.
 #+end_example
 
-#+attr_html: :class float :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
-
+#+attr_html: :class float :style width:50% :src /ox-hugo/tree-example.svg
+[[file:./tree-example.svg]]
+ 
 * Level Ordered Unary Degree Sequence (LOUDS)
 #+begin_definition 
 Start with =10=.
@@ -157,10 +157,10 @@ Then append the degree of each node in level/BFS order in unary:
 
 #+begin_example
 =10111100110011001100000= \\
-=a_bchiABdeCHjkIDfgEJKFG=
+=0_123401562378459067890=
 
-- lowercase: /introduce/ node as child.
-- uppercase: end the list of children of the node.
+- 1: /introduce/ node as child.
+- 0: end the list of children of the node.
 
 $2n+1$ bits:
 - a 1 to add the node as child,
@@ -168,9 +168,8 @@ $2n+1$ bits:
 - an extra 0.
 #+end_example
 
-
-#+attr_html: :class float-right :style max-height:40%;top:55%;right:15% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:45%;top:50%;right:10% :src /ox-hugo/louds.svg
+[[file:./louds.svg]]
 
 ** Operations
 #+begin_myquestion
@@ -189,7 +188,7 @@ How to implement operations:
 
 #+begin_example
 =10111100110011001100000= \\
-=a_bchiABdeCHjkIDfgEJKFG=
+=0_123401562378459067890=
 #+end_example
 
 $$
@@ -197,18 +196,18 @@ $$
 \newcommand{\select}{\mathsf{select}}
 $$
 
-#+attr_html: :class float-right :style max-height:70%;top:0%;right:00% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:70%;top:0%;right:-10%;background:white;padding:1em :src /ox-hugo/louds.svg
+[[file:./louds.svg]]
 
 ** Implementing the operations
 
 #+begin_example
 =10111100110011001100000= \\
-=a_bchiABdeCHjkIDfgEJKFG=
+=0_123401562378459067890=
 #+end_example
 
-#+attr_html: :class float-right :style max-height:50%;top:0%;right:00% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:60%;top:0%;right:-10%;background:white;padding:1em :src /ox-hugo/louds.svg
+[[file:./louds.svg]]
 
 #+begin_definition
 Number nodes $0$ to $n-1$ in level/BFS-order.
@@ -234,11 +233,11 @@ is left.
 #+attr_reveal: :frag t
 =(()(()(()()))()(()()))= \\
 =1101101101000101101000=  10 instead of ()\\
-=abBcdDefFgGEChHijJkKIA=
+=0112334556642778990080=
 
 #+attr_reveal: :frag t
-- lowercase: /enter/ subtree
-- uppercase: /leave/ subtree
+- 1: /enter/ subtree
+- 0: /leave/ subtree
 
 #+attr_reveal: :frag t
 $2n$ bits: a =(= and =)= for each node.\\
@@ -247,8 +246,8 @@ $\rank$ and $\select$ won't work here.
 #+end_example
 
 
-#+attr_html: :class float-right :style max-height:50%;top:45%;right:05% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:50%;top:34%;right:0%;background:white;padding:0.5em :src /ox-hugo/balanced-parentheses.svg
+[[file:./balanced-parentheses.svg]]
 
 ** Additional operations on BP
 #+begin_definition 
@@ -279,11 +278,11 @@ Implementation: See [cite/t:@fully-functional-succinct-trees]
 #+begin_example
 =(()(()(()()))()(()()))= \\
 =1101101101000101101000=  10 instead of ()\\
-=abBcdDefFgGEChHijJkKIA=
+=0112334556642778990080=
 #+end_example
 
-#+attr_html: :class float-right :style max-height:50%;top:10%;right:00% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:65%;top:10%;right:-10%;background:white;padding:0.5em :src /ox-hugo/balanced-parentheses.svg
+[[file:./balanced-parentheses.svg]]
 
 #+begin_definition
 Number nodes $0$ to $n-1$ in DFS-order.
@@ -306,10 +305,10 @@ Then convert =1= to =(= and =0= to =)= to get a BP sequence.
 #+begin_example
 =((((())(())(())))(()))= \\
 =1111100110011000011000= \\
-=aihcbABedCDgfEFGHkjIJK=
+=0872101432365456790890=
 
-- lowercase: /introduce/ node as child.
-- uppercase: end the list of children of the node.
+- 1: /introduce/ node as child.
+- 0: end the list of children of the node.
 
 # Uses the equivalence to binary trees!
 
@@ -318,28 +317,27 @@ $2n$ bits: 1 to introduce each node,\\
 #+end_example
 
 
-#+attr_html: :class float-right :style max-height:40%;top:55%;right:15% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
+#+attr_html: :class float-right :style max-height:60%;top:30%;right:0%;background:white;padding:0.5em :src /ox-hugo/dfuds.svg
+[[file:./dfuds.svg]]
 
 ** Implementing the DFUDS operations
 
 #+begin_example
 =((((())(())(())))(()))= \\
 =1111100110011000011000= \\
-=aihcbABedCDgfEFGHkjIJK=
+=0872101432365456790890=
 #+end_example
 
-#+attr_html: :class float-right :style max-height:40%;top:10%;right:00% :src /ox-hugo/tree-example.png
-[[file:./tree-example.png]]
-
+#+attr_html: :class float-right :style max-height:45%;top:08%;right:0%;background:white;padding:0.5em :src /ox-hugo/dfuds.svg
+[[file:./dfuds.svg]]
 
 #+begin_definition
 #+attr_reveal: :frag t
-- Start position of $u$: $q=\select_0(u)$
+- Start position of $u$: $\select_0(u-1)+1$. (Edge case $u=0$.)
 - End position of 0 or ) of $u$: $q=\select_0(u)$
-- Degree of $u$: $\select_0(u) - \select_0(u-1) - 1$. (Edge case for $u=0$ )
-- $i$'th child (position of first 1-bit): next after the matching =)=: $\mathsf{findclose}(q-1-i)+1$
-- Parent of $u$: get preceding ), then matching (, then succeeding ):
+- Degree of $u$: $\select_0(u) - \select_0(u-1) - 1$. (Edge case $u=0$.)
+- Start position of $i$'th child: position after the matching =)=: $\mathsf{findclose}(q-1-i)+1$
+- Parent of $u$: inverse of child: get preceding ), then matching (, then succeeding ):
   $\select_0(\rank_0(\mathsf{findopen}(\select_0(u-1))))$
 - Subtree size of $u$, starting at first bit $p$: find succeeding =)= that leaves the
   subtree:
@@ -348,8 +346,8 @@ $2n$ bits: 1 to introduce each node,\\
 
 * Compact planar graphs
 
-#+attr_html: :class float-right :style max-width:50%;height:70% :src /ox-hugo/succinct-planar-graph.png
-[[file:./succinct-planar-graph.png]]
+#+attr_html: :class float-right :style max-width:50%;height:70% :src /ox-hugo/succinct-planar-graph.svg
+[[file:./succinct-planar-graph.svg]]
 
 - Euler's formula: $v - e + f = 2$,\\
    i.e. $e = (v-1) + (f-1)$
@@ -364,6 +362,10 @@ $2n$ bits: 1 to introduce each node,\\
   - For each \(T\)-edge, whether we saw it before
   - For each non-$T$ edge, whether we saw it before
 - [cite:@succinct-graphs;@compact-planar-embeddings]
+
+#+reveal: split:t
+#+attr_html: :class float :style width:100% :src /ox-hugo/succinct-planar-graph-full.svg
+[[file:./succinct-planar-graph-full.svg]]
     
 * Further reading / sources
 - Florian Kurpicz' [[https://ae.iti.kit.edu/download/kurpicz/2024_advanced_data_structures/02_succinct_trees_handout.pdf][slides]] from 2024
