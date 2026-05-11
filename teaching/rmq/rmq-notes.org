@@ -120,7 +120,7 @@ Basically, we can split $A$ in blocks of size $c(n)$, build the RMQ data
 structure on the $n/c(n)$ blocks in $2n/c(n)$ bits, and then use $A$ to find the
 minimum of each block in $c(n)$ time.
 
-* Sparse Table: $O(1)$ queries, $n \log_2 n$ words
+* Sparse Table: $O(1)$ queries, $O(n \log_2 n)$ words
 - Let $k = \lfloor \log_2 n \rfloor$.
 - Store a tree of $k+1$ levels $0, \dots, k$.
 - In level $\ell$, store $n+1-2^\ell$ values for $0\leq i < n+1-2^\ell$,
@@ -137,7 +137,7 @@ minimum of each block in $c(n)$ time.
 - To get the /index/ of the minimum, store that instead, and take the argmin
   over the two indices returned by the two lookups.
   
-* Segment Tree: $O(\log n)$ queries, $2n$ words
+* Segment Tree: $O(\log n)$ queries, $O(n)$ words
 Sparse tables are quire redundant since consecutive nodes store mostly the same
 information.
 /Segment trees/ reduce the space usage, but have slower query times.
