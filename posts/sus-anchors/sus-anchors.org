@@ -103,7 +103,7 @@ freedom because they are not required to first hash all \(k\)-mers.
 In particular, /selection schemes/ with $k=1$ simply sample a single /position/
 based on a window of length $w=\ell$.
 Bidirectional string anchors (bd-anchors) are one such selection scheme
-[cite:@bdanchors-esa;@bdanchors]. These sample the start position of the
+[cite:@bdanchors]. These sample the start position of the
 smallest /rotation/ of a window and achieve a density of $O(1/w)$.
 For large $w$ and alphabet size $\sigma=4$, bd-anchors have a density around $20\%$ above the lower bound. Our goal is
 to reduce this to $0\%$ overhead.
@@ -195,8 +195,8 @@ schemes for small $k$.
 :CUSTOM_ID: bd-anchors
 :END:
 /Bidirectional string anchors/ (/bd-anchors/) are a $k=1$ selection scheme introduced by
-Loukides, Pissis, and Sweering for the purposes of
-text indexing [cite:@bdanchors-esa;@bdanchors].
+Loukides, Pissis, and Sweering for the purpose of
+text indexing [cite:@bdanchors].
 Given a window, they sample the (leftmost) start position of the
 lexicographically smallest rotation.
 A drawback of bd-anchors is that they are not forward: the window =ZABAAC= has
@@ -207,9 +207,7 @@ To ensure the density[fn::Note that even though typically $\ell=w+k-1=w$, we wil
 the density and $\ell$ for the length of the window.] is in $O(1/w)$,
 /reduced/ bd-anchors [cite:@bdanchors] avoid sampling the last $r=C\lceil \log_\sigma \ell\rceil$
 positions, where $C=4$ in theory but in practice $C=3$ or less
-suffices.[fn::It appears that Theorem 6 of the ESA paper [cite:@bdanchors-esa]
-on the density of bd-anchors does not hold, as it was relaxed to $O(1/w \cdot
-(1 + \log_\sigma w))$ in the journal version [cite:@bdanchors].]
+suffices.
 Given the choice of $r>\log_\sigma \ell$, in most windows of a random string
 the bd-anchor is the same as the smallest lexicographic \((r+1)\)-mer.
 Note though that reduced bd-anchors are still not forward.
@@ -562,7 +560,7 @@ maximal suffix). In that case, we pop $a_0$.
 * Results
 
 #+name: selection-s4
-#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, $k=1$, and varying $w$. The lower bound is shown in red. Bd-anchors (lime/green) are shown for various $r$, and SUS-anchors are shown with both the lexicographic (purple) and anti-lexicographic order (blue).  (The other orders are worse than anti-lexicographic.) On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^6$.
+#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, $k=1$, and varying $w$. The lower bound is shown in red. Bd-anchors (lime/green) are shown for various $r$, and SUS-anchors are shown with both the lexicographic (purple) and anti-lexicographic order (blue).  (The other orders are worse than anti-lexicographic.) On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^7$. For large $\sigma$ and $w$, there remains some variance in the estimated density.
 #+attr_html: :class inset large
 #+attr_latex: :width \linewidth :placement [t]
 [[file:./plots/sus-anchors-1.svg]]
