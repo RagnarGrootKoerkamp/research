@@ -33,7 +33,7 @@
 
 
 # UPDATE
-#+reveal_slide_footer: <span class="date">May, 2026</span> <span class="title">Rick Beeloo & Ragnar Groot Koerkamp: Sassy 1 & 2</span> <img class="uu-logo" src="/images/uu.png"></img> <img class="eth-logo" src="/images/ethz.svg"> <img class="kit-logo" src="/images/kit.png">
+#+reveal_slide_footer: <span class="date">RECOMB-Seq 2026</span> <span class="title">Rick Beeloo & Ragnar Groot Koerkamp: Sassy 1 & 2</span> <img class="uu-logo" src="/images/uu.png"></img> <img class="eth-logo" src="/images/ethz.svg"> <img class="kit-logo" src="/images/kit.png">
 
 # For slides only!
 # UPDATE and create dir
@@ -47,8 +47,30 @@
 <script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
 #+end_export
 
+* Previously
+#+attr_html: :class full :style left:30%;top:0%;max-width:70%;border:1px solid black;z-index:20 :src /ox-hugo/astarpa-scrot.png
+[[file:./astarpa-scrot.png]]
+#+attr_html: :class full :style left:10%;top:26%;z-index:10;max-width:90% :src /ox-hugo/astarpa-flames.png
+[[file:./astarpa-flames.png]]
+
+
+* Previously
+:PROPERTIES:
+:CUSTOM_ID: previously-2
+:END:
+#+attr_html: :class full :style left:30%;top:0%;max-width:70%;border:1px solid black;z-index:20 :src /ox-hugo/astarpa-scrot.png
+[[file:./astarpa-scrot.png]]
+
+#+attr_html: :class full :style left:32%;top:2%;max-width:70%;border:1px solid black;z-index:40 :src /ox-hugo/astarpa2-scrot.png
+[[file:./astarpa2-scrot.png]]
+#+attr_html: :class full :style top:29%;z-index:30 :src /ox-hugo/astarpa-flames2.png
+[[file:./astarpa-flames2.png]]
+
+* Long-read global alignment is just not a problem people have...
+* ... Sassy: 100bp semi-global alignment
+
 * Takeaway 1: Math yay, Bio nay
-* Takeaway 2: Do dumb stuff fast 
+* Takeaway 2: Do simple stuff fast 
 
 * Approximate String Matching
 - Find pattern $P$ in text $T$.
@@ -69,12 +91,6 @@
 - The end position?
 - A start and end position?
 - An alignment?
-  #+attr_reveal: :frag t
-  #+attr_html: :style color:red
-  - *But which one??????*
-  #+attr_reveal: :frag t
-  - In-progress PR by Fulcrum Genomics:\\
-    iterate over all "reasonable" alignments
 #+attr_html: :class float-right :style margin-right:-50%;overflow:hidden; :src /ox-hugo/sassy1-fwd-rev.svg
 [[file:./fig/sassy1-fwd-rev.svg]]
 
@@ -87,8 +103,14 @@
   - One pair per endpoint?
   - All pairs?
 - An alignment?
-  - One per endpoint?
   - /All/ alignments?
+  - One per endpoint?
+  #+attr_reveal: :frag t
+  #+attr_html: :style color:red
+  - *But which one??????*
+  #+attr_reveal: :frag t
+  - In-progress PR by Fulcrum Genomics:\\
+    iterate over all "reasonable" alignments
 #+attr_html: :class float-right :style margin-right:-50%;overflow:hidden; :src /ox-hugo/sassy1-fwd-rev.svg
 [[file:./fig/sassy1-fwd-rev.svg]]
   
@@ -102,9 +124,8 @@
 
 * ASM in $O(\lceil n/w\rceil k)$
 - Myers' bitpacking on \(w=64\)-bit blocks.
-- "Early break" when all states in block have cost $>k$.
+- "Early break" when all states in block have cost $>k$, after $\approx 2k$ rows.
 - Horizontal tiling because $k\ll w$ makes $O(n \lceil k/w\rceil)$ inefficient.
-  (Myers'99 does vertical tiling.)
 #+attr_html: :class large :style top:62% :src /ox-hugo/sassy1-early-break.svg
 [[file:./fig/sassy1-early-break.svg]]
 
@@ -117,23 +138,28 @@
 
 * Sassy 1: search long text at ${>}1$ Gbp/s 
 - Params:
-  - $20 \leq |P| \leq 1000$
-  - $n=10^5$
-  - 1 thread
-  - fwd search only
+  - $20 \leq |P| \leq 1000$, $n=10^5$
+  - 1 thread, fwd search only
+- Results:
+  
+  - k=3: 1.1 Gbp/s
+  - k=20: 600 Mbp/s
   - 10$\times$ Edlib, 128$\times$ parasail
 
 #+attr_reveal: :frag t
 *Applications:*
 #+attr_reveal: :frag t
 #+attr_html: :style background:white;padding:1em
-- =sassy grep -k 1 ACTCACGCTATA human-genome.fasta=
 - Crispr off-target searching
-  - Many short patterns, fixed text → Columba (Renders+ 2025)
+  - Many short patterns, fixed reference → Columba (Renders+ 2025)
 - Barcode detection for demultiplexing
-  - Many short patterns, variable text → Batching!
+  - Many short patterns, reads → Batching!
 #+attr_html: :class float-right :style z-index:-1 :src /ox-hugo/sassy1-throughput.svg
 [[file:./sassy1-throughput.svg]]
+
+* CLI: =sassy grep -p <pattern> -k 3 <hg>.fa=
+#+attr_html: :class plot :src /ox-hugo/sassy-grep.gif :style top:4%;width:120%;height:280%;max-height:120%
+[[file:./sassy-grep.gif]]
 
 * Sassy 2: /batching/ $\gg$ chunking
 - Text chunking requires =gathering= and transposing
@@ -156,10 +182,6 @@
   - 4.6$×$ Sassy1, 45$×$ Edlib
 - Barbell (Beeloo+) is a fast & accurate demultiplexer using Sassy2.
   - Poster @ RECOMB tomorrow evening!
-
-* CLI: =sassy grep -p <pattern> -k 3 <hg>.fa=
-#+attr_html: :class plot :src /ox-hugo/sassy-grep.gif :style top:4%;width:120%;height:280%;max-height:120%
-[[file:./sassy-grep.gif]]
 
 
 # Local Variables:
