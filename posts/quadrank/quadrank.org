@@ -75,9 +75,9 @@ query $\rank(q, c)$ counts the number of occurrences of symbol $c\in
 \Sigma$ in the first $q$ ($0\leq q\leq n$) characters of the text[fn::Like
 Rank9 [cite:@rank9] and most (but not all) other implementations, we follow Dijkstra's advice [cite:@dijkstra-numbering] and
 start numbering at zero.]:
-$$
+\[
 \rank(q, c) := \sum_{i\in \{0, \dots, q-1\}} [t_i = c].
-$$
+\]
 In most literature, the binary alphabet of size $\sigma=2$ is used, in which
 case the text is simply a string of $n$ bits. In this case, we also write
 $\rank(q) := \rank(q, 1)$ to count the number of $1$ bits.
@@ -98,7 +98,7 @@ In practice, most implementations have fixed overhead, making them /compact/ ($n
 *FM-index.*
 A primary application of Rank queries is in the /FM-index/ [cite:@fm-index], a
 succinct data structure that can efficiently locate all occurrences of a pattern in a
-text and is used in tools such as BWA-MEM [cite:@bwa-mem], and Bowtie
+text and is used in tools such as BWA-MEM [cite:@bwa-mem] and Bowtie
 [cite:@bowtie;@bowtie2].
 Whereas most of the literature on rank structures assumes a binary
 alphabet ($\sigma=2$), in this case the DNA alphabet has size $\sigma=4$.
@@ -448,7 +448,7 @@ stores a 32-bit L2 offset $s_i$ for each superblock $i$.
 Poppy [cite:@poppy] uses an additional 64-bit third level L3, so that 32-bit
 L2 values are sufficient. Even though this L3 layer is already very small, we remove it completely.
 Rather than directly encoding $\rank(i\cdot S)$, the rank at the start of a superblock, we store
-$$s_i := \lfloor \rank(i\cdot S)/2^{11}\rfloor$$
+\[s_i := \lfloor \rank(i\cdot S)/2^{11}\rfloor\]
 in the 32-bit L2
 value. The remainder $\rank(i\cdot S)\bmod 2^{11}$ will be added to the 16-bit
 $b_j$ delta for each block in the superblock.
@@ -480,7 +480,7 @@ the start of the superblock to the
 /start/ of the current block ($\rank(j\cdot B)$), but instead to the /middle/ of
 the current block ($\rank(j\cdot B + 240)$, after taking into account a 16-bit
 padding, line 9):
-$$ b_j := \rank(j\cdot B + 240) - 2^{11}\cdot s_{\lfloor j/128\rfloor}. $$
+\[ b_j := \rank(j\cdot B + 240) - 2^{11}\cdot s_{\lfloor j/128\rfloor}. \]
 By construction, these values are indeed bounded by $b_j \leq S + (2^{11}-1) <
 2^{16}$ (line 8).
 
@@ -684,8 +684,8 @@ query, which we will just call throughput) when processing random queries in
 a *for loop*: =for i in 0..Q { BiRank::rank(queries[i]) }=.
 We stress here that CPUs can use pipelining and out-of-order execution to execute multiple
 (up to at least 4) iterations of the loop in parallel.
-Thus, we add a third mode where we explicitly process many items at once and we add
-*prefetching*, where we prefetch the required cache lines 32
+Thus, we add a third mode where we explicitly process many items at once and we
+add *prefetching*, where we prefetch the required cache lines 32
 iterations ahead: =for i in 0..Q { BiRank::prefetch(queries[i+32]); BiRank::rank(queries[i]);
 }=[fn::In practice, we must also prefetch the upcoming query values themselves.
 We keep the memory system so busy that it does not have time to do this by
