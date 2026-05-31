@@ -1,0 +1,165 @@
+#+title: Entropy-efficient sketching
+#+filetags: @ideas @method sketching wip
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-05-31 Sun>
+
+At RECOMB, I got this idea for variable-\(k\) sketches, similar to what John
+Lees and Victor Rodriguez Bouza support in [[https://github.com/bacpop/sketchlib.rust][sketchlib]] [cite:@poppunk].
+These notes are mostly from a discussion with Luca Parmigiani.
+
+The goal is to analyse exactly how much entropy we can extract from a
+bottom-\(b\)-bit bucket sketch.
+
+See my earlier post on [[./simd-sketch/simd-sketch.org][simd-sketch]] for some background.
+
+* The entropy of bucket-sketching
+
+Suppose we do a bucket sketch of \(k\)-mers: each \(k\)-mer is mapped to one of
+$s$ buckets. Then we compute the minimum \(k\)-mer hash of each the bucket, and
+store the low $b$ bits.
+
+Suppose that two sketches have the same minimal \(k\)-mer in a bucket with
+probability $p$. After storing the low $b$ bits, we observe a match with
+probability $2^{-b} + (1-2^{-b})p = p + 2^{-b}(1-p)$, where $q=2^{-b}$ is the
+probability that the low $b$ bits collide by chance.
+
+For a fixed $p$, the goal is to choose $b$ so that we maximize the entropy per
+bit of the sketch. We gain at most 1 bit of entropy from each bucket
+(corresponding to whether the elements in this bucket match between two
+sketches), and so large $b\to\infty$ will give entropy per bit converging to
+$0$.
+On the other hand, when $b=0$ we have a match with probability 1, and we also
+learn nothing.
+
+In general, we learn nothing with probability $2^{-b}$, so the remaining entropy
+is $(1-2^{-b})H(p):=(1-2^{-b})( -p \lg p - (1-p) \lg (1-p))$, and the entropy
+per bit is
+\[
+\frac{1-2^{-b}}{b} H(p).
+\]
+It turns out that this function is decreasing, and has it's maximum for $b\geq
+0$ in the limit $b=0$, where we retain $\ln 2\approx 0.693$ of the input entropy.
+Further values:
+#+attr_html: :class small
+| $b$ | entropy/bit |
+|   0 |       0.693 |
+| 0.5 |       0.586 |
+|   1 |       0.500 |
+|   2 |       0.375 |
+|   4 |       0.234 |
+|   8 |       0.124 |
+|  16 |       0.062 |
+
+Either way, it's clear that $b=1$ bucket sketches are best if we want to avoid
+fiddling with $b<1$ (and yes we /do/ want to avoid that, since $b=1$ allows
+simple pop-counting). With $b\to 0$ sketches, we could save at most 28% of the
+remaining space, while $b=1$ is 4x more space efficient than $b=8$.
+
+** Fractional bits?
+Can we get $b<1$ in practice?
+A way to extract $<1$ bits of information from an integer value is for example
+by mapping it to 1 only 25% of the time (when it ends in 11).
+Then two such values could be xor'ed together.
+
+Or simpler: take two (or more) buckets and directly store the xor of the low bits.
+
+Or more general: take two or more buckets and store the xor of the low $b=8$
+bits of each? But that's probably strictly worse.
+
+But either way, how do we do 'half a comparison'?
+
+** Entropy vs variance
+
+Estimating the value of $p$ from the result of the comparisons is easy.
+But what is the variance of this estimate?
+Does it correspond directly to the entropy?
+$b=1$ has large variance due to the random collisions, which is especially
+problematic when $p$ is small. But in that case $b=8$ probably has the same problems?
+
+How does entropy correlate with the variance of the estimated $p$.
+
+* Choosing $p$
+
+When $b=1$, only half a bit of entropy remains per input bit, but (for $b\geq
+1$) this is the best we can do. Then the next question is: what is the ideal
+value of $p$?
+
+It should be clear that this is $p=0.5$, so that we get the maximum of 0.5
+bits of entropy per bit of the sketch. But note that the binary entropy
+function is quite forgiving. At $p=0.25$ and $p=0.75$, roughly 80% remains, and
+at $p=0.1$ and $p=0.9$, around 50% remains.
+So we should aim for $0.1 \leq p \leq 0.9$.
+Thus, we should choose the \(k\)-mer size such that the Jaccard similarity of
+the \(k\)-mer sets is in this range.
+
+In practice, we can simply use $k\in\{15,31,63,127,255,511\}$ (all odd to avoid
+issues with reverse complements). Assuming independent point mutations, each doubling of $k$ roughly corresponds to
+$p\mapsto p^2$, which would be the probability that two adjacent \(k\)-mers
+match. (In case the assumption is false, I think we can use the estimate from various $k$ to infer
+something about the error distribution if we wanted to.)
+
+So on repeatedly doubling $k$, we might get
+\[
+0.95 \mapsto 0.90 \mapsto 0.81 \mapsto 0.66
+\mapsto 0.44 \mapsto 0.19 \mapsto 0.04.
+\]
+Four of these values from 0.81 to 0.19 are well within our range, and the middle
+two are perfectly fine. Thus, covering powers of $2$ is too dense, and we can do
+powers of 4 instead where $p\mapsto p^4$, where there will still be a value
+sufficiently close to 0.5:
+\[
+0.95 \mapsto 0.81 \mapsto 0.44 \mapsto 0.04.
+\]
+Solving $(0.5+x)^4=0.5-x$, we always get at least one $p$ value in $[0.725, 0.275]$,
+which guarantees a sample with $H(p) \geq 0.85$.
+If instead we use a growth factor of 8, we get a $p$ value in $[0.81, 0.19]$,
+corresponding to $H(p) \geq 0.70$, which is also still reasonable.
+
+There's probably some trade-off here: we could have sketches of size $s$ every
+$k=2^i$, or sketches of size $2s$ every $k=4^i$, or sketches of size $3s$ every $k=8^i$.
+A smaller growth factor is more precise, but also slower to compute.
+
+All together, choosing something like $k\in\{31, 255, 2047\}$ should be able to
+cover a quite large range of error rates from $3\%$ to $0.05\%$. For larger
+error rates, one could start at $k=15$ or $k=21$ or so instead.
+
+** Minimizers
+
+An alternative approach is to only the minimizers of a sequence, as
+these also convey long-range information. But directly sketching long \(k\)-mers seems
+simpler, more direct, and easier to analyse.
+
+* The size of the sketch
+
+Given an \(s\)-bit sketch for a $k$, we cover a large fraction of bases for
+genomes of size up to $2sk$ or so. E.g. for $s=128$ and $k=2047$, we cover up to
+200k bases, which should be sufficient for 3 Mbp bacterial genomes.
+This is a similar coverage to what Karel Břinda gets for AllTheBacteria with
+$k=31$ and $s=10\,000$.
+
+Given $s=128$, we expect 64 bits to match randomly, with a standard deviation of
+$\sigma = 6$, so mostly between $64\pm 2\sigma = [52, 76]$.
+Then a similar number of bits remains for estimating $p$.
+In the ideal case, we see 96 1 bits, discount 64 of those, and then estimate $p=32/64=0.5$.
+But at this point, we probably get $\sigma=12$ or so (TODO: make this precise),
+which is too much given an average of only 32 matches.
+
+Let's try again with $s=512$, matching a cache line. $\sigma=12$, giving $256\pm
+2\sigma = [232, 280]$.
+This leaves $p=128/256$ in the ideal case, with $\sigma=24 \approx 0.2 \cdot p$
+or so. That might be sufficient? But still feels somewhat noisy.
+Probably still larger $s$ ($8\times$ or so?) is better for most applications.
+
+Given the estimate and variance for multiple $k$, we can also average those estimates.
+
+* Estimating $p$ and its variance
+
+Given $a$ bits out of $s$ match, what is the "best" estimate for $p$? What is
+the most likely value (taking into account noise on randomly matching bits)? 
+What is the value for which the standard deviation is minimized?
+
+#+print_bibliography:
