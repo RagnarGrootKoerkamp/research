@@ -37,7 +37,7 @@ We give a linear-time and $O(w)$ space streaming algorithm to compute all
 SUS-anchors of a string.
 
 *Results.*
-For alphabet size $\sigma=4$ and $k=1$, the anti-lexicographic SUS-anchors empirically has density
+For alphabet size $\sigma=4$ and $k=1$, the anti-lexicographic SUS-anchor empirically has density
 $<1\%$ away from the density lower bound,
 significantly improving over bd-anchors that are often $>15\%$ above it.
 For alphabet size $\sigma=2$, the density is at most $10\%$ above the lower
@@ -72,11 +72,11 @@ for smaller $w$ and $k$ roughly up to $15$, achieving particularly close to
 optimal density for $k=w+1$, $k=w$, and $k$ just below $w$.
 Shur et al. recently introduced
 /spacers/ [cite:@10-minimizers] that prefer sampling \(k\)-mers starting with
-=10= (assuming a binary alphabet) for which the next occurrence of =10= is as far ahead as possible.
+=10= (after projecting to a binary alphabet) for which the next occurrence of =10= is as far ahead as possible.
 Spacers improve the density of the ABB+ scheme we introduce here, and are
 especially good when $w$ is large.
 For particularly small parameters $(\sigma,k)=(2,\leq 6)$ and $(\sigma,k)=(4,
-2)$, exactly optimal minimizer schemes are given by the search algorithm OptMini [cite:@optmini] and
+2)$, exactly optimal /minimizer/ schemes are given by the search algorithm OptMini [cite:@optmini] and
 analysed theoretically by Shur [cite:@on-minimizers-of-minimum-density].
 
 This raises the question: *can we find near-optimal /sampling/ schemes for small $k$, and in
@@ -126,8 +126,8 @@ Specifically:
 # - Lastly, we show that the threshold order achieves good density TODO.
 # TODO: Mention threshold
 
-Parts of this paper have been previously introduced in the
-author's thesis [cite:@thesis].
+Parts of these results have been previously introduced in the
+author's PhD thesis [cite:@thesis].
 
 * Preliminaries
 ** Minimizers and sampling schemes
@@ -166,6 +166,9 @@ sampling schemes with $k=1$ [cite:@small-uhs].
 The /particular density/ of a sampling scheme is the fraction of positions that
 are sampled. The /density/ is the expected value of the particular density on a
 random string with length going to infinity.
+For forward schemes, the density can be computed as the probability that
+two /consecutive/ windows $W$ and $W'$ (overlapping by $\ell-1$ characters and
+together forming a /context/ of $\ell+1$ characters) sample a different position.
 # For forward schemes, the density equals the particular density on the De Bruijn
 # sequence [cite:@debruijnseq] of order $c=w+k$ and length $\sigma^{w+k}$ [cite:@improved-minimizers].
 # Thus, it can be computed exactly when $\sigma^{w+k}$ is not too large.
@@ -340,7 +343,7 @@ the index of the correspondingly sampled /SUS-anchor/ is 1.
 #+begin_newdefinition SUS-anchor
 Given a window $W$ of length $w=\ell$, the /smallest unique substring/
 is the smallest substring $\sus(W)=W[i\dots j)$ that does not occur elsewhere in $W$.
-Then $W[i\dots w)$ is the smallest unique /suffix/, and the SUS-anchor is $i$.
+Then $W[i\dots \ell)$ is the smallest unique /suffix/, and the SUS-anchor is $i$.
 #+end_newdefinition
 
 *MS-anchor.*
@@ -376,7 +379,7 @@ smallest unique suffix.
 #+end_observation
 
 #+begin_observation
-Unless removing the last character from the smallest unique substring results in
+Removing the last character from the smallest unique substring results in
 a non-unique substring.
 #+end_observation
 
@@ -446,10 +449,11 @@ The SUS-anchors of a string of length $n$ can be computed in $O(n)$ time and
 $O(\ell)$ space.
 #+end_mytheorem
 
-The method below works for the maximal suffix, as well as for any
-character-based order that is a total order in every position.
+Below, we present two direct methods for computing the /maximal/ suffix, as this
+slightly simplifies the notation and matches [cite:@minimal-maximal-suffix-tcs].
+It trivially extends to other character-based orders such as the anti-lexicographic order.
 
-*A streaming version.*
+*A streaming algorithm.*
 We now directly adapt the algorithm of [cite:@minimal-maximal-suffix-tcs] to our streaming setting.
 Suppose that we have so far processed $T[0\dots t)$.
 The algorithm maintains a doubly linked list $A=(a_0, a_1, a_2, \dots)$ of /active/ text positions $a_i$
@@ -486,7 +490,7 @@ Instead, we simply do a word-by-word scan on the
 bit-representation of the text, which takes expected constant time on random
 strings since LCPs of, say, over $64$ bits are unlikely in random strings.
 
-*A more direct version.*
+*A more direct algorithm.*
 A final modification drops the event queues and allows us to replace the doubly
 linked list $A$ by a simple double-ended queue. 
 For each $a\in A$, we now additionally store the text position $x_a$ where $a$ becomes
@@ -617,7 +621,7 @@ monotone-queue-based algorithm to a rescan-like approach [cite:@simd-minimizers]
 or even a branchless variant that could be implemented in parallel using SIMD.
 
 It would also be interesting to use SUS-anchors in combination with the
-mod-minimizer [cite:@modmini], especially in order to remove the $r$ parameter,
+mod-minimizer [cite:@modmini], especially in order to remove the mod-minimizer's $r$ parameter,
 but this has not worked out so far.
 
 Further work is needed to prove that, for example, anti-lexicographic SUS anchors have a density
