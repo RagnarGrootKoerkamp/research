@@ -1,0 +1,213 @@
+#+title: STPD 
+#+filetags: @devlog text-indexing wip
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-06-03 Wed>
+
+These are ongoing notes and logs on improving the STPD [cite:@stpd-preprint] and
+a new variant of it that I'll call the /jump index/.
+
+* Results
+
+| (in M)           |      n |     r |        |  stpd | #(src) | #(src,c) | #(links) |
+| influenza        | 154.81 |  3.02 | pos-   |  1.93 |   1.82 |     2.34 |     2.94 |
+| influenza        | 154.81 |  3.02 | lex-   |  1.82 |   1.58 |     2.09 |     2.98 |
+| influenza        | 154.81 |  3.02 | colex- |  1.81 |   4.08 |     5.05 |     5.05 |
+| dna.001.1        | 104.86 |  1.72 | pos-   |  1.25 |   0.76 |     1.27 |     1.61 |
+| dna.001.1        | 104.86 |  1.72 | lex-   |  1.10 |   0.79 |     1.29 |     1.71 |
+| dna.001.1        | 104.86 |  1.72 | colex- |  1.10 |   3.25 |     3.87 |     3.87 |
+| einstein.de.txt  |  92.76 |  0.10 | pos-   |  0.06 |   0.04 |     0.09 |     0.10 |
+| einstein.de.txt  |  92.76 |  0.10 | lex-   |  0.06 |   0.04 |     0.09 |     0.10 |
+| einstein.de.txt  |  92.76 |  0.10 | colex- |  0.06 |   0.05 |     0.12 |     0.12 |
+| Escherichia_Coli | 112.69 | 15.04 | pos-   | 11.68 |   7.07 |    11.88 |    14.97 |
+| Escherichia_Coli | 112.69 | 15.04 | lex-   |  9.82 |   6.84 |    11.53 |    14.99 |
+| Escherichia_Coli | 112.69 | 15.04 | colex- |  9.83 |   8.03 |    13.34 |    13.34 |
+
+* Faster construction by skipping runs
+before: 60s
+| influenza | 154.81 |   3.02 | pos-   |  1928406.00  |  1815632.00  |  2337554.00  |  2938832.00  | 
+| influenza | 154.81 |   3.02 | lex-   |  1815859.00  |  1580462.00  |  2087389.00  |  2982427.00  | 
+| influenza | 154.81 |   3.02 | colex- |  1805729.00  |  4081396.00  |  5054791.00  |  5054791.00  | 
+
+after: 35s
+| influenza | 154.81 |   3.02 | pos-   |  1928405.00  |  1815631.00  |  2337552.00  |  2938830.00  | 
+| influenza | 154.81 |   3.02 | lex-   |  1815859.00  |  1580462.00  |  2087388.00  |  2982426.00  | 
+| influenza | 154.81 |   3.02 | colex- |  1805728.00  |  4081395.00  |  5054789.00  |  5054789.00  | 
+
+Idea: if an SA interval $[l, r)$ is contained inside a BWT run, we can skip
+processing it completely.
+
+This results in close to $4r$ samples in total. Probably because each 'critical'
+interval is processed once for each character somehow?
+
+- After reusing BWT between variants: 29s
+- After switching to non-precomputed RMQ: still 29s
+- After switching to S=256 instead of S=64: still 29s
+- using =par_iter= for =permuted_pi=: 22s
+- using S=128: 21s
+- build RMQ using par_iter for block mins: 20s
+
+New overall results: (67s)
+| dna.001.1        | 104.86 |  1.72 | pos-   |  1250622.00 |  764033.00 |  1270872.00 |  1609647.00 |
+| dna.001.1        | 104.86 |  1.72 | lex-   |  1102787.00 |  793048.00 |  1285939.00 |  1707288.00 |
+| dna.001.1        | 104.86 |  1.72 | colex- |  1100566.00 | 3248974.00 |  3874623.00 |  3874624.00 |
+| influenza        | 154.81 |  3.02 | pos-   |  1928405.00 | 1815631.00 |  2337552.00 |  2938830.00 |
+| influenza        | 154.81 |  3.02 | lex-   |  1815859.00 | 1580462.00 |  2087388.00 |  2982426.00 |
+| influenza        | 154.81 |  3.02 | colex- |  1805728.00 | 4081395.00 |  5054789.00 |  5054789.00 |
+| Escherichia_Coli | 112.69 | 15.04 | pos-   | 11677571.00 | 7065572.00 | 11877332.00 | 14968636.00 |
+| Escherichia_Coli | 112.69 | 15.04 | lex-   |  9817074.00 | 6840748.00 | 11527829.00 | 14987339.00 |
+| Escherichia_Coli | 112.69 | 15.04 | colex- |  9825970.00 | 8027661.00 | 13337512.00 | 13337512.00 |
+| einstein.de.txt  |  92.76 |  0.10 | pos-   |    61606.00 |   43335.00 |    94804.00 |   104020.00 |
+| einstein.de.txt  |  92.76 |  0.10 | lex-   |    61492.00 |   37443.00 |    88425.00 |   103640.00 |
+| einstein.de.txt  |  92.76 |  0.10 | colex- |    62431.00 |   51988.00 |   117394.00 |   117394.00 |
+
+
+** TODO We loose 1 or 2 samples in the new setting. Why?
+** TODO More fine-grained pruning to directly construct the final result without duplicates?
+** TODO Construction direction via run-length BWT?
+** TODO PHF on (pos, c)
+** TODO compressed targets
+Instead of storing all jump targets, store a list of all target locations (as in STPD).
+But now partition it by the last character. Then store one list per final
+character (sorted by text pos, for lg(n/r) bits each) and the index in the list
+(lg r bits each). This should help compression when targets are reused.
+** TODO Prefix table up to k=10
+
+* TODO Queries
+- 1-PHF to map $(i,a)$ to its range
+
+* TODO suffix links
+- How good are our suffix links??? How many do we need to traverse to get to the
+  next position on average?
+
+* Ideas
+- max LCP length relates to max run length: both increase for more repetitive texts
+- pBWT: highlight jump-targets
+  - Either binary search for them in $O(l)$ ($l = \Theta(n/r)$ copies), or store
+    target in $\lg l$ bits.
+- STPD, say of size $s$:
+  - $s$ $\lg n$ bit samples, shuffled
+  - can we compress them?
+    - typically, we will jump from pos $i$ in one copy to pos $\approx i$ in
+      another copy? So then a binary search over $\ell$ things is enough?
+    - Consecutive STPD samples are in similar text positions?
+  - Jump targets will usually point to roughly the same position in the text
+- Compressing the Jump Index:
+  - MPHF for $(i, a)$
+  - LCP $\geq 255$ can be stored in a secondary structure with 32-bit values, so
+    8 bits is enough for the primary structure
+- Use a prefix lookup for the first ~10 bp = ~20 bits
+  
+
+* Analysing and reducing space usage
+** Movi 1
+Movi [cite:@movi;@movi2] is an engineered version of a run-length FM-index. Similar to the r-index,
+but avoiding all the rank and select structures and instead inlining just the
+right data so that most LF-mappings can be done with only a single cache miss.
+
+Movi1 uses 16 bytes per run.
+** Movi 2
+Movi2 splits some runs:
+- Runs longer than $2^\ell$ are split into two (+5% for HPRCv2), so the length can
+  be stored in $\ell$ bits
+- In a run of =A=, if we instead want to append a =C=, the best match is
+  in the run of =C='s preceding or succeeding the current run. Most of the
+  time, this choice is the same for all elements of the run, and a single bit
+  up/down pointer for each of $\sigma-1$ of the non-run characters suffices.
+  If this is not the case, the run is split, for 10% extra runs on HPRCv2.
+It then stores:
+- 2-bit character
+- \(\ell=11\)-bit run length
+- the \(\log_2(n)\)-bit position where the entire run maps to:
+  - a \(\log_2(r)=36\)-bit run-index $\xi$
+  - an 11-bit index in the run
+- $\sigma-1=3$ bits indicating whether to round up or down for each non-run characters.
+For a total of 63 bits or 8 bytes, with the bulk being the $r\log_2n$ bits for
+the target indices.
+
+*** Block-based run-indices
+    
+The largest component are the run-indices $\chi$. But these can be compressed
+further, since $\xi$ is increasing over all runs for the same character.
+An elias-fano structure would be space efficient, but a practical solution is to
+only store $\xi$ values (for all characters) every $b$ rows and then linearly
+interpolate between them, only storing the delta to the prediction.
+In this mode, $\ell=10$ and $\Delta=23$ (I think), for a total of 6 bytes.
+
+Instead of storing $\Delta$, a further down-sampling followed by a linear scan is also possible, bringing the space
+per run to just 3 bytes. (I do not yet fully understand the details here.)
+
+** STPD
+Suppose we have $k$ similar sequences of total length $n=k\cdot m$.
+In practice, the STPD has roughly $s=\frac 23 r$ samples (see tables above).
+
+Each sample is a text position, for a total space of $s\log_2 n \approx r\log_2
+n$, i.e., similar to the move-index. In fact, 6 bytes (48 bits) per sample is
+plenty, matching the block-based movi2 (but not the sampled version).
+
+Do note though that this excludes the relative-Lempel-Ziv compressed text, as
+well as a 2-4 bit/element RMQ structure that selects the /best/ match in the
+interval of the STPD (sparse prefix array) that matches the pattern prefix:
+- For =colex-=, this cam be omitted and we take the start of the interval instead.
+- For =pos-=, we could also iterate over the entire matching interval. Not sure
+  if that would be slow.
+- For =lex-=, the RMQ structure /is/ needed.
+
+Unlike for movi, where the target runs are increasing and can thus be
+compressed, here we must sort the $s$ integers in colex order, meaning that (a
+priory) we cannot compress them via something like Elias-Fano coding.
+
+But there is hope!
+
+** Compressing STPD: STPD for pBWT
+
+Consider the setting where the $k$ sequences only differ by say 1% of
+substitutions, and nothing else.
+Then we can put them below each other (as in the pBWT), and for each column
+where the pattern matches, we could report the first input sequence in which it matches.
+
+Thus, we get something like this:
+#+begin_src txt
+Pat: ABCDE
+T1   ABCDEFGHIJX
+T2   ABCDEFGHIJY
+T3   ABCDEZGHIJX
+T4   ABCDEZGHIXX
+#+end_src
+Here, the pattern matches a prefix of $T_1$.
+Then, if we extend the pattern by =Z=, it does not match $T_1$ anymore, and
+instead we have to jump to $T_3$. Thus, the =Z= in $T_3$ would be an STPD-sample
+(in the concatenation of the texts).
+
+Thus, in every column where "things happen" we get one or more STPD samples.
+But in this setting, we don't have to binary search over /all/ samples in
+$O(\log s)$!
+Instead, we only have to binary search the samples in the current column, which
+is more like $O(\log s/m)$, or either way at most $O(\log k)$.
+
+Thus, we could ideally use some perfect hash function to map /active/ columns (with at least one
+sample) to a variable-length list of samples in around 2 bits per active column.
+Or we could store in $\log_2 k$ bits the number of STPD samples in each active
+column, and then distribute columns over multiple PHFs based on the number of samples.
+
+Then, all that's needed is to store the subset of the $k$ sequences that has an
+STPD sample in this column, which is only $\log_2 k$ bits (around 9 for HPRCv2)
+rather than $\log_2 n$ (around 44).
+
+Thus, this scheme needs only $m\log k + 2m +s\log_2 k$ bits.
+
+A big restriction, though, is that this does not allow jumping between different
+columns: once the pattern in /anchored/ to some column, it can only switch
+between rows.
+
+Nevertheless, it feels like this should provide some possible ways to optimize
+the generic STPD as well: most of the time, jumping happens between 'equivalent
+positions' in different genomes, and if we have some course
+multiple-sequence-alignment or so between them, then it might be sufficient to
+only store low bits most of the time to indicate 'jump to the equivalent
+location in the input sequence with ID $x$'.
+
+#+print_bibliography: 
