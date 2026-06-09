@@ -1,4 +1,4 @@
-#+title: STPD 
+#+title: STPD dev notes
 #+filetags: @devlog text-indexing wip
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -11,31 +11,131 @@ These are ongoing notes and logs on improving the STPD [cite:@stpd-preprint] and
 a new variant of it that I'll call the /jump index/.
 
 * Results
+twice the same table; bottom one in millions
+|                  |         n | k    |        r |        e | CDAWG nodes | CDAWG edges | stpd   | $\vert\mathsf{stpd}\vert$ |  #(src) | #(src,c) | #(links) |
+| influenza        | 154808560 | 78k  |  3022821 | 17163707 |     7734059 |    17163736 | pos-   |                   1928406 | 1815632 |  2337554 |  2938832 |
+| influenza        |           |      |          |          |             |             | lex-   |                   1815859 | 1580462 |  2087389 |  2982427 |
+| influenza        |           |      |          |          |             |             | colex- |                   1805729 | 4081396 |  5054791 |  5054791 |
+| dna.001.1        | 104857600 | 100  |  1716805 |          |     6003074 |    12911887 | pos-   |                   1250622 |  764033 |  1270872 |  1609646 |
+| dna.001.1        |           |      |          |          |             |             | lex-   |                   1102787 |  793048 |  1285939 |  1707288 |
+| dna.001.1        |           |      |          |          |             |             | colex- |                   1100566 | 3248971 |  3874620 |  3874621 |
+| einstein.de.txt  |  92758440 | 2.1k |   101368 |   238338 |       79468 |      238234 | pos-   |                     61606 |   43335 |    94804 |   104020 |
+| einstein.de.txt  |           |      |          |          |             |             | lex-   |                     61492 |   37442 |    88424 |   103639 |
+| einstein.de.txt  |           |      |          |          |             |             | colex- |                     62429 |   51986 |   117392 |   117392 |
+| Escherichia_Coli | 112689512 | 23   | 15044485 | 31340395 |    12011071 |    31340396 | pos-   |                  11677571 | 7065572 | 11877332 | 14968636 |
+| Escherichia_Coli |           |      |          |          |             |             | lex-   |                   9817074 | 6840748 | 11527829 | 14987339 |
+| Escherichia_Coli |           |      |          |          |             |             | colex- |                   9825970 | 8027661 | 13337512 | 13337512 |
 
-| (in M)           |      n |     r |        |  stpd | #(src) | #(src,c) | #(links) |
-| influenza        | 154.81 |  3.02 | pos-   |  1.93 |   1.82 |     2.34 |     2.94 |
-| influenza        | 154.81 |  3.02 | lex-   |  1.82 |   1.58 |     2.09 |     2.98 |
-| influenza        | 154.81 |  3.02 | colex- |  1.81 |   4.08 |     5.05 |     5.05 |
-| dna.001.1        | 104.86 |  1.72 | pos-   |  1.25 |   0.76 |     1.27 |     1.61 |
-| dna.001.1        | 104.86 |  1.72 | lex-   |  1.10 |   0.79 |     1.29 |     1.71 |
-| dna.001.1        | 104.86 |  1.72 | colex- |  1.10 |   3.25 |     3.87 |     3.87 |
-| einstein.de.txt  |  92.76 |  0.10 | pos-   |  0.06 |   0.04 |     0.09 |     0.10 |
-| einstein.de.txt  |  92.76 |  0.10 | lex-   |  0.06 |   0.04 |     0.09 |     0.10 |
-| einstein.de.txt  |  92.76 |  0.10 | colex- |  0.06 |   0.05 |     0.12 |     0.12 |
-| Escherichia_Coli | 112.69 | 15.04 | pos-   | 11.68 |   7.07 |    11.88 |    14.97 |
-| Escherichia_Coli | 112.69 | 15.04 | lex-   |  9.82 |   6.84 |    11.53 |    14.99 |
-| Escherichia_Coli | 112.69 | 15.04 | colex- |  9.83 |   8.03 |    13.34 |    13.34 |
+| (in M)           |      n | k    |     r |     e | CDAWG-n |    -e | stpd   | $\vert\mathsf{stpd}\vert$ | #(src) | #(src,c) | #(links) |
+| influenza        | 154.81 | 78k  |  3.02 | 17.16 |    7.73 | 17.15 | pos-   |                      1.93 |   1.82 |     2.34 |     2.94 |
+| influenza        |        |      |       |       |         |       | lex-   |                      1.82 |   1.58 |     2.09 |     2.98 |
+| influenza        |        |      |       |       |         |       | colex- |                      1.81 |   4.08 |     5.05 |     5.05 |
+| dna.001.1        | 104.86 | 100  |  1.72 |       |    6.00 | 12.91 | pos-   |                      1.25 |   0.76 |     1.27 |     1.61 |
+| dna.001.1        |        |      |       |       |         |       | lex-   |                      1.10 |   0.79 |     1.29 |     1.71 |
+| dna.001.1        |        |      |       |       |         |       | colex- |                      1.10 |   3.25 |     3.87 |     3.87 |
+| einstein.de.txt  |  92.76 | 2.1k |  0.10 |  0.24 |    0.08 |  0.23 | pos-   |                      0.06 |   0.04 |     0.09 |     0.10 |
+| einstein.de.txt  |        |      |       |       |         |       | lex-   |                      0.06 |   0.04 |     0.09 |     0.10 |
+| einstein.de.txt  |        |      |       |       |         |       | colex- |                      0.06 |   0.05 |     0.12 |     0.12 |
+| Escherichia_Coli | 112.69 | 23   | 15.04 | 31.34 |   12.01 | 31.33 | pos-   |                     11.68 |   7.07 |    11.88 |    14.97 |
+| Escherichia_Coli |        |      |       |       |         |       | lex-   |                      9.82 |   6.84 |    11.53 |    14.99 |
+| Escherichia_Coli |        |      |       |       |         |       | colex- |                      9.83 |   8.03 |    13.34 |    13.34 |
+
+short repetitive sequence, 1% error rate, alphabet size 2 and 4
+
+|                            |       n |     r | CDAWG-n |     -e | stpd   | $\vert\mathsf{stpd}\vert$ | #(src) | #(src,c) | #(links) |
+| relative(1*1000@0.01,2)    |    1000 |   488 |     740 |   1486 | pos-   |                       401 |    336 |      336 |      484 |
+| relative(1*1000@0.01,2)    |    1000 |   488 |     740 |   1486 | lex-   |                       309 |    301 |      302 |      487 |
+| relative(1*1000@0.01,2)    |    1000 |   488 |     740 |   1486 | colex- |                       305 |    380 |      380 |      380 |
+| relative(2*1000@0.01,2)    |    2000 |   612 |     909 |   1825 | pos-   |                       513 |    402 |      402 |      622 |
+| relative(2*1000@0.01,2)    |    2000 |   612 |     909 |   1825 | lex-   |                       376 |    376 |      377 |      606 |
+| relative(2*1000@0.01,2)    |    2000 |   612 |     909 |   1825 | colex- |                       375 |    470 |      470 |      470 |
+| relative(128*1000@0.01,2)  |  128000 |  7766 |   43553 |  87165 | pos-   |                      5690 |   5541 |     5541 |     7814 |
+| relative(128*1000@0.01,2)  |  128000 |  7766 |   43553 |  87165 | lex-   |                      4672 |   4737 |     4738 |     7582 |
+| relative(128*1000@0.01,2)  |  128000 |  7766 |   43553 |  87165 | colex- |                      4652 |  21795 |    21795 |    21795 |
+| relative(1024*1000@0.01,2) | 1024000 | 31984 |  252733 | 505545 | pos-   |                     22931 |  24898 |    24898 |    32440 |
+| relative(1024*1000@0.01,2) | 1024000 | 31984 |  252733 | 505545 | lex-   |                     20692 |  20374 |    20375 |    31186 |
+| relative(1024*1000@0.01,2) | 1024000 | 31984 |  252733 | 505545 | colex- |                     20783 | 128607 |   128607 |   128607 |
+| relative(1*1000@0.01,4)    |    1000 |   744 |     542 |   1475 | pos-   |                       615 |    353 |      633 |      775 |
+| relative(1*1000@0.01,4)    |    1000 |   744 |     542 |   1475 | lex-   |                       501 |    353 |      620 |      773 |
+| relative(1*1000@0.01,4)    |    1000 |   744 |     542 |   1475 | colex- |                       497 |    375 |      657 |      657 |
+| relative(2*1000@0.01,4)    |    2000 |   874 |     621 |   1668 | pos-   |                       683 |    391 |      692 |      847 |
+| relative(2*1000@0.01,4)    |    2000 |   874 |     621 |   1668 | lex-   |                       572 |    375 |      662 |      841 |
+| relative(2*1000@0.01,4)    |    2000 |   874 |     621 |   1668 | colex- |                       576 |    432 |      750 |      750 |
+| relative(128*1000@0.01,4)  |  128000 |  8282 |   43824 |  99987 | pos-   |                      5671 |   4351 |     6739 |     8374 |
+| relative(128*1000@0.01,4)  |  128000 |  8282 |   43824 |  99987 | lex-   |                      5140 |   3726 |     6002 |     8076 |
+| relative(128*1000@0.01,4)  |  128000 |  8282 |   43824 |  99987 | colex- |                      5155 |  22762 |    29810 |    29812 |
+| relative(1024*1000@0.01,4) | 1024000 | 37602 |  234132 | 703386 | pos-   |                     25721 |  21231 |    30606 |    38203 |
+| relative(1024*1000@0.01,4) | 1024000 | 37602 |  234132 | 703386 | lex-   |                     24160 |  18321 |    26770 |    36844 |
+| relative(1024*1000@0.01,4) | 1024000 | 37602 |  234132 | 703386 | colex- |                     24107 | 156444 |   323502 |   323503 |
+
+long repetitive sequence, 0.1% error rate, alphabet size 2 and 4
+
+|                              |        n |     r | CDAWG-n |      -e | stpd   | $\vert\mathsf{stpd}\vert$ |  #(src) | #(src,c) | #(links) |
+| relative(1*10000@0.001,2)    |    10000 |  5013 |    7540 |   15091 | pos-   |                      4122 |    3361 |     3361 |     4966 |
+|                              |          |       |         |         | lex-   |                      3073 |    3115 |     3116 |     4980 |
+|                              |          |       |         |         | colex- |                      3087 |    3763 |     3764 |     3764 |
+| relative(2*10000@0.001,2)    |    20000 |  5152 |    7816 |   15641 | pos-   |                      4224 |    3459 |     3459 |     5140 |
+|                              |          |       |         |         | lex-   |                      3216 |    3213 |     3214 |     5140 |
+|                              |          |       |         |         | colex- |                      3223 |    3908 |     3908 |     3908 |
+| relative(128*10000@0.001,2)  |  1280000 | 16527 |   98398 |  196848 | pos-   |                     12502 |   11256 |    11256 |    16218 |
+|                              |          |       |         |         | lex-   |                     10033 |   10178 |    10179 |    16339 |
+|                              |          |       |         |         | colex- |                     10032 |   50831 |    50832 |    50832 |
+| relative(1024*10000@0.001,2) | 10240000 | 79282 | 2987410 | 5975276 | pos-   |                     57803 |   58012 |    58012 |    80795 |
+|                              |          |       |         |         | lex-   |                     48235 |   48634 |    48635 |    77778 |
+|                              |          |       |         |         | colex- |                     48250 | 1481795 |  1481796 |  1481796 |
+| relative(1*10000@0.001,4)    |    10000 |  7534 |    5459 |   14639 | pos-   |                      5905 |    3418 |     5955 |     7426 |
+|                              |          |       |         |         | lex-   |                      5020 |    3360 |     5856 |     7488 |
+|                              |          |       |         |         | colex- |                      5012 |    3762 |     6484 |     6484 |
+| relative(2*10000@0.001,4)    |    20000 |  7627 |    5581 |   14957 | pos-   |                      6058 |    3491 |     6105 |     7624 |
+|                              |          |       |         |         | lex-   |                      5028 |    3399 |     5914 |     7589 |
+|                              |          |       |         |         | colex- |                      5087 |    3838 |     6642 |     6642 |
+| relative(128*10000@0.001,4)  |  1280000 | 16924 |   91260 |  192530 | pos-   |                     12520 |    8407 |    13586 |    16859 |
+|                              |          |       |         |         | lex-   |                     10881 |    7721 |    12728 |    16850 |
+|                              |          |       |         |         | colex- |                     10958 |   47333 |    54212 |    54212 |
+| relative(1024*10000@0.001,4) | 10240000 | 81066 | 2958481 | 6587814 | pos-   |                     55824 |   40501 |    63548 |    79097 |
+|                              |          |       |         |         | lex-   |                     51343 |   36891 |    59656 |    80204 |
+|                              |          |       |         |         | colex- |                     51324 | 1602100 |  1973240 |  1973241 |
+Datasets from pizza&chili [[https://pizzachili.dcc.uchile.cl/repcorpus.html][repetitive corpus]]:
+- =influenza=: 78k copies of influenza; probably with very high variance
+- =dna.001.1=: is 100 synthetic copies of a 1 MB string, each with 0.1%
+  independent mutations
+- =einstein.de.txt=: revisions of the German Einstein Wikipedia article
+- =Escherichia_Coli=: 23 copies of E. Coli.
+
+Variables:
+- $n$: size of input
+- $k$: the number of copies
+- $r$: BWT-runs
+- $e = |\mathsf{CDAWG}|$ is the number of /edges/ in the CDAWG and is copied from [cite/t:@grammar-cdawg].
+   - My numbers in the CDAWG-e column are just slightly (<100) off. Maybe
+     because I don't append a sentinel?
+- $|\mathsf{stpd}|$: STPD size
+  - equal to number of CDAWG nodes with a non-path incoming edge?
+- *src*: number of text positions from which we jump
+- *(src, c)*: number of (text positions, character) for which there is a jump
+- *#(links)*: total number of links in Jump Index. 
+  - TODO: Why not equal to |CDAWG|/2?
+
+
+Observations:
+- For all but =influenza=, we have roughly $r = n/(k/2) = 2\cdot n/k$.
+- the STPD size is always 60% to 75% of $r$
+- Number of links for pos and lex is *very close* to $r$
+- Number of links for colex is *much worse*, but why? Especially when there are
+  many repeats.
 
 * Faster construction by skipping runs
 before: 60s
-| influenza | 154.81 |   3.02 | pos-   |  1928406.00  |  1815632.00  |  2337554.00  |  2938832.00  | 
-| influenza | 154.81 |   3.02 | lex-   |  1815859.00  |  1580462.00  |  2087389.00  |  2982427.00  | 
-| influenza | 154.81 |   3.02 | colex- |  1805729.00  |  4081396.00  |  5054791.00  |  5054791.00  | 
+| (in M)    |      n |    r |        |       stpd |     #(src) |   #(src,c) |   #(links) |
+| influenza | 154.81 | 3.02 | pos-   | 1928406.00 | 1815632.00 | 2337554.00 | 2938832.00 |
+| influenza | 154.81 | 3.02 | lex-   | 1815859.00 | 1580462.00 | 2087389.00 | 2982427.00 |
+| influenza | 154.81 | 3.02 | colex- | 1805729.00 | 4081396.00 | 5054791.00 | 5054791.00 |
 
 after: 35s
-| influenza | 154.81 |   3.02 | pos-   |  1928405.00  |  1815631.00  |  2337552.00  |  2938830.00  | 
-| influenza | 154.81 |   3.02 | lex-   |  1815859.00  |  1580462.00  |  2087388.00  |  2982426.00  | 
-| influenza | 154.81 |   3.02 | colex- |  1805728.00  |  4081395.00  |  5054789.00  |  5054789.00  | 
+| (in M)    |      n |    r |        |       stpd |     #(src) |   #(src,c) |   #(links) |
+| influenza | 154.81 | 3.02 | pos-   | 1928405.00 | 1815631.00 | 2337552.00 | 2938830.00 |
+| influenza | 154.81 | 3.02 | lex-   | 1815859.00 | 1580462.00 | 2087388.00 | 2982426.00 |
+| influenza | 154.81 | 3.02 | colex- | 1805728.00 | 4081395.00 | 5054789.00 | 5054789.00 |
 
 Idea: if an SA interval $[l, r)$ is contained inside a BWT run, we can skip
 processing it completely.
@@ -51,6 +151,7 @@ interval is processed once for each character somehow?
 - build RMQ using par_iter for block mins: 20s
 
 New overall results: (67s)
+| (in M)           |      n |     r |        |  stpd | #(src) | #(src,c) | #(links) |
 | dna.001.1        | 104.86 |  1.72 | pos-   |  1250622.00 |  764033.00 |  1270872.00 |  1609647.00 |
 | dna.001.1        | 104.86 |  1.72 | lex-   |  1102787.00 |  793048.00 |  1285939.00 |  1707288.00 |
 | dna.001.1        | 104.86 |  1.72 | colex- |  1100566.00 | 3248974.00 |  3874623.00 |  3874624.00 |
@@ -209,5 +310,136 @@ positions' in different genomes, and if we have some course
 multiple-sequence-alignment or so between them, then it might be sufficient to
 only store low bits most of the time to indicate 'jump to the equivalent
 location in the input sequence with ID $x$'.
+
+** Jump Index
+- HPRCv2: 466 copies of Gbp => 40.5 bits of text
+- At 8 bytes/run and including rc and 15% extra runs, movi2 has 47.3 GB.
+  - 5.1 G runs
+  - 2.55 G runs for 466 copies of fwd-only
+  - 1.72 G runs for a single copy of a human genome
+
+Initial space we need per pointer:
+- source: 41 bits
+  - hide in MPHF on (pos, c) => 2 bits
+  - EF to store all lengths?
+  - Or EF for source locations + EF for lengths?
+  - <1 byte total?
+- target: 41 bits = 5 bytes
+- LCP len: 16 bits (probably 8 + fallback) = 2 bytes
+
+*** Compact link
+Current
+#+begin_src rust
+pub struct Link {
+    /// 5 bytes?
+    pub source: usize,
+    /// 2 bits?
+    pub c: char,
+    /// 2 bytes?
+    pub lcp: usize,
+    /// 5 bytes?
+    pub target: usize,
+}
+#+end_src
+- naive: 24 bytes
+- packed: 100 bits = 12.5 bytes
+  - 41 bit src
+  - 2 bit char
+  - 16 bit LCP
+  - 41 bit target
+- EF: we have ~2G runs, so we encode the top 31 bits with only 2 bits => 71 bits each
+
+*** Mutable
+- Giulio's mutable rank/select B-tree on the high part of the EF
+  - maybe 20% overhead; that's all fine
+  - Does it support insertions though... It'll need to be modified for this
+- B-tree on the low parts of the EF values, so insertion is fast
+  - Needs special support for indexing
+  - Split so that low parts are 64 bits??? 9-bit LCP?
+- 
+
+** TODO
+- Number of edges in graph on STPD samples?
+  - (this is larger than just the number of links)
+  - equivalent to CDAWG? Smaller?
+- Number of suffix links?
+
+* CDAWG
+
+What is the relation between suffixient sets/STPD and the CDAWG?
+- STPD is a path decomposition of the CDAWG
+  - Size is the number of /nodes/ with >1 incoming edge, ie at least one incoming
+    edge not in the path decomposition. Up to 10x smaller than the CDAWG, see
+    table at the top.
+- Jump Index has size equal to the number of non-path /edges/ in the CDAWG?
+  - In the table, the size of the jump index varies between 20% and 50% of the
+    CDAWG. I'm not yet sure why it's not always at least 50%, ie where at most half the edges are
+    heavy-path and the other (at least) half light edges needing a jump pointer.
+  - Hmm; the JI jumps to a different location depending on the length of the
+    substring already matched, whereas the CDAWG is independent of the
+    already-matched prefix and so is more like COLEX-?
+    Or is this not an issue because such cases have different CDAWG nodes?
+- CDAWG is bad ($O(n)$) for =AAAAAAAA#=. But maybe fine in practice?
+- CDAWG nodes are maximal repeats $S$, and have an equivalence class of
+  right-maximal strings $\{S[0..), S[1..), S[2..), \dots, S[k..)\}$ such that all of
+  those (but the first) are /not/ left-maximal, but $S[k+1\dots)$ /is/
+  left-maximal. [cite:@suffix-tree-as-cdawg]
+  - All strings in the equivalence class have the same range-length in the BWT
+    and for $i\geq 1$, all $S[i..)$ the range is (contained in) a single run
+    with character $S[i-1]$. OTOH, the BWT interval for $S[0..)$ contains at least two characters.
+  - All paths to a node in the CDAWG are a suffix of one another.
+- The in-neighbours of a node exactly partition the range of 'active lengths'.
+  
+
+CDAWG:
+- A node for every maximal repeat, that is: a substring $S$ that is repeated and can be
+  extended both left and right in at least 2 ways. Or equivalently, $aS$ and
+  $Sa$ occur stricly less than $S$ for all symbols $a$.
+- Space: number of right-extensions of maximal repeats
+
+[cite/title/b:@cdawg-size] [cite:@cdawg-size]
+- ([[https://scholar.google.ch/scholar?cluster=17760392744935874273&hl=en&as_sdt=0,5][google scholar citations]] to this paper give a good source of papers)
+- introduces $e$, the number of arcs in the CDAWG
+- Index combining run-length BWT with CDAWG
+
+[cite/title/b:@suffix-tree-as-cdawg]
+[cite:@suffix-tree-as-cdawg]
+- Heavy-path decomposition of CDAWG; supports additional suffix-tree operations
+
+** Further papers
+
+[cite/title/b:@cdawg-for-tries]
+[cite:@cdawg-for-tries]
+- Takes as input not a string, but a suffix tree or so.
+
+[cite/title/b:@grammar-cdawg]
+[cite:@grammar-cdawg]
+- Builds a CDAWG on grammars; 4x smaller than the original CDAWG
+
+
+[cite/title/b:@indexing-repetitive-strings-1]
+[cite:@indexing-repetitive-strings-1]
+
+[cite/title/b:@indexing-repetitive-strings-2]
+[cite:@indexing-repetitive-strings-2]
+
+* Fast construction
+- Goal: $O(r)$ space; $O(n)$ is wasteful
+  - BWT+LCP in $O(r)$ is possible (?)
+- Skip constructing SA on repetitive parts?
+  - Simply dynamically add them and don't process them at all?
+  - For each mutation find the longest extension to left/right to make it
+    unique. Then only process that window?
+
+* HPRCv2
+
+Get the AGC (assembled genomes compressor) version as described [[https://github.com/human-pangenomics/hprc_intermediate_assembly/tree/main/data_tables#from-the-agc-archive][here]] (3.3 GB =.agc=):
+#+begin_src sh
+wget https://s3-us-west-2.amazonaws.com/human-pangenomics/submissions/B4174A5F-F20E-4DCF-8470-F8A907B640BC--HPRCv2_0.6.1_pr_agc_submission/HPRC_r2_assemblies_0.6.1.agc
+#+end_src
+
+Or get all of them as alignments against a reference from [[https://github.com/pangenome/HPRCv2][here]] (5.2 GB =.paf.gz=).
+
+Rust AGC api: https://docs.rs/ragc-core/0.1.1/ragc_core/
 
 #+print_bibliography: 
