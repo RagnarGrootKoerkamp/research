@@ -442,4 +442,104 @@ Or get all of them as alignments against a reference from [[https://github.com/p
 
 Rust AGC api: https://docs.rs/ragc-core/0.1.1/ragc_core/
 
+* Questions
+- Why is the number of jumps so close to $r$
+- data layout
+  - dynamic vs static implementation?
+- lg(k) instead of lg(n) bits per jump?
+- suffix links?
+** Notes
+- BML: faster MEM finding
+- moni align
+- phi (and inverse) also give LCP values
+- classic: find all occurrences of all MEMs, but not what is needed in practice
+  - 100 matches to 3 locations is not super useful
+  - Only care about distinct locations in pangenome graphs
+    - Paper Joni + Paten, WABI 2025: tag array
+    - only store distinct mapping locations for runs
+- Latin 2025 paper Gonzalo, Joni, Travis
+- Jannick Olbrich: MSA
+  - sample runs; how many columns you move left after LF mapping
+- Heng:
+  - vg-surject: *maps alignment to graph back to standard reference*
+  - tag array of vg-surject values
+- Goal: mix tag arrays with suffixient sets
+  - *Problem: these don't give BWT interval*
+  - *Can only /enumerate/ the interval; not "RMQ" /query/ it*
+  - *not count query, but interval query*
+- lg(n) vs lg(h)
+- movi: r lg n, but r lg(n/r) 
+  - move structure: row-major
+  - compression: col-major
+- paper from Roberto's festschrift
+- SMEM: MEM aligned by pBWT columns
+- suffixient set for findings MEMs; then r-index to locate all occurrences?
+- SPIRE paper:
+  - Heng: grlBWT; LMS grammar
+  - Ben: PFP parsing
+- z-fast trie vs centroid decomposition
+- WABI 22 ??
+
+Demo:
+- patterns up to length 20
+  - obvious that most stuff is useless
+** Jump Index
+- dynamic construction
+  - *quickly* discard existing regions
+- dynamic predecessor structure is all that's needed
+  - log(u/n) ideally
+- similar to ukkonen's SA construction
+- Store lg(h) instead of lg(n), relative to MSA
+  - all relative to reference?
+  - break each pointer into 2 pieces:
+    - this genome lg(h)
+    - roughly this position lg(w)
+  - if mapping is monotone; use checkpoints
+- Can enumerate all occurrences via DFS
+- Associate TAG array information with jump links?
+  - But we still
+- Can we do counts?
+- Draw as automaton
+  - *What happens when we add a copy?*
+  - How many states do we gain?
+
+* Shrinking practical memory usage
+- SA: 24GB = 8B * 3G, because =libsais= needs =i64= for $2^{31.5}$ elements
+- PLCP: 24GB
+- Shrink SA to =u32= for 12GB
+- Shrink PLCP to =u16= for 6GB
+- Build LCP, also 6GB
+- Peak so far: 48GB
+
+New:
+- Text: 1 B -> 3 GB
+- BWT:  1 B -> 3 GB
+- SA:  32 bit = 4 B -> 12 GB
+- LCP: 32 bit = 4 B -> 12 GB
+- Dropped range boundaries
+- RMQ via segtree instead of sparse table
+- SA  RMQ: 1.5 b -> 500 MB 
+- LCP RMQ: 1.5 b -> 500 MB
+Total: 31GB
+
+- 32 byte links: ~23GB for ~1/3rd of the data
+- 16 byte links: ~24GB for 560/750 intervals = 3/4th of the data
+
+- Replace LCP by Compact PLCP version
+  - 12.4 GB => 0.8 GB
+- 20 GB now: 3+3+12+0.5+0.5+0.8
+  - 40 GB left for links :)
+- collecting links is SLOW because of RMQ requiring up to 128 select queries...
+  - 36 GB before dedup; ~56 GB total
+  - 27 GB after dedup; ~47 GB total
+
+- POS- for human genome in 9.5min wall time (576s) on 6 cores / 12 threads.
+|       | n             | r             | CDAWG nodes   | CDAWG edges   | #(src)      | #(src,c)      | #(links)      |
+| human | 3 117 292 032 | 1 702 564 736 | 1 437 127 296 | 3 741 263 872 | 815 311 808 | 1 345 582 592 | 1 697 342 720 |
+
+Max LCP: 3111690 => 22 bits
+
+- links can fit in 12 bytes, but that makes sorting them much much slower.
+- EF compresses links from 27 GB to 13 GB!
+  - MPHF would make it even smaller but need something to counter false positives.
 #+print_bibliography: 
