@@ -24,11 +24,11 @@
 <script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
 #+end_export
 
-#+REVEAL_TITLE_SLIDE: <h1 class="title" style="margin-top:-10%%">QuadRank</h1>
+#+REVEAL_TITLE_SLIDE: <h1 class="title">QuadRank</h1>
 #+REVEAL_TITLE_SLIDE: <p class="subtitle" style="font-size:80px;" style="color:grey">Engineering a High-Throughput Rank</p>
-#+REVEAL_TITLE_SLIDE: <h2 class="author" style="margin:0;margin-top:1em;">%a</h2>
-#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:smaller;font-weight:normal;color:grey">DSB 2026</h2>
-#+REVEAL_TITLE_SLIDE: <a href="https://doi.org/10.48550/ARXIV.2602.04103" style="position:absolute;bottom:15%%;left:3%%;width:30%%;color:grey;font-size:smaller">doi.org/10.48550/ARXIV.2602.04103</a>
+#+REVEAL_TITLE_SLIDE: <h2 class="author">%a</h2>
+#+REVEAL_TITLE_SLIDE: <h2 class="date" style="font-size:smaller;font-weight:normal;color:grey">DSB 2026, SEA 2026</h2>
+#+REVEAL_TITLE_SLIDE: <a href="https://doi.org/10.4230/LIPIcs.SEA.2026.20" style="position:absolute;bottom:15%%;left:3%%;width:30%%;color:grey;font-size:smaller">doi.org/10.4230/LIPIcs.SEA.2026.20</a>
 #+REVEAL_TITLE_SLIDE: <a href="https://curiouscoding.nl/posts/quadrank" style="position:absolute;bottom:10%%;left:3%%;width:30%%;color:grey;font-size:smaller">curiouscoding.nl/{posts,slides}/quadrank</a>
 #+REVEAL_TITLE_SLIDE: <a href="https://github.com/RagnarGrootKoerkamp/quadrank" style="position:absolute;bottom:5%%;left:3%%;width:30%%;color:grey;font-size:smaller">github.com/RagnarGrootKoerkamp/quadrank</a>
 #+REVEAL_TITLE_SLIDE: <img src="/ox-hugo/kit.svg" style="position:absolute;bottom:0%%;right:0%%;width:20%%"></img>
@@ -105,44 +105,47 @@
 :PROPERTIES:
 :CUSTOM_ID: levels
 :END:
+- [cite/t:@pasta]
 - 2 levels:
   - L2 with 16-bit /delta/ every block: 3.125% overhead
   - L1 with 64-bit /offset/ every 128 blocks: 0.1% overhead
-#+attr_html: :src /ox-hugo/4-pasta.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute :class post-large
+#+attr_html: :src /ox-hugo/4-pasta.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:20%;position:absolute :class post-large
 [[file:./figs/4-pasta.svg]]
 
 * Reducing cache misses: SPIDER
 :PROPERTIES:
 :CUSTOM_ID: spider
 :END:
+- [cite/t:@spider]
 - Inline the 16-bit L2 deltas bits into each cache line
   - Remaining 0.1% overhead L1 array fits in cache.
 
-#+attr_html: :src /ox-hugo/5-spider.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute :class post-large
+#+attr_html: :src /ox-hugo/5-spider.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:20%;position:absolute :class post-large
 [[file:./figs/5-spider.svg]]
 
 * Reducing the popcount: Pairing
 :PROPERTIES:
 :CUSTOM_ID: pairing
 :END:
+- [cite/t:@engineering-rank]
 - Delta is to the /middle/ instead of /start/ of a block.
   - Count only 256 bits in first or second half of block.
 
-#+attr_html: :src /ox-hugo/6-pairing.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute :class post-large
+#+attr_html: :src /ox-hugo/6-pairing.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:20%;position:absolute :class post-large
 [[file:./figs/6-pairing.svg]]
 
 * All together now: BiRank
 :PROPERTIES:
 :CUSTOM_ID: birank
 :END:
-- Inline 16-bit deltas
-- Pairing
+- Inline 16-bit deltas from SPIDER [cite:@spider]
+- Pairing from [cite/t:@engineering-rank]
 - 32-bit /reduced/ L1 offsets: 0.05% overhead
   - Low 11 bits are stored in deltas
   - Input up to $2^{43}$ bits
   - 16 MiB cache supports 32 GiB input
 
-#+attr_html: :src /ox-hugo/7-birank.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:10%;position:absolute :class post-large
+#+attr_html: :src /ox-hugo/7-birank.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:15%;position:absolute :class post-large
 [[file:./figs/7-birank.svg]]
 
 * What is /fast/?
@@ -165,7 +168,7 @@ for q in queries {
 Prefetching/batching: 8-23 ns/q
 #+begin_src rust
 for i in 0..queries.len() {
-    ranker.prefetch(queries[i+32]);
+    ranker.prefetch_index(queries, i+32);
     ranker.rank(queries[i]);
 }
 #+end_src
@@ -174,7 +177,7 @@ for i in 0..queries.len() {
 :PROPERTIES:
 :CUSTOM_ID: birank-results
 :END:
-#+attr_html: :class full post-large :src /ox-hugo/plot-laptop-st-2-large.svg :style left:-1%
+#+attr_html: :class full post-large :src /ox-hugo/plot-laptop-st-2-large.svg :style left:-1%;height:100%
 [[file:./plots/plot-laptop-st-2-large.svg]]
 
 * Memory-bandwidth efficient = Fast
@@ -182,17 +185,17 @@ for i in 0..queries.len() {
 :CUSTOM_ID: bandwidth
 :END:
 
-* QuadRank
+* QuadRank: BiRank for $\sigma{=}4$ DNA
 :PROPERTIES:
 :CUSTOM_ID: quadrank
 :END:
-- Support $\sigma=4$ (=ACGT=) alphabet, and $\rank(q, c)$ for arbitrary $c$.
-$$\rank_4(q) := [\rank(q, \texttt A),\rank(q, \texttt C),\rank(q, \texttt G),\rank(q, \texttt T)].$$
-- Input is 2 bits per symbol.
-- Like BiRank, but replicate all metadata $4\times$.
-- Store input in /transposed/ layout: low bits separate from high bits.
-- Efficient SIMD implementation of 4-parallel popcounting.
-- 16 MiB cache supports 14 GiB = 61Gbp input
+- New rank query $\rank(q, c)$ for arbitrary $c$ and
+  $$\rank_4(q) := [\rank(q, \texttt A),\rank(q, \texttt C),\rank(q, \texttt G),\rank(q, \texttt T)].$$
+  - Input is 2 bits per symbol.
+  - Like BiRank, but replicate all metadata $4\times$.
+  - Store input in /transposed/ layout: low bits separate from high bits.
+  - Efficient SIMD implementation of 4-parallel popcounting.
+  - 16 MiB cache supports 14 GiB = 61 Gbp input
 
 #+attr_html: :src /ox-hugo/8-quadrank.svg :style width:120%;max-width:150%;margin-left:-25%;bottom:0%;position:absolute :class post-large
 [[file:./figs/8-quadrank.svg]]
@@ -218,7 +221,7 @@ $$\rank_4(q) := [\rank(q, \texttt A),\rank(q, \texttt C),\rank(q, \texttt G),\ra
 :PROPERTIES:
 :CUSTOM_ID: fm-results
 :END:
-#+attr_html: :class full post-large :src /ox-hugo/plot-fm.svg :style left:3%
+#+attr_html: :class full post-large :src /ox-hugo/plot-fm.svg :style left:14%
 [[file:./plots/plot-fm.svg]]
 
 * Conclusion: Thread, Batch, and Prefetch
