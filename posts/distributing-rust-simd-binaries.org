@@ -22,8 +22,10 @@ either NEON or AVX2 instructions are enabled.
 It also contains instructions for effectively distributing such binaries,
 which is explained in more detail here.
 
+See also a newer post on my [[./release-flow/release-flow.org][release setup]].
+
 * What's inside
-Initially, most of my code uses Rust's unstable =#![feature(portabe-simd)]=.
+Initially, most of my code uses Rust's unstable =#![feature(portable-simd)]=.
 Unfortunately, users and packagers don't like unstable Rust, so by now I have
 converted everything to =wide= ([[https://github.com/Lokathor/wide][gh]], [[https://docs.rs/wide/latest/wide/][docs.rs]]). Wide supports types like =u64x4=
 like this (omitting irrelevant details):
@@ -108,7 +110,7 @@ overhead due to decompressing the binaries.
 * Rust's default target-cpu
 This is all nice, but it gives some problems:
 on x64, Rust has a default target of x86-64-v1, which does not include all the
-features we need. Instead, we can force to use all feature available on the host
+features we need. Instead, we can force to use all features available on the host
 CPU and optimize the code for it using:
 #+begin_src toml
 # .config/cargo.toml
