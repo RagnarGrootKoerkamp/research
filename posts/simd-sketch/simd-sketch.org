@@ -655,4 +655,23 @@ This way, sketches are much smaller, and comparing sketches is $4\times$ faster 
 - Benchmark on some low-identity data where the Jaccard similarity is as low as 0.001.
 - Compare against dashing and/or HyperMinHash?
 
+- Add DynamicDemiLog [cite:@dynamicdemilog] and DynamicLogLog [cite:@dynamicloglog]
+- Add Sketchlib.Rust (Gemsparcl) [cite:@sketchlib-rust]
+- Poppunk [cite:@poppunk] uses much smaller variable k, ie 21, 25, 29. The
+  purpose is to estimate two separate parameters:
+  - /accessory genome/: genomes in only one species
+  - /core/: shared genome
+  - $p_{accessory}$: the probability a kmer is not accessory, ie the relative size of the core
+  - $\pi$: the point-mutation rate in the core
+  Then
+  - $p_{core} = (1-\pi)^k$ is probability that kmers in the core match
+  - $p_{accessory} = 1-a$ for $a$ is accessory divergence is the probability
+    that the k-mers are shared in the first place.
+  - $p_{match,k} = (1-a) (1-\pi)^k$.
+
+  Sketching for multiple values of $k$ allows estimating both these parameters.
+
+- Both gemsparcl and dynamicdemilog and Onika [cite:@onika] use an inverted
+  index (all on 16-bit elements?). 1-bit hashing breaks that idea.
+
 #+print_bibliography:
