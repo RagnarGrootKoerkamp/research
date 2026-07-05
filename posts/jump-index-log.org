@@ -1,4 +1,4 @@
-#+title: STPD dev notes
+#+title: Jump Index dev notes
 #+filetags: @devlog text-indexing wip
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -468,6 +468,7 @@ Rust AGC api: https://docs.rs/ragc-core/0.1.1/ragc_core/
   - *Can only /enumerate/ the interval; not "RMQ" /query/ it*
   - *not count query, but interval query*
 - lg(n) vs lg(h)
+- phi using lg(h); cool trick by Jounan(?)
 - movi: r lg n, but r lg(n/r) 
   - move structure: row-major
   - compression: col-major
@@ -478,6 +479,7 @@ Rust AGC api: https://docs.rs/ragc-core/0.1.1/ragc_core/
   - Heng: grlBWT; LMS grammar
   - Ben: PFP parsing
 - z-fast trie vs centroid decomposition
+- Michael Sansung: papers on how r changes with point mutations
 - WABI 22 ??
 
 Demo:
@@ -534,12 +536,530 @@ Total: 31GB
   - 27 GB after dedup; ~47 GB total
 
 - POS- for human genome in 9.5min wall time (576s) on 6 cores / 12 threads.
-|       | n             | r             | CDAWG nodes   | CDAWG edges   | #(src)      | #(src,c)      | #(links)      |
-| human | 3 117 292 032 | 1 702 564 736 | 1 437 127 296 | 3 741 263 872 | 815 311 808 | 1 345 582 592 | 1 697 342 720 |
+|       | n             | r             | CDAWG nodes   | CDAWG edges   | #(target)=STPD | #(src)      | #(src,c)      | #(links)      |
+| human | 3 117 292 032 | 1 702 564 736 | 1 437 127 296 | 3 741 263 872 | 1 147 728 000  | 815 311 808 | 1 345 582 592 | 1 697 342 720 |
 
 Max LCP: 3111690 => 22 bits
 
 - links can fit in 12 bytes, but that makes sorting them much much slower.
 - EF compresses links from 27 GB to 13 GB!
   - MPHF would make it even smaller but need something to counter false positives.
+- Idea to reduce memory usage: store LCP lengths separately so that large values
+  don't take all space.
+- 2nd idea by Nicola: only store the LCP when needed at all.
+- 3rd idea by Ruben: verify all length $2^i$ prefixes of the pattern.
+
+** Memory usage with =into_par_iter= for merging
+- EF size: 20.3 GB
+- during partitioning: 40-41 GB
+- EF size: 21.2 GB
+- merging: 45..46..47..48..49..52..54..5541
+- EF size: 13.3 GB
+- extend: 52 .. 52 .. 52
+- final EF size: 13.6GB
+- memory usage still 52 GB???
+** Memory usage with =into_iter= for merging
+- collecting: 29 .. 30 .. 40
+- EF size: 20.3 GB
+- during partitioning: 40-41 GB
+- EF size: 21.2 GB
+- merging: 41 .. 44 .. 46 .. 47 .. 52
+- EF size: 13.3 GB
+- extend: 52 .. 52 .. 52
+- final EF size: 13.6GB
+- memory usage still 48 GB???
+- after printing LCP stats: still 48 GB when computing JI stats
+** Memory usage with =drain= fix??
+- collecting: 29 .. 30 .. 40
+- EF size: 20.3 GB
+- during partitioning: 40-41 GB
+- EF size: 21.2 GB
+- merging: 41 .. 44 .. 46 .. 47 .. 52
+- EF size: 13.3 GB
+- extend: 52 .. 52 .. 52
+- final EF size: 13.6GB
+- memory usage still 48 GB???
+- after printing LCP stats: still 48 GB when computing JI stats
+
+*THE ISSUE WAS THE ALLOCATOR NOT FREEING MEMORY FROM SMALL ALLOCATIONS.*
+** LCP stats
+- max 3111690 => 22 bits
+- average: 17 => 5+2 = 7 bits with EF
+- Number of (pos,c) with >0 link: 815311808
+- Number of (pos,c) with >1 link: 275454818 (33.7%)
+- Number of (pos,c) with >2 link: 59460310
+- Number of (pos,c) with >3 link: 13060635
+- Number of (pos,c) with >4 link: 2907064
+
+** 2-bit alphabet
+- 1 EF on (src, c, lcp, target)
+  
+  =final EF size: 12.538 GB : 1697342725 * (2 + 56) bits=
+
+** Compressing LCP values
+- 1 EF on (src, c, target)
+  
+  =compact EF size: 6.250 GB : 1345582601 * (2 + 35) bits=
+- 1 EF on (src, c, lcp, target) with additional targets for each c
+  
+  =LCP EF size:     2.687 GB : 351760124 * (2 + 59) bits=
+
+- Total: =8.937 GB=
+** Dropping LCP values
+- 1 EF on (src, c, target)
+
+  =compact EF without LCP: 7.816 GB : 1697342725 * (2 + 34) bits=
+
+** MPHF for (source, c)
+- PHF mapping (source, c) to idx =phf: 0.449 GB=
+- Bitvector mapping index to offset =bits: 0.264 GB=
+- List of target values =targets: 6.899 GB=
+- Total: =7.612 GB=
+
+** Highly repetitive 8-bit =einstein.de.txt=:
+- EF on (s,c,l,t): 24.2 MB
+- EF on (s,c,t) + EF on (s,c,l,t): 12.8 + 5.1 = 17.9 MB
+- EF on (s,c,t): 16.0 MB
+- PHF + bits + ts: 0.8 + 0.4 + 11.9 = 13.2 MB
+  
+  
+* TODO
+- Drop RMQs; find them on-the-fly during DFS
+- Try separately encoding STPD (jump targets) and JI
+- Store only LCP when there are >1 links in a state; might give 4x saving for
+  that part.
+- Dynamic push-only EF structure that auto-adapts?
+
+Turns out the issue is that allocators don't always return all memory...
+
+NEXT UP:
+- Compress links by only storing 'double' LCP values
+  option 1:
+  - EF<SmallLink>: source, char, target
+  - Ef<LargeLink>: source, char, LCP, target
+  option 2:
+  - EF<source>
+  - EF<SmallLink>: source_idx, char, target
+  - Ef<LargeLink>: source_idx, char, LCP, target
+
+- Store STPD and LPlF array for suffix links?
+  
+* Pseudo matching lengths
+I did some benchmark for Pseudo Matching Lengths as in the Mov2 paper, which if I understand correctly comes down to:
+extend from the start of the pattern as much as possible until there is no match anymore. Then repeatedly continue that from the first character that wasn't matched yet. So this is like some kind of greedy matches but not necessarily MEMs because we start somewhere in the middle of each MEM.
+
+Movi2 reports 4000 reads/s PML throughput for simulated (pacbio?) reads of average length 2500, so 10M bases/s, or 100ns/base, which indeed is close to a cache miss. I'm not sure what the default error rate is here.
+
+I'm taking random substrings of length uniform in 1 to 5000 and adding 1% or 0.1% random mutations. Then I get the following, where 'part len' is the average length of the pseudo matches and 'jump dist' is the average distance between consecutive jumps.
+
+#+begin_src txt
+Influenza:
+1.00% errors: Avg   5787 reads/sec. Avg part len:   86.2, avg jump dist:   10.3, avg jumps/part:   8.38
+0.10% errors: Avg  39635 reads/sec. Avg part len:  696.3, avg jump dist:   72.7, avg jumps/part:   9.58
+E.coli:
+1.00% errors: Avg  16360 reads/sec. Avg part len:   83.2, avg jump dist:    9.2, avg jumps/part:   9.07
+0.10% errors: Avg  94055 reads/sec. Avg part len:  691.1, avg jump dist:   72.6, avg jumps/part:   9.52
+Human genome:
+1.00% errors: Avg  14234 reads/sec. Avg part len:   87.3, avg jump dist:    7.4, avg jumps/part:  11.84
+0.10% errors: Avg  81313 reads/sec. Avg part len:  696.3, avg jump dist:   57.6, avg jumps/part:  12.09
+#+end_src
+
+So with 10x fewer errors everything is much faster, as can be expected since
+once we anchor on the right location there is no jumping around anymore. That
+also gives much longer matches and correspondingly a larger distance between
+jumps. In particular the number of jumps needed to anchor a pseudo match/part is
+roughly constant at 9 either way. Which probably also means that a *prefix
+lookup table on the first ~10 characters (TODO)* will avoid most of those.  Also
+note that the throughput for the human genome is similar to the other cases,
+even though this is a 30x larger dataset, so this is promising for the extension
+to full HPRCv2.
+
+* June 15
+** Plan
+- [X] Extract link computation to separate function
+- [X] Store EF-encoded version on disk
+- [X] Build and test POS+ version.
+  - [X] Bug where 10..2947 of E.coli is not found?
+  - [X] Include empty suffix?
+- [X] Store POS+ links on disk as well.
+- [X] Make =SuffixLink= type for suffix links, pointing from target to source.
+- [X] Store Links and ReverseLink(reverse text) at the same time
+- [X] Use suffix links for fast matching statistics
+- [ ] Dynamic construction
+** Testing POS+
+#+begin_src 
+01234567890123456
+AGAGCGAGAGCGCGC#
+               ^ root
+                
+
+sa: [0, 6, 2, 8, 15, 14, 4, 12, 10, 5, 1, 7, 13, 3, 11, 9]
+Root anchor: 4
+
+
+#+end_src
+
+
+Bug in E.coli dataset for POS+:
+#+begin_src 
+Testing mapping
+0: mismatch at 112689514: got 1 wanted 2
+link: Link { source: 112689514, c: 2, lcp: 3, target: 112689513 }
+2: mismatch at 112689515: got end of text wanted 2
+link: Link { source: 112689515, c: 2, lcp: 2, target: 112689366 }
+4: mismatch at 112689368: got 3 wanted 0
+link: Link { source: 112689368, c: 0, lcp: 4, target: 112688049 }
+5: mismatch at 112688050: got 2 wanted 1
+link: Link { source: 112688050, c: 1, lcp: 5, target: 112685534 }
+9: mismatch at 112685538: got 2 wanted 0
+link: Link { source: 112685538, c: 0, lcp: 10, target: 110925697 }
+11: mismatch at 110925699: got 3 wanted 1
+link: Link { source: 110925699, c: 1, lcp: 11, target: 110289776 }
+14: mismatch at 110289779: got 2 wanted 3
+link: Link { source: 110289779, c: 3, lcp: 14, target: 107623798 }
+426: mismatch at 107624210: got 3 wanted 1
+link: Link { source: 107624210, c: 1, lcp: 436, target: 37421115 }
+462: mismatch at 37421151: got 1 wanted 2
+no link found; next is Link { source: 37421258, c: 2, lcp: 14, target: 15827280 }
+prev link: Link { source: 37420687, c: 1, lcp: 12, target: 16407000 }
+
+thread 'main' (867347) panicked at src/jump_index.rs:735:13:
+substring 10..2947 not found
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+#+end_src
+
+** Failing tests
+
+#+begin_src 
+01234567890123456789
+CCBDDACADDCCADDACBDD
+A    *
+B *
+D  *
+CA     *
+CB*
+   DA*
+   DC     *
+   DDC    *
+     AD *
+   DDACB         *
+      CADDA    * 
+CCBDDACADDCCADDACBDD
+01234567890123456789
+#+end_src
+
+Bug: CCA and CCB are a BWT-run, but the character preceding CCB wraps around the text!
+
+
+#+begin_src 
+      012345678901234567890123456789
+text: DCACCCABDCDCACCCABDCDCCCCCABAC
+pat:  **                 CDCCCCC
+       C*       *
+               CDC*         *
+                            ^ MISSING
+#+end_src
+- missing link for prefix DCACCCABDCDCACCCA => DCACCCABDCDCACCCC
+  - had off-by-one in prefix-run check
+
+#+begin_src 
+      012345678901234567890123456789
+text: DCCACDCBDADCCACDCBDADCAACACBDA
+pat:                  CBDADCAACACB
+      **                 
+       C*    *   
+            CBDADC*         *
+                            ^ MISSING
+#+end_src
+- missing link for prefix DCCACDCBDADCC => DCCACDCBDADCA
+  - had off-by-one in prefix-run check
+** TODO Support length-0 pattern
+For POS+, the length-0 pattern currently matches before instead of after the last
+character.
+- TODO: Include the empty suffix in the suffix array.
+
+** Suffix link debugging
+#+begin_src 
+   0123456789012345
+T: AGAGCGAGAGCGCGC#   POS- LINKS
+   #              *   0->15 (0)
+   C   *              0->4  (0)
+   G*                 0->1  (0)
+   AGC *              2->4  (2)
+    GAGA   *          4->8  (3)
+      GC#         *   5->15 (2)
+   AGAGCGC     *      6->12 (6)
+            GCGC# *  13->15 (4)
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+   #              *  reverse POS+ LINKS
+   CGAG*
+   G*
+     CGCG    *
+           CGCGC
+             *
+  GAG
+    *
+  GAGAGCG
+        *
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+                     SUFFIX LINKS
+   A
+   *                 1->0 (0)
+   *GAG              2->0 (2)
+   *   C             5->0 (0)
+    *  CGAG          5->1 (3)
+   *    GAGAGC       6->0 (5)
+      *      CGCG   11->3 (3)
+            *CGCGC  11->9 (4)
+   *              # 16->0 (0)
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+#+end_src
+
+** Match statistics debugging
+
+#+begin_src 
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+P: AGAGCGAGGCG
+           *
+    GAGG
+   AGG
+   G
+#+end_src
+
+#+begin_src 
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+P:  GAGCGCGAGCGCGC
+         *
+          GAGCGCGAGCGCGC
+                 *
+
+#+end_src
+
+** Match statistics results!!!
+for 100k reads; avg len 2500
+
+Human genome index: 2 * 12.5 = 25 GB (for fwd links and suffix links)
+
+|           | errors | k.reads/sec | part len | jump/part | jump lookup/part | SL/part | SL skip/part |
+| influenza |     1% |           9 |       27 |       1.4 |              2.7 |     1.3 |          2.2 |
+|           |   0.1% |          40 |      324 |       3.0 |              4.5 |     1.6 |          6.8 |
+|           |        |             |          |           |                  |         |              |
+| e.coli    |     1% |          10 |       20 |       1.1 |              2.2 |    1.06 |          4.8 |
+|           |   0.1% |          48 |      234 |       2.0 |              3.1 |    1.12 |         24.3 |
+|           |        |             |          |           |                  |         |              |
+| 1 human   |     1% |           6 |       18 |       1.1 |              2.2 |    1.06 |          7.0 |
+|           |   0.1% |          34 |      210 |       2.1 |              3.2 |    1.07 |         53.6 |
+
+RLZ:
+- as fast for influenza
+- 2x faster for e.coli
+- 3x faster than MS for human genome
+
+#+begin_src 
+influenza:
+11.5 for 100000 reads of average length 2500 with 1.00% errors. Avg   8672 reads/sec. Avg part len:   27.7, avg jump dist:   19.5, avg jumps/part:   1.42, avg suffix-link dist:   20.9, avg suffix-links/part:   1.33 (jump lookups/pt:   2.75, suffix link lookups/pt:   1.33, suffix link skips/pt:   2.25)
+ 2.4 for 100000 reads of average length 2500 with 0.10% errors. Avg  40113 reads/sec. Avg part len:  324.1, avg jump dist:  109.7, avg jumps/part:   2.95, avg suffix-link dist:  206.4, avg suffix-links/part:   1.57 (jump lookups/pt:   4.52, suffix link lookups/pt:   1.57, suffix link skips/pt:   6.80)
+
+e.coli:
+MS:  9.798 for 100000 reads of average length 2500 with 1.00% errors. Avg  10206 reads/sec. Avg part len:   20.0, avg jump dist:   17.7, avg jumps/part:   1.14, avg suffix-link dist:   18.9, avg suffix-links/part:   1.06 (jump lookups/pt:   2.20, suffix link lookups/pt:   1.06, suffix link skips/pt:   4.89)
+MS:  2.070 for 100000 reads of average length 2500 with 0.10% errors. Avg  48298 reads/sec. Avg part len:  234.6, avg jump dist:  114.4, avg jumps/part:   2.05, avg suffix-link dist:  208.6, avg suffix-links/part:   1.12 (jump lookups/pt:   3.18, suffix link lookups/pt:   1.12, suffix link skips/pt:  24.30)
+
+human:
+MS:  16.835 for 100000 reads of average length 2500 with 1.00% errors. Avg   5940 reads/sec. Avg part len:   18.1, avg jump dist:   15.7, avg jumps/part:   1.15, avg suffix-link dist:   17.1, avg suffix-links/part:   1.06 (jump lookups/pt:   2.21, suffix link lookups/pt:   1.06, suffix link skips/pt:   7.01)
+MS:  2.908 for 100000 reads of average length 2500 with 0.10% errors. Avg  34391 reads/sec. Avg part len:  209.0, avg jump dist:   98.7, avg jumps/part:   2.12, avg suffix-link dist:  194.7, avg suffix-links/part:   1.07 (jump lookups/pt:   3.19, suffix link lookups/pt:   1.07, suffix link skips/pt:  53.61)
+#+end_src
+
+* Dynamic construction
+
+#+begin_src 
+0123456789012345
+AGAGCGAGAGCGCGC#
+
+         1->0 sufl (0) ** init
+*G       0->1 link (0)
+         2->0 sufl (0) ** wrong len
+A       
+AG     
+  *
+  AGC    2->4 link (2)
+C        0->4 link (0)
+         5->0 sufl (0) ** wrong len
+         5->1 sufl (3) ** MISSING
+ G
+ GA
+ GAG
+ GAGA    4->8 link (3)
+AGA      6->0 sufl (3) ** wrong len
+AGAG
+AGAGC
+AGAGCG
+AGAGCGC  6->12 link (6)
+   GC   11->3  sufl (2) ** wrong len
+   GCG
+          CGCGC ???
+         GCGC   11->9  sufl (4) ** MISSING
+         GCGC#  13->15 link (4)
+   GC#           5->15 link (2) ** MISSING
+#                0->15 link (0)
+                16->0  sufl (0)  ** OK
+AGAGCGAGAGCGCGC#
+0123456789012345
+
+     GAGAGCGC
+      ------
+AGAGCG
+   GC      **
+
+          CGCG
+   GC      --
+           ***
+   GCG
+
+          CGCGC
+   GCG     ---
+           ****
+         GCGC
+
+
+#+end_src
+
+** Take 2
+#+begin_src 
+   0123456789012345
+T: AGAGCGAGAGCGCGC#  POS- LINKS   SL         not in the pattern
+   G*                0->1  (0)    1->0  (0)  v
+   AGC *             2->4  (2)    2->0  (2)
+   C   *             0->4  (0)    5->0  (0)  *
+    GAGA   *         4->8  (3)    5->1  (3)
+   AGAGCGC     *     6->12 (6)    6->0  (5)  *
+            GCGC# * 13->15 (4)   11->9  (4)
+      GC#         *  5->15 (2)   11->3  (3)  *
+   #              *  0->15 (0)   16->0  (0)  *
+T: AGAGCGAGAGCGCGC#              
+   0123456789012345  POS- LINKS   SUFFIX LINKS
+  A*                 0->1  (0)    1->0  (0)  
+  G                
+   A                
+   AG  *             2->4  (2)    2->0  (2)
+  C    *             0->4  (0)    5->0  (0)
+    G              
+    GA               
+    GAG    *         4->8  (3)    5->1  (3)
+   AG
+   AGA              
+   AGAG            
+   AGAGC           
+   AGAGCG      *     6->12 (6)    6->0  (5)  *** Dynamic algo gives len 6 here!
+    G  *             2->4  (1)
+      GC            
+      GCG      *     6->12 (3) 
+            GCGC  * 13->15 (4)   11->9  (4)
+      GC          *  5->15 (2)   11->3  (3)  
+  #               *  0->15 (0)   16->0  (0)  
+
+T: AGAGCGAGAGCGCGC#
+   0123456789012345
+#+end_src
+
+Thinks to track:
+- in: longest suffix =T[pos-len..pos] = T[i-len..i]= that occurred at =pos<i=
+- if T[pos] == T[i]:
+  - pos+=1
+  - len+=1
+  - done
+- 
+
+- out: longest suffix =T[pos'-len'..pos'] = T[i+1-len'..i+1]= that occurred at =pos'≤i=
+
+** More debugging of dynamic construction
+#+begin_src 
+0123456789
+BDDAAABDAC
+fwd:
+    C    *   4->9 (2)  got len 1
+suf:
+  DA  BDA    7->2 (2)  got len 1
+
+BD    BD
+  A     *
+| empty suffix link
+   A extend with A
+  DA -> could have extended directly
+BDDAAABDAC
+0123456789
+
+
+
+T: BDDAAABDAC
+P: DAC
+FWD1: [0->3 A 0, 0->9 C 0, 0->1 D 0, 2->3 A 1, 2->8 A 2, 4->6 B 1, 4->9 C 2, 5->6 B 2]
+FWD2: [0->3 A 0, 0->9 C 0, 0->1 D 0, 2->3 A 1, 2->8 A 2, 4->6 B 1, 4->9 C 1, 5->6 B 2]
+SUF1: [1->0 0, 2->0 0, 2->1 1, 4->0 0, 4->3 2, 6->0 2, 7->2 2, 10->0 0]
+SUF2: [1->0 0, 2->0 0, 2->1 1, 4->0 0, 4->3 2, 6->0 2, 8->3 1, 10->0 0]
+
+#+end_src
+
+
+
+** IDEA: Store one EF for each character??
+
+** It's working!!!
+Influenza:
+#+begin_src 
+=== DYNAMIC CONSTRUCTION ===
+   1.0Mbp    0.06s 17.80Mbp/s fwd links    0.1M = every 12.8bp suf links    0.1M = every 12.9bp fwd    2.73MB suf    2.71MB
+   2.1Mbp    0.14s 14.80Mbp/s fwd links    0.2M = every 11.7bp suf links    0.2M = every 11.7bp fwd    5.98MB suf    5.97MB
+   4.2Mbp    0.27s 15.58Mbp/s fwd links    0.3M = every 13.3bp suf links    0.3M = every 13.3bp fwd   10.51MB suf   10.47MB
+   8.4Mbp    0.47s 17.86Mbp/s fwd links    0.5M = every 16.5bp suf links    0.5M = every 16.6bp fwd   16.92MB suf   16.86MB
+  16.8Mbp    0.79s 21.16Mbp/s fwd links    0.8M = every 21.4bp suf links    0.8M = every 21.5bp fwd   26.13MB suf   26.03MB
+  33.6Mbp    1.21s 27.70Mbp/s fwd links    1.1M = every 30.6bp suf links    1.1M = every 30.7bp fwd   36.55MB suf   36.43MB
+  67.1Mbp    1.91s 35.08Mbp/s fwd links    1.6M = every 42.9bp suf links    1.6M = every 43.0bp fwd   52.13MB suf   51.98MB
+ 134.2Mbp    3.52s 38.11Mbp/s fwd links    2.6M = every 51.4bp suf links    2.6M = every 51.6bp fwd   87.05MB suf   86.72MB
+=== DYNAMIC CONSTRUCTION IN 4.230 seconds ===
+#+end_src
+
+E.coli:
+#+begin_src 
+=== DYNAMIC CONSTRUCTION ===
+   1.0Mbp    0.69s  1.51Mbp/s fwd links    0.8M = every  1.4bp suf links    0.8M = every  1.4bp fwd   25.09MB suf   25.09MB
+   2.1Mbp    1.58s  1.33Mbp/s fwd links    1.5M = every  1.4bp suf links    1.5M = every  1.4bp fwd   50.17MB suf   50.17MB
+   4.2Mbp    3.52s  1.19Mbp/s fwd links    3.0M = every  1.4bp suf links    3.0M = every  1.4bp fwd   99.37MB suf   99.37MB
+   8.4Mbp    5.77s  1.45Mbp/s fwd links    4.5M = every  1.8bp suf links    4.5M = every  1.8bp fwd  151.21MB suf  151.20MB
+  16.8Mbp   11.35s  1.48Mbp/s fwd links    8.1M = every  2.1bp suf links    8.1M = every  2.1bp fwd  270.47MB suf  270.49MB
+  33.6Mbp   14.59s  2.30Mbp/s fwd links   10.1M = every  3.3bp suf links   10.1M = every  3.3bp fwd  336.17MB suf  336.16MB
+  67.1Mbp   19.96s  3.36Mbp/s fwd links   13.3M = every  5.1bp suf links   13.3M = every  5.1bp fwd  441.83MB suf  441.62MB
+=== DYNAMIC CONSTRUCTION IN 24.007 seconds ===
+#+end_src
+
+Einstein.de:
+#+begin_src 
+=== DYNAMIC CONSTRUCTION ===
+   1.0Mbp    0.01s  77.92Mbp/s fwd links    0.0M = every  69.3bp suf links    0.0M = every  69.3bp fwd    0.50MB suf    0.50MB
+   2.1Mbp    0.02s  98.83Mbp/s fwd links    0.0M = every 109.3bp suf links    0.0M = every 109.1bp fwd    0.64MB suf    0.64MB
+   4.2Mbp    0.03s 123.52Mbp/s fwd links    0.0M = every 182.5bp suf links    0.0M = every 182.3bp fwd    0.77MB suf    0.77MB
+   8.4Mbp    0.06s 136.17Mbp/s fwd links    0.0M = every 263.0bp suf links    0.0M = every 261.4bp fwd    1.06MB suf    1.07MB
+  16.8Mbp    0.11s 149.39Mbp/s fwd links    0.0M = every 378.7bp suf links    0.0M = every 374.4bp fwd    1.48MB suf    1.49MB
+  33.6Mbp    0.22s 155.96Mbp/s fwd links    0.1M = every 490.0bp suf links    0.1M = every 485.0bp fwd    2.28MB suf    2.31MB
+  67.1Mbp    0.41s 164.68Mbp/s fwd links    0.1M = every 671.8bp suf links    0.1M = every 663.6bp fwd    3.33MB suf    3.37MB
+=== DYNAMIC CONSTRUCTION IN 0.560 seconds ===
+#+end_src
+
+** Optimizing the relative store
+Starting point:
+- fwd: EF + BTreeSet
+- suf: EF + BTreeSet
+
+Better:
+- fwd: EF + HashMap<(source, c): u64, (len: u32, idx: u32)> + Vec<Vec<(lcp, target): u64>>
+- suf: EF + Vec<(source, lcp, target)> with binary search or an S+-tree.
+  
+
 #+print_bibliography: 
+
+
