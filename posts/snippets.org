@@ -177,3 +177,24 @@ export file="figs.ipe":
     rm -f *.svg
     grep view {{file}} | grep -o 'name="[a-zA-Z0-9_-]*"' | cut -d '"' -f 2 | xargs -I NAME -n 1 iperender -svg -view NAME {{file}} NAME.svg
 #+end_src
+
+* Ox-reveal
+https://github.com/hexmode/ox-reveal
+** Fragmented list
+Step-by-step fragmented list
+
+#+begin_src org
+#+attr_reveal: :frag t
+- This appears first
+- And only later this
+#+end_src
+
+** Split slide
+
+#+begin_src org
+,* header
+content before and after split
+,#+reveal: split:t
+content only after split
+#+end_src
+
