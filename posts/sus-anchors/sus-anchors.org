@@ -479,12 +479,9 @@ Run the construction algorithm on chunks of size $2\ell$ that overlap by
 $\ell-1$, so that the total space usage is $O(\ell)$ and the total time remains
 $O(n)$.
 
-Below, we present two /direct/ methods for computing the /maximal suffix/ of each
-window of a string, as this
-slightly simplifies the notation (compared to computing SUS-anchors, where we
-"manually" have to ensure uniqueness of the suffix)
-and matches [cite:@minimal-maximal-suffix-tcs].
-It trivially extends to other character-based orders such as the anti-lexicographic order.
+Below, we first adapt the method of [cite:@minimal-maximal-suffix-tcs] for
+computing the maximal suffix of each window to our streaming setting.
+Then, we adapt it to compute SUS-anchors for any character-based order.
 
 #+begin_mytheorem 
 For any character-based order $O$, the SUS-anchors of a string of length $n$
@@ -492,8 +489,8 @@ over a constant-size alphabet can be computed in $O(n)$ time and $O(\ell)$
 space.
 #+end_mytheorem
 
-*A streaming algorithm.*
-We now adapt the algorithm of [cite:@minimal-maximal-suffix-tcs] to our streaming setting.
+*A streaming algorithm for the maximal suffix.*
+We first adapt the algorithm of [cite:@minimal-maximal-suffix-tcs] to our streaming setting.
 Suppose that we have so far processed $T[0\dots t)$.
 The algorithm maintains a doubly linked list $A=(a_0, a_1, a_2, \dots)$ of /active/ text positions $a_i$
 such that $T[a_i\dots t) > T[j\dots t)$ for all $a_i < j < t$.
@@ -529,7 +526,11 @@ Instead, we simply do a word-by-word scan on the
 bit-representation of the text, which takes expected constant time on random
 strings since LCPs of, say, over $64$ bits are unlikely in random strings.
 
-*A more direct algorithm.*
+*A more direct algorithm for SUS-anchors.*
+We now make some modifications to use the algorithm above for SUS-anchors.
+Most importantly, $A$ will now be an /increasing/ list of suffixes, with the
+smallest at the start, with the caveat that unlike usually a string is considered /smaller/
+than all its prefixes.
 A final modification drops the event queues and allows us to replace the doubly
 linked list $A$ by a simple double-ended queue, as shown in \cref{alg}. 
 For each $a\in A$, we now additionally store the text position $x_a$ where $a$ becomes
@@ -538,9 +539,9 @@ start of the maximal suffix of the window) when the
 character $T[x_a]$ enters the sliding window.
 When comparing $t$ to $\last(A)$, there are three cases. 
 1. $A$ is empty, in which case we push $t$ and set $x_t = t$.
-2. $T[\last(A)\dots) > T[t\dots)$, in which case we push $t$ and note that it
-   becomes hot when $\last(A)$ falls out of the window, i.e., $x_t = \last(A)+\ell$.
-3. $T[\last(A)\dots) < T[t\dots)$: $t$ "takes over" $\last(A)$ when character
+2. $T[\last(A)\dots \last(A)+\ell) \leq_O T[t\dots t+\ell)$, in which case we push $t$ and note that it
+   becomes hot (the smallest suffix) when $\last(A)$ falls out of the window, i.e., $x_t = \last(A)+\ell$.
+3. $T[\last(A)\dots \last(A)+\ell) > T[t\dots t+\ell)$: $t$ "takes over" $\last(A)$ when character
    $t+\lambda$ enters the window, where $\lambda = \lcp(T[t\dots), T[\last(A)\dots))$.
    - If $\last(A)$ is already hot by that time ($x_{\last(A)} < t+\lambda$),
      push $t$ with $x_t = \min(t + \lambda, a+\ell)$.
@@ -559,7 +560,6 @@ maximal suffix). In that case, we pop $a_0$.
   \label{alg}
   \begin{algorithmic}[1]
 	\Procedure{SUS-anchors}{$T$, $\ell$, $O$}
-    %% \Comment{Text $T[0\dots n)$, window length $\ell$, character-based order $O$}
 
     \State $A \gets [] $ \Comment{Deque of (position, hot-time) pairs.}
     \State $S \gets []$ \Comment{List of SUS-anchor positions of each window.}
@@ -568,12 +568,12 @@ maximal suffix). In that case, we pop $a_0$.
         \While{$A$ is not empty}
             \State $(a, x_a) \gets \last(A)$
             
-            \If{$T[a\dots a{+}\ell) \geq_O T[t\dots t{+}\ell) $}
-                \Comment{New suffix is smaller.}
+            \If{$T[a\dots a{+}\ell) \leq_{O} T[t\dots t{+}\ell) $}
+                \Comment{New suffix is larger.}
                 \State $x_t \gets a + \ell$
                 \Comment{Hot when $a$ exits the window.}
                 \State \textbf{break}
-            \Else \Comment{New suffix is larger: takes over $a$ at time $x$}
+            \Else \Comment{New suffix is smaller: takes over $a$ at time $x$}
                 \State $\lambda \gets \lcp\bigl(T[t\dots t{+}\ell), T[a\dots a{+}\ell)\bigr)$
                 \State $x \gets \min(t + \lambda, a + \ell)$
                 \If{$x_a < x$}
