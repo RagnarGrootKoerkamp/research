@@ -1,4 +1,4 @@
-#+title: The anti-lexicographic SUS-anchor: a near-optimal k=1 sampling scheme
+#+title: The anti-lexicographic SUS-anchor: an empirically optimal selection scheme
 #+filetags: @paper minimizers 
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
@@ -18,22 +18,36 @@ A preprint of this blog can be found here: [[../../static/papers/sus-anchor-prep
 ---
 
 * Abstract
+:PROPERTIES:
+:UNNUMBERED:
+:END:
 *Motivation.*
-In recent years, there has been a renewed interest in the search for low density
-minimizer schemes. These schemes take a /window/ of $w$ consecutive \(k\)-mers,
-and /sample/ one of them: the smallest under some specific order.
-Schemes such as the mod-minimizer provide a low /density/ (fraction of sampled \(k\)-mers) when
-$k \gg w$, while schemes such as the greedy minimizer work well for explicit
+/Selection schemes/ provide a way to select a subset of positions in a text in
+such a way that no two consecutive selected positions are more than $w$ apart.
+These selected positions can be used as "anchor" points for text indices
+such that every sufficiently long pattern corresponds to at least one anchor
+[cite:@lc-anchors].
+Closely related are /sampling schemes/, that sample a /\(k\)-mer/ from each window
+of $w$ consecutive \(k\)-mers in a text, and the more restricted /minimizer
+schemes/, that achieve this by taking the smallest \(k\)-mer according to some
+order.  In recent years, there has been a renewed interest in the search for
+/low density/ schemes that select/sample only a small fraction of
+positions/\(k\)-mers.
+
+The mod-minimizer [cite:@modmini] provides a near-optimal density of $1/w$ as
+$k / w \to \infty$, while schemes such as the greedy minimizer work well for explicit
 small parameters roughly in the regime $k \leq 2w$, for $k$ and $w$ up
 to $15$ or so.
 
-When $k < \log_\sigma w$ is very small, minimizer schemes cannot do well, and
-more general /sampling/ schemes are needed that can be richer than just
-comparing \(k\)-mers. Bidirectional-string anchors (bd-anchors) form one such scheme.
+When $k < \log_\sigma w$ is small, minimizer schemes cannot do well
+[cite:@asymptotic-optimal-minimizers]. 
+As a first step towards low density sampling schemes in this regime, we fix
+$k=1$ and search for a near-optimal selection scheme to improve the existing
+bidirectional string anchors (bd-anchors) [cite:@bdanchors;@lc-anchors].
 
 *Methods.*
 Inspired by bd-anchors, we introduce the /smallest unique substring/ or SUS-anchor:
-Given a window, this considers all suffixes that do not occur as a substring
+given a window, this considers all suffixes that do not occur as a substring
 elsewhere in the window. It then samples the start position of the smallest suffix according to the
 new /anti-lexicographic/ order that minimizes the first character and maximizes
 the remaining characters.
@@ -43,27 +57,38 @@ SUS-anchors of a string.
 *Results.*
 For alphabet size $\sigma=4$ and $k=1$, the anti-lexicographic SUS-anchor empirically has density
 $<1\%$ away from the density lower bound,
-significantly improving over bd-anchors that are often $>15\%$ above it.
+significantly improving over both bd-anchors that are often $>15\%$ above it and
+all other minimizer schemes that have $>6\%$ overhead it for $w\leq 32$.
 For alphabet size $\sigma=2$, the density is at most $10\%$ above the lower
-bound, which again improves over the $>50\%$ overhead of bd-anchors.
-# The good density also extends to $1<k<\log_\sigma w$.
-
-# Additionally, we revisit the /ABB/ scheme and show that the ABB+ variant with tie-breaking achieves
-# good density up to slightly larger $k$, and that a /threshold/-based order
-# also achieves good density (TODO).
+bound, which again improves over the $>50\%$ overhead of bd-anchors and $>15\%$
+overhead of all other schemes for $w\leq 32$.
 
 * Introduction
 Minimizers [cite:@winnowing;@minimizers] are a technique to subsample the
-\(k\)-mers of a string such that consecutive samples are at most $w$ positions apart.
+/\(k\)-mers/ of a string such that consecutive samples are at most $w$ positions apart.
 Minimizer sampling has many applications in bioinformatics.
-In particular, the minimizers of a string are a /sketch/ or compressed (lossy)
-representation,
-allowing for faster processing.
-Specific applications include seeding for read-mapping as done by minimap
-[cite:@minimap], the minimizer-space De Bruijn graph
-[cite:@mdbg], text-indexing using the U-index [cite:@u-index], sketching for
+In particular, a number of data structures exploit this /window guarantee/ and
+use minimizers as a locality-sensitive hash: SSHash
+[cite:@sshash;@sshash2] and \(k\)ache-hash [cite:@kache-hash-preprint]
+use the minimizer of a string as the key in a hash map, while the U-index
+[cite:@u-index] is a text index that considers the minimizers of a pattern.
+In a similar way, the text index of Loukides et al. and Ayad et al.
+[cite:@bdanchors;@lc-anchors] works for patterns of length at least $\ell$ and selects /positions/ in the text (/anchors/) that are at most $w=\ell$
+apart in a locally consistent way, so that each queried pattern of length $\geq
+\ell$ can be found via its anchor. Improving their bidirectional string anchors
+is the main goal of this work, as this directly leads to a smaller text index.
+
+From another point of view, the minimizers of a string are a /sketch/ or
+compressed (lossy) representation, allowing for faster processing.  Specific
+applications include seeding for read-mapping as done by minimap
+[cite:@minimap], the minimizer-space De Bruijn graph [cite:@mdbg], sketching for
 Jaccard similarity in mashmap [cite:@mashmap], host depletion in Deacon
 [cite:@deacon-preprint], and more [cite:@minimizer-sketches].
+In this direction, there are also other schemes such as syncmers
+[cite:@syncmers] and universal hitting sets
+[cite:@docks-wabi;@docks;@improved-minimizers]. In these schemes, each \(k\)-mer
+is sampled independently from its context, which may loosen the window guarantee
+and does not directly give a suitable key or anchor for each window.
 
 *Recent work.*
 There is a long line of active work on minimizers.
@@ -79,8 +104,8 @@ Shur et al. recently introduced
 =10= (after projecting to a binary alphabet) for which the next occurrence of =10= is as far ahead as possible.
 Spacers improve the density of the ABB+ scheme we introduce here, and are
 especially good when $w$ is large.
-For particularly small parameters $(\sigma,k)=(2,\leq 6)$ and $(\sigma,k)=(4,
-2)$, exactly optimal /minimizer/ schemes are given by the search algorithm OptMini [cite:@optmini] and
+For particularly small parameters $(\sigma,k)=(2,\leq 6)$ and $(\sigma,k)=(4, 2)$,
+exactly optimal /minimizer/ schemes are given by the search algorithm OptMini [cite:@optmini] and
 analysed theoretically by Shur [cite:@on-minimizers-of-minimum-density].
 
 This raises the question: *can we find near-optimal /sampling/ schemes for small $k$, and in
@@ -106,35 +131,41 @@ but this restriction does not apply to /sampling schemes/, which have more
 freedom because they are not required to first hash all \(k\)-mers.
 In particular, /selection schemes/ with $k=1$ simply sample a single /position/
 based on a window of length $w=\ell$.
+The main reason that selection schemes can achieve better density than
+sampling schemes is that for a fixed sized window, they can also sample the last
+$k-1$ positions, and thus achieve a greater distance between consecutive samples.
 Bidirectional string anchors (bd-anchors) are one such selection scheme
 [cite:@bdanchors]. These sample the start position of the
 smallest /rotation/ of a window and achieve a density of $O(1/w)$.
-For large $w$ and alphabet size $\sigma=4$, bd-anchors have a density around $20\%$ above the lower bound. Our goal is
-to reduce this to $0\%$ overhead.
+For large $w$ and alphabet size $\sigma=4$, bd-anchors have a density around
+$20\%$ above the lower bound. Our goal is to reduce this to as close to $0\%$
+overhead as possible.
 
 *Contributions.*
 In this paper, we introduce SUS-anchors, short for /smallest unique substring/ anchors.
 As the name implies, given a window, these sample the start position of the
-smallest substring that does not occur a second time. This is equivalent (after
-reversing the order of the alphabet) to finding the /maximal suffix/ of each window. 
-Specifically:
-- We introduce the concept of /character-based orders/ that generalizes e.g. the
-  lexicographic, alternating [cite:@minimizers], and ABB
-  [cite:@minimally-overlapping-words] orders.
-- We then introduce two new orders: the /ABB+/ and /anti-lexicographic/ order.
+smallest substring that does not occur a second time. The /lexicographic/
+SUS-anchor is equivalent (after reversing the order of the alphabet) to the
+the /maximal suffix/ of each window. 
+Our main results are as follows:
+- We experimentally show that SUS-anchors with the anti-lexicographic order (see
+  below) have density within
+  $1\%$ of optimal for $\sigma=4$ and any $w$.
 - We give an $O(n)$ time and $O(\ell)$ space sliding-window algorithm to compute the
   SUS-anchors of a string of length $n$ that is based on the /monotone-queue/
   approach [cite:@simd-minimizers].
-- We experimentally show that SUS-anchors with the anti-lexicographic order have density within
-  $1\%$ of optimal for $\sigma=4$ and any $w$.
-# - Lastly, we show that the threshold order achieves good density TODO.
-# TODO: Mention threshold
+
+Smaller contributions that are of possible independent interest are:
+- /character-based orders/ that generalize e.g. the
+  lexicographic, alternating [cite:@minimizers], and ABB
+  [cite:@minimally-overlapping-words] order; and
+- two new character-based orders: the /ABB+/ and /anti-lexicographic/ order.
 
 Parts of these results have been previously introduced in the
 author's PhD thesis [cite:@thesis].
 
 * Preliminaries
-** Minimizers and sampling schemes
+** Minimizer, sampling, and selection schemes
 For a more in-depth introduction to minimizers, we refer the reader
 to the survey by Zheng et al. [cite:@minimizer-sketches],
 the mod-minimizer paper
@@ -160,11 +191,15 @@ Consecutive sampled positions differ by at most $w$, and
 a sampling scheme is /forward/ when the
 sampled position in $T$ never decreases when sliding the window forward.
 
-Often considered are /minimizer schemes/ [cite:@winnowing;@minimizers], which are forward sampling schemes that sample the start
-position of the smallest \(k\)-mer (according to some order given by a hash function) starting in the window.
+Often considered are /minimizer schemes/ [cite:@winnowing;@minimizers], which are forward sampling schemes that sample (the 
+position of) the smallest \(k\)-mer in the window according to some order as given by a hash function.
 
+*Selection schemes.*
 In this paper, we are particularly interested in /selection/ schemes, which are
-sampling schemes with $k=1$ [cite:@small-uhs].
+sampling schemes with $k=1$ [cite:@small-uhs]. In particular, these select a
+/position/ rather than /\(k\)-mer/ in each window. Given a fixed window
+(context) of $\ell$ characters, the $w=\ell$ selection scheme has greater
+freedom than an $w=\ell-k+1$ sampling scheme, and thus can achieve lower density.
 
 *Density.*
 The /particular density/ of a sampling scheme is the fraction of positions that
@@ -210,8 +245,8 @@ A drawback of bd-anchors is that they are not forward: the window =ZABAAC= has
 =AAC...= as smallest rotation, while the shifted window =ABAACA= has =AAB...= as
 smallest rotation. After further shifting to =BAACAY=, the smallest rotation is =AAC...=
 again: the =AB= prefix caused the selected position to jump around.
-To ensure the density[fn::Note that even though typically $\ell=w+k-1=w$, we will $w$ for
-the density and $\ell$ for the length of the window.] is in $O(1/w)$,
+To ensure the density[fn::Note that even though typically $\ell=w+k-1=w$, we
+will use $w$ for the density and $\ell$ for the length of the window.] is in $O(1/w)$,
 /reduced/ bd-anchors [cite:@bdanchors] avoid sampling the last $r=C\lceil \log_\sigma \ell\rceil$
 positions, where $C=4$ in theory but in practice $C=3$ or less
 suffices.
@@ -226,7 +261,15 @@ structure of Kociumaka [cite:@minimal-suffix-cpm16],
 but this is mostly of theoretical interest only since it requires $O(n)$
 words of space for e.g. a suffix array. 
 Theorem 3 of [cite:@bdanchors] gives an $O(n)$ time and $O(\ell)$ space
-algorithm by using Kociumaka's method on overlapping chunks of size e.g. $2\ell$.
+algorithm when the alphabet size is constant ($\sigma = O(1)$) by using Kociumaka's method on overlapping chunks of size e.g. $2\ell$.
+A practical linear time algorithm to compute reduced bd-anchors with $r=\lceil
+4\log_\sigma w\rceil$ is given by [cite:@lc-anchors]. This works by first
+computing the lexicographic minimizers of size $k=r$ and only comparing
+the corresponding rotations in case of ties. Additionally, the /randomized/
+reduced bd-anchor is introduced that mimics the random minimizer: it considers
+the smallest \(r\)-mer in a window under a pseudo-random order and breaks ties
+by preferring the lexicographically smallest rotation. In practice, the density
+of randomized reduced bd-anchors is indistinguishable from the density of random minimizers.
 
 ** Maximal suffixes
 Separate from the literature on minimizers, there is a line of work on
@@ -277,8 +320,13 @@ $O_0$, and for $i>0$ it uses the order
 $$1=_{O_i}2=_{O_i}\dots=_{O_i}\sigma-1 <_{O_i} 0,$$
 so that any string like =ABBBB...= or =AXYZDEF...= is minimal.
 This scheme has the nice property that occurrences of small strings starting in
-=A= and not containing further =A='s are disjoint [cite:@non-overlapping-codes]. *Vigemers* [cite:@vigemers] are also a character-based order, where $O_i$ is the
+=A= and not containing further =A='s are disjoint [cite:@non-overlapping-codes].
+(The concept of sets of minimally overlapping strings has been
+further explored in [cite:@minimally-overlapping-words], but these do not form a
+character-based order and do not directly work with variable-length strings.)
+*Vigemers* [cite:@vigemers] are also a character-based order, where $O_i$ is the
 order after xor'ing by a character $\gamma_i$.
+
 
 A drawback of the ABB order is that it throws away some information: for example,
 over the normal alphabet, =AB= and =AC= are considered equal. Thus, we also consider a version with tiebreaking, /ABB+/:
@@ -295,7 +343,7 @@ The following scheme is more practical.
 The /anti-lexicographic order/ uses the lexicographic order for $O_0$, and
 /reverse/ lexicographic order for $O_i$ for $i>0$.
 #+end_newdefinition
-In this order, the smallest alphabetic string is =AZZZZ...=.
+In this order, the smallest string is =AZZZZ...=.
 
   
 * Smallest unique substring anchors
@@ -329,12 +377,33 @@ is the smallest substring $\sus(W)=W[i\dots j)$ that does not occur elsewhere in
 Then $W[i\dots \ell)$ is the smallest unique /suffix/, and the SUS-anchor is $i$.
 #+end_newdefinition
 
+We note that for the purposes of the definition, it would be sufficient to
+only consider the starting position of smallest unique /suffix/.
+Nevertheless, we prefer to consider the smallest unique /substring/ since it has properties that are similar to
+the \(k\)-mers sampled by minimizer schemes. For example, both
+optimal-density minimizer schemes and optimal-density SUS-anchors would always
+sample non-overlapping \(k\)-mers and SUS-anchors respectively.
+
+*Variants.* Alongside the lexicographic variant,
+the SUS-anchor allows variants based on character-based orders.
+Specifically, we consider SUS-anchors with the anti-lexicographic order.
+These variants work just like the lexicographic version: simply consider the set of
+suffixes that do not occur as a substring elsewhere, and then take the
+smallest of these using the chosen character-based order.
+
 *MS-anchor.*
-It turns out that the concept of /smallest unique suffix/ is exactly equivalent
+It turns out that the concept of /lexicographic smallest unique suffix/ is exactly equivalent
 to that of the /maximal suffix/
 [cite:@factorizing-words;@minimal-maximal-suffix-tcs] after reversing the order of the alphabet:
 in both cases, we look for the extremal suffix where longer suffixes should be
 preferred over shorter ones.
+More generally, for any character-based order $O$, the SUS-anchor under $O$
+starts at the same position as the maximal suffix when suffixes are compared by
+the reverse of $O$.
+Whereas the SUS-anchor explicitly requires considering a unique suffix, this is
+handled implicitly by the maximal suffix: when one suffix is a prefix of a
+longer suffix, the longer suffix is automatically the larger one (regardless of
+the chosen character-based order $O$).
 
 #+begin_newdefinition MS-anchor
 Given a window $W$ of length $w=\ell$,
@@ -370,7 +439,7 @@ appending $W'[\ell-1]$ to these two suffixes will not change their relative orde
 Since $W[i\dots)$ is unique in $W$, $W'[i-1\dots)$ is also unique in $W'$,
 and so $W'[i-1\dots)$ is a smaller unique suffix than $W'[i'\dots)$ for all $i'<i-1$.
 Thus, $\sus(W')$ cannot start at an index less than $i-1$, and
-thus the sus-anchor is forward.
+thus the SUS-anchor is forward.
 #+end_proof
 
 #+begin_mytheorem Charged context
@@ -400,24 +469,31 @@ SUS $W'[i'\dots j')$ can only end in $j'=\ell$, as required.
 #+end_proof
 
 ** Computing SUS-anchors
-Via the equivalence to maximal suffixes, we can use the theoretical algorithm of
+Via the equivalence to maximal suffixes, we can compute all lexicographic
+SUS-anchors using the theoretical algorithm of
 [cite:@minimal-maximal-suffix-tcs] that requires $O(n)$ space, $O(n)$
 preprocessing, and supports $O(1)$ queries for substring suffix-maximum.
-To reduce the space usage, we can use the same trick as for bd-anchors, and run
-it on chunks of size $2\ell$ that overlap by $\ell-1$, so that the total space
-usage is $O(\ell)$ and the total time remains $O(n)$.
+When the alphabet has constant size, we can use the same trick as for bd-anchors
+to reduce the space usage:
+Run the construction algorithm on chunks of size $2\ell$ that overlap by
+$\ell-1$, so that the total space usage is $O(\ell)$ and the total time remains
+$O(n)$.
 
-#+begin_mytheorem 
-The SUS-anchors of a string of length $n$ can be computed in $O(n)$ time and
-$O(\ell)$ space.
-#+end_mytheorem
-
-Below, we present two direct methods for computing the /maximal/ suffix, as this
-slightly simplifies the notation and matches [cite:@minimal-maximal-suffix-tcs].
+Below, we present two /direct/ methods for computing the /maximal suffix/ of each
+window of a string, as this
+slightly simplifies the notation (compared to computing SUS-anchors, where we
+"manually" have to ensure uniqueness of the suffix)
+and matches [cite:@minimal-maximal-suffix-tcs].
 It trivially extends to other character-based orders such as the anti-lexicographic order.
 
+#+begin_mytheorem 
+For any character-based order $O$, the SUS-anchors of a string of length $n$
+over a constant-size alphabet can be computed in $O(n)$ time and $O(\ell)$
+space.
+#+end_mytheorem
+
 *A streaming algorithm.*
-We now directly adapt the algorithm of [cite:@minimal-maximal-suffix-tcs] to our streaming setting.
+We now adapt the algorithm of [cite:@minimal-maximal-suffix-tcs] to our streaming setting.
 Suppose that we have so far processed $T[0\dots t)$.
 The algorithm maintains a doubly linked list $A=(a_0, a_1, a_2, \dots)$ of /active/ text positions $a_i$
 such that $T[a_i\dots t) > T[j\dots t)$ for all $a_i < j < t$.
@@ -429,19 +505,19 @@ position that can modify the middle of the list.
 
 As we shift the window and increment $t$ to $t'=t+1$, we remove $a_0$ when $a_0 < t'-\ell$.
 After appending $T[t]$, we get a new suffix $T[t\dots
-t')$, and we have to update $A$.
-- *Repeatedly pop $A$.* We remove the last element $\last(A)=A_{|A|-1}$ from $A$ as long as $T[t\dots t') > T[\last(A)\dots t')$.
-- *Add event.* Then, if $A$ is not empty and $T[t\dots) > T[\last(A)\dots)$
+t')$. We update $A$ before pushing the new element $t$.
+- *Repeatedly pop $A$.* We remove the last element $\last(A)=A_{|A|-1}$ from $A$
+  as long as $T[\last(A)\dots t') < T[t\dots t')$.
+- *Add event.* Then, if $A$ is not empty and $T[\last(A)\dots) < T[t\dots)$
   (taking into account upcoming characters), compute $\lambda=\lcp(T[t\dots),
   T[\last(A)\dots))$ and add the event "check if we should drop the element
-  preceding $t$ from $A$" to the event queue for
-  position $t+\lambda+1$.
-- *Push $t$.* Then, push $t$ to $A$ and increment $t'$.
+  preceding $t$ from $A$" to
+  the event queue for position $t+\lambda+1$.
+- *Push $t$.* Then, push $t$ to $A$ and increment $t$ to $t' = t+1$.
 - *Handle event.* As soon as $t''$ reaches position $t+\lambda+1$, we check if
   $t$ is still in $A$, and if so, if it has now become larger than its
   preceding element. Then repeatedly remove the preceding element as long as $T[t\dots t'')$ is
-  larger, and end when either there is no preceding element, or when $T[a_i\dots
-  t'') > T[t\dots t'')$. In that case, again check if the order will flip in the
+  larger, and end when either there is no preceding element, or when $T[a_i\dots t'') > T[t\dots t'')$. In that case, again check if the order will flip in the
   future, and if so, add a new event to the event queue.
 
 *Practical considerations.*
@@ -461,11 +537,13 @@ For each $a\in A$, we now additionally store the text position $x_a$ where $a$ b
 start of the maximal suffix of the window) when the
 character $T[x_a]$ enters the sliding window.
 When comparing $t$ to $\last(A)$, there are three cases. 
-1. $T[t\dots) < T[\last(A)\dots)$, in which case we push $t$ and note that it
+1. $A$ is empty, in which case we push $t$ and set $x_t = t$.
+2. $T[\last(A)\dots) > T[t\dots)$, in which case we push $t$ and note that it
    becomes hot when $\last(A)$ falls out of the window, i.e., $x_t = \last(A)+\ell$.
-2. $T[t\dots) > T[\last(A)\dots)$: $t$ "takes over" $\last(A)$ when character
+3. $T[\last(A)\dots) < T[t\dots)$: $t$ "takes over" $\last(A)$ when character
    $t+\lambda$ enters the window, where $\lambda = \lcp(T[t\dots), T[\last(A)\dots))$.
-   - If $\last(A)$ is already hot by that time ($x_{\last(A)} < t+\lambda$), simply push $t$.
+   - If $\last(A)$ is already hot by that time ($x_{\last(A)} < t+\lambda$),
+     simply push $t$ with $x_t = t + \lambda$.
    - If not, $\last(A)$ will never be hot, and we pop it and (repeatedly) compare $t$ to the new $\last(A)$.
 Once this process finishes, the first element of $A$ indicates the maximum suffix of the
 current window. We then increment $t$ to the next text position and check
@@ -517,25 +595,22 @@ maximal suffix). In that case, we pop $a_0$.
 # #+end_export
 
 
-# ** TODO Theoretical density
-
-# - Lemma: an optimal minimizer scheme /never/ selects two overlapping k-mers!
-#   - How does this generalize to selection schemes? Intuition: never select two
-#     overlapping strings either
-
-
-* Results
+* TODO Results
 
 #+name: selection-s4
-#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, $k=1$, and varying $w$. The lower bound is shown in red. Bd-anchors (lime/green) are shown for various $r$, and SUS-anchors are shown with both the lexicographic (purple) and anti-lexicographic order (blue).  (The other orders are worse than anti-lexicographic.) On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^7$. For large $\sigma$ and $w$, there remains some variance in the estimated density.
+#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, $k=1$, and varying $w$. The lower bound is shown in red. Bd-anchors (lime/green) are shown for various $r$, and SUS-anchors are shown with both the lexicographic (purple) and anti-lexicographic order (blue). (The other orders are worse than anti-lexicographic.) On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^7$. For large $\sigma$ and $w$, there remains some variance in the estimated density, occasionally leading to estimates below the lower bound.
 #+attr_html: :class inset large
 #+attr_latex: :width \linewidth :placement [t]
 [[file:./plots/sus-anchors-1.svg]]
 
 
 We compare bd-anchors with various $r$ and sus-anchors with various underlying
-orderings in [[selection-s4]]. We see that as $w$ grows, so does the optimal value of
-$r$.
+orderings in [[selection-s4]].
+The true density is approximated by computing the /particular density/ on a
+uniform random string of $10^7$ characters over alphabets of size $2$, $4$, and $32$.
+A new independent random string is used for each data point.
+
+We see that as $w$ grows, so does the optimal value of $r$.
 Still, even with the best choice of $r$, bd-anchors have density over $50\%$
 ($\sigma=2$), $15\%$ ($\sigma=4$), or $2.5\%$ ($\sigma=32$)
 above the lower bound for all but the smallest $w$.
@@ -547,39 +622,73 @@ Anti-lexicographic SUS-anchors are much better, and get surprisingly close to
 the lower bound. They are away from the lower bound by less than $10\%$ for
 $\sigma=2$ and less than $1\%$ for $\sigma=4$ and $\sigma=32$.
 
+*Intuition on SUS-anchor density.*
+Low-density schemes sample positions that are as far apart as possible.
+When sampling \(k\)-mers, this means that ideally each \(k\)-mer does not overlap
+with the preceding or succeeding sampled \(k\)-mer, or else as little as possible.[fn::In particular, a minimizer scheme that has density exactly equal to the lower
+bound [cite:@sampling-lower-bound] must never sample overlapping \(k\)-mers: 
+The lower bound uses that at least two \(k\)-mers must be sampled on each
+primitive cycle of $w+k$ characters, and if two overlapping \(k\)-mers are sampled,
+there must be at least a third sampled \(k\)-mer.
+In the $k=1$ setting we get the same for SUS-anchors: they can only have optimal
+density if SUS-anchors never overlap.]
+Thus, shorter SUS-anchors are beneficial since they are both less likely to
+overlap and can be the anchor for more consecutive \(k\)-mers.
+
+Taken together, this means that short unique substrings should work well.
+In particular, the anti-lexicographic order is better than the lexicographic
+order since it avoids sampling overlapping substrings: in the lexicographic
+order, consecutive substrings like =AAAB= and =AAB= are both small, causing
+overlapping samples when a window starts with such a string.
+The anti-lexicographic order prevents this by explicitly preferring a large
+suffix after removing the first character.
+A weakness of the ABB scheme is that it needs to sample
+a relatively long substring before it becomes unique: in a window like
+=ABDDCBA=, 6 of the 7 characters (=ABDDCB=) are part of the ABB-SUS, so that
+this sample can only cover a few windows. The anti-lexicographic SUS is simply
+=AB= instead.
+
+This also explains the effect of the alphabet size: for $\sigma=2$, on average a
+substring needs to have length $\log_2 w$ before it becomes unique. Thus, the
+SUS-anchors are longer and more likely to overlap.
+An example of a case where anti-lexicographic SUS-anchors still overlap is given
+by the consecutive windows =ABABABB= and =BABABBB=, with anti-lexicographic
+SUS-anchors =ABABA= and =ABA=. For alphabet size $\sigma=2$, such cases are
+somewhat common.
+For $\sigma=32$ on the other hand, most characters in the window are unique (for
+$w\leq 32$) and most anchors will consist of only one or two characters (e.g.
+just =A= or =AZ=) and thus rarely overlap. 
+
+
 # TODO: scaling by k for lexicographic variants
 
-* Discussion
+* Conclusion
 We introduced anti-lexicographic SUS-anchors, gave a linear-time algorithm to
 compute them, and showed that they empirically get to within $1\%$ of the density lower bound
 for $\sigma=4$.
 
 *Future work.*
-On a practical level, future work is needed to improve the current
-monotone-queue-based algorithm to a rescan-like approach [cite:@simd-minimizers]
-or even a branchless variant that could be implemented in parallel using SIMD.
-
-It would also be interesting to use SUS-anchors in combination with the
-mod-minimizer [cite:@modmini], especially in order to remove the mod-minimizer's $r$ parameter,
-but this has not worked out so far.
-
-Further work is needed to prove that, for example, anti-lexicographic SUS anchors have a density
-of $2/(w+1) + o(1/w)$.
-Given how close to optimal these schemes already are, the fact that exactly optimal schemes /do/
-exist for small $w$ [cite:@sampling-lower-bound], as well as manually constructed schemes that
-are exactly optimal for $\sigma=2$ and $w\leq 12$, the question remains whether
+More work is needed to /prove/ that, for example, anti-lexicographic SUS anchors
+have a close-to-optimal density of $2/(w+1) + o(1/w)$.
+Given how close to optimal these schemes already are, the fact that /exactly/
+optimal schemes are known to exist for small $w$ [cite:@sampling-lower-bound],
+including manually constructed for $\sigma=2$ and $w\leq 12$, the question remains whether
 "clean", constant space schemes can be developed for generic $w$. The /spacers/
 of [cite:@10-minimizers] are similar to our own ongoing work, and provide a
 first step in this direction.
 
-# In another direction, GreedyMini has shown that close-to-optimal density is
-# achievable for $k\approx w$, and our new character-based orders show good
-# density up to approximately (TODO) $w/6$. ILP results suggest that the lower
-# bound is not attainable for $k\approx w/3$ [cite:@sampling-lower-bound], and it
-# is an open question how close one can get (as $w\to\infty$ and/or $\sigma\to\infty$).
-# Relatedly, non-minimizer sampling schemes are required to achieve good density for
-# small $k$, but this is not needed for larger $k$. Yet the question remains
-# whether sampling schemes could give (small) improvements for larger $k$.
+On a practical level, further work is needed to improve the current
+monotone-queue-based algorithm to a rescan-like approach [cite:@simd-minimizers]
+or even a branchless variant that could be implemented in parallel using SIMD.
+
+It would also be interesting to use SUS-anchors in combination with the
+mod-minimizer [cite:@modmini].
+In particular, the mod-minimizer requires a lower bound $r = \Theta(\log_\sigma w)$ on the
+length of the chosen minimizers (typically around $4$ in practice), and it would be
+interesting to see if "mod-SUS-anchors" can work without such a restriction.
+More generally, SUS-anchors can be extended to $k>1$ by simply excluding the last
+$k-1$ suffixes, and preliminary results show that this gives good density up to
+$k \approx \log_\sigma w$.
 
 Lastly, the SUS-anchor is a forward scheme. It is known that non-forward schemes
 can be (at least) slightly better at times and break the forward lower bound,
