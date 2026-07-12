@@ -55,13 +55,14 @@ We give a linear-time and $O(w)$ space streaming algorithm to compute all
 SUS-anchors of a string.
 
 *Results.*
-For alphabet size $\sigma=4$ and $k=1$, the anti-lexicographic SUS-anchor empirically has density
-$<1\%$ away from the density lower bound,
-significantly improving over both bd-anchors that are often $>15\%$ above it and
-all other minimizer schemes that have $>6\%$ overhead it for $w\leq 32$.
+For alphabet size $\sigma=4$ and $k=1$, the parameter-free anti-lexicographic
+SUS-anchor empirically has density $<1\%$ away from the density lower bound and
+is at least $4\times$ closer to the lower bound than all other tested schemes.
 For alphabet size $\sigma=2$, the density is at most $10\%$ above the lower
-bound, which again improves over the $>50\%$ overhead of bd-anchors and $>15\%$
-overhead of all other schemes for $w\leq 32$.
+bound, which still improves $2\times$ to $3\times$ the overhead of the random
+minimizer and is consistently better than the greedy minimizer.
+Likewise, the anti-lexicographic minimizer performs better than all other schemes
+apart from the greedy minimizer.
 
 * Introduction
 Minimizers [cite:@winnowing;@minimizers] are a technique to subsample the
@@ -150,9 +151,9 @@ the /maximal suffix/ of each window.
 Our main results are as follows:
 - We experimentally show that SUS-anchors with the anti-lexicographic order (see
   below) have density within
-  $1\%$ of optimal for $\sigma=4$ and any $w$.
+  $1\%$ of optimal for $\sigma=4$ and any practical value of $w$.
 - We give an $O(n)$ time and $O(\ell)$ space sliding-window algorithm to compute the
-  SUS-anchors of a string of length $n$ that is based on the /monotone-queue/
+  SUS-anchors of a string of length $n$ that is inspired by the /monotone-queue/
   approach [cite:@simd-minimizers].
 
 Smaller contributions that are of possible independent interest are:
@@ -252,7 +253,7 @@ positions, where $C=4$ in theory but in practice $C=3$ or less
 suffices.
 Given the choice of $r>\log_\sigma \ell$, in most windows of a random string
 the bd-anchor is the same as the smallest lexicographic \((r+1)\)-mer.
-Note though that reduced bd-anchors are still not forward.
+Note that reduced bd-anchors are still not forward.
 
 In practice, bd-anchors can be computed in $O(n\ell)$ time by using Booth's linear-time
 algorithm for the lexicographically minimal rotation [cite:@smallest-rotation].
@@ -323,8 +324,7 @@ This scheme has the nice property that occurrences of small strings starting in
 =A= and not containing further =A='s are disjoint [cite:@non-overlapping-codes].
 (The concept of sets of minimally overlapping strings has been
 further explored in [cite:@minimally-overlapping-words], but these do not form a
-character-based order and do not directly work with variable-length strings.)
-*Vigemers* [cite:@vigemers] are also a character-based order, where $O_i$ is the
+character-based order and do not directly work with variable-length strings.) *Vigemers* [cite:@vigemers] are also a character-based order, where $O_i$ is the
 order after xor'ing by a character $\gamma_i$.
 
 
@@ -334,7 +334,6 @@ over the normal alphabet, =AB= and =AC= are considered equal. Thus, we also cons
 The /ABB+/ order first compares two strings via the ABB order, and, in case of
 a tie, compares them via the plain lexicographic order.
 #+end_newdefinition
-# [TODO: Break ties using antilexicographic?]
 Note that this is only useful when comparing strings (\(k\)-mers) of equal
 length, and that the ABB+ order is not itself a character-based order.
 
@@ -545,7 +544,7 @@ When comparing $t$ to $\last(A)$, there are three cases.
    $t+\lambda$ enters the window, where $\lambda = \lcp(T[t\dots), T[\last(A)\dots))$.
    - If $\last(A)$ is already hot by that time ($x_{\last(A)} < t+\lambda$),
      push $t$ with $x_t = \min(t + \lambda, a+\ell)$.
-   - If not, $\last(A)$ will never be hot, and we pop it and (repeatedly) compare $t$ to the new $\last(A)$.
+   - If not, $\last(A)$ will never be hot. We pop it and (repeatedly) compare $t$ to $\last(A)$.
 Once this process finishes, the first element of $A$ indicates the maximum suffix of the
 current window. We then increment $t$ to the next text position and check
 whether we reached the position $x_{a_1}$ where the next element of $A$ becomes
@@ -592,7 +591,7 @@ maximal suffix). In that case, we pop $a_0$.
         %% \EndIf
         \If{$p + \ell - 1 = t \textbf{ or }\bigl(|A| > 1\textbf{ and }A.\textsf{index}(1).x \le t+1\bigr)$}
             \State $A.\mathsf{pop\_front()}$
-            \Comment{Pop from $A$ if window ends or it's overtaken.}
+            \Comment{Pop from $A$ if window ends or next element becomes hot.}
         \EndIf
     \EndFor
     \State \Return $S$
@@ -602,32 +601,74 @@ maximal suffix). In that case, we pop $a_0$.
 #+end_export
 
 
-* TODO Results
+* Results
 
+# ./py/sus-anchors-1.py
 #+name: selection-s4
-#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, $k=1$, and varying $w$. The lower bound is shown in red. Bd-anchors (lime/green) are shown for various $r$, and SUS-anchors are shown with both the lexicographic (purple) and anti-lexicographic order (blue). (The other orders are worse than anti-lexicographic.) On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^7$. For large $\sigma$ and $w$, there remains some variance in the estimated density, occasionally leading to estimates below the lower bound.
+#+caption: Comparison of the density factor (the density multiplied by $w+1$) of selection schemes for $\sigma\in\{2,4,32\}$, and varying $w$. The lower bound is shown in red. For each scheme (minimizers, bd-anchors [cite:@bdanchors], double decycling [cite:@minimum-decycling-set], greedy minimizer [cite:@greedymini]), the best parameter $r$ or $k$ is chosen for each $w$ (and $w$ is decreased accordingly). Changes to the value of $r$ or $k$ are annotated. On the right of each plot, we show scaling for large $w$. Each data point is the particular density on an independent random string of length $10^7$. For large $\sigma$ and $w$, there remains some variance in the estimated density, occasionally leading to estimates below the lower bound. Sus-anchors are consistently better than minimizers, and the anti-lexicographic order is better than the random order which itself is better than the lexicographic order.
 #+attr_html: :class inset large
 #+attr_latex: :width \linewidth :placement [t]
 [[file:./plots/sus-anchors-1.svg]]
 
-
-We compare bd-anchors with various $r$ and sus-anchors with various underlying
-orderings in [[selection-s4]].
+In [[selection-s4]], we compare the density of SUS-anchors against the bd-anchors
+selection scheme as well as minimizer schemes. For the minimizer schemes, we choose the $k$ that
+minimizes the density, and we adjust $w$ to $w'=w+1-k$ accordingly to preserve
+the overall window length $\ell = w'+k-1$.
 The true density is approximated by computing the /particular density/ on a
 uniform random string of $10^7$ characters over alphabets of size $2$, $4$, and $32$.
 A new independent random string is used for each data point.
 
-We see that as $w$ grows, so does the optimal value of $r$.
-Still, even with the best choice of $r$, bd-anchors have density over $50\%$
-($\sigma=2$), $15\%$ ($\sigma=4$), or $2.5\%$ ($\sigma=32$)
-above the lower bound for all but the smallest $w$.
-# TODO: update 2.5%
+Lexicographic minimizers are roughly on-par with bd-anchors, and lexicographic
+SUS-anchors are slightly better but still far from optimal.
+Double decycling [cite:@minimum-decycling-set] and the random minimizer appear to converge to density factor
+$2$ as $w\to\infty$ and have similar density. The greedy minimizer
+[cite:@greedymini] only performs well for small $w$ and $\sigma$, as it requires
+precomputed orders that are not always available. (We did not implement
+the logic to extrapolate from smaller orders.) The greedy minimizer is the
+only scheme that improves over anti-lexicographic minimizers for $\sigma=2$ and
+$\sigma=4$ (excluding very small $w\leq 6$).
 
-Lexicographic SUS-anchors perform consistently slightly better than the best
-bd-anchor for all $\sigma$ and not too small $w$.
-Anti-lexicographic SUS-anchors are much better, and get surprisingly close to
-the lower bound. They are away from the lower bound by less than $10\%$ for
+The anti-lexicographic minimizer consistently improves over
+the random minimizer and double decycling. The anti-lexicographic
+SUS-anchors consistently have the best density of all, while also being parameter-free.
+They get surprisingly close to the lower bound: they are away from the lower bound by less than $10\%$ for
 $\sigma=2$ and less than $1\%$ for $\sigma=4$ and $\sigma=32$.
+For $\sigma=32$, the anti-lexicographic sus-anchor is indistinguishable from
+optimal for all $w\leq 64$, and improves over the random minimizer that is
+$>1\%$ away from optimal here.
+
+# cargo run -r --example sus-evals
+#+name: table
+#+caption: Density factor and throughput of various selection schemes for $w=31$ (left half) and $w=63$ (right half) on a random string and on chromosome 19. For minimizer schemes, the value of $k$ that minimizes the density on chromosome 19 is chosen. Schemes are sorted by decreasing density.
+| Scheme             | $k$ | Density (random) | Density (chrm 19) | Throughput (MB/s) | $k$ | Density (random) | Density (chrm 19) | Throughput |
+| Bd-anchor          |   2 |             2.59 |              3.04 |               2.0 |   3 |             2.53 |              3.36 |        1.0 |
+| Greedy minimizer   |   4 |             3.62 |              2.75 |              44.9 |   5 |             3.68 |              2.86 |       43.9 |
+| Lex minimizer      |   4 |             2.47 |              2.91 |              35.3 |   5 |             2.42 |              3.16 |       35.4 |
+| Lex SUS-anchor     |   - |             2.33 |              2.66 |              19.0 |   - |             2.34 |              2.96 |       18.4 |
+| Random minimizer   |   4 |             2.18 |              2.27 |              40.3 |   4 |             2.08 |              2.19 |       40.7 |
+| Double decycling   |   5 |             2.18 |              2.23 |              13.6 |   5 |             2.10 |              2.13 |       13.7 |
+| Antilex minimizer  |   3 |             2.07 |              2.29 |              36.2 |   4 |             2.05 |              2.42 |       35.0 |
+| Antilex SUS-anchor |   - |             2.01 |              2.18 |              17.9 |   - |             2.01 |              2.33 |       17.6 |
+
+*Density and throughput on chromosome 19.*
+In [[table]], we compare the density on a random string with the particular density
+on chromosome 19 of CHM13 [cite:@chm13v2], which has length $61.7$ Mbp.
+Most schemes have slightly worse density on chromosome 19 than on real data.
+The greedy minimizer has worse than expected performance in both
+cases, which is likely due to the fact that our parameters are large and require
+extrapolating from smaller cases.
+The anti-lexicographic SUS-anchor has the best performance on random data, but
+on chromosome 19, it is outperformed by the random minimizer and double decyling [cite:@minimum-decycling-set]
+for $w=63$.
+
+Additionally, [[table]] shows the obtained
+throughput of evaluating each scheme on an Intel i7-10750H CPU running at 2.6 GHz. but we note that the implementations have not been optimized for speed.
+In particular, for bd-anchor we use a very naive $O(nw^2)$ implementation. Most
+other methods are $O(n)$ in practice, as can be seen from the fact that they do
+not slow down from $w=31$ to $w=63$.
+SIMD-minimizers [cite:@simd-minimizers], an optimized library for computing
+random minimizers, has a throughput over $500$ MB/s, which is more than
+$10\times$ faster than all of the methods shown here.
 
 *Intuition on SUS-anchor density.*
 Low-density schemes sample positions that are as far apart as possible.
@@ -637,8 +678,8 @@ bound [cite:@sampling-lower-bound] must never sample overlapping \(k\)-mers:
 The lower bound uses that at least two \(k\)-mers must be sampled on each
 primitive cycle of $w+k$ characters, and if two overlapping \(k\)-mers are sampled,
 there must be at least a third sampled \(k\)-mer.
-In the $k=1$ setting we get the same for SUS-anchors: they can only have optimal
-density if SUS-anchors never overlap.]
+Similarly, SUS-anchors can only have optimal
+density if they never overlap.]
 Thus, shorter SUS-anchors are beneficial since they are both less likely to
 overlap and can be the anchor for more consecutive \(k\)-mers.
 
@@ -666,13 +707,13 @@ For $\sigma=32$ on the other hand, most characters in the window are unique (for
 $w\leq 32$) and most anchors will consist of only one or two characters (e.g.
 just =A= or =AZ=) and thus rarely overlap. 
 
-
-# TODO: scaling by k for lexicographic variants
-
 * Conclusion
 We introduced anti-lexicographic SUS-anchors, gave a linear-time algorithm to
 compute them, and showed that they empirically get to within $1\%$ of the density lower bound
-for $\sigma=4$.
+for $\sigma=4$. They are consistently the lowest density selection scheme of all
+tested variants, while also being parameter-free. As a second best,
+anti-lexicographic minimizers also perform better than all other schemes apart
+from the greedy minimizer.
 
 *Future work.*
 More work is needed to /prove/ that, for example, anti-lexicographic SUS anchors
