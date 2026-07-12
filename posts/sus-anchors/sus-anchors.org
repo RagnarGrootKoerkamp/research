@@ -297,27 +297,6 @@ The /anti-lexicographic order/ uses the lexicographic order for $O_0$, and
 #+end_newdefinition
 In this order, the smallest alphabetic string is =AZZZZ...=.
 
-# When $\sigma \gg \ell = w+k-1$, all schemes so far reduce to just
-# finding the smallest character. This prevents the otherwise beneficial effect of the
-# ABB scheme that small strings do not occur close to each other.
-# The following order reduces this problem.
-# #+begin_newdefinition Threshold order
-# The /threshold order/ partitions the alphabet $\Sigma$ into a set $S$ of /small/
-# characters of size $|S|\approx\frac 14 |\Sigma|$, and a set $L$ of /large/ characters of size $|L|\approx\frac 34 |\Sigma|$. It then uses (abusing notation) orders $S <_{O_0} L$
-# and $L <_{O_i} S$ for $i>0$.
-# As with ABB+, ties are broken using the plain lexicographic order.
-# #+end_newdefinition
-# # [TODO: Break ties using antilexicographic?]
-
-# Like the ABB scheme, the threshold scheme tries to avoid small overlapping \(k\)-mers:
-# a small \(k\)-mer starts with a small character, followed by as many large
-# characters as possible, thus "pushing" the next small \(k\)-mer as far ahead as possible.
-# To reach completely non-overlapping sampled \(k\)-mers, as required for optimal
-# minimizer schemes, we would like every window to contain a string of the form $SL^{k-1}$.
-# Using $|S| \approx \frac 1{ke} |\Sigma|$ maximizes the probability that such a
-# string occurs in a window, but in practice gives too many windows without any
-# small character and $|S|\approx \frac 14 |\Sigma|$ gives better results.
-
   
 * Smallest unique substring anchors
 *Intuition.*
@@ -362,16 +341,6 @@ Given a window $W$ of length $w=\ell$,
 the /maximal suffix anchor/ or MS-anchor samples the position $i\in[w]$ where the maximal
 suffix $W[i\dots \ell)$ of $W$ starts.
 #+end_newdefinition
-
-*Variants.* Alongside the lexicographic variant,
-the SUS-anchor allows variants based on character-based orders.
-Specifically, we consider SUS-anchors with the anti-lexicographic order.
-# We consider the ABB order, the anti-lexicographic order, and the threshold order.
-# Note that the tiebreaking of the ABB+ order is not needed, as all suffixes have
-# a different length.
-These variants work just like the lexicographic version: simply consider the set of
-suffixes that do not occur as a substring elsewhere, and then take the
-smallest of these using the chosen character-based order.
 
 ** Properties
 We now state some observations and then prove some properties of SUS-anchors.
@@ -429,16 +398,6 @@ Thus, $W[i'+1\dots)$ must be a prefix of $W[i\dots)$, so that the suffix is not
 unique. This means that $W'[i'\dots \ell-1)$ is not unique in $W'$, and thus, the
 SUS $W'[i'\dots j')$ can only end in $j'=\ell$, as required.
 #+end_proof
-
-# #+begin_observation 
-# Given a non-empty string $A$ and empty string $B$, and a character-based order
-# $O$, we have $A>_O B$.
-# As we repeatedly append the same character to both $A$ and $B$, $A>_O B$ remains
-# true as long as $B$ is a prefix of $A$.
-# The next character fixes $\ell = \lcp(A, B)$ and /may/ flip the order /once/,
-# after which it remains the same on pushing more characters.
-# In particular, once $A<_O B$, it will remain smaller.
-# #+end_observation
 
 ** Computing SUS-anchors
 Via the equivalence to maximal suffixes, we can use the theoretical algorithm of
@@ -573,10 +532,6 @@ maximal suffix). In that case, we pop $a_0$.
 #+attr_latex: :width \linewidth :placement [t]
 [[file:./plots/sus-anchors-1.svg]]
 
-# \makebox[\linewidth]{
-# \includesvg[width=1.4\linewidth]{./plots/sus-anchors-1}
-# }
-
 
 We compare bd-anchors with various $r$ and sus-anchors with various underlying
 orderings in [[selection-s4]]. We see that as $w$ grows, so does the optimal value of
@@ -593,26 +548,6 @@ the lower bound. They are away from the lower bound by less than $10\%$ for
 $\sigma=2$ and less than $1\%$ for $\sigma=4$ and $\sigma=32$.
 
 # TODO: scaling by k for lexicographic variants
-
-# - fig2: $\sigma=4$, $w\in\{12, 24, 48\}$
-
-# #+caption: The /anti-lex threshold minimizers/ are near-optimal for $3\leq k \leq 6$, again unlike any other scheme so far.
-# #+attr_html: :class inset
-# [[./plots/9-threshold.svg]]
-
-# *Sampling schemes.*
-# To end, in <fig> we once more compare all sampling schemes so far. We also include a
-# $k>1$ variant of the sus-anchor, that simply picks the smallest unique substring
-# that has length at least $k$. Since the sus-anchor works well for small $k$, we
-# can use $r=1$ for the extended mod-mini version of it. As can be seen, this is
-# nearly optimal exactly in the small-$k$ region where the ABB+ order was lacking.
-# And the mod-version also works well for $k=w+1$ and just above.
-# The ABB+ scheme then picks up around $\log_\sigma(w)$, and remains near-optimal
-# until around $w/6$. From then on, double decycling is best up to $k=w$, after
-# which the mod-minimizer versions work best. Looking at the plot, the biggest
-# headroom is currently for intermediate values of $k$. It is unclear whether
-# this is due to the lower bound not being tight, or because better sampling
-# schemes just have not been found yet.
 
 * Discussion
 We introduced anti-lexicographic SUS-anchors, gave a linear-time algorithm to
