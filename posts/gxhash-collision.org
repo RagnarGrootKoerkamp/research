@@ -1,0 +1,45 @@
+#+title: A seed-independent hash collision in GxHash
+#+filetags: misc
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+# #+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-07-31 Fri>
+
+For a pangenome deduplication tool I'm working on ([[https://github.com/RagnarGrootKoerkamp/pandedup][pandedup]]), I'm using 128-bit
+hashes as "unique" identifiers of substrings.
+
+Sadly, it turns out that =gxhash128= has a hash collision between the two
+strings of length 88 below that only differ in 5 positions, /regardless/ of the value of the seed.
+
+Looking at the strings, this clearly isn't a /random/ collision.  Those could be
+expected when doing $2^{64}$ lookups in a dictionary of $2^{64}$ keys, but my
+data is nowhere near that large.
+
+#+begin_src rust
+use gxhash::gxhash128;
+
+fn main() {
+    //                                                                     *                     ****
+    let a = "GGAGGAAGTCCCCCAGGAGTCCTGGGATGAAGGTTATTCGACTCTCTCAATTCCTCCTGAAATGTTGGCCTCGTACCAGTCTTAAGCA";
+    let b = "GGAGGAAGTCCCCCAGGAGTCCTGGGATGAAGGTTATTCGACTCTCTCAATTCCTCCTGAAAGGTTGGCCTCGTACCAGTCTTACAGC";
+    for _ in 0..1000000 {
+        let seed = rand::random::<i64>();
+
+        let hash_a = gxhash128(a.as_bytes(), seed);
+        let hash_b = gxhash128(b.as_bytes(), seed);
+        eprintln!("A: {a} => {hash_a}");
+        eprintln!("B: {b} => {hash_b}");
+        assert_eq!(hash_a, hash_b); // This passes, even though I don't want it to.
+    }
+}
+#+end_src
+
+If we drop the first character from each, then the hashes do become distinct.
+In general, making similar changes to both strings seems to still give the same
+problem, but not always. For example, changing the =G= at index =3= to a =C=
+/does/ result in different hashes.
+
+Anyway, I shall search for a better hash function.
+#+print_bibliography:
