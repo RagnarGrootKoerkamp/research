@@ -1,0 +1,282 @@
+#+title: NtHash revisited
+#+filetags: @results nthash math
+#+OPTIONS: ^:{}
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2026-08-01 Sat>
+
+$$
+\newcommand{\rot}{\mathsf{rot}}
+\newcommand{\shift}{\mathsf{shift}}
+$$
+
+Previously, I have written on:
+- [[file:nthash.org][Collision-free NtHash-1]], by changing the seeds so that no 64-bit hash
+  collisions occur for $k$ up to 32.
+- [[file:nthash2-collisions.org][Collisions in NtHash2]], where the shorter rotations allow for periods larger
+  than 64 (since the least common multiple of 31 and 33 is much larger), but
+  this still has collisions at $k=65$.
+  - This still has some open questions on why, in practice, there are already
+    structural hash collisions for $k\leq 64$.
+
+Furthermore, Igor Martayan wrote on [[https://igor.martayan.org/posts/breaking-nthash/][correlations between small consecutive hash values]].
+
+Together with the original authors, we're now thinking on how to improve all this.
+This post introduces a new idea to break the 64-base periodicity of NtHash with
+a simpler scheme than used by NtHash2, and collects some facts around it.
+
+In short:
+- Replace $h \gets \rot^R(h)$ by $h\gets \shift(h) = \rot^R(h) \oplus (\rot^R(h)
+  \ll C)$ for e.g. $R=7$ and $C=27$, which has period $4292868097 = 2^{31.9993}$.
+  - This does not need the distinction between NtHash and NtHash2 anymore.
+  - It should also reduce the correlation between consecutive small values.
+  - For $C\geq w/2$, $x\oplus (x\ll C)$ is its own inverse, and so can also be
+    used for canonical nthash.
+- Again use the trick that $h(T) = h(A) \oplus h(C) \oplus h(G)$ so that we can
+  check that the system is bijective by checking that
+  $\{\shift^0(x),\dots,\shift^31(x), \shift^0(y),\dots,\shift^31(y)\}$ is a
+  basis of $\mathbb F_2^{64}$ for $x=h(A)\oplus h(C)$ and $y=h(A)\oplus h(G)$.
+
+  #+begin_src rust
+  let a = 0x3c8b_fbb3_95c6_0471u64 as B; // new value for bijective hash with shift
+  let c = 0x3193_c185_62a0_2b4cu64 as B; // v1
+  let g = 0x2032_3ed0_8257_2324u64 as B; // v1
+  let t = a ^ c ^ g;                     // fix for bijective hash
+  #+end_src
+  - I have not yet proven conclusively that this =t = a^c^g= is strictly
+    required to avoid hash collisions, but it seems hard or at least non-trivial
+    to find good seed values if this turns out not to be needed.
+- TODO:
+  - Find good values of $R$ and $C$ to avoid correlations between consecutive
+    small hash values. Similarly, is a left-shift or right-shift better?
+  - Investigate structural hash collisions like we had them for NtHash1 and NtHash2
+  - Add this to simd-minimizers.
+  - Figure out if we can efficiently do $\shift^n$. This means the
+    hash is currently less suitable for constant-time hashing of arbitrary-length
+    sequences based on prefix hashes.
+
+* Quick introduction
+
+I'll be brief here, so please check out the linked posts above for details.
+
+In general, NtHash [cite:@nthash] is a rolling hash where for every incoming character, the
+bits of the hash are rotated 1 position, then a hash of the new character is
+xor'ed in, and the (rotated) hash of the outgoing character is xor'ed out.
+
+This is very simple and fast to compute, and since for DNA the alphabet is only
+size 4, the hash of each character can be computed using a SIMD-based lookup
+table via some shuffle instructions. This then also allows computing many hashes
+in parallel, as we do in [[https://github.com/rust-seq/simd-minimizers][simd-minimizers]].
+
+A drawback of NtHash is that for the string =X...X= of length 65, starting and
+ending in the same character and any other characters in between, the final hash
+is independent of =X=, since the value is xor'ed in twice, once rotated by 0 and
+once rotated by 64, and these cancel each other.
+
+NtHash2 [cite:@nthash2] fixes this by splitting the bit-representation into a first half of 31 bits and a
+second half of 33 bits, that are then rotated independently. This increases the
+period to $31\cdot 33$, but is much more annoying to compute because now a
+simple bit-rotate instruction doesn't work anymore and instead a number of
+bit-masks and bit-shifts are needed.
+Furthermore, there are still structural collisions: in the string
+=A....A.A....A= of length 65 with the same character at positions 0, 31, 33, and
+64, their hashes still cancel. And a similar effect happens when splitting into
+even more parts (which is even slower to compute).
+
+* A new strategy
+
+The main source of the collisions is that there is no mixing between bits: each
+bit of a hashed character predictably rotates through the hash value and always
+affects exactly 1 position.
+
+Here's an idea to improve this which turns out to work surprisingly well:
+instead of the bit-rotate instruction, we can basically do an invertible
+operation that mixes the bits of the value. So if you consider the hash as a
+vector over $\mathbb F_2^64$, we can use any invertible matrix over $\mathbb
+F_2^{64\times 64}$. We can /not/ use something like multiplication by an odd
+constant (which /is/ bijective), because we then can't xor away the outgoing
+hash values anymore.
+
+Anyway, the first thing that comes to mind that shuffles bits more than just a
+rotate $h'\gets\rot^1(h)$ is to do that first, followed by $h'' \gets h' \oplus
+(h' \gg 1)$ or $h''\gets h'\oplus(h'\ll 1)$. These last operations have the
+benefit that they are invertible, and also very simple.
+When we replace the shift by 1 by e.g. a left-shift of 17 (or a right-shift by 7), this has a period as large
+as 4292868097 for 32-bit values, which is less than 0.05% away from the upper bound of $2^32$.
+(I'm only considering 32-bit hashes here, both because that is what we use in
+SIMD-minimizers, and because that's 
+
+Let's get a feeling for what's going on:
+For a left-shift by 1, the period is 33 for 32-bit hashes, and for 8-bit values
+we get:
+#+begin_src 
+ 0: 00000001
+ 1: 00000110
+ 2: 00010100
+ 3: 01111000
+ 4: 00010000
+ 5: 01100000
+ 6: 01000000
+ 7: 10000000
+ 8: 00000011
+ 9: 00001010
+10: 00111100
+11: 10001000
+12: 00110011
+13: 10101010
+14: 11111111
+15: 00000001
+#+end_src
+(Note that the period happens to be the same for all 1-bit patterns.)
+
+With a right-shift by 1 we get the following pattern that is a lot like Pascal's triangle:
+#+begin_src 
+ 0: 00000001
+ 1: 00000011 
+ 2: 00000101 
+ 3: 00001111 
+ 4: 00010001 
+ 5: 00110011 
+ 6: 01010101 
+ 7: 11111111 
+ 8: 10000000 
+ 9: 00000001 
+#+end_src
+
+If we shift left (or right) by 5 instead ($5=8/2+1$), we get a period of 217 out
+of 256:
+#+begin_src 
+  0: 00000001 
+  1: 01000010 
+  2: 00000100 
+  3: 00001000 
+  4: 00010000 
+  5: 00100000 
+  6: 01000000 
+  7: 10000000 
+  8: 00100001 
+  9: 00000010 
+ 10: 10000100 
+ 11: 00101001 
+ 12: 00010010 
+ 13: 10100100 
+ 14: 01101001 
+ 15: 10010010 
+ 16: 10000101 
+ 17: 01101011 
+...
+ 31: 00111100 
+ 32: 01111000 
+ 33: 11110000
+...
+202: 01001011 
+203: 01010110 
+204: 00101100 
+205: 01011000 
+206: 10110000 
+207: 01000001 
+208: 11000010 
+209: 00100101 
+210: 00001010 
+211: 10010100 
+212: 00001001 
+213: 01010010 
+214: 00100100 
+215: 01001000 
+216: 10010000 
+217: 00000001 
+#+end_src
+
+
+** Inverse operation
+To compute canonical hashes, we need to run NtHash in the forward and reverse
+direction at the same time. Thus, we need to be able to efficiently compute the
+inverse operations. For $\rot^R$, this is easy: $\rot^{32-R}$.
+For $h\oplus(h\ll 1)$, the inverse xors each bit by all high positioned bits. That
+seems impractical in constant time. In matrix notation over $\mathbb F_2$:
+#+begin_src 
+10000000   10000000   10000000
+11000000   11000000   01000000
+01100000   11100000   00100000
+00110000 * 11110000 = 00010000
+00011000   11111000   00001000
+00001100   11111100   00000100
+00000110   11111110   00000010
+00000011   11111111   00000001
+#+end_src
+
+For larger shifts that shift at least half the bit-width, the situation is
+simpler and they are their own inverse!
+Indeed, for $f(h)=h\oplus(h\ll 17)$, it is easy to see that $f^2(h) = f(f(h)) = h$.
+For example, $f$ xors bit 0 into bit $C$, and then applying $f$ again repeats
+this, resetting bit $C$ to its original value. Since $C \geq w/2$, there is no
+bit $2C$, and the second application of $f$ does not xor bit 0 into bit $2C$.
+#+begin_src 
+10000000   10000000   10000000
+01000000   01000000   01000000
+00100000   00100000   00100000
+00010000 * 00010000 = 00010000
+10001000   10001000   00001000
+01000100   01000100   00000100
+00100010   00100010   00000010
+00010001   00010001   00000001
+#+end_src
+
+Thus, $h'\gets \rot^1(h)$, $\h''\gets h'\oplus(h' \ll 17)$ seems like a good
+candidate function, since both parts are fast to invert!
+
+In Igor's [[https://igor.martayan.org/posts/breaking-nthash/][post]], he argues that $h'\gets\rot^R(h)$ is better, e.g. for $R=7$. In
+that case, $C=23$ works well. In general, for $w=32$, every odd $R$ admits a
+$C\geq w/$ with period exactly 4292868097 ($\approx 2^{31.9993}$).
+
+** Some more variants
+A drawback of $h' \gets \rot^R (h)$ is that there is no corresponding SIMD
+instruction, and it needs to be emulated using two shifts as =(h<<R) | (h>>(32-R))=.
+If we're anyway adding a second shift, we might as well go with something like
+this instead:
+\begin{align*}
+h' &\gets h\phantom{'}\oplus(h\phantom{'}\ll R)\\
+h''&\gets h'\oplus(h'\gg C)
+\end{align*}
+
+This scheme would be
+fast if both $R$ and $C$ are at least $w/2$ for bit-width $w$. Unfortunately,
+some quick experiments show that this never has large period. Basically, I think
+the problem is that all entropy is shifted from the middle bits to the edges,
+and never comes back to the middle, so that mixing is bad in practice.
+Thus, we'll have to stick with the invertible and well-mixing $\rol$ instruction
+after all.
+
+** TODO Repeated applications of $f$
+So even though this new scheme $f$ has a fast/constant-time inverse, we do not (yet,
+anyway) have a fast way to compute $f^i$ for arbitrary $i$, unlike was the case
+for the simple $\rot$ operation. This means that the scheme cannot easily be
+used to compute the hash of a string $B$ from the hash of $A$ and $AB$, as is
+commonly done when storing all hashes of a prefix of a string.
+
+** Collisions
+We can re-use the technique from the [[file:nthash.org][earlier post]] to search for collisions.
+We'll start with $\shift(h) = \rot^1(h) \oplus(\rot^1(h)\ll 17)$ on 32-bit hash values,
+using the original NtHash1 seeds. We get collisions from $k=12$ onward for
+32-bit values.
+
+If we take $h(T) = h(A) \oplus h(C) \oplus h(G)$, then we get two basis vectors
+$x_0=h(A)\oplus h(C)$ and $y_0=h(A)\oplus h(G)$, as well as their rotations $x_i
+= \shift^i(x_0)$ and $y_i = \shift^i(y_0)$.
+Then the hash function is a bijection if and only if
+$\{x_0,\dots,x_{31},y_0,\dots,y_{31}\}$ forms a basis of $\mathbb F_2^{64}$.
+We can easily find parameters for which this is the case just by modifying them slightly:
+#+begin_src rust
+// let a = 0x3c8b_fbb3_95c6_0474u64 as B; // v1
+// let a = 0x3c8b_fbb3_95c6_0470u64 as B; // previous fix for bijective hash with rotate
+let a = 0x3c8b_fbb3_95c6_0471u64 as B;    // new value for bijective hash with shift
+let c = 0x3193_c185_62a0_2b4cu64 as B;    // v1
+let g = 0x2032_3ed0_8257_2324u64 as B;    // v1
+// let t = 0x2955_49f5_4be2_4456u64 as B; // v1
+let t = a ^ c ^ g;                        // fix for bijective hash
+#+end_src
+
+** TODO Consecutive small values
+
+#+print_bibliography:
+
