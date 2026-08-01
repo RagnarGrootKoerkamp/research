@@ -10,7 +10,7 @@
 For a pangenome deduplication tool I'm working on ([[https://github.com/RagnarGrootKoerkamp/pandedup][pandedup]]), I'm using 128-bit
 hashes as "unique" identifiers of substrings.
 
-Sadly, it turns out that =gxhash128= has a hash collision between the two
+Sadly, it turns out that =gxhash128= (the 128-bit version of [[https://github.com/ogxd/gxhash][gxhash]]) has a hash collision between the two
 strings of length 88 below that only differ in 5 positions, /regardless/ of the value of the seed.
 
 Looking at the strings, this clearly isn't a /random/ collision.  Those could be
@@ -42,4 +42,3 @@ problem, but not always. For example, changing the =G= at index =3= to a =C=
 /does/ result in different hashes.
 
 Anyway, I shall search for a better hash function.
-#+print_bibliography:
