@@ -54,7 +54,7 @@ h(s)
 = h(t)
 \end{align*}
 
-* NtHash2 collisions
+* NtHash2 collisions: 2-way split
 A similar pattern occurs with NtHash2 when using $\srol_2$:
 #+begin_src txt
 pos 0  ...  3133  ...  64
@@ -97,11 +97,91 @@ we get positions $\{0,a,b,a+b,c,a+c,b+c,a+b+c\}$:
 =&0
 \end{align*}
 
-In practice, we see collisions already at 44 here, so there must be some smaller
+In practice, we see collisions already at $k=45$ here, so there must be some smaller
 'gadget'.
+Victor reports these hash collisions, and given that there are 4 of them with
+the same pattern, they look structural:
 
-For the 6-way split into $64=5+7+9+11+13+19$, collisions start at 35 instead.
+#+begin_src
+0                                       20      24                                      44
+010101010101010101010101010101010101010101010101010101010101010101010101010101010101010110
+100101010101010101010101010101010101010110010101100101010101010101010101010101010101010101
+^^                                      ^^      ^^                                      ^^
 
-Thus, some work remains to be done to understand these better.
+010101010101010101010101010101010101010101010101100101010101010101010101010101010101010110
+100101010101010101010101010101010101010110010101010101010101010101010101010101010101010101
+^^                                      ^^      ^^                                      ^^
+
+101110010101110101001100111001000100011110110010101001100111111101010101111011011000011010
+111110010101110101001100111001000100011111110010111001100111111101010101111011011000011011
+^^                                      ^^      ^^                                      ^^
+
+110100111100001111100011100101001001010110111101111110111110101110010101111111111000001110
+100100111100001111100011100101001001010111111101101110111110101110010101111111111000001111
+^^                                      ^^      ^^                                      ^^
+#+end_src
+
+Thus, they follow a similar pattern as before (the =A= in the first
+sequence and =C= in the second sequence can be swapped freely because we work
+with xor):
+#+begin_src txt
+pos 0  ...  20..24  ...  44
+s = A.......A...A........A
+t = C.......C...C........C
+#+end_src
+
+Let's analyse $\rol^0 \oplus \rol^{20} \oplus \rol^{24} \oplus
+\rol^{44}$:
+- The cycle of length 20 reduces to $\rol_{20}^0 \oplus \rol_{20}^0 \oplus \rol_{20}^4 \oplus \rol_{20}^4 = 0$
+- The cycle of length 21 reduces to $\rol_{21}^0 \oplus \rol_{21}^{-1} \oplus \rol_{21}^3 \oplus \rol_{21}^2$
+- The cycle of length 23 reduces to $\rol_{23}^0 \oplus \rol_{23}^{-3} \oplus \rol_{23}^{-1} \oplus \rol_{23}^{-2}$
+
+The length 20 cycle always cancels out, but the others do not.
+But the collisions are for /canonical/ hashes, which are the /xor/ of the
+forward and reverse-complement hash. In this case, the collisions always involve
+two characters that are /not/ each other's reverse complement (since =00=A=,
+=01=C=, =10=T=, =11=G=).
+
+Since the full pattern is symmetric, the length-21 part of the first sequence becomes:
+$$(\rol_{21}^0(A) \oplus \rol_{21}^{-1}(A) \oplus \rol_{21}^3(A) \oplus \rol_{21}^2(A))\oplus
+(\rol_{21}^0(T) \oplus \rol_{21}^{-1}(T) \oplus \rol_{21}^3(T) \oplus \rol_{21}^2(T))$$
+and for the second sequence we get
+$$(\rol_{21}^0(C) \oplus \rol_{21}^{-1}(C) \oplus \rol_{21}^3(C) \oplus \rol_{21}^2(C))\oplus
+(\rol_{21}^0(G) \oplus \rol_{21}^{-1}(G) \oplus \rol_{21}^3(G) \oplus
+\rol_{21}^2(G))$$
+where the $\oplus$ in the middle is because we /xor/ the forward and
+reverse-complement hash (rather than taking the minimum (as in NtHash1) or sum
+(as in NtHash2)).
+
+Now, in general these two terms are not equal, but the /are/ equal if we have
+$A\oplus C\oplus G \oplus T = 0$, which is exactly the condition we used in the
+previous post to ensure that NtHash1 is bijective up to $k=32$.
+
+Note that they become different again when we sum instead of xor the forward and
+reverse-complement hash.
+
+
+* 6-way split
+For the 6-way split into $64=5+7+9+11+13+19$, collisions start at $k=35$ instead.
+It looks like these are all random hash collisions and not structural, since
+there is not much overlap between them.
+
+#+begin_src 
+35:
+0110101101010000110111101111010110101011010101000111111011100011010111
+0101110111010111011111000101011101010101111001110101101101110101010100
+
+51:
+100101110100010100001010110111101100011111011010000111011011110111010010101100110010001100001110111101
+100000010000100101111011010011111100000111110111100111101101110111011111011001111101110111000011100111
+
+000100011101011000010101011111010010000111011100101010000010110011111011000110111100111010010011000111
+101001111000100110100000111100010010110111000000111110010111110111100011001111111000001100010101010111
+
+65:
+1001111000111001111101011001011110110111111000100101110001110010111001011101110001011001111110010011110101110010011001011101110000
+1010110000110100111111110000110111101110011100111100011101111101000010110010011001111100111101010111001011111111010001000000001011
+#+end_src
+
 
 #+print_bibliography:
