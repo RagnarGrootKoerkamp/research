@@ -23,7 +23,7 @@ open:
 
 .PHONY: build-content
 build-content:
-	git clean -X --force content
+#	git clean -X --force content
 # Build temporary minimal EMACS installation separate from the one in the machine.
 	XDG_CONFIG_HOME= HOME=$(EMACS_BUILD_SRC) BASE_DIR=$(BASE_DIR) emacs -Q --batch --load $(EMACS_BUILD_SRC)/init.el --execute "(build/export-all)" --kill
 
