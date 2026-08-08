@@ -67,16 +67,16 @@ A nonsystematic data structure must use at least $2n - \Theta(\log n)$ bits.
 
 As a first note, we need at least $n-1$ bits to store for each pair $(a_i,
 a_{i+1})$ whether $a_i \leq a_{i+1}$ or $a_i>a_{i+1}$, since this information is
-needed to answer queries $\rmq(i, i+1)$.
+needed to answer queries $\rmq(i, i+2)$.
 
 More generally, we can use the $\rmq$ values to reconstruct the /cartesian/
 tree ([[https://en.wikipedia.org/wiki/Cartesian_tree][wikipedia]]):
 
 [[file:./cartesian-tree.png]]
 
-We can use $\rmq(1,n)=i$ to find the smallest element in the array.
-Then, we can use $\rmq(1, i-1)$ to find the smallest element left of it (if
-$i>1$) and $\rmq(i+1, n)$ to find the smallest element right of it (if $i < n$).
+We can use $\rmq(0,n)=i$ to find the smallest element in the array.
+Then, we can use $\rmq(0, i)$ to find the smallest element left of it (if
+$i>0$) and $\rmq(i+1, n)$ to find the smallest element right of it (if $i < n$).
 
 *Cartesian trees.*
 The Cartesian tree is the binary tree we get by repeating this process
@@ -122,20 +122,21 @@ minimum of each block in $c(n)$ time.
 
 * Sparse Table: $O(1)$ queries, $O(n \log_2 n)$ words
 - Let $k = \lfloor \log_2 n \rfloor$.
-- Store a tree of $k+1$ levels $0, \dots, k$.
+- Store a tree of $k$ levels $0, \dots, k$.
 - In level $\ell$, store $n+1-2^\ell$ values for $0\leq i < n+1-2^\ell$,
-  each storing the minimum over a (sliding) /window/ of length $2^\ell$:
-  $$S_\ell[i] := \min_{i\leq j < i + 2^\ell} a_i.$$
+  each storing the position of the minimum over a (sliding) /window/ of length $2^\ell$:
+  $$S_\ell[i] := \argmin_{i\leq j < i + 2^\ell} (a_i).$$
+  - (Level $0$ simply stores $S_0[i] = i$, and could be omitted.)
 - To answer a query $[l,r)$, first find the largest power $2^\ell$ that is at
   most $r-l$.
   Then we have
   $$l \leq r-2^\ell \leq l + 2^\ell \leq r,$$
   i.e., the intervals $[l, l+2^\ell)$ and $[r-2^\ell, r)$ together cover
   $[l, r)$. Thus, we get:
-  $$\min_{l\leq i< r} a_i = \min(S_\ell[l], S_\ell[r-2^\ell]).$$
+  $$\argmin_{l\leq i< r} (a_i) = \argmin_{i\in \{S_\ell[l], S_\ell[r-2^\ell]\}} (a_i).$$
 
-- To get the /index/ of the minimum, store that instead, and take the argmin
-  over the two indices returned by the two lookups.
+- If only the /value/ of the minimum is needed, that can be stored directly,
+  instead of its index. Then the last step simply takes the minimum of the two values.
   
 * Segment Tree: $O(\log n)$ queries, $O(n)$ words
 Sparse tables are quire redundant since consecutive nodes store mostly the same

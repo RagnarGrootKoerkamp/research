@@ -26,7 +26,7 @@
 #+REVEAL_TITLE_SLIDE: <img class="ae-logo" src="/images/alg-engineering-group.png"></img>
 
 # UPDATE
-#+reveal_slide_footer: <span class="date">April, 2026</span> <span class="title">Ragnar Groot Koerkamp: Rank & Select</span> <img src="/images/kit.png" class="kit-logo"></img>
+#+reveal_slide_footer: <span class="date">April, 2026</span> <span class="title">Ragnar Groot Koerkamp: Elias-Fano</span> <img src="/images/kit.png" class="kit-logo"></img>
 
 # For slides only!
 # UPDATE and create Dir
@@ -80,7 +80,7 @@ What if $n \gg U$?
 #+end_myquestion
 #+begin_answer
 #+attr_reveal: :frag t
-When $n\gg U$, store how often each element each element occurs.
+When $n\gg U$, store how often each element occurs.
 #+attr_reveal: :frag t
 - $U \log_2 n$ bits
 #+end_answer
@@ -95,7 +95,7 @@ What if $n \approx U$?
 #+attr_reveal: :frag t
 When all elements are distinct: store $U$ bits indicating for each $1$ or $0$.
 #+attr_reveal: :frag t
-- $n$ bits
+- $U$ bits
 
 #+attr_reveal: :frag t
 Otherwise: encode all the counts in unary and concatenate them, e.g., a count of 3 becomes =1110=.
@@ -116,7 +116,7 @@ Store directly:
 #+attr_reveal: :frag t
 - $n \log_2 U$ bits.
 #+attr_reveal: :frag t
-- Lower bound for $n\ll U$: $n\log_2\left(e\cdot \frac Un\right) \approx n\log_2(eU/n)
+- Lower bound for $n\ll U$: $n\log_2\left(e\cdot \frac Un\right) = n\log_2(eU/n)
   = n(\log_2 U + \log_2 e -
   \log_2 n)$
   - $\log_2 n - \log_2 e$ bits/key wasted!
@@ -137,7 +137,8 @@ A list of $n$ integers $0\leq x_0\leq x_1\leq \dots \leq x_{n-1} < U$ can be sto
 $$
 n (\log_2 (U/n) +2)
 $$
-bits while supporting $O(1)$ access time.
+bits while supporting $O(1)$ access time using an additional $o(2n)$ bits for
+select operations.
 
 This is only $2-\log_2(e) = 0.5573$ bits/key away from the lower bound when $n =
 o(\sqrt U)$!
@@ -214,10 +215,10 @@ To get $x_i$:
 - What are some interpretations of the bits encoding the high parts?
 - How does one recover $x_i$, i.e., query the Elias-Fano coded list?
 
-* Blackboard: Bit vector & Rank
+* Blackboard: Elias-Fano 1
 #+attr_html: :class blackboard :src /ox-hugo/blackboard-elias-fano-1.jpg
 [[file:./blackboard-elias-fano-1.jpg]]
-* Blackboard: Select & Darray
+* Blackboard: Elias-Fano 2
 #+attr_html: :class blackboard :src /ox-hugo/blackboard-elias-fano-2.jpg 
 [[file:./blackboard-elias-fano-2.jpg]]
     
