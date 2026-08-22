@@ -90,58 +90,130 @@ trait PriorityQueue {
     fn pop(&mut self) -> T;
 }
 #+end_src
+
+* "Solved" problem: Brodal heaps are "optimal"
+- $\push$: $O(1)$ worst-case
+- $\pop$: $O(\lg n)$ worst-case
+
+More theoretical work on:
+- I/O-complexity: reading few cache lines
+- cache-oblivious: efficient across the cache hierarchy
+- average vs worst case
+- $\mathsf{decreaseKey}$ using indirection
   
+Important in practice:
+- no random access 
+- efficient operations
+- avoiding indirections
+
 * Binary Heaps: probably worse than you thought
 :PROPERTIES:
 :CUSTOM_ID: binary-heap
 :END:
-Both $\push$ and $\pop$:
-- $O(\log_2 n)$ operations, but
-- $O(\log_2 n)$ I/O complexity for $\pop$!
-  - Each $\pop$ requires a random access to $O(n)$ memory!
-  - 80ns cache miss to RAM if we're unlucky
 
-(todo figure & plot)
+# Binary heaps: the default, but cache misses and no SIMD
 
-* Quad/Oct Heap: fewer layers, but still bad
+- $O(\log_2 n)$ operations for $\push$ and $\pop$, but
+- $\pop$ randomly walks down the tree:
+  - requires random accesses
+  - 80ns cache miss!
+  - Not good for SIMD
+# Dropped I/O complexity here
+  # - $O(\log_2 n)$ 
+  # - a random access / cache miss
+  # - $O(\log_2 n)$ I/O complexity for $\pop$!
+  # - Each $\pop$ requires a random access to $O(n)$ memory!
+  # - 80ns cache miss to RAM if we're unlucky
+
+# TODO fig & plot
+
+* d-ary heap: fewer layers, but still bad
 :PROPERTIES:
 :CUSTOM_ID: quad-heap
 :END:
-(todo figure & plot)
+# d-ary heaps: fewer cache misses, tiny bit of SIMD
+- Branching factor 4 or 8, so $\frac 12$ or $\frac 13$ as many layers
+  - Fewer memory accesses
+  - But still $\geq 1$ random access and cache miss
+  # - Can use a bit of SIMD
+  
+# TODO fig & plot
+  
+* Splitting vs merging
+# splitting is faster
+- Binary heaps /merge/: elements are inserted randomly and interleaved.
+- Others /split/, like quicksort: elements are partitioned using pivots
+  - Splitting is more efficient using SIMD
 
-* Good $O(1/B)$ I/O complexity is possible
+#+attr_html: :class medium :style top:65% :src /ox-hugo/slides-heaps.svg
+[[file:slides-heaps.svg]]
+
+* Avoiding cache-misses is possible!
 :PROPERTIES:
 :CUSTOM_ID: good-io-complexity
 :END:
 
-Move a cache line worth of elements at a time into/out of RAM.
+Move a cache line worth of elements at a time into/out of RAM, only using
+sequential scans.
 - Radix Heap [cite:@radix-heap-johnson]
 - Sequence Heap [cite:@sequence-heap]
 - QuickHeap [cite:@quickheap;@stronger-quickheaps]
 
-(todo plot)
+|                    | no SIMD     | *SIMD*        |
+| random access      | binary heap | ~ d-ary heap  |
+| *no random access* | QuickHeap   | SimdQuickHeap |
 
-* The QuickHeap
+# TODO plot
+
+* The QuickHeap: inspired by quick select
 :PROPERTIES:
 :CUSTOM_ID: quickheap
 :END:
+
+# original for in-place online bottom-k
+
 1. Use in-place /quick select/ [cite:@quickselect] to find the smallest element.
 2. Store the pivots.
-4. To $\push$, /bubble/ down the new element through all pivots
-3. To $\pop$, recursively partition the smallest part and return the leftmost element.
+3. To $\push$, /bubble/ down the new element through all pivots
+4. To $\pop$, recursively partition the smallest part and return the leftmost element.
 
-(todo fig & plot)
+- Slower than binary heap: 3-way rotates; scalar partitioning is slower than bubbling.
+- I/O-efficient; fasterer on large data; cache-oblivious 
+  
+# TODO plot
+
+#+attr_html: :class medium :style top:65% :src /ox-hugo/slides-quickheap.svg
+[[file:slides-quickheap.svg]]
 
 * The SimdQuickHeap
 :PROPERTIES:
 :CUSTOM_ID: simdquickheap
 :END:
 
-- Store each partition in its own layer
-- use SIMD =_mm256_permutevar8x32_epi32= or AVX-612 =_mm512_maskz_compress_epi64= instructions for the partitioning
-- Use SIMD-based linear-search over pivots to find the layer/partition to append to.
+- Store each partition in its own layer.
+- SIMD-based classification and partitioning.
 
-(todo fig & animated demo)
+# TODO animated demo?
+
+#+attr_html: :class medium :style top:60% :src /ox-hugo/slides-simdquickheap.svg
+[[file:slides-simdquickheap.svg]]
+
+** Classification using SIMD
+:PROPERTIES:
+:CUSTOM_ID: classification
+:END:
+- Quickly count the number of pivots $>x$.
+#+attr_html: :class medium :style top:60% :src /ox-hugo/quickheap-classification.svg
+[[file:quickheap-classification.svg]]
+** Partitioning using SIMD
+:PROPERTIES:
+:CUSTOM_ID: partitioning
+:END:
+- Move values $< p$ to the front and $\geq p$ to the back.
+  - AVX2: =_mm256_permutevar8x32_epi32=
+  - AVX-512: =_mm512_maskz_compress_epi64=
+#+attr_html: :class medium :style top:65% :src /ox-hugo/quickheap-partitioning.svg
+[[file:quickheap-partitioning.svg]]
 
 * Synthethic benchmarks
 :PROPERTIES:
@@ -151,6 +223,11 @@ Move a cache line worth of elements at a time into/out of RAM.
 :PROPERTIES:
 :CUSTOM_ID: graph-results
 :END:
+
+* Future work
+- Rebalancing to avoid worst-case inputs
+- Reduce space consumption by using list-of-blocks
+- De-amortizing SimdQuickHeap?
 
 * Conclusion
 :PROPERTIES:
@@ -182,7 +259,7 @@ Move a cache line worth of elements at a time into/out of RAM.
 
 #+attr_html: :class full :style z-index:-1 :src /ox-hugo/p99-last.png
 [[file:p99-last.png]]
-
+  
 * Bibliography
 #+print_bibliography: 
 
