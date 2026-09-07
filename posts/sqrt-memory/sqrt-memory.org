@@ -1,0 +1,94 @@
+#+title: The sqrt(n) memory model
+#+filetags: wip
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+toc: headlines 3
+#+date: <2026-09-07 Mon>
+
+These are some quick notes for a future project on introducing the "$\sqrt n$ memory model".
+
+In 2014, Emil Ernerfeldt wrote the following series of blogposts:
+- [[https://www.ilikebigbits.com/2014_04_21_myth_of_ram_1.html][The Myth of RAM, part I]]
+- [[https://www.ilikebigbits.com/2014_04_28_myth_of_ram_2.html][The Myth of RAM, part II]]
+- [[https://www.ilikebigbits.com/2014_04_29_myth_of_ram_3.html][The Myth of RAM, part III]]
+- [[https://www.ilikebigbits.com/2015_02_09_myth_of_ram_4.html][The Myth of RAM, part IV: FAQ]]
+
+[[https://news.ycombinator.com/item?id=12383012][HackerNews discussion]], [[https://www.reddit.com/r/programming/comments/2v8dty/the_myth_of_ram_part_i_why_a_random_memory_read/][Reddit discussion]]
+
+- Blog: Memory access is $O(n^{1/3})$: https://vitalik.eth.limo/general/2025/10/05/memory13.html
+  - [[https://x.com/VitalikButerin/status/1974668182888857871][twitter discussion]]
+
+Related papers:
+- The Cost of Address Translation ([[https://arxiv.org/abs/1212.0703][arxiv]], [[https://www.reddit.com/r/programming/comments/509qhd/randomly_accessing_n_items_in_dram_is_on_in/][reddit]])
+- Data movement distance (of matmul) [cite:@data-movement-distance]
+- Data movement complexity (of matmul) [cite:@data-movement-complexity]
+- Processor—Time Tradeoffs under Bounded-Speed Message Propagation:
+  [[https://doi.org/10.1007/s002240000066][Part I, Upper Bounds]], 
+[[https://doi.org/10.1007/s002240000131][Part II, Lower Bounds]]
+
+See also my [[../../slides/p99][P99 slides]] on this.
+
+* Preliminaries
+
+** Performance models
+- RAM model :: Every (random) memory access is $O(1)$, and we only count operations.
+- Transichotomous model :: the word size is $\Theta(\lg n)$, so that a pointer
+  into the data is $1$ word.
+- IO-model :: There is a memory/cache of size $M$, and data outside this is read
+  in chunks of $B$ words at a time. We count the number of chunks read.
+  (Nice post [[https://pethick.dk/posts/2018-05-22-io-model/][here]].)
+- Roofline model :: tradeoff between CPU-bound, and memory-throughput bound, as
+  the CPU becomes faster while memory throughput remains constant.
+
+** Big-O notation
+
+Mathematically speaking, for two functions $f$ and $g$, $f = O(g)$ or $f\in O(g)$ when there exists some
+constant $C$ such that $f(x) \leq C\cdot g(x)$ for all $x\geq x_0$, or
+equivalently, $f(x)/g(x) < \infty$ as $x\to\infty$.
+
+We use $f = o(g)$ when $f(x) / g(x) \to 0$ as $x\to\infty$.
+
+When $f$ and $g$ have the same asymptotics up to a constant (i.e., $f=O(g)$ and $g=O(f)$), we write $f = \Theta(g)$.
+
+** Applications of big-O notation
+Big-O notation is often used to analyse the complexity of algorithms.
+In particular, we typically model the number of abstract /operations/.
+
+* Memory accesses in practice
+Extend the plot in my [[../../slides/p99][P99 slides]] to also include SSDs and maybe even scaling to network storage.
+
+* A $\sqrt n$-memory model
+As a starting point, we can consider that reading from an array of size $n$
+takes $\sqrt n$ time, and directly gives a block of $\sqrt n$ consecutive
+values. This way, streaming to $\sqrt n$ values has amortized cost 1 per element.
+
+TODO: Is the constant $\sqrt n$ or $n^{1/3}$?
+
+In the physical black-hole limit, we can only store quadratic information in a
+sphere of radius $r$, but of course we're not yet close to that. But either way,
+active RAM that requires some constant amount of energy per bit per second needs
+cubic energy flux through a quadratic surface. Probably cooling is indeed a
+bottleneck of stacking more layers of RAM in practice. But then again, the
+actual latency/throughput is probably bottlenecked by how we can efficiently
+address a single cache line in a large memory; would be interesting to read more
+on this.
+
+* Algorithms to analyze
+- Binary search
+- B-trees
+  - constant, $\log n$, or $\sqrt n$ branching factor
+- Quick sort
+- Merge sort
+- Radix sort
+- Hash tables
+- k-PHF
+
+* TODO
+- Interview with Jim Gray: https://amturing.acm.org/pdf/GrayTuringTranscript.pdf
+  - Mentioned speed of light, why processors must be 3D, and cooling.
+- AMD V-cache: vertical cache stacking.
+- Idea: measure latencies for various sizes of RAM and SSDs; see how they scale.
+  Can we observe that larger memory means slower access? Where in the hardware
+  does the real latency/throughput bottleneck actually come from anyway?
+- See peters chapter on 'Realistic models of computation' and hardware cooling
+#+print_bibliography:
