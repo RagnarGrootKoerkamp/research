@@ -272,6 +272,41 @@ which point we can read out the remaining elements.
 This still uses $O(n)$ space for a bucket of $n$ elements, but it's closer to
 $n$ bytes rather than $n$ words, which might make a difference in practice.
 
+** Counting bloom filters
+
+Another, more promising, idea (again by SW) to deduplicate buckets is the following:
+Create a counting bloom filter of, say $n$ 8-bit counters.
+For each element, increment its corresponding counter, and for each delete,
+decrement it. Then filter out all the elements for which the counter is 0, since
+a count of 0 must mean all elements mapping to that counter have been deleted.
+
+This leaves around false positives, in that some deleted elements map to a
+non-zero counter and are thus preserved, but that is OK: we can simply leave those in and filter them
+out the next time we deduplicate a bucket. If we use independent random seeds
+all should be fine as long as each iteration filters away at least a fixed
+fraction of the deleted elements. (This is unlike the bloom filter
+approach above, where the one-sided-probability was too eager in filtering out
+non-deleted elements, which needed an explicit second pass to resolve.)
+
+It might already be sufficient to use 2-bit counters: we can first increment it
+for all inserts, and then decrement it for all deletes, but use the value 3 as
+'saturated'.
+
+Either way, once all counters have been computed, we can compactify them into a
+0/1-bitvector indicating which counters are positive and thus which elements
+should be preserved.
+
+In case the counter vector would not fit in (small enough) cache, one option
+could also be to first pseudo-randomly (or by pivots?) partition the bucket into
+chunks that /do/ fit in memory.
+
+(Side question: why is it that partitioning into chunks /feels/ very fast and I/O
+efficient, but hash tables are /not/ I/O-efficient. I suppose partitioning is
+fast as long as each partition has at least $\Omega(1)$ cache lines worth of
+data (as opposed to $O(1/B)$ when accessing a single word). Thus, we could
+partition into $O(M/B)$ blocks in one go? But then we get limited by the number
+of write-combining buffers probably.)
+
 * The SIMD radix heap
 Another idea is to combine the ideas of the SimdQuickHeap with the radix heap of
 Johnson [cite:@radix-heap-johnson].
