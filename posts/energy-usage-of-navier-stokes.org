@@ -1,0 +1,169 @@
+#+title: On the Energy Usage for Navier-Stokes
+#+filetags: misc fermi-estimate highlight
+#+OPTIONS: ^:{} num:
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-09-16 Wed>
+
+As they[fn::Where by "they", I mean Alfred Renyi.] say,
+#+begin_quote
+a mathematician is a machine for turning coffee into theorems.
+#+end_quote
+These days, we can extend this into
+#+begin_quote
+an LLM is a machine for turning energy into theorems.
+#+end_quote
+Indeed, let's find out how much coal OpenAI[fn::There's a whole bunch of dispute
+around who was first, OpenAI or independent researchers Buckmaster and Alpöge.
+See [[https://en.wikipedia.org/wiki/Navier%E2%80%93Stokes_priority_controversy#Dispute_between_OpenAI_and_Buckmaster%E2%80%93Alp%C3%B6ge][wikipedia]].] turned into a proof[fn::Their solution
+still requires a smooth external force and thus (as I read somewhere?) does not /fully/ solve the original problem?] of Navier Stokes.
+
+*Please note: we're going to do a Fermi estimate here.
+I'm making up numbers and citing random sources on the internet.
+They /will/ be off. But hopefully not by more than an order of magnitude?*
+
+
+* Input data
+Most of the source data comes from [[https://openai.com/index/navier-stokes-solution/][OpenAI's announcement]]. The numbers in there
+are (intentionally?) such that it's quite hard to make sense of them. To
+summarize some facts from their post:
+- Training since Aug 28. 
+- Sept 1: rumours of 2 solved millennium problems. They start running the internal model
+  on all open millennium problems, as well as some other problems.
+- Agents were split into groups of varying size and could communicate within
+  groups. The group that solves NS has 10000 agents. It appears they had at
+  least 4 groups running on NS? For each of versions A/B/C/D.
+- They also had a group working on the simplified "Euler" version. This was
+  solved by 100 agents in 50 hours.
+- Then they shifted (most/all?) agents to work on NS?
+- Different groups tried different approaches. (So multiple groups of ~10k, and
+  only the lucky one that got the winning idea is reported?) With
+  cross-pollination for sharing useful results.
+- The solution came on Sept 5, 88h after the first agents were launched. (Then
+  only 17h for formalization and verification, presumably with fewer agents?)
+- In total, across all problems, 300G output tokens, of which 130G for NS.
+
+The [[https://en.wikipedia.org/wiki/Navier%E2%80%93Stokes_priority_controversy#OpenAI_announcement][wikipedia page]] has some sources for the fact that in total, the cost of the
+proof was a couple million USD. A [[https://fortune.com/2026/09/08/openai-says-it-cracked-navier-stokes-math-grand-challenge-buckmaster-accusation-cheating-intimidation-tao-lament/][fortune article]] and [[https://www.newscientist.com/article/2588063-openai-has-solved-the-navier-stokes-millennium-problem-using-15m-of-ai-effort/][new scientist article]]
+mention:
+- At first, 1000 agents worked on the Euler problem for 50 hours.
+- Then, 10000 agents worked on the full Navier-Stokes for 11 hours.
+- OpenAI said "this" would cost $15 million for customers.
+- The fortune article mentions it was 1000x more expensive than previous
+  problems which had cost \$2000, putting the internal price at \$2M.
+
+* Electricity cost and coal usage
+Overall, let's *say the /internal/ cost is indeed $2M*. Further, let's *assume that
+50% of the cost is energy* for both running the GPUs and cooling them (with the rest going to hardware, maintenance,
+and the developers). So we get $1M of energy.
+
+The US cost of bulk electricity is \$25 to \$120 per MWh. Let's *assume OpenAI pays \$50/MWh*?
+That gives us =\$1M / (\$50 / MWh) = 20 GWh=.
+
+Coal power plants operate at roughly [[https://www.pcienergysolutions.com/2023/04/17/power-plant-efficiency-coal-natural-gas-nuclear-and-more/][33% efficiency]], so we have to burn 60 GWh
+worth of coal. Coal has an [[https://en.wikipedia.org/wiki/Coal][energy density]] of 6.7 KWh/kg, making for =60 GWh /
+(6.7 KWh/kg) = 3000 tonne=.
+A Panamax bulk carrier (the max size that fits through the Panama canal) has
+[[https://daizotec.com/panamax-bulk-carrier-c2-700---117.html][60000 tonne capacity]], so this is 5% of a carrier.
+Coal has a [[https://www.engineeringtoolbox.com/classification-coal-d_164.html][bulk density]] around 0.8 kg/m^3, so this is ~4000m^3, which is 1.5
+2500 m^3 [[https://en.wikipedia.org/wiki/Olympic-size_swimming_pool][Olympic-size swimming pools]].
+
+Bulk coal costs [[https://tradingeconomics.com/commodity/coal][\$100-150 per tonne]]. Let's go with \$125/tonne. Then, \$1M buys around
+8000 tonnes of raw coal. Thus, the overhead of turning coal into energy and
+transmitting the energy is around 2.5x (=8000/3000). That sounds about right.
+
+* Energy to GPUs
+Now lets approach this from a different angle.
+In total, it seems, they had 10000 agents running for 88 hours. Thus, we get an
+energy consumption of =20 GWh/88h = 230 MW=. Let's say [[https://www.bloomenergy.com/blog/data-center-cooling-for-hyperscale-and-ai-workloads/][a third]] of that is
+cooling, leaving 150 MW for compute.
+[[https://www.nvidia.com/de-de/data-center/dgx-b200/][DGX B200 video cards]] (consisting of 8x B200 cards) are rated at 14 kW max TDP, so let's say they use around 10
+kW during normal operation?
+(Although you probably want to pretty much saturate your hardware as much as you can probably? idk.)
+Then it's *15000 DGX B200 video cards (120k B200's) working on this*. Each of those would cost
+[[https://wccftech.com/nvidia-blackwell-dgx-b200-price-half-a-million-dollars-top-of-the-line-ai-hardware/][$0.5M]] at retail prices, which would be *\$7.5 billion of GPUs*.
+(If we assume they run at the full 14 kW TDP, this goes down to 11000 video
+cards at \$5.4 billion retail cost.)
+
+* Agents per GPU
+
+Based on the information available, I'm assuming they had all 10k agents running
+for the full 88 hours: at first spread over various problems, and then later all
+focused on Navier-Stokes. Thus, they run 10k agents on 15k chips, or 1.5 DGX per
+agent.  Given each DGX B200 has 1.4 TB of memory, using 1.5 of those would give
+us a 2.1 TB, which would be 4T parameters at 4-bit quantization.
+
+That's actually pretty close to Anthropic's Fable, which is [[https://www.reddit.com/r/ClaudeAI/comments/1ul9a80/how_big_are_claude_models_in_parameter_count_any/][said to have around 5T weights]].
+
+The one problem I have here is that I always thought that one normally
+batches/multiplexes many requests/agents to a single chip. E.g., that 100
+agents would run on a single (or 1.5) DGX chip. But the math seems to work out
+nicely if each chip just runs one agent, so maybe not?
+
+* Tokens per second
+
+Lastly, we know that they produced a total of 300 billion tokens over 88h.
+That's a total of roughly 1 million tokens per second[fn::0.95M tps to be precise.
+Honestly, this is close enough that I could imagine they choose the number of
+agents and GPUs so that they have around 1M tps in total.], or 100 tokens/sec per
+agent. Astra [[https://openrouter.ai/openai/gpt-6-astra][runs]] at 50 tps, so this seems a bit on the high end. But we also
+know from the announcement that the internal model is cheaper to run, so maybe this
+new model is 2x smaller than Astra?
+
+Either way, this means we get 66 amortized tps per DGX B200.
+
+A DGX B200 has [[https://resources.nvidia.com/en-us-dgx-systems/dgx-b200-datasheet][144 petaFLOPS]] of (4bit?) inference, so each token costs around
+=144/66=2.18petaFLOP=. That is $2 \cdot 10^{15}$ floating-point operations for
+every. single. output token!
+(Well, as an upper bound. But let's assume we are mostly saturating the GPU.)
+
+* Extrapolating
+Their "let's have some fun on the side" cluster used 230 MW during this time window.
+Let's assume that this is also their training cluster, and that this is 50% of
+their total capacity, with the other half serving inference?
+(10k average active parallel users sounds a bit low maybe? Especially if users
+are also running many agents? But I guess they mostly don't use Astra, and Sol
+is 2x [[https://developers.openai.com/api/docs/pricing][cheaper]] and Luna 50x, so maybe this works out? Either way it sounds
+reasonable to have a roughly 50/50 split between training and inference
+hardware? But maybe they have 10x more inference than training?)
+
+Then, they have a total capacity of roughly 460 MW.
+Typical power plants are on the order of 1 GW, so this means that OpenAI is
+burning through roughly half a power plant of energy now.
+
+If we extrapolate the coal usage to a year, we get 4000 GWh of energy used,
+which corresponds to [[https://en.wikipedia.org/wiki/Coal_power_in_the_United_States#Statistics][0.5%]] of the US coal consumption for power generation.
+or =2*3000 tonne / 88h * 1year = 600000 tonne/year=.
+(It turns out that 88h is very close to 1% of a year.)
+So that's 300 Olympic swimming pools of coal, or 7.5 bulk carriers of coal.
+
+* Putting things in perspective
+NeurIPS 2025 was in San Diego and had [[https://x.com/AlexGDimakis/status/1996312049358639360][29000 attendees]]. Let's say that on
+average, each attendee does a New-York to San Diego return flight (with many US
+attendees having shorter flights, and many non-US attendees having longer flights).
+The distance is roughly 4000 km, and the [[https://en.wikipedia.org/wiki/Fuel_economy_in_aircraft#Operations][fuel consumption]] per
+passenger-kilometer of a plane is around 3L per 100km, making for a
+round-trip usage of 240L or 200kg per person.
+In total, we get an estimated *5800 tonnes of jet fuel for NeurIPS*.
+Given that jet fuel is nearly twice as energy dense as coal, this burns
+around 4x more energy than the Navier-Stokes proof.
+
+
+* Conclusion
+To summarize: assuming that $1 million was spent on electricity, we get the
+follow Fermi estimates:
+- A total energy usage of 20 GWh over 88 hours, or 230 MW of power.
+  - That's 1.5 Olympic swimming pools of coal, or 5% of a bulk carrier.
+  - That's 25% of what 29000 people burn with their flights to/from NeurIPS.
+- They used the equivalent of 15'000 DGX B200 video cards, or 120'000 B200 cards.
+- Given 10000 agents, that's 12 B200's per agent, suggesting a 2TB model.
+- Given 300G output tokens, that's 100 tps per agent, or 66 tps per DGX B200.
+
+Extrapolating to yearly consumption, assuming a 50/50 split of their GPUs
+between training and inference, we get:
+- 4000 GWh per year, 0.5% of all US generated coal power;
+- 300 Olympic swimming pools of coal, roughly one per day[fn::I.e., the US burns 200 swimming pools of coal per day? Ouch...];
+- 7.5 bulk carriers of coal per year.
+
