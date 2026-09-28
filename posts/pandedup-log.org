@@ -644,13 +644,8 @@ push sample 465 (3.0 Gbp  79 ctg): read:  4.87s minis:  4.08s phrases: 17.66s so
   output_bp:            6.390 Gbp (0.5%)
 #+end_src
 
-* TODO
-- Dedup unitig start/end
-- Dedup by matching against reference text
-- rwlock over shards
-
 * Sept 28
-** Using it in deacon
+** Using it in deacon: bug in ambiguous bases
 Bede used =hprcv2.k64.zst= in deacon. For =k=31= and =w=20=, it gives
 =353,721,077= minimizers, whereas running on the full hprcv2 =.agc= directly
 gives =353,690,959= minimizers, which is =30118= /smaller/, and so I'm
@@ -658,17 +653,17 @@ gives =353,690,959= minimizers, which is =30118= /smaller/, and so I'm
 
 Added a bunch of tests to pandedup, but those all seem to work fine.
 
-- Checking 0.1% of output kmers against the .agc input gives no new kmers, but
-  I'm stripping N chars from the input...
+*It turns out I assumed that AGC never returns ambiguous bases, but that's not
+true. Thus, doing =b"ACGT"[b%4]= quietly collapses ambiguous bases.*
+Fixing this should resolve the additional kmers.
 
-** HPRCv2
+** Re-running on HPRCv2
+First, we do the rough dedup using *pandedup*:
 #+begin_src sh
-cargo run -r -- -k 64 -w 100 hprcv2.agc
-#+end_src
+> cargo run -r -- -k 64 -w 100 hprcv2.agc
 
-1700s
+...
 
-#+begin_src sh
 push sample 465 (3.0 Gbp  79 ctg): read:  0.00s minis:  4.95s phrases:  5.08s sort:  0.08s lookups:  1.05s sort:  0.04s lock:  0.00s output:  0.10s
   new bp:              13.039 Mbp (189.5 bp/contig)
   new phrases:          0.148 M   (2.1 /contig;  0.2%; 68.0% filtered away)
@@ -676,43 +671,43 @@ push sample 465 (3.0 Gbp  79 ctg): read:  0.00s minis:  4.95s phrases:  5.08s so
   num_contigs:         59.592 M
   output_bp:           14.856 Gbp (1.1%)
 #+end_src
+Takes *1700s* on my laptop and outputs *14.9Gbp*. On a server, it runs in *230s*
+with 64 threads.
 
-on the server, with splitting on N, in 230s, gives *14.9GB* output.
-
-#+begin_src sh
-2026-09-28T13:58:28.653526Z DEBUG pandedup: push sample 465 (3.0 Gbp  89 ctg): read:  0.00s minis:  3.34s phrases:  6.66s sort:  0.12s lookups:  1.57s sort:  0.04s lock:  0.10s output:  0.13s
-2026-09-28T13:58:28.653546Z DEBUG pandedup:   new bp:              13.152 Mbp (189.5 bp/contig)
-2026-09-28T13:58:28.653550Z DEBUG pandedup:   new phrases:          0.149 M   (2.1 /contig;  0.2%; 68.8% filtered away)
-2026-09-28T13:58:28.653553Z DEBUG pandedup:   unique phrases:     196.322 M   (0.7%)
-2026-09-28T13:58:28.653555Z DEBUG pandedup:   num_contigs:         59.985 M
-2026-09-28T13:58:28.653556Z DEBUG pandedup:   output_bp:           14.882 Gbp (1.1%)
-2026-09-28T13:58:28.653558Z DEBUG pandedup: 
-bash-5.2$ la
-#+end_src
-
-ggcat on the output takes forever, see https://github.com/algbio/ggcat/issues/76.
+*ggcat* on the output takes forever, see https://github.com/algbio/ggcat/issues/76
+(now fixed; it had a bug for even $k$).
 #+begin_src sh
 ggcat build --greedy-matchtigs -o hprcv2.dedup.ggcat.fa --kmer-length 64 -m 512 -j 128  hprcv2.dedup.fa
 #+end_src
 
-Cuttlefish to build unitigs takes 20 minutes; some small issues here: https://github.com/COMBINE-lab/cuttlefish/issues/70.
+Instead, we can use *Cuttlefish* to build unitigs in *20min*. Some small remarks here https://github.com/COMBINE-lab/cuttlefish/issues/70.
 #+begin_src sh
 cuttlefish build --ref --seq hprcv2.dedup.fa --kmer-len 63 --threads 64 --work-dir work --output hprcv2.unitigs.fa -m 512
 #+end_src
 - Sadly, this increases the file size from *15GB* to *18GB*.
+- Note that Cuttlefish only takes odd k, so we have $k=63$ now.
 
-Now, let's run (greedy) [[https://github.com/algbio/matchtigs][matchtigs]] (takes around an hour; small issue here https://github.com/algbio/matchtigs/issues/8) for the final shrink:
+Now, let's shrink things using [[https://github.com/algbio/matchtigs][greedy matchtigs]]: *1h*, small issue here https://github.com/algbio/matchtigs/issues/8):
 #+begin_src 
 matchtigs -k 63 -t 64 --fa-in hprcv2.unitigs.fa --greedytigs-fa-out hprcv2.greedytigs.fa
 #+end_src
+This outputs *8.7GB* (down from 10.6GB with $w=25$), or *2.38GB* after zstd compression!
 
-This outputs *8.7GB* (down from 10.6GB with $w=25$), or *2.38GB* after compression!
+Download the result here:
+https://ragnargrootkoerkamp.nl/upload/hprcv2-k63-greedytigs.fa.zst
 
-https://ragnargrootkoerkamp.nl/upload/hprcv2-k64-greedytigs.fa.zst
-
-** GGCAT take 2
+** GGCAT
+GGCAT implements fout types of tig output:
+(Refer to [[file:tigs/tigs.org][this post]] summarizing types of tigs.)
+- Unitigs: the default.
+  
+- Simplitigs: just concatenate unitigs, reimplemented and very fast.
+- Eulertigs: optimally concatenate unitigs, reimplemented and very fast.
+- Greedy matchtigs: the smallest and directly forwards to the matchtigs library.
+  - These also contract kmers /at a distance/, causing duplicate kmers.
+*** Greedy matchtigs
 It turns out that ggcat had an issue for even k that has now been fixed. For
-$k=63$, it runs in ~50min and I got:
+$k=63$, it outputs *8.9GB* (slightly larger only because of file headers) and runs in *50min* with:
 #+begin_src 
 	phase: reads bucketing 	=> 12.59s
 	phase: kmers merge 	=> 19.18s
@@ -723,34 +718,27 @@ $k=63$, it runs in ~50min and I got:
 	phase: greedy matchtigs building [step1] 	=> 2682.47s
 	phase: greedy matchtigs building [step2] 	=> 160.27s
 #+end_src
-The output file is very close in size to the output generated by cuttlefish
-and matchtigs, at *8.9GB*. (The only difference is that it takes an additional 250MB to
-store the length of each contig in the fasta headers.)
 
-Note that the unitig part takes only 200s (~3.5 minutes) compared to the 20
-minutes used by cuttlefish. The matchtigs part takes around 47min, which is also
+Note that the unitig part takes only *200s* compared to the 20
+minutes used by cuttlefish. The matchtigs part takes around *47min*, which is also
 ~10min faster than running matchtigs directly. I assume that's because ggcat has
 more optimized I/O, and that either way the matchtigs part is largely single-threaded.
 
-*** Other tigs
-(Refer to [[file:tigs/tigs.org][this post]] summarizing types of tigs.)
-
-GGCAT has dedicated algorithms for simplitigs and eulertigs.
-- Simplitigs: *10.9GB* in *160s*
-  - Simplitigs are obtained by contracting unitigs.
-  #+begin_src 
+*** Simplitigs
+*10.9GB* in *160s*
+#+begin_src 
 TOTAL TIME: 160.60s
 Max virtual fs usage: 9.48 GiB
 Max disk usage: 0.00 octets
 Final stats:
-	phase: reads bucketing 	=> 12.47s
-	phase: kmers merge 	=> 12.98s
-	phase: unitigs joining 	=> 135.15s
-  #+end_src
-- Eulertigs: *10.7GB* in *162s*
-  - Eulertigs do the contraction in an optimal way.
-  - This crashed for =k=64=, so this is for =k=63= instead.
-  #+begin_src 
+ phase: reads bucketing 	=> 12.47s
+ phase: kmers merge 	=> 12.98s
+ phase: unitigs joining 	=> 135.15s
+#+end_src
+*** Eulertigs
+*10.7GB* in *162s*
+- This crashed for =k=64=, so this is for =k=63= instead.
+#+begin_src 
 TOTAL TIME: 162.43s
 Max virtual fs usage: 9.46 GiB
 Max disk usage: 0.00 octets
@@ -761,13 +749,13 @@ Final stats:
 	phase: eulertigs building part 1 	=> 35.81ms
 	phase: eulertigs building part 2 	=> 9.89ms
 	phase: eulertigs building part 3 	=> 95.58s
-  #+end_src
-- Matchtigs: *8.9GB* in *50min* (as above)
-  - Matchtigs also contract unitigs /at a distance/, thereby introducing
-    duplicate k-mers.
+#+end_src
   
 
 * TODO
+- Dedup unitig start/end
+- Dedup by matching against reference text
+- rwlock over shards
 - update zenodo after testing: https://zenodo.org/records/21724558
 - it's k=63, not k=64
 - check details of reverse complementing
