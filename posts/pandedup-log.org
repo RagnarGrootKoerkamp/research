@@ -1,0 +1,776 @@
+#+title: Pandedup: Making a k-mer spectrum of HPRCv2
+#+filetags: data-analysis wip lablog
+#+OPTIONS: ^:{} num: num:t
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+date: <2026-09-28 Mon>
+
+With sassy, we can quickly do /approximate string matching/ (ASM) or /fuzzy
+searching/ of small patterns such as 23bp barcodes or 23bp Crispr guides againsta fasta
+file.
+
+With multi-threading, searching a human genome takes as little as 30ms per
+pattern on my laptop. And even less with the work-in-progress GPU version.
+
+It would be great to also search in HPRCv2, but searching 466 full copies of a
+human genome would be unnecessarily slow as they are highly redundant.
+So here we go about deduping HPRCv2 into a /spectrum preserving string set/
+(SPSS) that contains each k-mer at least once. We choose $k=40$ to accommodate
+searches of patterns of length around $m=32$ while allowing up to $k-m=8$ errors.
+
+Here are my notes of developing [[https://github.com/ragnargrootkoerkamp/pandedup][pandedup]], a tool for deduplicating (human) pangenomes.
+
+As input we take the 3.3GB AGC file that we parse using the (vibe coded) =ragc=
+Rust port.
+The implementation uses multiple decoder instances to parse multiple samples in
+parallel and sends them to a single thread (using a =mpsc=) that does the actual
+deduplication.
+
+* Syncmers
+We can use the =simd-minimizers= crate to extract /syncmers/, which (in my
+notation) are substrings (windows) of length $\ell = k+w-1$ that have their minimizer
+(smallest k-mer) at the start or end. It is guaranteed that consecutive syncmers
+overlap by at least $k$ (although $k-1$ is sufficient for our application).
+
+We then incrementally build a hashset containing the 128-bit hashes of all syncmers seen so far.
+
+When parsing a new contig, we take the union of all new syncmers and output the
+corresponding substrings to the output.
+
+For $w=100$ we get:
+
+#+begin_src 
+process sample 0: 8.747084871s
+  new bp:           2934.064 Mbp (10620.9 bp/range)
+  new taken:          58.283 M   (211.0 /range)
+  syncmers taken:     58.283 M   (89.6%)
+  num_ranges:          0.276 M
+  output_bp:           2.934 Gbp (94.1%)
+
+process sample 1: 11.235665811s
+  new bp:            541.665 Mbp (255.9 bp/range)
+  new taken:           8.061 M   (3.8 /range)
+  syncmers taken:     66.344 M   (51.2%)
+  num_ranges:          2.393 M
+  output_bp:           3.476 Gbp (56.3%)
+
+process sample 2: 10.015981828s
+  new bp:            291.877 Mbp (238.7 bp/range)
+  new taken:           4.251 M   (3.5 /range)
+  syncmers taken:     70.595 M   (36.6%)
+  num_ranges:          3.616 M
+  output_bp:           3.768 Gbp (41.0%)
+
+...
+
+process sample 10: 9.581835449s
+  new bp:             87.308 Mbp (215.8 bp/range)
+  new taken:           1.230 M   (3.0 /range)
+  syncmers taken:     91.651 M   (13.4%)
+  num_ranges:         10.097 M
+  output_bp:           5.238 Gbp (15.7%)
+
+...
+
+process sample 25: 10.337954934s
+  new bp:             35.677 Mbp (202.2 bp/range)
+  new taken:           0.492 M   (2.8 /range)
+  syncmers taken:    107.409 M   (6.6%)
+  num_ranges:         15.382 M
+  output_bp:           6.362 Gbp (8.1%)
+
+...
+
+process sample 100: 11.310624909s
+  new bp:             20.608 Mbp (199.8 bp/range)
+  new taken:           0.282 M   (2.7 /range)
+  syncmers taken:    148.540 M
+  num_ranges:         29.598 M
+  output_bp:           9.318 Gbp (3.1%)
+
+...
+
+process sample 200: 11.294771273s
+  new bp:             26.053 Mbp (203.0 bp/range)
+  new taken:           0.360 M   (2.8 /range)
+  syncmers taken:    179.428 M
+  num_ranges:         40.543 M
+  output_bp:          11.552 Gbp (1.9%)
+
+...
+
+process sample 300: 10.509615192s
+  new bp:             11.874 Mbp (196.9 bp/range)
+  new taken:           0.162 M   (2.7 /range)
+  syncmers taken:    201.636 M
+  num_ranges:         48.568 M
+  output_bp:          13.166 Gbp (1.5%)
+
+...
+
+process sample 400: 11.201425417s
+  new bp:             13.529 Mbp (198.9 bp/range)
+  new taken:           0.186 M   (2.7 /range)
+  syncmers taken:    220.593 M
+  num_ranges:         55.347 M
+  output_bp:          14.536 Gbp (1.2%)
+
+...
+
+process sample 464: 12.979684545s
+  new bp:              7.983 Mbp (199.6 bp/range)
+  new taken:           0.109 M   (2.7 /range)
+  syncmers taken:    231.548 M
+  num_ranges:         59.269 M
+  output_bp:          15.329 Gbp (1.1%)
+
+process sample 465: 13.323026054s
+  new bp:             13.655 Mbp (197.8 bp/range)
+  new taken:           0.188 M   (2.7 /range)
+  syncmers taken:    231.736 M
+  num_ranges:         59.338 M
+  output_bp:          15.343 Gbp (1.1%)
+#+end_src
+
+This finishes in 1:25 hours using 5h of CPU time.
+The main bottleneck is that =ragc= does not support multithreaded decompression,
+and so I have to create one decompressor instance per thread and these take a
+lot of memory, so I can only have 4 at a time.
+
+
+Observe:
+- The first sample adds 2.9 Gbp of new sequence, and 90% of the syncmers is taken.
+- Following samples quickly add less and less new content: around =30
+  Mbp/sample= at sample 25, =20 Mbp/sample= at sample 100, and just =10
+  Mbp/sample= at sample 250.
+- Each newly added range has average length around 200bp, which is $2w$ or $w +
+  2.5k$. TODO: figure out which is mathematically correct.
+- Most likely, each added range contains a single point mutation or structural variation.
+  It's a bit long to add 200 bases if all we need is $2k-1=79$ bases to
+  cover it.
+- Each range is the span of 2.8 syncmers on average.
+- After 466 samples, we have 231 million syncmers in total in our hashset.
+- After 466 samples, we have 15.3 Gbp of data accumulated over 59M contigs, which is equivalent
+  to around 5 human genomes.
+- If we bit-pack the data, it would be 3.8 GB, which is only slightly larger
+  than the 3.3 GB input file.
+
+What's somewhat annoying is that each mutation gives multiple new syncmers that
+together span an unnecessarily large interval. Let's try to fix that.
+
+* Syncmer-parse rather than syncmers (whoops)
+Instead of fixed-length syncmers, we can use the /minimizer parse/: compute all
+$(k, w)$ minimizers, and then extract the substrings spanned by each pair of
+consecutive minimizers. These form strict substrings of the syncmers and should
+be less prone to nearby mutations.
+
+This results in:
+
+#+begin_src 
+process sample 0: 7.513588348s
+  new bp:           2926.985 Mbp (9043.9 bp/range)
+  new taken:          57.840 M   (178.7 /range)
+  syncmers taken:     57.840 M   (88.9%)
+  num_ranges:          0.324 M
+  output_bp:           2.927 Gbp (93.9%)
+
+process sample 1: 9.204434037s
+  new bp:            511.038 Mbp (236.8 bp/range)
+  new taken:           7.639 M   (3.5 /range)
+  syncmers taken:     65.480 M   (50.5%)
+  num_ranges:          2.481 M
+  output_bp:           3.438 Gbp (55.7%)
+
+process sample 2: 7.965897865s
+  new bp:            418.844 Mbp (222.6 bp/range)
+  new taken:           6.141 M   (3.3 /range)
+  syncmers taken:     71.621 M   (37.1%)
+  num_ranges:          4.363 M
+  output_bp:           3.857 Gbp (42.3%)
+
+...
+
+process sample 10: 8.435886889s
+  new bp:            179.178 Mbp (213.1 bp/range)
+  new taken:           2.589 M   (3.1 /range)
+  syncmers taken:     89.146 M   (13.1%)
+  num_ranges:         10.340 M
+  output_bp:           5.083 Gbp (15.3%)
+
+...
+
+process sample 25: 8.458732794s
+  new bp:             32.617 Mbp (182.8 bp/range)
+  new taken:           0.446 M   (2.5 /range)
+  syncmers taken:    103.603 M   (6.3%)
+  num_ranges:         15.712 M
+  output_bp:           6.119 Gbp (7.8%)
+
+...
+
+process sample 100: 8.336943788s
+  new bp:             18.526 Mbp (178.4 bp/range)
+  new taken:           0.247 M   (2.4 /range)
+  syncmers taken:    140.545 M   (2.2%)
+  num_ranges:         30.125 M
+  output_bp:           8.816 Gbp (2.9%)
+
+...
+
+process sample 300: 8.166004583s
+  new bp:             10.600 Mbp (175.1 bp/range)
+  new taken:           0.140 M   (2.3 /range)
+  syncmers taken:    187.128 M   (1.0%)
+  num_ranges:         49.271 M
+  output_bp:          12.285 Gbp (1.4%)
+#+end_src
+
+Compared to the syncmer parse:
+- Ranges (mostly for point mutations) are 10% shorter.
+- We get 10% less new output bases.
+- We sample fewer minimizer phrases than syncmers.
+
+* Minimizer parse
+
+(Not sure anymore exactly which parameters this has.)
+
+#+begin_src
+process sample 0: 7.682570099s
+  new bp:           2912.950 Mbp (6754.1 bp/range)
+  new taken:          56.843 M   (131.8 /range)
+  syncmers taken:     56.843 M   (88.2%)
+  num_ranges:          0.431 M
+  output_bp:           2.913 Gbp (93.4%)
+
+process sample 1: 9.894358837s
+  new bp:            434.693 Mbp (187.0 bp/range)
+  new taken:           6.091 M   (2.6 /range)
+  syncmers taken:     62.934 M   (49.0%)
+  num_ranges:          2.755 M
+  output_bp:           3.348 Gbp (54.3%)
+
+process sample 2: 8.430858872s
+  new bp:            350.879 Mbp (177.4 bp/range)
+  new taken:           4.805 M   (2.4 /range)
+  syncmers taken:     67.739 M   (35.4%)
+  num_ranges:          4.733 M
+  output_bp:           3.699 Gbp (40.6%)
+
+...
+
+process sample 10: 8.516717746s
+  new bp:             65.566 Mbp (159.8 bp/range)
+  new taken:           0.850 M   (2.1 /range)
+  syncmers taken:     81.128 M   (12.0%)
+  num_ranges:         10.792 M
+  output_bp:           4.707 Gbp (14.1%)
+
+...
+
+process sample 100: 10.845207061s
+  new bp:             14.189 Mbp (144.6 bp/range)
+  new taken:           0.175 M   (1.8 /range)
+  syncmers taken:    118.237 M   (1.8%)
+  num_ranges:         30.154 M
+  output_bp:           7.550 Gbp (2.5%)
+
+...
+
+process sample 200: 10.901156258s
+  new bp:             18.143 Mbp (146.5 bp/range)
+  new taken:           0.222 M   (1.8 /range)
+  syncmers taken:    137.706 M   (1.1%)
+  num_ranges:         40.685 M
+  output_bp:           9.110 Gbp (1.5%)
+#+end_src
+
+* Shorter minimizers
+
+Before, we were using $w=100$, $k=40$ minimizers, but in fact it is sufficient
+to use shorter minimizers with $k'=8$ to extract 'key positions' at most 100
+apart, and then simply extract sufficiently overlapping subsequences starting at
+these positions and ending 40 beyond the next sampled position. 
+
+For random minimizers, $k'=8$ is large enough to not loose any density, while
+being more stable under changes.
+
+#+begin_src
+process sample 0: 9.144635842s
+  new bp:           2909.696 Mbp (6250.1 bp/range)
+  new taken:          58.868 M   (126.4 /range)
+  syncmers taken:     58.868 M   (87.9%)
+  num_ranges:          0.466 M
+  output_bp:           2.910 Gbp (93.3%)
+
+process sample 1: 8.989641454s
+  new bp:            419.542 Mbp (177.9 bp/range)
+  new taken:           5.700 M   (2.4 /range)
+  syncmers taken:     64.568 M   (48.4%)
+  num_ranges:          2.824 M
+  output_bp:           3.329 Gbp (54.0%)
+
+process sample 2: 8.699237103s
+  new bp:            338.204 Mbp (169.4 bp/range)
+  new taken:           4.485 M   (2.2 /range)
+  syncmers taken:     69.053 M   (34.8%)
+  num_ranges:          4.820 M
+  output_bp:           3.667 Gbp (40.2%)
+
+process sample 3: 9.111089474s
+  new bp:            159.663 Mbp (161.9 bp/range)
+  new taken:           2.078 M   (2.1 /range)
+  syncmers taken:     71.132 M   (27.0%)
+  num_ranges:          5.806 M
+  output_bp:           3.827 Gbp (31.5%)
+
+...
+
+process sample 10: 9.04328886s
+  new bp:            143.675 Mbp (168.2 bp/range)
+  new taken:           1.911 M   (2.2 /range)
+  syncmers taken:     81.645 M   (11.6%)
+  num_ranges:         10.895 M
+  output_bp:           4.640 Gbp (13.9%)
+
+...
+
+process sample 465: 10.648589872s
+  new bp:              9.454 Mbp (143.5 bp/range)
+  new phrases:           0.116 M   (1.8 /range)
+  total phrases:    170.376 M   (0.6%)
+  num_ranges:         58.554 M
+  output_bp:          11.732 Gbp (0.8%)
+#+end_src
+
+So 15.3 to 11.7; pretty good gain :)
+In 4344s overall on 3 threads.
+
+** Bugfix
+
+Turns out AGC is returning =u8= vectors of =0123=, not =ACTG=, and so the
+minimizer/PFP computation was only using 1 of the 2 bits (because going from
+ACTG to 0123 normally shifts right by 1).
+
+Fixing that gives:
+#+begin_src 
+process sample 0: 9.24019449s
+  new bp:           2908.803 Mbp (6423.3 bp/range)
+  new phrases:          57.031 M   (125.9 /range)
+  total phrases:     57.031 M   (86.4%)
+  num_ranges:          0.453 M
+  output_bp:           2.909 Gbp (93.3%)
+
+process sample 1: 11.256846815s
+  new bp:            420.293 Mbp (178.5 bp/range)
+  new phrases:           5.640 M   (2.4 /range)
+  total phrases:     62.671 M   (47.9%)
+  num_ranges:          2.807 M
+  output_bp:           3.329 Gbp (54.0%)
+
+process sample 2: 9.406656924s
+  new bp:            221.560 Mbp (169.2 bp/range)
+  new phrases:           2.883 M   (2.2 /range)
+  total phrases:     65.554 M   (33.7%)
+  num_ranges:          4.117 M
+  output_bp:           3.551 Gbp (38.6%)
+
+process sample 3: 9.715269299s
+  new bp:            277.431 Mbp (166.4 bp/range)
+  new phrases:           3.604 M   (2.2 /range)
+  total phrases:     69.158 M   (26.8%)
+  num_ranges:          5.784 M
+  output_bp:           3.828 Gbp (31.5%)
+
+...
+
+process sample 10: 8.702274402s
+  new bp:            142.963 Mbp (168.0 bp/range)
+  new phrases:           1.888 M   (2.2 /range)
+  total phrases:     79.541 M   (11.6%)
+  num_ranges:         10.853 M
+  output_bp:           4.640 Gbp (13.9%)
+#+end_src
+
+** With read-write lock of hashset
+- Same output, but only 500ms instead of 10s lock on the hashmap.
+
+
+* Aside: PFP / FracMinHash
+Let's also try the approach of sampling all kmers with fractional hash value at
+most $2/(w+1)$ (to have the same overall density).
+
+#+begin_src 
+process sample 0: 10.844735133s
+  new bp:           2927.617 Mbp (6567.0 bp/range)
+  new taken:          72.765 M   (163.2 /range)
+  syncmers taken:     72.765 M   (91.7%)
+  num_ranges:          0.446 M
+  output_bp:           2.928 Gbp (93.9%)
+
+process sample 1: 10.579291664s
+  new bp:            550.039 Mbp (202.1 bp/range)
+  new taken:           6.931 M   (2.5 /range)
+  syncmers taken:     79.696 M   (51.6%)
+  num_ranges:          3.168 M
+  output_bp:           3.478 Gbp (57.4%)
+
+process sample 2: 11.18861265s
+  new bp:            301.227 Mbp (202.4 bp/range)
+  new taken:           3.574 M   (2.4 /range)
+  syncmers taken:     83.269 M   (35.8%)
+  num_ranges:          4.656 M
+  output_bp:           3.779 Gbp (41.5%)
+
+process sample 3: 12.66143639s
+  new bp:            189.336 Mbp (196.2 bp/range)
+  new taken:           2.146 M   (2.2 /range)
+  syncmers taken:     85.415 M   (27.5%)
+  num_ranges:          5.622 M
+  output_bp:           3.968 Gbp (32.7%)
+
+...
+
+process sample 10: 11.550021873s
+  new bp:             78.163 Mbp (195.8 bp/range)
+  new taken:           0.816 M   (2.0 /range)
+  syncmers taken:     96.193 M   (11.3%)
+  num_ranges:         10.578 M
+  output_bp:           4.950 Gbp (14.9%)
+#+end_src
+
+Overall, this is worse than the minimizer variant.
+
+* Minimizers, with smaller $w=50$, $k=40$, $k'=8$
+
+#+begin_src 
+process sample 0: 15.900242517s
+  new bp:           2887.140 Mbp (4294.3 bp/range)
+  new phrases:         113.153 M   (168.3 /range)
+  total phrases:    113.153 M   (88.6%)
+  num_ranges:          0.672 M
+  output_bp:           2.887 Gbp (92.6%)
+
+process sample 1: 18.765048945s
+  new bp:            335.610 Mbp (133.2 bp/range)
+  new phrases:           8.261 M   (3.3 /range)
+  total phrases:    121.414 M   (47.9%)
+  num_ranges:          3.191 M
+  output_bp:           3.223 Gbp (52.2%)
+
+process sample 2: 15.640636325s
+  new bp:            265.662 Mbp (127.1 bp/range)
+  new phrases:           6.365 M   (3.0 /range)
+  total phrases:    127.779 M   (34.0%)
+  num_ranges:          5.282 M
+  output_bp:           3.488 Gbp (38.3%)
+
+push sample   8 (3.0 Gbp): read: 23.327796953s minis: 5.11133427s
+process sample 3: 16.567902729s
+  new bp:            123.190 Mbp (122.6 bp/range)
+  new phrases:           2.898 M   (2.9 /range)
+  total phrases:    130.677 M   (26.1%)
+  num_ranges:          6.287 M
+  output_bp:           3.612 Gbp (29.7%)
+
+...
+
+process sample 10: 16.139335034s
+  new bp:            111.328 Mbp (129.2 bp/range)
+  new phrases:           2.709 M   (3.1 /range)
+  total phrases:    145.220 M   (10.7%)
+  num_ranges:         11.407 M
+  output_bp:           4.233 Gbp (12.7%)
+#+end_src
+
+So maybe 10-20% smaller overall result, but 2x more phrases and thus 2x larger hashset.
+
+
+* $k=64$, $w=100$, $k'=8$
+Gives a 15.0 Gbp file, up from 11.8 Gbp for $k=40$.
+
+#+begin_quote
+process sample 465: 135.466742ms
+  new bp:             13.638 Mbp (192.3 bp/range)
+  new phrases:         0.162 M   (2.3 /range)
+  total phrases:     203.864 M   (30.3%)
+  num_ranges:         59.379 M
+  output_bp:          14.860 Gbp (1.1%)
+#+end_quote
+
+604s walltime on 64 threads (backus)
+
+With canonical (in 582s):
+#+begin_quote
+process sample 465: 135.578722ms
+  new bp:             14.003 Mbp (194.4 bp/range)
+  new phrases:         0.163 M   (2.3 /range)
+  total phrases:     202.118 M   (30.6%)
+  num_ranges:         59.692 M
+  output_bp:          15.063 Gbp (1.1%)
+#+end_quote
+
+With non-canonical anti-lex kmers (in 603s):
+#+begin_src 
+process sample 465: 129.883241ms
+  new bp:             13.647 Mbp (191.0 bp/range)
+  new phrases:           0.156 M   (2.2 /range)
+  total phrases:    196.372 M   (30.3%)
+  num_ranges:          59.486 M
+  output_bp:           14.848 Gbp (1.1%)
+#+end_src
+
+After speading up the ragc reader: 438s.
+
+After a smaller initial batch to reduce 64x 2s wait: 383s
+
+** Sharding
+We can shard the hashtable into 256 parts and process the phrases in each sample
+part-by-part.
+If we randomize the order of the parts in each sample, we get much larger output
+(398s).
+#+begin_src 
+process sample 465: 12.971602ms
+  new bp:              10.967 Mbp (212.6 bp/range)
+  new phrases:          0.133 M   (2.6 /range; 100.0 %)
+  total phrases:      196.372 M   (100.0%)
+  num_ranges:         107.403 M
+  output_bp:           18.175 Gbp (1.3%)
+#+end_src
+
+Back to linear order in 362s:
+#+begin_src 
+push sample 465 (3.0 Gbp): read: 11.05s minis:  4.82s phrases:  5.97s sort:  1.45s lookups:  9.07s sort:  0.13s
+process sample 465: 15.361753ms
+  new bp:              13.014 Mbp (189.5 bp/range)
+  new phrases:          0.148 M   (2.1 /range; 100.0 %)
+  total phrases:      196.372 M   (100.0%)
+  num_ranges:          59.484 M
+  output_bp:           14.848 Gbp (1.1%)
+#+end_src
+
+128 threads instead of 64, to avoid low utilization (of only 20 cores at times):
+380s; 750GB RAM.
+
+With RwLock instead of Mutex: 366s also. Slightly larger/more ranges because of
+unordered insertions
+#+begin_src 
+process sample 465: 14.683933ms
+  new bp:              11.650 Mbp (190.2 bp/range)
+  new phrases:          0.132 M   (2.2 /range; 100.0 %)
+  total phrases:      196.372 M   (100.0%)
+  num_ranges:          61.175 M
+  output_bp:           14.968 Gbp (1.1%)
+#+end_src
+
+** Per-contig processing and per-thread output
+Instead of sending all output to a single thread, we can output directly from
+the worker thread. We can also process only single contigs at a time to
+significantly reduce memory usage: 471s.
+Note that we also process the reference first on a single thread.
+
+#+begin_src 
+push sample 463 (3.1 Gbp  85 ctg): read:  6.58s minis:  4.49s phrases:  1.58s sort:  0.27s lookups: 23.59s sort:  0.13s lock:  0.26s output:  0.15s
+  new bp:              11.004 Mbp (212.7 bp/contig)
+  new phrases:          0.133 M   (2.6 /contig;  0.2%)
+  unique phrases:     196.372 M   (0.7%)
+  num_contigs:         60.215 M
+  output_bp:           14.899 Gbp (1.1%)
+#+end_src
+
+** Pre-filtering against reference:
+We store the reference and the position of each phrase in it.
+When parsing a new sequence, if the phrase already occurs in the reference, we
+then greedily extend from there and skip any phrases contained in this region.
+
+307s
+
+#+begin_src 
+push sample 465 (3.0 Gbp  79 ctg): read:  7.23s minis:  4.79s phrases:  6.70s sort:  0.09s lookups:  1.84s sort:  0.04s lock:  1.22s output:  0.14s
+  new bp:              13.141 Mbp (189.5 bp/contig)
+  new phrases:          0.149 M   (2.1 /contig;  0.2%; 68.0% filtered)
+  unique phrases:     196.372 M   (0.7%)
+  num_contigs:         60.225 M
+  output_bp:           14.899 Gbp (1.1%)
+#+end_src
+
+* $k=64$, $w=25, $k'=8$
+Gives a 11.5 Gbp file, or 3.1 GB after zst-compression.
+
+96 threads, anti-lex: 1000s; 950GB RAM 
+
+#+begin_src
+process sample 465: 13.606797ms
+  new bp:               8.943 Mbp (138.3 bp/range)
+  new phrases:          0.347 M   (5.4 /range; 100.0 %)
+  total phrases:      552.892 M   (100.0%)
+  num_ranges:          57.789 M
+  output_bp:           11.288 Gbp (0.8%)
+#+end_src
+
+Latest version, in 386s and <100GB RAM:
+
+#+begin_src 
+push sample 465 (3.0 Gbp  79 ctg): read:  7.37s minis:  5.48s phrases: 11.59s sort:  0.21s lookups:  4.03s sort:  0.10s lock:  0.22s output:  0.15s
+  new bp:               9.042 Mbp (138.3 bp/contig)
+  new phrases:          0.351 M   (5.4 /contig;  0.2%; 81.9% filtered away)
+  unique phrases:     552.892 M   (0.5%)
+  num_contigs:         58.045 M
+  output_bp:           11.312 Gbp (0.8%)
+#+end_src
+
+With $w=10$, in 587s and 96GB RAM:
+
+#+begin_src 
+push sample 465 (3.0 Gbp  79 ctg): read:  7.45s minis:  5.70s phrases: 17.49s sort:  0.32s lookups:  7.64s sort:  0.20s lock:  0.33s output:  0.22s
+  new bp:               8.250 Mbp (128.1 bp/contig)
+  new phrases:          0.706 M   (11.0 /contig;  0.1%; 86.6% filtered away)
+  unique phrases:    1179.914 M   (0.5%)
+  num_contigs:         57.766 M
+  output_bp:           10.625 Gbp (0.8%)
+#+end_src
+
+* $k=32$, $w=10$
+- 400 s
+- <100 GB RAM
+- 1.9 GB .zst output
+#+begin_src 
+push sample 465 (3.0 Gbp  79 ctg): read:  4.87s minis:  4.08s phrases: 17.66s sort:  0.28s lookups:  6.14s sort:  0.09s lock:  0.16s output:  0.15s
+  new bp:               3.652 Mbp (67.0 bp/contig)
+  new phrases:          0.317 M   (5.8 /contig;  0.1%; 85.7% filtered away)
+  unique phrases:     777.793 M   (0.3%)
+  num_contigs:         54.224 M
+  output_bp:            6.390 Gbp (0.5%)
+#+end_src
+
+* TODO
+- Dedup unitig start/end
+- Dedup by matching against reference text
+- rwlock over shards
+
+* Sept 28
+** Using it in deacon
+Bede used =hprcv2.k64.zst= in deacon. For =k=31= and =w=20=, it gives
+=353,721,077= minimizers, whereas running on the full hprcv2 =.agc= directly
+gives =353,690,959= minimizers, which is =30118= /smaller/, and so I'm
+/over/-reporting kmers. Hrmmm...
+
+Added a bunch of tests to pandedup, but those all seem to work fine.
+
+- Checking 0.1% of output kmers against the .agc input gives no new kmers, but
+  I'm stripping N chars from the input...
+
+** HPRCv2
+#+begin_src sh
+cargo run -r -- -k 64 -w 100 hprcv2.agc
+#+end_src
+
+1700s
+
+#+begin_src sh
+push sample 465 (3.0 Gbp  79 ctg): read:  0.00s minis:  4.95s phrases:  5.08s sort:  0.08s lookups:  1.05s sort:  0.04s lock:  0.00s output:  0.10s
+  new bp:              13.039 Mbp (189.5 bp/contig)
+  new phrases:          0.148 M   (2.1 /contig;  0.2%; 68.0% filtered away)
+  unique phrases:     196.372 M   (0.7%)
+  num_contigs:         59.592 M
+  output_bp:           14.856 Gbp (1.1%)
+#+end_src
+
+on the server, with splitting on N, in 230s, gives *14.9GB* output.
+
+#+begin_src sh
+2026-09-28T13:58:28.653526Z DEBUG pandedup: push sample 465 (3.0 Gbp  89 ctg): read:  0.00s minis:  3.34s phrases:  6.66s sort:  0.12s lookups:  1.57s sort:  0.04s lock:  0.10s output:  0.13s
+2026-09-28T13:58:28.653546Z DEBUG pandedup:   new bp:              13.152 Mbp (189.5 bp/contig)
+2026-09-28T13:58:28.653550Z DEBUG pandedup:   new phrases:          0.149 M   (2.1 /contig;  0.2%; 68.8% filtered away)
+2026-09-28T13:58:28.653553Z DEBUG pandedup:   unique phrases:     196.322 M   (0.7%)
+2026-09-28T13:58:28.653555Z DEBUG pandedup:   num_contigs:         59.985 M
+2026-09-28T13:58:28.653556Z DEBUG pandedup:   output_bp:           14.882 Gbp (1.1%)
+2026-09-28T13:58:28.653558Z DEBUG pandedup: 
+bash-5.2$ la
+#+end_src
+
+ggcat on the output takes forever, see https://github.com/algbio/ggcat/issues/76.
+#+begin_src sh
+ggcat build --greedy-matchtigs -o hprcv2.dedup.ggcat.fa --kmer-length 64 -m 512 -j 128  hprcv2.dedup.fa
+#+end_src
+
+Cuttlefish to build unitigs takes 20 minutes; some small issues here: https://github.com/COMBINE-lab/cuttlefish/issues/70.
+#+begin_src sh
+cuttlefish build --ref --seq hprcv2.dedup.fa --kmer-len 63 --threads 64 --work-dir work --output hprcv2.unitigs.fa -m 512
+#+end_src
+- Sadly, this increases the file size from *15GB* to *18GB*.
+
+Now, let's run (greedy) [[https://github.com/algbio/matchtigs][matchtigs]] (takes around an hour; small issue here https://github.com/algbio/matchtigs/issues/8) for the final shrink:
+#+begin_src 
+matchtigs -k 63 -t 64 --fa-in hprcv2.unitigs.fa --greedytigs-fa-out hprcv2.greedytigs.fa
+#+end_src
+
+This outputs *8.7GB* (down from 10.6GB with $w=25$), or *2.38GB* after compression!
+
+https://ragnargrootkoerkamp.nl/upload/hprcv2-k64-greedytigs.fa.zst
+
+** GGCAT take 2
+It turns out that ggcat had an issue for even k that has now been fixed. For
+$k=63$, it runs in ~50min and I got:
+#+begin_src 
+	phase: reads bucketing 	=> 12.59s
+	phase: kmers merge 	=> 19.18s
+	phase: unitigs joining 	=> 38.37s
+	phase: maximal unitigs links building [step 1] 	=> 1.82s
+	phase: maximal unitigs links building [step 2] 	=> 5.21s
+	phase: maximal unitigs links building [step 3] 	=> 124.00s
+	phase: greedy matchtigs building [step1] 	=> 2682.47s
+	phase: greedy matchtigs building [step2] 	=> 160.27s
+#+end_src
+The output file is very close in size to the output generated by cuttlefish
+and matchtigs, at *8.9GB*. (The only difference is that it takes an additional 250MB to
+store the length of each contig in the fasta headers.)
+
+Note that the unitig part takes only 200s (~3.5 minutes) compared to the 20
+minutes used by cuttlefish. The matchtigs part takes around 47min, which is also
+~10min faster than running matchtigs directly. I assume that's because ggcat has
+more optimized I/O, and that either way the matchtigs part is largely single-threaded.
+
+*** Other tigs
+(Refer to [[file:tigs/tigs.org][this post]] summarizing types of tigs.)
+
+GGCAT has dedicated algorithms for simplitigs and eulertigs.
+- Simplitigs: *10.9GB* in *160s*
+  - Simplitigs are obtained by contracting unitigs.
+  #+begin_src 
+TOTAL TIME: 160.60s
+Max virtual fs usage: 9.48 GiB
+Max disk usage: 0.00 octets
+Final stats:
+	phase: reads bucketing 	=> 12.47s
+	phase: kmers merge 	=> 12.98s
+	phase: unitigs joining 	=> 135.15s
+  #+end_src
+- Eulertigs: *10.7GB* in *162s*
+  - Eulertigs do the contraction in an optimal way.
+  - This crashed for =k=64=, so this is for =k=63= instead.
+  #+begin_src 
+TOTAL TIME: 162.43s
+Max virtual fs usage: 9.46 GiB
+Max disk usage: 0.00 octets
+Final stats:
+	phase: reads bucketing 	=> 12.40s
+	phase: kmers merge 	=> 12.76s
+	phase: unitigs joining 	=> 41.64s
+	phase: eulertigs building part 1 	=> 35.81ms
+	phase: eulertigs building part 2 	=> 9.89ms
+	phase: eulertigs building part 3 	=> 95.58s
+  #+end_src
+- Matchtigs: *8.9GB* in *50min* (as above)
+  - Matchtigs also contract unitigs /at a distance/, thereby introducing
+    duplicate k-mers.
+  
+
+* TODO
+- update zenodo after testing: https://zenodo.org/records/21724558
+- it's k=63, not k=64
+- check details of reverse complementing
+- build for k=31 and k=127
+- try masked superstrings
+
