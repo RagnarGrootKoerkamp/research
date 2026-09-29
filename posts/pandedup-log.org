@@ -595,7 +595,7 @@ push sample 465 (3.0 Gbp  79 ctg): read:  7.23s minis:  4.79s phrases:  6.70s so
   output_bp:           14.899 Gbp (1.1%)
 #+end_src
 
-* $k=64$, $w=25, $k'=8$
+* $k=64$, $w=25$, $k'=8$
 Gives a 11.5 Gbp file, or 3.1 GB after zst-compression.
 
 96 threads, anti-lex: 1000s; 950GB RAM 
@@ -646,7 +646,7 @@ push sample 465 (3.0 Gbp  79 ctg): read:  4.87s minis:  4.08s phrases: 17.66s so
 
 * Sept 28
 ** Using it in deacon: bug in ambiguous bases
-Bede used =hprcv2.k64.zst= in deacon. For =k=31= and =w=20=, it gives
+Bede used =hprcv2.k64.zst= in deacon. For =k=31= and =w=21=, it gives
 =353,721,077= minimizers, whereas running on the full hprcv2 =.agc= directly
 gives =353,690,959= minimizers, which is =30118= /smaller/, and so I'm
 /over/-reporting kmers. Hrmmm...
@@ -656,6 +656,8 @@ Added a bunch of tests to pandedup, but those all seem to work fine.
 *It turns out I assumed that AGC never returns ambiguous bases, but that's not
 true. Thus, doing =b"ACGT"[b%4]= quietly collapses ambiguous bases.*
 Fixing this should resolve the additional kmers.
+
+*A second bug c
 
 ** Re-running on HPRCv2
 First, we do the rough dedup using *pandedup*:
@@ -687,7 +689,7 @@ cuttlefish build --ref --seq hprcv2.dedup.fa --kmer-len 63 --threads 64 --work-d
 - Sadly, this increases the file size from *15GB* to *18GB*.
 - Note that Cuttlefish only takes odd k, so we have $k=63$ now.
 
-Now, let's shrink things using [[https://github.com/algbio/matchtigs][greedy matchtigs]]: *1h*, small issue here https://github.com/algbio/matchtigs/issues/8):
+Now, let's shrink things using [[https://github.com/algbio/matchtigs][greedy matchtigs]]: *1h*, small issue here https://github.com/algbio/matchtigs/issues/8:
 #+begin_src 
 matchtigs -k 63 -t 64 --fa-in hprcv2.unitigs.fa --greedytigs-fa-out hprcv2.greedytigs.fa
 #+end_src
@@ -750,7 +752,52 @@ Final stats:
 	phase: eulertigs building part 2 	=> 9.89ms
 	phase: eulertigs building part 3 	=> 95.58s
 #+end_src
-  
+*** TODO Masked superstrings
+- It doesn't yet work on the server because of missing libraries, see
+  https://github.com/OndrejSladky/kmercamel/issues/105.
+- It looks like there is little/no multithreading, see https://github.com/OndrejSladky/kmercamel/issues/106.
+- Running on laptop didn't do much after ~30 minutes; need to rerun for longer.
+
+* Sept 29
+** Preserving short kmers
+There was a second bug: ggcat would throw away contigs shorter than k, but we
+explicitly need those if we use the index for a smaller final value of k.
+Thus, deacon would give =353,690,956= minimizers rather than =353,690,959=.
+Explicitly outputting short kmers to a separate file, indexing that
+with deacon, and merging the two indices recovers the last 3 missing minimizers
+from the index obtained when running on the .agc directly.
+
+See =examples/filter_short_contigs.rs= in pandedup, and [[https://github.com/algbio/ggcat/pull/77][this]] (slop!) PR/FR to add
+=--preserve-short-contigs= to ggcat.
+
+** Rerun by calling ggcat via the API
+:PROPERTIES:
+:CUSTOM_ID: rerun
+:END:
+Instead of writing intermediate files to disk, it's easier and faster to just call the
+ggcat API directly.
+This takes as input the =hprcv2.agc= to pandedup, and then repeatedly calls
+ggcat on this output in different modes.
+
+I had codex create a [[https://github.com/RagnarGrootKoerkamp/pandedup/tree/ggcat][=ggcat= branch]] that uses the GGCAT API to output all
+possible types of output:
+- *pandedup* output: 3.5 min, 15GB
+- *unitigs*: 69s, 21GB (incl ~3GB record headers)
+- *simplitigs*: 60s, 10.746GB (~1GB record headers)
+- *eulertigs*: 67s, 10.745GB (~1GB record headers)
+  - (I would have expected a larger difference here.)
+- *greedy matchtigs*: 5200s, 8.9GB (of which ~0.2GB headers)
+  - takes 75min of Dijkstra. Earlier this was much faster; maybe some badly
+    balanced buckets? Most of the time, only 2 threads are active.
+  - 4min to find Eulerian cycle.
+- *masked superstring*: 5h, 7.8GB (no headers)
+  - Builds directly from eulertigs:
+    #+begin_src sh
+kmercamel compute -k 63 -o hprcv2.masked.msfa -S hprcv2-k63-eulertigs.fa
+    #+end_src
+
+Note that ggcat uses a fast reimplementation of the simplitigs and eulertigs
+methods, but falls back to the =matchtigs= library for greedy matchtigs.
 
 * TODO
 - Dedup unitig start/end
@@ -760,5 +807,4 @@ Final stats:
 - it's k=63, not k=64
 - check details of reverse complementing
 - build for k=31 and k=127
-- try masked superstrings
 
