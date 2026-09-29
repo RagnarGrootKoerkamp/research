@@ -786,11 +786,11 @@ possible types of output:
 - *simplitigs*: 60s, 10.746GB (~1GB record headers)
 - *eulertigs*: 67s, 10.745GB (~1GB record headers)
   - (I would have expected a larger difference here.)
-- *greedy matchtigs*: 5200s, 8.9GB (of which ~0.2GB headers)
+- *greedy matchtigs*: 5200s, 8.9GB (of which ~0.2GB headers), *2.6GB* zstd compressed
   - takes 75min of Dijkstra. Earlier this was much faster; maybe some badly
     balanced buckets? Most of the time, only 2 threads are active.
   - 4min to find Eulerian cycle.
-- *masked superstring*: 5h, 7.8GB (no headers)
+- *masked superstring*: 5h, 7.8GB (no headers), *2.5GB* zstd compressed
   - Builds directly from eulertigs:
     #+begin_src sh
 kmercamel compute -k 63 -o hprcv2.masked.msfa -S hprcv2-k63-eulertigs.fa
@@ -798,6 +798,10 @@ kmercamel compute -k 63 -o hprcv2.masked.msfa -S hprcv2-k63-eulertigs.fa
 
 Note that ggcat uses a fast reimplementation of the simplitigs and eulertigs
 methods, but falls back to the =matchtigs= library for greedy matchtigs.
+
+Somewhat surprisingly, after plain zstd compression, the masked superstring is
+only 60MB smaller, which is possibly less than the overhead of numbered contigs
+in the greedy matchtigs.
 
 * TODO
 - Dedup unitig start/end
