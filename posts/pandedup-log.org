@@ -781,6 +781,11 @@ ggcat on this output in different modes.
 
 I had codex create a [[https://github.com/RagnarGrootKoerkamp/pandedup/tree/ggcat][=ggcat= branch]] that uses the GGCAT API to output all
 possible types of output:
+#+begin_src sh
+cargo run -r -- hprcv2/hprcv2.agc -k 63 -w 100 -j 64 -o hprcv2/out/hprcv2.dedup.fa.zst --ggcat
+#+end_src
+
+
 - *pandedup* output: 3.5 min, 15GB
 - *unitigs*: 69s, 21GB (incl ~3GB record headers)
 - *simplitigs*: 60s, 10.746GB (~1GB record headers)
@@ -802,6 +807,259 @@ methods, but falls back to the =matchtigs= library for greedy matchtigs.
 Somewhat surprisingly, after plain zstd compression, the masked superstring is
 only 60MB smaller, which is possibly less than the overhead of numbered contigs
 in the greedy matchtigs.
+
+stats: (note that ggcat outputs include contig lengths in the record header, at ~9B/contig)
+| file                             | time (min) | contigs | size (GB) | zstd compressed size (GB) |
+| hprcv2.pandedup.fa               |        3.5 | 60M     |      14.9 |                       3.9 |
+| hprcv2.ggcat-unitigs.fa          |          1 | 185M    |      21.2 |                           |
+| hprcv2.ggcat-simplitigs.fa       |          1 | 59M     |      10.7 |                           |
+| hprcv2.ggcat-eulertigs.fa        |          1 | 60M     |      10.7 |                           |
+| hprcv2.ggcat-greedy-matchtigs.fa |         90 | 27M     |       8.9 |                       2.6 |
+| hprcv2.kmercamel-masked.fa       |        500 | 1       |       7.8 |                       2.5 |
+
+* Sept 30
+** Faster =deacon index build=
+- Make the output deterministic by sorting minimizer values by target
+  bucket and value before writing them.
+- Add a =deacon index reorder <path>= command to re-sort existing index files
+- Parallellize the build in two steps:
+  1. let each thread collect its own minimizer values and then single-threadedly
+     collect those.
+  2. Secondly, re-shard by hash-table order in parallel: each thread builds a
+     =Vec<Vec<T>>= with one inner =Vec= for each target shard, and then appends
+     each inner list to the global =Vec<Mutex<Vec<T>>>=. Then, each global =Vec=
+     is sorted and deduplicated.
+
+*** Human genome results
+#+begin_src sh
+cargo run -r -- index build -t 12 $d/chm13v2.0.fa -o index-new
+#+end_src
+
+*Before:* 23.9s (66s CPU)
+#+begin_src sh
+19:42:19  INFO Deacon v0.18.0; mode: build; input: single; options: threads=12
+19:42:19  INFO Building index (k=31, w=15)
+  Processed 7 sequences (1093031482bp), 116696808 minimizers
+  Processed 12 sequences (2100591497bp), 223674031 minimizers
+  Processed 25 sequences (3117292070bp), 316436671 minimizers
+19:42:35  INFO Collecting minimizers into a single set
+19:42:35  INFO Indexed 316436671 minimizers from 25 record(s) (3117292070bp)
+19:42:35  INFO Sorting minimizers..
+19:42:40  INFO Writing minimizers..
+19:42:43  INFO Completed build in 23.90s
+#+end_src
+
+
+*Collect minimizers per thread:* 42.9s
+#+begin_src sh
+19:37:33  INFO Deacon v0.18.0; mode: build; input: single; options: threads=12
+19:37:33  INFO Building index (k=31, w=15)
+19:37:39  INFO   Processed 7 sequences (1032781085bp)
+19:37:41  INFO   Processed 15 sequences (2048986257bp)
+19:37:45  INFO   Processed 25 sequences (3117292070bp)
+19:37:46  INFO Collecting minimizers into a single set
+19:38:09  INFO Indexed 316436671 minimizers from 25 record(s) (3117292070bp)
+19:38:09  INFO Sorting minimizers..
+19:38:12  INFO Checking that values are sorted by hash.
+19:38:13  INFO Writing minimizers..
+19:38:16  INFO Completed build in 42.92s
+#+end_src
+
+*Multi-threaded re-sharding at the end:* 19.2s (140s CPU time)
+#+begin_src sh
+19:34:17  INFO Deacon v0.18.0; mode: build; input: single; options: threads=12
+19:34:17  INFO Building index (k=31, w=15)
+19:34:23  INFO   Processed 7 sequences (1032781085bp)
+19:34:25  INFO   Processed 15 sequences (2207406112bp)
+19:34:29  INFO   Processed 25 sequences (3117292070bp)
+19:34:30  INFO Re-sharding and sorting minimizers
+19:34:30  INFO Re-shard minimizers
+19:34:31  INFO Sort shards
+19:34:33  INFO Indexed 316436671 minimizers from 25 record(s) (3117292070bp)
+19:34:33  INFO Writing minimizers..
+19:34:36  INFO Completed build in 19.22s
+#+end_src
+
+To check, all have the same sha256:
+#+begin_src sh
+> sha256sum  index-new
+bdbfcd394ab8e89e11cdb37e997a582197abebca3a6dcf53c4ba77cd7de5e162  index-new
+#+end_src
+
+*Vibe-coded branch:* 9.1s (47s CPU)
+
+(Note that this one has a different hash... apparently because it sorts the
+shards by bucket value, but not the elements within the shards.)
+
+Time to figure out what makes the big difference here..
+
+*** Learning from the vibe-coded version
+The main difference is that we spend /a lot/ of time inserting minimizers into
+hashmaps. Pushing them onto a list and regularly sorting+deduplicating those
+is more efficient. In particular, this version has a length-1024 thread-local
+buffers for every shard that are flushed to the global shards once full. Then,
+global shards are sorted and deduplicated every time they double in size (and
+have at least 4M elements).
+
+*Collect-to-vec:* 
+So, let's first collect onto a local =Vec<T>= that is pushed to a  global =Vec<T>= per shard that we deduplicate
+/once, at the end/. *20s*
+
+This is already much better: *11s*
+#+begin_src sh
+20:29:02  INFO   Processed 7 sequences (1232028657bp)
+20:29:02  INFO   Processed 12 sequences (2100591497bp)
+20:29:03  INFO   Processed 25 sequences (3117292070bp)
+20:29:03  INFO Re-shard minimizers
+20:29:06  INFO Sort shards
+20:29:08  INFO Indexed 316436671 minimizers from 25 record(s) (3117292070bp)
+20:29:08  INFO Writing minimizers..
+20:29:11  INFO Completed build in 10.85s
+#+end_src
+
+*voracious_radix_sort:*
+Now let's use =voracious_radix_sort::RadixSort::voracious_sort= instead of
+=Vec::sort_unstable=. *10.9s*
+
+It turns out the sorting to deduplicate minimizers isn't so much a bottleneck
+since at least on this dataset there is not too much duplication.
+
+*Faster sort-by-hash.* Currently, I do =shard.sort_unstable_by_key(|x|
+(bucket(x), x))= to deterministically sort the hashing. Let's instead to sort
+only by =bucket(x)= first, and then do a second pass to sort values with the
+same bucket. *11.5s*.
+
+Let's just ignore these last 2 ideas.
+
+*** HPRCv2 results
+#+begin_src sh
+cargo build -r
+time cargo run -r -- index build -t 12 ./hprcv2-k63-greedytigs.fa.zst -o index
+#+end_src
+
+*Baseline:* 82s (CPU 147s)
+#+begin_src sh
+21:17:53  INFO Building index (k=31, w=15)
+  Processed 4956378 sequences (1000001644bp), 76332117 minimizers
+  Processed 9840366 sequences (2000024274bp), 140810438 minimizers
+  Processed 14452692 sequences (3000017524bp), 198972527 minimizers
+  Processed 18651198 sequences (4000001222bp), 252520490 minimizers
+  Processed 22183944 sequences (5000017030bp), 303053561 minimizers
+  Processed 24701748 sequences (6000046266bp), 352937691 minimizers
+  Processed 26150688 sequences (7000025386bp), 404442635 minimizers
+  Processed 26897844 sequences (8000047407bp), 457857180 minimizers
+21:19:01  INFO Collecting minimizers into a single set
+21:19:01  INFO Indexed 480863905 minimizers from 27092669 record(s) (8424467217bp)
+21:19:02  INFO Sorting minimizers..
+21:19:08  INFO Writing minimizers..
+21:19:15  INFO Completed build in 82.56s
+#+end_src
+
+*New version:* 35s (CPU 157s)
+#+begin_src sh
+21:16:10  INFO Deacon v0.18.0; mode: build; input: single; options: threads=12
+21:16:10  INFO Building index (k=31, w=15)
+21:16:13  INFO   Processed 4956492 sequences (1000022657bp)
+21:16:15  INFO   Processed 9840252 sequences (2000003572bp)
+21:16:18  INFO   Processed 14452692 sequences (3000011065bp)
+21:16:21  INFO   Processed 18651312 sequences (4000026167bp)
+21:16:23  INFO   Processed 22183944 sequences (5000019134bp)
+21:16:26  INFO   Processed 24701748 sequences (6000046266bp)
+21:16:28  INFO   Processed 26150688 sequences (7000025386bp)
+21:16:31  INFO   Processed 26897844 sequences (8000024736bp)
+21:16:33  INFO Dedup shards
+21:16:36  INFO Re-shard minimizers
+21:16:38  INFO Sort shards
+21:16:41  INFO Indexed 480863905 minimizers from 27092669 record(s) (8424467217bp)
+21:16:41  INFO Writing minimizers..
+21:16:45  INFO Completed build in 35.31s
+#+end_src
+
+*LLM version:* 35.6s (CPU 132s)
+#+begin_src sh
+...
+Indexed 480863905 minimizers from 27092669 record(s) (8424467217bp)
+Completed build in 35.65s
+#+end_src
+
+*** On-the-fly dedup
+Currently, we only dedup everything at the very end, but this is tricky when
+there are many duplicate minimizers. This has two problems: identical minimizers might
+occur very frequently within a thread, and the same minimizer can occur in all
+threads. Thus, we need constant global deduplication to prevent storing many
+minimizers once per thread. Indeed this is what the LLM does. It uses a
+"deduplicating vector" that does =sort+dedup= every time it doubles in size.
+
+We also reduce the size of per-thread buffers to at most 1024 elements per shard
+and actively push to the global buffers. The total time remains higher than the
+35s we had originally:
+
+*DeduppingVec:* 40s (CPU 180s)
+
+With =.fa= instead of =.fa.zst= input, this reduces to *28s*!
+
+If we further increase the threshold where dedupping starts to happen to 4M
+elements per shard, then the time reduces to *20s* (153s CPU) and it nearly matches the LLM
+code again :)
+
+#+begin_src sh
+> time ./target/release/deacon index build -t 12 ./hprcv2-k63-greedytigs.fa -o index
+22:27:00  INFO Building index (k=31, w=15)
+22:27:01  INFO   Processed 4956492 sequences (1000020972bp)
+22:27:02  INFO   Processed 9840252 sequences (2000003572bp)
+22:27:03  INFO   Processed 14452692 sequences (3000005896bp)
+22:27:04  INFO   Processed 18651312 sequences (4000026167bp)
+22:27:05  INFO   Processed 22183944 sequences (5000006629bp)
+22:27:05  INFO   Processed 24701748 sequences (6000046266bp)
+22:27:06  INFO   Processed 26150688 sequences (7000000451bp)
+22:27:07  INFO   Processed 26897844 sequences (8000047407bp)
+22:27:07  INFO Dedup shards
+22:27:11  INFO Re-shard minimizers
+22:27:13  INFO Sort shards
+22:27:16  INFO Indexed 480863905 minimizers from 27092669 record(s) (8424467217bp)
+22:27:16  INFO Writing minimizers..
+22:27:20  INFO Completed build in 20.55s
+#+end_src
+
+*** Prevent spamming the terminal
+
+Also added a quick commit to redirect output from =stdout= to =/dev/null= when
+no explicit output is given and the output is a terminal rather than a pipe/redirect.
+
+*** Input formats
+Decompressing =hprcv2-k63-greedytigs.fa.zst= from 2.6GB to 8.7GB takes 15s on a
+single thread,
+while the entire deacon pipeline takes 10s when using =.fa= input.
+There happens to be a (vibe coded?) PR from this week adding multithreading to
+=zstd=: https://github.com/facebook/zstd/pull/4796.
+
+*Why not gzip*? Because =gzip hprcv2-k63-greedytigs.fa= takes over 20 minutes.
+
+
+#+begin_src  sh
+time ./target/release/deacon index build -t 12 ../pandedup/hprcv2-k63-greedytigs.<ext>
+#+end_src
+(excluding writing a file to disk now)
+
+#+attr_html: :class small
+| extension | size (GB) | time (s) | CPU (s) |
+| .fa       |       8.7 | *18*     |     157 |
+| .fa.zst   |       2.9 | 33       |     156 |
+| .cbq      |     *2.0* | *19*     |     164 |
+
+Do note that .cbq is stored without record-id headers here.
+
+*Cbq is as small as zstd, but as fast as plain fasta!*
+
+** Fixing tracing subscriber Compact format
+- PR adding it: https://github.com/tokio-rs/tracing/pull/1069
+- PR modifying it: https://github.com/tokio-rs/tracing/pull/1499
+- Docs: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/format/struct.Compact.html
+- Issue about broken docs: https://github.com/tokio-rs/tracing/issues/3157
+- Reply: https://github.com/tokio-rs/tracing/issues/3157
+- Oh, stuff is in =master= which is now the =0.2.x= branch, but not in =main=,
+  which is the =0.1= branch: 
+
 
 * TODO
 - Dedup unitig start/end
