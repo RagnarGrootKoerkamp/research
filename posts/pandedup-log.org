@@ -1060,7 +1060,120 @@ Do note that .cbq is stored without record-id headers here.
 - Oh, stuff is in =master= which is now the =0.2.x= branch, but not in =main=,
   which is the =0.1= branch: 
 
+* Oct 1
+** Pandedup-GGCAT integration
+- Pandedup now preserves short kmers by manually appending them to the ggcat output file
+** TODO Speeding up kmercamel
+*** What does it do and why is it slow?
+- Single-threaded currently.
+- Iterates over overlap from $k-2$ down to 0.
+- for each, builds a hashset of all prefixes and rc suffixes, and tries to match
+  them to suffixes and rc prefixes.
+- does some tricky stuff with a =next= array to handle the fact that multiple
+  prefixes/rc suffixes can have the same value, and so we need the equivalent of
+  a C++ =unordered_multimap=, but =khash= doesn't support this directly.
+- half the time is in hash table inserts/lookups
+- half the time is in encoding/decoding the (rc) kmer at the start/end of each contig
+- There is a =memory_reduction= constant of 16 so that the hashmap is only built
+  for 1/16th of the data at a time. This saves 16x max memory, but makes it (up
+  to) 16x slower also. In practice my laptop has plenty RAM to just have this
+  constant at 1 instead.
+*** Rust version
+- Implemented in =pandedup/examples/mss.rs= (for masked super string).
+- Instead of hashing, we can collect all $4n$ terminal kmers (head, rc tail) and
+  (tail, rc head) in two vectors and sort those using =voracious_radix_sort=
+  with multiple threads.
+- Then, do a mergesort, and link matching heads and tails. Fill the =next:
+  Option<(usize, u8)>= and =prev: Option<(usize, u8)>= of the two nodes
+  accordingly, containing the adjacent node ID and the length of the overlap.
 
+*** Rust results
+- on laptop; up to 12 threads
+- k=63
+#+attr_html: :class small
+| method    | input            | contigs | input Gbp | output Gbp | time  |
+| kmercamel | eulertigs        | 27.0M   |      9.58 |      *7.8* | 5 h   |
+| fwd       | eulertigs        | 58.3M   |      9.58 |       8.11 | 237 s |
+| fwd+rc    | eulertigs        | 58.3M   |      9.58 |     *7.88* | 361 s |
+| fwd       | greedy matchtigs | 27.0M   |      8.42 |       8.08 | 117 s |
+| fwd+rc    | greedy matchtigs | 27.0M   |      8.42 |       8.06 | 191 s |
+
+Unsurprisingly, passing greedy matchings is ~2x faster as they have ~2x fewer
+input contigs. But the output is not as small, because the matchtigs introduce
+additional bases that we cannot (or at least do not) get rid of anymore.
+
+*** Reusing the sorted tail array
+We can generate and sort the =tails= only once and then just shift-right
+on-demand to get the exact key. We can then either compactify the vec by
+removing used tails, or just repeatedly iterate the full array. This reduces
+the time for fwd+rc greedy matchtigs to *160s*.
+
+*** Reusing the sorted head array
+Between consecutive overlaps, the head array loses the 2 most significant bits
+of all values, so it becomes 4 sorted runs. We can merge-sort those instead of
+doing a full radix sort. This increases the time to *220s*, but note that now
+the bulk of the work is single-threaded instead.
+
+35% of the running time is now spend in =heads.retain()= to filter out
+already-used contigs. Skipping that check gives back *150s*.
+
+*** Multi-threaded re-sort
+We can use multithreading for the re-sorting of the heads array: we can split
+each of the 4 increasing slices into $t$ sub-slices (one per thread) and merge
+those in parallel. *120s*.
+
+*** In-place retain
+Currently, the =heads= and =tails= array slowly fill up with kmers corresponding
+to already-used ends. During the merge, we can directly compactify them and only
+write elements that are still unlinked at the time.
+These elements could still be linked via the reverse-complement match. In that
+case we simply discard them in the next iteration.
+Note that we can't greedily check for every element whether it's still active,
+as that involves a useless cache-miss for most elements. Thus, we only do this
+once an element has a match to another end: there, we anyway already have a
+cache-miss, and so we only pay the additional cache-miss for those elements that
+are indeed redundant now.
+*90s*
+
+*** Parallel merge
+We can split the =heads= and =tails= into one chunk per thread and merge those
+in parallel. We shard the =ends= array into a list of $16\cdot t$ chunks each locked by
+their own mutex so we can concurrently write to it.
+Entries of =heads= and =tails= are set to =usize::MAX= as soon as the
+corresponding end point has been linked, and these are then filtered out in a
+final single-threaded =retain= after the merge. Note that this also uses a
+bitmask to indicate used links. *50s*
+
+*** Parallel retain
+We can also do a multi-threaded =retain=: first retain sub-slices in parallel,
+and then merge those into a single array. *60s*
+
+Dropping the =used= bitmask from this: *55s*
+
+Still it's not great: the main thread spends half its time compacting the
+per-thread compacted data. Let's first count how much space each thread will
+need for its compacted output, and then write things directly to the right
+location. *60s*
+
+Better: we can only call =retain= when over half of the entries is dead: *30s*
+
+*** Reducing further single-threaded bottlenecks
+Now, half the time of the main thread is spent determining where the heads array
+has boundaries between the 4 character ranges. Instead of a linear scan, let's
+do binary searches. *27s* (Turns out the main thread really isn't the bottleneck
+anymore anyway.)
+
+*** Faster load
+Now, just reading all contigs and writing an array of their start/end kmer
+values is ~30% of the time. Let's also multithread that: *25s*
+
+*** Further ideas
+- We could also first partition heads and tails by their minimizer.
+- Multithreading merging
+  
+
+** TODO Matchtigs
+- I should try inputting the bcaml graph rather than jsut the fasta
 * TODO
 - Dedup unitig start/end
 - Dedup by matching against reference text
