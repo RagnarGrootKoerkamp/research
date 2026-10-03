@@ -689,7 +689,8 @@ cuttlefish build --ref --seq hprcv2.dedup.fa --kmer-len 63 --threads 64 --work-d
 - Sadly, this increases the file size from *15GB* to *18GB*.
 - Note that Cuttlefish only takes odd k, so we have $k=63$ now.
 
-Now, let's shrink things using [[https://github.com/algbio/matchtigs][greedy matchtigs]]: *1h*, small issue here https://github.com/algbio/matchtigs/issues/8:
+Now, let's shrink things using [[https://github.com/algbio/matchtigs][greedy matchtigs]] (note that =matchtigs= uses
+=--greedytigs= for greedy matchtigs): *1h*, small issue here https://github.com/algbio/matchtigs/issues/8:
 #+begin_src 
 matchtigs -k 63 -t 64 --fa-in hprcv2.unitigs.fa --greedytigs-fa-out hprcv2.greedytigs.fa
 #+end_src
@@ -805,17 +806,17 @@ Note that ggcat uses a fast reimplementation of the simplitigs and eulertigs
 methods, but falls back to the =matchtigs= library for greedy matchtigs.
 
 Somewhat surprisingly, after plain zstd compression, the masked superstring is
-only 60MB smaller, which is possibly less than the overhead of numbered contigs
+only 60MB smaller, which is possibly less than the overhead of numbered records
 in the greedy matchtigs.
 
-stats: (note that ggcat outputs include contig lengths in the record header, at ~9B/contig)
-| file                             | time (min) | contigs | size (GB) | zstd compressed size (GB) |
-| hprcv2.pandedup.fa               |        3.5 | 60M     |      14.9 |                       3.9 |
-| hprcv2.ggcat-unitigs.fa          |          1 | 185M    |      21.2 |                           |
-| hprcv2.ggcat-simplitigs.fa       |          1 | 59M     |      10.7 |                           |
-| hprcv2.ggcat-eulertigs.fa        |          1 | 60M     |      10.7 |                           |
-| hprcv2.ggcat-greedy-matchtigs.fa |         90 | 27M     |       8.9 |                       2.6 |
-| hprcv2.kmercamel-masked.fa       |        500 | 1       |       7.8 |                       2.5 |
+stats: (note that ggcat outputs include record lengths in the header, at ~9B/record)
+| file                             | time (min) | tigs | size (GB) | zstd compressed size (GB) |
+| hprcv2.pandedup.fa               |        3.5 | 60M  |      14.9 |                       3.9 |
+| hprcv2.ggcat-unitigs.fa          |          1 | 185M |      21.2 |                           |
+| hprcv2.ggcat-simplitigs.fa       |          1 | 59M  |      10.7 |                           |
+| hprcv2.ggcat-eulertigs.fa        |          1 | 60M  |      10.7 |                           |
+| hprcv2.ggcat-greedy-matchtigs.fa |         90 | 27M  |       8.9 |                       2.6 |
+| hprcv2.kmercamel-masked.fa       |        500 | 1    |       7.8 |                       2.5 |
 
 * Sept 30
 ** Faster =deacon index build=
@@ -1061,19 +1062,23 @@ Do note that .cbq is stored without record-id headers here.
   which is the =0.1= branch: 
 
 * Oct 1
+- Various ggcat, kmercamel, and matchtigs explorations; see below.
 ** Pandedup-GGCAT integration
 - Pandedup now preserves short kmers by manually appending them to the ggcat output file
-** TODO Speeding up kmercamel
+
+  
+* Oct 2
+** Speeding up kmercamel
 *** What does it do and why is it slow?
 - Single-threaded currently.
-- Iterates over overlap from $k-2$ down to 0.
+- Iterates over overlap from $k-1$ down to 0.
 - for each, builds a hashset of all prefixes and rc suffixes, and tries to match
   them to suffixes and rc prefixes.
 - does some tricky stuff with a =next= array to handle the fact that multiple
   prefixes/rc suffixes can have the same value, and so we need the equivalent of
   a C++ =unordered_multimap=, but =khash= doesn't support this directly.
 - half the time is in hash table inserts/lookups
-- half the time is in encoding/decoding the (rc) kmer at the start/end of each contig
+- half the time is in encoding/decoding the (rc) kmer at the start/end of each input sequence
 - There is a =memory_reduction= constant of 16 so that the hashmap is only built
   for 1/16th of the data at a time. This saves 16x max memory, but makes it (up
   to) 16x slower also. In practice my laptop has plenty RAM to just have this
@@ -1091,7 +1096,7 @@ Do note that .cbq is stored without record-id headers here.
 - on laptop; up to 12 threads
 - k=63
 #+attr_html: :class small
-| method    | input            | contigs | input Gbp | output Gbp | time  |
+| method    | input            | records | input Gbp | output Gbp | time  |
 | kmercamel | eulertigs        | 27.0M   |      9.58 |      *7.8* | 5 h   |
 | fwd       | eulertigs        | 58.3M   |      9.58 |       8.11 | 237 s |
 | fwd+rc    | eulertigs        | 58.3M   |      9.58 |     *7.88* | 361 s |
@@ -1099,7 +1104,7 @@ Do note that .cbq is stored without record-id headers here.
 | fwd+rc    | greedy matchtigs | 27.0M   |      8.42 |       8.06 | 191 s |
 
 Unsurprisingly, passing greedy matchings is ~2x faster as they have ~2x fewer
-input contigs. But the output is not as small, because the matchtigs introduce
+input records. But the output is not as small, because the matchtigs introduce
 additional bases that we cannot (or at least do not) get rid of anymore.
 
 *** Reusing the sorted tail array
@@ -1115,7 +1120,7 @@ doing a full radix sort. This increases the time to *220s*, but note that now
 the bulk of the work is single-threaded instead.
 
 35% of the running time is now spend in =heads.retain()= to filter out
-already-used contigs. Skipping that check gives back *150s*.
+already-used tig ends. Skipping that check gives back *150s*.
 
 *** Multi-threaded re-sort
 We can use multithreading for the re-sorting of the heads array: we can split
@@ -1164,22 +1169,192 @@ do binary searches. *27s* (Turns out the main thread really isn't the bottleneck
 anymore anyway.)
 
 *** Faster load
-Now, just reading all contigs and writing an array of their start/end kmer
+Now, just reading all sequences and writing an array of their start/end kmer
 values is ~30% of the time. Let's also multithread that: *25s*
 
-*** Further ideas
-- We could also first partition heads and tails by their minimizer.
-- Multithreading merging
+*** Reducing memory usage
+Note: I'm now testing the =eulertigs= file with roughly 2x the contigs instead of the =greedytigs=.
+
+- Base: *30GB*
+- Drop input data as soon as we read their head and starts: *24GB*
+- Single scratch buffer for head and tail: *23GB*
+- Drop the 4 =u128= values from the =ends= array; that now only stores the links
+  from the head and tail of each node: *18.6GB*
+- Store input data in a =PackedSeqVec= together with ranges pointing into it: *12.8GB*
+  - Now the peak is reached when the scratch buffer is allocated for =retain=
+- We can shrink our types a bit and use =u32= indices, to get *11.9GB*
+- The heads and tails are still =(u128, u32, bool)=. Aligning them to =u32=
+  reduces memory to *9.2GB* and also reduces time from *54s* to *44s*.
+- 1-byte alignment further reduces memory to *8.3GB*
+  - intermezzo: Making the algorithm generic over =u128= and =u64= for $k\leq 32$, we reduce
+    memory further to *6.3GB*, and time for $k=31$ from *26s* to *21s*.
+- Let's pack the =index: u32= and =reverse: bool= together in a single =u32=,
+  and also use packed/unaligned =Link= types: *7.8GB* (compared to 8.3 above for
+  k=64) and *42s.*
   
 
+** Different input sets to =mss=
+| type       |  k | input GB | contigs | walltime | CPU time | output Gbp |
+| eulertigs  | 17 |      6.9 |         |        8 |      188 |       1.96 |
+| eulertigs  | 31 |      6.4 |         |       19 |      113 |       4.39 |
+| eulertigs  | 63 |       11 |         |       44 |      305 |       7.83 |
+| greedytigs | 63 |      8.7 |         |       25 |      152 |       8.06 |
+
+#+begin_src 
+ggcat eulertigs: 655.37s wall, 7589.32s CPU, 1158.0% average CPU, 6904923140 bytes (hprcv2.dedup.ggcat-eulertigs.fa)
+
+#+end_src
+
+*** TODO Further ideas
+- do k=64 and k=32 instead of 63 and 31?
+- test for N/ambiguous chars in input and panic on them
+- end-to-end benchmarks
+- construct actual output sequence with masking => cleanup/check the slop
+- add MaskedPackedSeq and use it in Deacon
+- compare compression schemes
+- *parallel cycle reconstruction*
+- test paraseq for IO
+- add =pandedup mss -j=
+
+Eulertigs  output size: 7833783806
+Greedytigs output size: ??     067
+* Oct 3
 ** TODO Matchtigs
-- I should try inputting the bcaml graph rather than jsut the fasta
+- I should try inputting the bcaml graph rather than just the fasta: https://github.com/algbio/matchtigs/issues/8
+  - Currently loading input (and presumably reconstruction the graph) takes 40min on 1 thread
+  - Dijkstra takes 16min on many threads
+- Instead of dijkstra with a binary heap, a bucket queue of size k should be enough
+  - current implementation: https://github.com/algbio/matchtigs/blob/main/src/implementation/matchtigs/mod.rs
+- let's try to parallellize things; the initial graph construction also seems single-threaded
+
+*** Building the unitig graph
+
+Building unitigs as input:
+#+begin_src sh
+> cargo run -r --example ggcat hprcv2.dedup.fa.zst -k 63 --mode none
+
+11:32:18  INFO Read hprcv2.dedup.fa.zst: 3941236558 bytes, 59591914 records, 14855772704 bases, 249.3 bases/record
+11:32:20  INFO ggcat input: 59584907 in-memory contigs, 14855772704 bases (from hprcv2.dedup.fa.zst)
+11:38:03  INFO Wrote hprcv2.dedup-k63-none.fa: 21181450134 bytes, records unknown, bases unknown, bases/record unknown
+11:38:03  INFO ggcat: 381.23s wall [2054.63s CPU; 539.0%], input 3941236558 bytes, output 21181450134 bytes (hprcv2-unitigs.fa)
+#+end_src
+
+- 3.9Gbp in => 21.2 Gbp out over 186M contigs of average length 114bp, but
+  median length probably close to 64
+
+Time for some profiling:
+#+begin_src sh
+cargo build -r && samply record ./target/release/matchtigs -k 63 -t 6 --fa-in $pd/hprcv2-k63-unitigs.fa  --greedytigs-fa-out $pd/hprcv2-k63-greedytigs-2.fa
+#+end_src
+
+*** Unitigs with links
+
+A lot of time is spent on parsing the input and building the graph. As
+recommended by the docs, let's instead include graph information in the fasta
+headers in BCALM format. We use the GGCAT API, but this is the =-e= option in
+the CLI.
+
+Building unitigs with links:
+#+begin_src 
+> cargo run -r -- ggcat hprcv2.dedup.fa.zst -k 63 --mode unitig-links
+
+14:17:59  INFO Read hprcv2.dedup.fa.zst: 3941236558 bytes, 59591914 records, 14855772704 bases, 249.3 bases/record
+14:18:00  INFO ggcat input: 59584907 in-memory contigs, 14855772704 bases (from hprcv2.dedup.fa.zst)
+14:26:11  INFO Wrote hprcv2.dedup-k63-unitig-links.fa: 29386798229 bytes, records unknown, bases unknown, bases/record unknown
+14:26:11  INFO ggcat: 529.31s wall [2598.50s CPU; 490.9%], input 3941236558 bytes, output 29386798229 bytes (hprcv2.dedup-k63-unitig-links.fa)
+#+end_src
+
+*unitig graph:*
+- bases: 21.2Gbp
+- unitigs: 186M
+- edges: 267M
+
+
+We can try running =matchtigs= again, but it *crashes after ~12 mins* with
+SIGKILL, so I assume it went out of memory:
+
+#+begin_src 
+matchtigs -k 63 -t 6 --bcalm-in $pd/hprcv2-k63-unitig-links.fa  --greedytigs-fa-out $pd/hprcv2-k63-greedytigs-2.fa
+#+end_src
+
+*** Exploring the unitigs
+
+Investigating the unitigs, we see this:
+
+#+begin_src 
+>10097112 LN:i:70 L:+:10097111:+ L:-:10097113:- L:-:10097114:-
+AAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAAGAAAAAGAAAGAA
+>10097113 LN:i:67 L:+:10097112:+ L:-:10097117:-
+GAAAGAAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAAGAAAA
+>10097114 LN:i:67 L:+:10097112:+ L:-:135476963:-
+GAAGAAAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAAGAAAA
+>10097115 LN:i:67 L:+:137890227:+ L:-:10097117:-
+GAAAGAAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAAAAGAA
+>10097116 LN:i:67 L:+:137890227:+ L:-:135476963:-
+GAAGAAAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAAAAGAA
+>10097117 LN:i:76 L:+:10097113:+ L:+:10097115:+ L:-:135471706:-
+AAGAAAAAGAAAAAGAAAGAAGAAAGAAAGAAAGAAAGAAAGAAATAATAAAAAGAAAGAAAAAGAAAGAAAGAAA 
+#+end_src
+
+In particular, nodes 10097113 to 10097116 all have 1 incoming (=L:-:...=) and 1
+outgoing (=L:+:...=) edge. Still, they cannot be merged because supposedly there
+are other edges joining in those nodes. 
+
+*** Graph representation: Unitig-centric
+The first option is to number the unitigs, as in the snippet above, and for each
+unitig store the IDs (and strand) of al connecting unitigs.
+
+When a \(k-1\)-mer occurs at the start of 4 unitigs and end of 4 unitigs, that
+means we get a total of 16 edges connecting them, so that we store 32 IDs.
+
+*** Graph representation: overlap-centric
+Alternatively, we could ID the \(k-1\)-mers at the start and end of every
+unitig. I estimate their count is roughly 1/2 to 2/3 of the number of unitigs,
+corresponding respectively to average degree 4 and 3.
+In this case, each unitig becomes an edge between two \(k-1\)-mers and thus
+corresponds to storing 2 \(k-1\)-mer IDs for the forward and reverse direction.
+
+I suspect this this turns out more compact overall.
+
+Most unitigs are only slightly longer than $k$, and we could store not the
+target ID, but the bases that are added to the kmer.
+Together with a PHF mapping kmers to IDs, that could maybe give a compact representation?
+
+*** Implementing it
+Here's the prompt:
+#+begin_quote
+In src/mss.rs there is an algorithm for creating a superstring (spectrum preserving string set) of a fasta file input. Follow that overall style.
+
+We'll add a new algorithm in src/matchtigs.rs.
+The input is again a PackedSeqVec and a list of ranges. This time, we assume the input is unitigs (whereas before simplitigs also worked). First we must recover the graph. For each unitig, add (head, id) and (rc tail, id) to a list of heads, and (tail, id) and (rc head, id) to a list of tails. Then, sort both lists. Then, build the graph: for each range of heads and tails with the same kmer, add an edge from each head id to each tail id. Do this by simply pushing (from id, to id) on a new list. Then sort that list, and build a graph out of it. The representation is one list of edges where the parity of the to_id encodes from which side we enter the unitid id. Then we keep a separate list with for every unitig two entries: the u32 index where its outgoing edges start.
+
+Once the graph representation is done, we start the algorithm: we again have a list of endpoints/tails that will become the "receiving ends" from the left, and we have a list of tails from where we grow sequences to the right. This time, we store the starting tail id, and the current tail id (which is initially is the same).
+
+Then do a first "extend edge" step, where for each unitig tail, we replace it using the graph by all outgoing edges, specifically the tail id corresponding to each of those unitigs. Collect them in a vec and then sort the vec. Then we do a linear pass to link paths to remaining active receiving tails. We have a separate Vec<Links> to store active links: whenever a new match is found, check if the two corresponding unitig-ends are still active; if not, then mark these nodes as u32::MAX. Otherwise, link the two unitig ends (the starting node of the path to the receiving unitig).
+
+Then filter out all done unitigs, and repeat: extend all active paths by 1 edge, sort tail ids, find matches, and shrink the 2 vectors.
+
+All edges also have a weight though, corresponding to the number of 1-character extensions to go from the end of the current unitig to the end of the next unitig.
+
+One thing is tricky though: we don't want to include the full cost of the last unitig. So I think we should first run the matching stage, and then update the cost of all edges. We want to use a bucket queue: we keep a separate vec for the edges at each distance up to k. In each iteration, we only work on the first non-empty vec
+#+end_quote
+
+*** Reducing memory
+
+
+*** TODO
+- verify whether total cost is up to k-1 or k
+- upper/lowercase bases in reconstructed output
+- fix first/last distance overcounting; we should count unitig_end -> unitig_start
+  
+
+
 * TODO
 - Dedup unitig start/end
 - Dedup by matching against reference text
 - rwlock over shards
 - update zenodo after testing: https://zenodo.org/records/21724558
 - it's k=63, not k=64
-- check details of reverse complementing
-- build for k=31 and k=127
+- build for k=31 and k=127?
+
 
