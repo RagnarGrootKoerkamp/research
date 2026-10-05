@@ -1219,7 +1219,7 @@ ggcat eulertigs: 655.37s wall, 7589.32s CPU, 1158.0% average CPU, 6904923140 byt
 Eulertigs  output size: 7833783806
 Greedytigs output size: ??     067
 * Oct 3
-** TODO Matchtigs
+** Matchtigs
 - I should try inputting the bcaml graph rather than just the fasta: https://github.com/algbio/matchtigs/issues/8
   - Currently loading input (and presumably reconstruction the graph) takes 40min on 1 thread
   - Dijkstra takes 16min on many threads
@@ -1320,6 +1320,9 @@ Most unitigs are only slightly longer than $k$, and we could store not the
 target ID, but the bases that are added to the kmer.
 Together with a PHF mapping kmers to IDs, that could maybe give a compact representation?
 
+* Oct 4
+** Continuing Matchtigs
+
 *** Implementing it
 Here's the prompt:
 #+begin_quote
@@ -1340,14 +1343,670 @@ One thing is tricky though: we don't want to include the full cost of the last u
 #+end_quote
 
 *** Reducing memory
+- packed structs
+- drop intermediate path parent pointers, since just final links is enough
 
+#+begin_src 
+> cargo run -r -- matchtigs hprcv2-k63-unitigs.fa.zst -k 63
 
-*** TODO
-- verify whether total cost is up to k-1 or k
-- upper/lowercase bases in reconstructed output
-- fix first/last distance overcounting; we should count unitig_end -> unitig_start
+02:09:28  INFO Reading unitigs..
+02:10:21  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+02:10:21  INFO Building graph of 186723674 unitigs..
+02:10:33  INFO Sorting heads
+02:11:00  INFO Sorting tails
+02:11:28  INFO Matching unitig ends
+02:11:34  INFO Sorting 534216886 edges
+02:12:00  INFO Building CSR adjacency
+02:12:00  INFO Filling offsets: 1424 MB
+02:12:02  INFO Mapping pairs
+02:12:03  INFO Allocating 373447348 links: 1780 MB
+02:12:03  INFO Allocating 373447348 receiving ids: 1424 MB
+Pushing to initial bucket
+02:12:04  INFO Distance 0: 373447348 active paths, 373447348 receiving ends
+02:12:52  INFO Distance 1: 22900904 active paths, 118578822 receiving ends
+02:12:56  INFO Distance 2: 22658491 active paths, 112868300 receiving ends
+
+02:16:14  INFO Distance 16: 317083268 active paths, 84779338 receiving ends
+#+end_src
+using ~32GB at this point
+
+This crashes with out-of-memory eventually in a separate run:
+#+begin_src 
+02:38:42  INFO After distance 25, bucket queue sizes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 887547819, 362200595, 162538168, 124284752, 86530464, 69234377, 58137007, 50224293, 43420318, 40512191, 37494701, 35084655, 32624626, 31644801, 33588580, 33041442, 32333127, 30225164, 30976702, 31286851, 32149128, 31869221, 33070349, 32540403, 35147195, 31435462, 31503491, 28257588, 29517232, 27807232, 27708123, 23382365, 20760981, 17088280, 18330846, 16236818, 0]
+02:38:42  INFO Distance 26: 887547819 active paths, 75642574 receiving ends
+#+end_src
+at this point there are 2.6G queue elements in total, for 186M unitigs...
   
+- *voracious radix sort* brings the running time to get to distance 20 excluding input reading from *8.5min* to *3.5min*.
 
+
+*** GPT did a thing
+
+I think: for each distance, iterate over all active unitigs, and for each do a
+full DFS/BFS backwards search to find a match. Kinda weird but it does seem to
+work, although slowly. Memory usage is around 18GB.
+
+#+begin_src 
+13:24:06  INFO Reading unitigs..
+13:24:58  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+13:24:58  INFO Building graph of 186723674 unitigs..
+13:25:09  INFO Sorting heads
+13:25:15  INFO Sorting tails
+13:25:21  INFO Matching unitig ends
+13:25:27  INFO Sorting 534216886 edges
+13:25:29  INFO Building CSR adjacency
+13:25:29  INFO Filling offsets: 1424 MB
+13:25:31  INFO Mapping pairs
+13:25:33  INFO Distance 0: 373447348 receiving ends
+13:29:03  INFO After distance 0: 127434263 links
+13:29:03  INFO Distance 1: 7997244 receiving ends
+13:29:17  INFO After distance 1: 130289575 links
+13:29:17  INFO Distance 2: 7046483 receiving ends
+
+13:48:16  INFO Distance 60: 1422199 receiving ends
+13:48:32  INFO After distance 60: 157940371 links
+13:48:32  INFO Distance 61: 1425403 receiving ends
+13:48:50  INFO After distance 61: 158111508 links
+13:48:50  INFO Distance 62: 1423215 receiving ends
+13:49:07  INFO After distance 62: 158281419 links
+13:49:08  INFO Reconstruct output
+13:51:30  INFO Wrote hprcv2-k63-unitigs.fa.matchtigs.msfa: 8257821647 bytes, 1 records, 8257821616 bases, 8257821616.0 bases/record
+13:51:30  INFO matchtigs: 1643.62s wall [1783.16s CPU; 108.5%], output 8257821616 bases (hprcv2-k63-unitigs.fa.matchtigs.msfa)
+#+end_src
+Output:
+- *8.26Gbp* or *8.3GB*; actually an improvement over the *8.7GB* greedytigs!
+- 1 record
+- *1640s* walltime (1780s CPU).
+
+Again, for comparison (with tool):
+- unitigs (ggcat): *17.5Gbp*
+- eulertigs (ggcat): *10.7Gbp*
+- greedy matchtigs (matchtigs): *8.71Gbp*
+- greedy matchtigs (us): *8.26Gbp* << new here
+- masked superstring (us): *7.83Gbp*
+
+*** Back to layer-by-layer
+- Rough current algorithm:
+  - iterate distance upwards
+  - for each dist, do multiple passes
+  - within a pass, iterate over all nodes and find those at the current distance
+    (the implicit frontier)
+  - for each that has an outgoing edge to a target that wasn't used yet, find a
+    "receiver" (weird/opposite naming?) ie the source of a path of the given
+    length that ends here in the right distance, by doing a DFS over the
+    spanning tree.
+    
+Output (aborted):
+
+#+begin_src 
+cargo run -r -- matchtigs hprcv2-k63-unitigs.fa.zst -k 63
+13:53:40  INFO Reading unitigs..
+13:54:33  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+13:54:34  INFO Building graph of 186723674 unitigs..
+13:54:46  INFO Sorting heads
+13:54:52  INFO Sorting tails
+13:54:57  INFO Matching unitig ends
+13:55:03  INFO Sorting 534216886 edges
+13:55:06  INFO Building CSR adjacency
+13:55:06  INFO Filling offsets: 1424 MB
+13:55:08  INFO Mapping pairs
+13:56:21  INFO Distance 0, pass 1: 373447348 frontier nodes, 119690289 links
+13:58:31  INFO Distance 0, pass 2: 134066770 frontier nodes, 6513605 links
+13:58:58  INFO Distance 0, pass 3: 121039560 frontier nodes, 949707 links
+13:59:11  INFO Distance 0, pass 4: 119140146 frontier nodes, 280662 links
+13:59:20  INFO Distance 0, pass 5: 118578822 frontier nodes, 0 links
+13:59:20  INFO After distance 0: 127434263 links
+13:59:22  INFO Distance 1, pass 1: 18940594 frontier nodes, 2798292 links
+13:59:37  INFO Distance 1, pass 2: 13912819 frontier nodes, 56205 links
+13:59:39  INFO Distance 1, pass 3: 13809173 frontier nodes, 764 links
+13:59:40  INFO Distance 1, pass 4: 13807697 frontier nodes, 0 links
+13:59:40  INFO After distance 1: 130289524 links
+13:59:42  INFO Distance 2, pass 1: 12593328 frontier nodes, 2099130 links
+13:59:57  INFO Distance 2, pass 2: 8862016 frontier nodes, 65518 links
+13:59:59  INFO Distance 2, pass 3: 8725709 frontier nodes, 4509 links
+14:00:00  INFO Distance 2, pass 4: 8711163 frontier nodes, 327 links
+14:00:01  INFO Distance 2, pass 5: 8709765 frontier nodes, 24 links
+14:00:02  INFO Distance 2, pass 6: 8709644 frontier nodes, 1 links
+14:00:03  INFO Distance 2, pass 7: 8709636 frontier nodes, 0 links
+14:00:03  INFO After distance 2: 132459033 links
+
+14:09:22  INFO After distance 16: 144867407 links
+^C
+#+end_src
+
+*** Fixing repeated passes
+Currently quite some time is wasted in repeated passes that iterate over all
+nodes again and again, even though only few changed. Instead we can just update
+the graph directly after finding a new link and do a local re-check.
+
+#+begin_src 
+> cargo run -r -- matchtigs hprcv2-k63-unitigs.fa.zst -k 63                    1230.515s 14:14
+14:55:24  INFO Reading unitigs..
+14:56:16  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+14:56:18  INFO Building graph of    186723674 unitigs..
+14:56:29  INFO Sorting heads
+14:56:35  INFO Sorting tails
+14:56:41  INFO Matching unitig ends
+14:56:47  INFO Sorting    534216886 edges
+14:56:49  INFO Building CSR adjacency
+14:56:49  INFO Filling offsets:         1424 MB
+14:56:51  INFO Mapping pairs
+14:56:54  INFO Matching    186723674 unitigs,    373447348 ends, k           63: two ends per unitig; overlap = k minus one minus distance; examined = receiver checks; links made = connections; receiving ends remain = unlinked ends scheduled below k; free ends = initial ends minus twice cumulative links
+14:56:54  INFO Before distance            0:            0 receiving ends examined,            0 links made,    373447348 receiving ends remain,    373447348 free ends,  17488538356 estimated bases
+14:56:54  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at the initial distance; nearest_receiver includes its reverse search; connect touches two link slots; remove_source includes tree, boundary, and repair scans
+14:56:54  INFO Estimated bases starts as the sum of unitig lengths and drops by every link overlap; cycle closures can make it lower than the final linear output
+14:59:27  INFO After distance            0:    246013085 receiving ends examined,    127434263 links made,    118578822 receiving ends remain,    118578822 free ends,   9587614050 estimated bases
+14:59:27  INFO After distance            0 node visits: direct_overlap    257853327 (total    257853327), nearest_receiver            0 (total            0), connect    254868526 (total    254868526), remove_source   9061551581 (total   9061551581)
+14:59:52  INFO After distance            1:    115723510 receiving ends examined,      2855312 links made,     77167699 receiving ends remain,    112868198 free ends,   9413440018 estimated bases
+14:59:52  INFO After distance            1 node visits: direct_overlap            0 (total    257853327), nearest_receiver    117871611 (total    117871611), connect      5710624 (total    260579150), remove_source   1493213306 (total  10554764887)
+15:00:09  INFO After distance            2:      3028201 receiving ends examined,      2169644 links made,     72820395 receiving ends remain,    108528910 free ends,   9283261378 estimated bases
+15:00:09  INFO After distance            2 node visits: direct_overlap            0 (total    257853327), nearest_receiver      3356136 (total    121227747), connect      4339288 (total    264918438), remove_source   1659115818 (total  12213880705)
+
+15:28:46  INFO After distance           62:      1158960 receiving ends examined,       169648 links made,            0 receiving ends remain,     56887566 free ends,   8255130536 estimated bases
+15:28:46  INFO After distance           62 node visits: direct_overlap            0 (total    257853327), nearest_receiver      1186320 (total    230476753), connect       339296 (total    316559782), remove_source   1729083327 (total 172785885593)
+15:28:47  INFO Final node visits (including closure links): direct_overlap    257853327, nearest_receiver    230476753, connect    373447348, remove_source 172785885593
+15:28:47  INFO Reconstruct output
+15:31:10  INFO Length summary:   8255130536 estimated bases after links,   8257861763 output bases
+15:31:14  INFO Wrote hprcv2-k63-unitigs.fa.matchtigs.msfa: 8257861794 bytes, 1 records, 8257861763 bases, 8257861763.0 bases/record
+15:31:14  INFO matchtigs: 2149.84s wall [2284.33s CPU; 106.3%], output   8257861763 bases (hprcv2-k63-unitigs.fa.matchtigs.msfa)
+#+end_src
+
+New output: *2149s* (2284s CPU), *8.26Gbp*, ie same as before.
+- I'm a bit surprised this is actually slower than before.
+
+*** Faster =remove_source=
+Every time a link is made, we have to repair a part of the graph around it.
+There were 2 DFSes and one loop before; instead let's just do a single DFS.
+  
+#+begin_src 
+15:35:31  INFO Reading unitigs..
+15:36:22  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+15:36:24  INFO Building graph of 187M unitigs..
+15:36:35  INFO Sorting heads
+15:36:41  INFO Sorting tails
+15:36:47  INFO Matching unitig ends
+15:36:52  INFO Sorting 534M edges
+15:36:55  INFO Building CSR adjacency
+15:36:55  INFO Filling offsets: 1.49GB
+15:36:56  INFO Mapping pairs
+15:36:59  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = receiver checks; links made = connections; receiving ends remain = unlinked ends scheduled below k; free ends = initial ends minus twice cumulative links
+15:36:59  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+15:36:59  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at the initial distance; nearest_receiver includes its reverse search; connect touches two link slots; remove_source includes tree, boundary, and repair scans
+15:36:59  INFO Estimated bases starts as the sum of unitig lengths and drops by every link overlap; cycle closures can make it lower than the final linear output
+15:39:01  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+15:39:01  INFO After distance 0 node visits: direct_overlap 258M (total 258M), nearest_receiver 0 (total 0), connect 255M (total 255M), remove_source 3.50G (total 3.50G)
+15:39:20  INFO After distance 1: 116M receiving ends examined, 2.86M links made, 77.2M receiving ends remain, 113M free ends, 9.41G estimated bases
+15:39:20  INFO After distance 1 node visits: direct_overlap 0 (total 258M), nearest_receiver 118M (total 118M), connect 5.71M (total 261M), remove_source 305M (total 3.80G)
+15:39:32  INFO After distance 2: 3.03M receiving ends examined, 2.17M links made, 72.8M receiving ends remain, 109M free ends, 9.28G estimated bases
+15:39:32  INFO After distance 2 node visits: direct_overlap 0 (total 258M), nearest_receiver 3.35M (total 121M), connect 4.34M (total 265M), remove_source 311M (total 4.11G)
+
+15:57:27  INFO After distance 62: 1.16M receiving ends examined, 170k links made, 0 receiving ends remain, 56.9M free ends, 8.26G estimated bases
+15:57:27  INFO After distance 62 node visits: direct_overlap 0 (total 258M), nearest_receiver 1.19M (total 230M), connect 339k (total 317M), remove_source 233M (total 26.0G)
+15:57:28  INFO Final node visits (including closure links): direct_overlap 258M, nearest_receiver 230M, connect 373M, remove_source 26.0G
+15:57:28  INFO Reconstruct output
+15:59:49  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases
+15:59:54  INFO Wrote hprcv2-k63-unitigs.fa.matchtigs.msfa: 8257965107 bytes, 1 records, 8257965076 bases, 8257965076.0 bases/record
+15:59:54  INFO matchtigs: 1462.87s wall [1467.26s CPU; 100.3%; MaxRSS 26.18 GiB], output 8.26G bases (hprcv2-k63-unitigs.fa.matchtigs.msfa)
+#+end_src
+
+- *1462s* (1467s CPU); 26GB memory
+
+*** Dropping DFS =parent= and =owner= metadata
+The DFS can simply infer the owner trees on-the-fly; let's save some memory and
+not store these things explicitly.
+  
+#+begin_src 
+16:27:38  INFO Reading unitigs..
+16:28:29  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+16:28:31  INFO Building graph of 187M unitigs..
+16:28:42  INFO Sorting heads
+16:28:49  INFO Sorting tails
+16:28:55  INFO Matching unitig ends
+16:29:01  INFO Sorting 534M edges
+16:29:04  INFO Building CSR adjacency
+16:29:04  INFO Filling offsets: 1.49GB
+16:29:05  INFO Mapping pairs
+16:29:07  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = receiver checks; links made = connections; receiving ends remain = unlinked ends scheduled below k; free ends = initial ends minus twice cumulative links
+16:29:07  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+16:29:07  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at the initial distance; nearest_receiver includes its reverse search; connect touches two link slots; remove_source includes tree, boundary, and repair scans
+16:30:51  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+16:30:51  INFO After distance 0 node visits: direct_overlap 258M (total 258M), nearest_receiver 0 (total 0), connect 255M (total 255M), remove_source 3.57G (total 3.57G)
+16:32:04  INFO After distance 1: 116M receiving ends examined, 2.86M links made, 77.2M receiving ends remain, 113M free ends, 9.41G estimated bases
+16:32:04  INFO After distance 1 node visits: direct_overlap 0 (total 258M), nearest_receiver 752M (total 752M), connect 5.71M (total 261M), remove_source 328M (total 3.90G)
+16:32:16  INFO After distance 2: 3.03M receiving ends examined, 2.17M links made, 72.8M receiving ends remain, 109M free ends, 9.28G estimated bases
+16:32:16  INFO After distance 2 node visits: direct_overlap 0 (total 258M), nearest_receiver 29.7M (total 782M), connect 4.34M (total 265M), remove_source 353M (total 4.25G)
+
+16:35:44  INFO After distance 16: 2.02M receiving ends examined, 533k links made, 46.7M receiving ends remain, 83.7M free ends, 8.61G estimated bases
+16:35:44  INFO After distance 16 node visits: direct_overlap 0 (total 258M), nearest_receiver 52.2M (total 1.54G), connect 1.07M (total 290M), remove_source 383M (total 9.07G)
+^C
+#+end_src
+
+*** Remove more metadata
+#+begin_src 
+16:36:53  INFO Reading unitigs..
+16:37:44  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+16:37:45  INFO Building graph of 187M unitigs..
+16:37:56  INFO Sorting heads
+16:38:03  INFO Sorting tails
+16:38:09  INFO Matching unitig ends
+16:38:15  INFO Sorting 534M edges
+16:38:18  INFO Building CSR adjacency
+16:38:18  INFO Filling offsets: 1.49GB
+16:38:20  INFO Mapping pairs
+16:38:21  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = receiver checks; links made = connections; receiving ends remain = unlinked ends scheduled below k; free ends = initial ends minus twice cumulative links
+16:38:21  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+16:38:21  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at the initial distance; nearest_receiver includes its reverse search; connect touches two link slots; remove_source scans changed nodes and edges used to recompute distances
+16:39:41  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+16:39:41  INFO After distance 0 node visits: direct_overlap 258M (total 258M), nearest_receiver 0 (total 0), connect 255M (total 255M), remove_source 2.09G (total 2.09G)
+16:40:51  INFO After distance 1: 116M receiving ends examined, 2.86M links made, 77.2M receiving ends remain, 113M free ends, 9.41G estimated bases
+16:40:51  INFO After distance 1 node visits: direct_overlap 0 (total 258M), nearest_receiver 752M (total 752M), connect 5.71M (total 261M), remove_source 178M (total 2.27G)
+16:41:00  INFO After distance 2: 3.03M receiving ends examined, 2.17M links made, 72.8M receiving ends remain, 109M free ends, 9.28G estimated bases
+16:41:00  INFO After distance 2 node visits: direct_overlap 0 (total 258M), nearest_receiver 29.7M (total 782M), connect 4.34M (total 265M), remove_source 168M (total 2.44G)
+
+16:48:22  INFO After distance 62: 1.16M receiving ends examined, 170k links made, 0 receiving ends remain, 56.9M free ends, 8.26G estimated bases
+16:48:22  INFO After distance 62 node visits: direct_overlap 0 (total 258M), nearest_receiver 4.26M (total 3.56G), connect 339k (total 317M), remove_source 57.2M (total 7.79G)
+16:48:23  INFO Final node visits (including closure links): direct_overlap 258M, nearest_receiver 3.56G, connect 373M, remove_source 7.79G
+16:48:23  INFO Reconstruct output
+16:50:44  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases
+16:50:49  INFO Wrote hprcv2-k63-unitigs.fa.matchtigs.msfa: 8257965169 bytes, 1 records, 8257965138 bases, 8257965138.0 bases/record
+16:50:49  INFO matchtigs: 836.30s wall [973.04s CPU; 116.4%; MaxRSS 26.18 GiB], output 8.26G bases (hprcv2-k63-unitigs.fa.matchtigs.msfa)
+#+end_src
+
+Now we have *836s*! (and still 26GB mem)
+
+*** Lazy =remove_source=: 2-3x slower
+Instead of eagerly updating the tree on node-removal, we can lazily update nodes
+when we have a candidate match at the right distance.
+This turns out much slower. I'm not exactly sure why, but probably because
+(somehow?) nodes get relazed multiple times each time a node disappears.
+
+#+begin_src 
+17:09:59  INFO Reading unitigs..
+17:10:51  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+17:10:52  INFO Building graph of 187M unitigs..
+17:11:04  INFO Sorting heads
+17:11:10  INFO Sorting tails
+17:11:16  INFO Matching unitig ends
+17:11:22  INFO Sorting 534M edges
+17:11:24  INFO Building CSR adjacency
+17:11:24  INFO Filling offsets: 1.49GB
+17:11:26  INFO Mapping pairs
+17:11:27  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = receiver checks; links made = connections; receiving ends remain = unlinked ends scheduled below k; free ends = initial ends minus twice cumulative links
+17:11:27  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+17:11:27  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at the initial distance; nearest_receiver includes its bounded DFS; connect touches two link slots
+17:11:38  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+17:11:38  INFO After distance 0 node visits: direct_overlap 258M (total 258M), nearest_receiver 0 (total 0), connect 255M (total 255M)
+17:12:00  INFO After distance 1: 116M receiving ends examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+17:12:00  INFO After distance 1 node visits: direct_overlap 0 (total 258M), nearest_receiver 291M (total 291M), connect 5.71M (total 261M)
+17:12:23  INFO After distance 2: 111M receiving ends examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+17:12:23  INFO After distance 2 node visits: direct_overlap 0 (total 258M), nearest_receiver 302M (total 592M), connect 4.34M (total 265M)
+
+17:17:42  INFO After distance 13: 87.7M receiving ends examined, 620k links made, 87.0M receiving ends remain, 87.1M free ends, 8.69G estimated bases
+17:17:42  INFO After distance 13 node visits: direct_overlap 0 (total 258M), nearest_receiver 327M (total 4.08G), connect 1.24M (total 286M)
+<aborted>
+#+end_src
+
+*** Not quite meet-in-the-middle
+Let's alternate relaxing from the start and from the end. That way, exploration
+trees should be much smaller.
+Here, GPT did a bunch of stuff that is not exactly what I intended I think, but
+it seems to work.
+My idea (that's not really what is happening now; see below): every time we relax an edge and detect that we already have a distance
+to the other end, push the edge on a bucket queue for that /total/ distance.
+Then we only need to relax edges from nodes at distance at most $k/2$ or so, and
+process the 'bridges'/meeting points up to distance $k$.
+
+#+begin_src 
+18:21:08  INFO Reading unitigs..
+18:21:59  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+18:22:01  INFO Building graph of 187M unitigs..
+18:22:12  INFO Sorting heads
+18:22:18  INFO Sorting tails
+18:22:24  INFO Matching unitig ends
+18:22:30  INFO Sorting 534M edges
+18:22:33  INFO Building CSR adjacency
+18:22:33  INFO Filling offsets: 1.49GB
+18:22:34  INFO Mapping pairs
+18:22:36  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; receiving ends remain and free ends = initial ends minus twice cumulative links
+18:22:36  INFO Meeting search: source and receiver fronts each store distances below 31; a path through one unitig has cost left distance + unitig extensions + right distance
+18:22:36  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+18:22:36  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; meet checks and schedules central unitig traversals and traces endpoints; connect touches two link slots; remove_source repairs both bounded fronts
+18:23:45  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+18:23:45  INFO After distance 0 node visits: direct_overlap 258M (total 258M), meet 0 (total 0), connect 255M (total 255M), remove_source 1.95G (total 1.95G)
+18:24:08  INFO After distance 1: 8.58M bridge entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+18:24:08  INFO After distance 1 node visits: direct_overlap 0 (total 258M), meet 77.7M (total 1.33G), connect 5.71M (total 261M), remove_source 161M (total 2.11G)
+18:24:14  INFO After distance 2: 10.2M bridge entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+18:24:14  INFO After distance 2 node visits: direct_overlap 0 (total 258M), meet 83.6M (total 1.42G), connect 4.34M (total 265M), remove_source 150M (total 2.26G)
+
+18:27:17  INFO After distance 61: 1.54M bridge entries examined, 172k links made, 57.2M receiving ends remain, 57.2M free ends, 8.26G estimated bases
+18:27:17  INFO After distance 61 node visits: direct_overlap 0 (total 258M), meet 9.78M (total 4.01G), connect 343k (total 316M), remove_source 12.4M (total 4.96G)
+18:27:19  INFO Final node visits (including closure links): direct_overlap 258M, meet 4.01G, connect 373M, remove_source 4.96G
+18:27:19  INFO Reconstruct output
+18:29:39  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases
+18:29:44  INFO Wrote hprcv2-k63-unitigs.fa.matchtigs.msfa: 8258031942 bytes, 1 records, 8258031911 bases, 8258031911.0 bases/record
+18:29:44  INFO matchtigs: 515.75s wall [659.01s CPU; 127.8%; MaxRSS 26.19 GiB], output 8.26G bases (hprcv2-k63-unitigs.fa.matchtigs.msfa)
+#+end_src
+
+- *515s*; 26GB memory
+
+At this point, our main algorithm is only like half the total time!
+- 60s reading input
+- 100s prep; building graph; linking $(k-1)$-overlaps
+- 200s: Our actual algorithm
+- 140s writing output
+
+Let's try to understand the details:
+- First link adjacent unitigs
+- Then compute distances from free ends to remaining unitigs ends
+- Then push all 'bridge' unitigs on a bucket queue corresponding to the length
+  of the path they complete.
+- Process the lowest-cost unitigs, drop their endpoints, and update
+  corresponding distances.
+- If the cost of a unitig changed, re-push it at the new distance so we try
+  again later.
+
+Some small optimizations:
+- To compute the weight of a /bridge/ (the middle edge), we can just take
+  =dist[head]+dist[tail]-cost(unitig)=. (Minus, instead of plus, because both
+  paths to the middle already include the cost of the unitig iteslf.) The only
+  times we cannot do this is when one of the costs is 0 (because it is a
+  starting point) or infinity.
+- There was quite a lot of code to avoid self-loops where a unitig-end connects
+  back onto itself from the other direction. This stuff should be quite rare, so
+  let's just allow that and detect this during string reconstruction, to save
+  250 lines of code.
+- The initialization of all distances was weird: they started all at 0 (because
+  everything is an open end) and then in the first iteration many of them were
+  removed and trees updated. Now we only write those elements that remain after
+  the first pass and do a multi-source dijkstra from those, updating everything
+  at once.
+- =PackedSeq::unpack_into()= nearly doubles the speed of string reconstruction, but it
+  still pretty slow at *80s* (from 140s). 
+
+At this point, the total time is *420s*.
+
+*** Multithreading (failed)
+I tried a few ideas, but none really work yet:
+- We could reconstruct in parallel, but most time ends in 1 thread (that has 1
+  long cycles?)
+- We could check for good bridges in parallel, but a lot of the work is in
+  dynamically updating the graph.
+
+*** Reducing bridges (failed)
+- Currently we always have most unitigs as a bridge in a queue somewhere. In
+  practice, when there is a path from A to B, we only need to consider the
+  middle edge.
+- We then need to dynamically push new bridges whenever =remove_source= leads to
+  new 'middle' edges appearing.
+- Below, it seems that we do indeed check only half the number of bridges of
+  before, but on the other hand, we do more work in remove_source, and this
+  appears not to be worth it.
+
+#+begin_src 
+22:44:42 (00:00:00)  INFO Reading unitigs..
+22:45:36 (00:00:53)  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+22:45:38 (00:00:55)  INFO Building graph of 187M unitigs..
+22:45:48 (00:01:06)  INFO Sorting heads
+22:45:55 (00:01:12)  INFO Sorting tails
+22:46:01 (00:01:18)  INFO Matching unitig ends
+22:46:06 (00:01:23)  INFO Sorting 534M edges
+22:46:09 (00:01:26)  INFO Building CSR adjacency
+22:46:09 (00:01:26)  INFO Filling offsets: 1.49GB
+22:46:10 (00:01:27)  INFO Mapping pairs
+22:46:11 (00:01:28)  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; a self-link occupies one end, other links occupy two
+22:46:11 (00:01:28)  INFO Meeting search: source and receiver fronts each store distances below 31; a path through one unitig has cost left distance + unitig extensions + right distance
+22:46:11 (00:01:28)  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+22:46:11 (00:01:28)  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; build_distances initializes bounded shortest paths; meet checks and schedules central unitig traversals and traces endpoints; connect touches link slots; remove_source repairs both bounded fronts
+22:46:57 (00:02:14)  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+22:46:57 (00:02:14)  INFO After distance 0 node visits: direct_overlap 258M (total 258M), build_distances 1.35G, meet 0 (total 0), connect 255M (total 255M), remove_source 0 (total 0)
+22:47:20 (00:02:38)  INFO After distance 1: 8.58M bridge entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+22:47:20 (00:02:38)  INFO After distance 1 node visits: direct_overlap 0 (total 258M), meet 29.9M (total 707M), connect 5.71M (total 261M), remove_source 295M (total 295M)
+22:47:31 (00:02:48)  INFO After distance 2: 7.79M bridge entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+22:47:31 (00:02:48)  INFO After distance 2 node visits: direct_overlap 0 (total 258M), meet 25.9M (total 733M), connect 4.34M (total 265M), remove_source 273M (total 568M)
+
+22:50:12 (00:05:30)  INFO After distance 32: 2.17M bridge entries examined, 320k links made, 70.8M receiving ends remain, 70.8M free ends, 8.37G estimated bases
+22:50:12 (00:05:30)  INFO After distance 32 node visits: direct_overlap 0 (total 258M), meet 12.8M (total 1.20G), connect 640k (total 303M), remove_source 90.2M (total 4.75G)
+^C
+#+end_src
+
+
+
+* Oct 5
+** Continuing matchtigs again
+*** Meet-in-the-middle for real
+Let's try mitm again:
+- Dijkstra from both sides
+- Relax all edges at distance d
+  - We iterate over all nodes; not sure if we should make a queue
+  - Push new bridges to a queue for their cost.
+- find & use all bridges with total length 2d-1 and 2d or so.
+  - We iterate over all edges; not sure if we should make a queue
+- Note that a bridge is only considered if it is the 'middle' edge: the cost at
+  both ends must be at most half the total length of the path.
+
+#+begin_src 
+10:25:49 (00:00:00)  INFO Reading unitigs..
+10:26:41 (00:00:52)  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+10:26:43 (00:00:54)  INFO Building graph of 187M unitigs..
+10:26:53 (00:01:04)  INFO Sorting heads
+10:26:59 (00:01:10)  INFO Sorting tails
+10:27:04 (00:01:15)  INFO Matching unitig ends
+10:27:11 (00:01:21)  INFO Sorting 534M edges
+10:27:13 (00:01:24)  INFO Building CSR adjacency
+10:27:13 (00:01:24)  INFO Filling offsets: 1.49GB
+10:27:15 (00:01:26)  INFO Mapping pairs
+10:27:16 (00:01:27)  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; a self-link occupies one end, other links occupy two
+10:27:16 (00:01:27)  INFO Meeting search: grow source and receiver distances below 31 one layer at a time; a path through one unitig has cost left distance + unitig extensions + right distance
+10:27:16 (00:01:27)  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+10:27:16 (00:01:27)  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; build_distances scans and relaxes distance layers; meet scans unitig traversals and traces endpoints; connect touches link slots; remove_source repairs settled distances
+10:27:33 (00:01:44)  INFO Half-distance 0: 119M nodes settled
+10:27:33 (00:01:44)  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+10:27:33 (00:01:44)  INFO After distance 0 node visits: direct_overlap 258M (total 258M), build_distances 987M, meet 0 (total 0), connect 255M (total 255M), remove_source 0 (total 0)
+10:27:36 (00:01:47)  INFO Half-distance 1: 18.9M nodes settled
+10:27:40 (00:01:51)  INFO After distance 1: 2.86M bridges found, 2.91M entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+10:27:40 (00:01:51)  INFO After distance 1 node visits: direct_overlap 0 (total 258M), build_distances 485M (total 1.47G), meet 279M (total 279M), connect 5.71M (total 261M), remove_source 62.9M (total 62.9M)
+10:27:45 (00:01:56)  INFO After distance 2: 2.81M bridges found, 2.86M entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+10:27:45 (00:01:56)  INFO After distance 2 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 1.47G), meet 302M (total 581M), connect 4.34M (total 265M), remove_source 27.7M (total 90.5M)
+10:27:47 (00:01:58)  INFO Half-distance 2: 8.71M nodes settled
+10:27:51 (00:02:02)  INFO After distance 3: 2.68M bridges found, 2.71M entries examined, 1.73M links made, 105M receiving ends remain, 105M free ends, 9.18G estimated bases
+10:27:51 (00:02:02)  INFO After distance 3 node visits: direct_overlap 0 (total 258M), build_distances 444M (total 1.92G), meet 312M (total 893M), connect 3.45M (total 268M), remove_source 28.1M (total 119M)
+10:27:56 (00:02:07)  INFO After distance 4: 1.77M bridges found, 1.79M entries examined, 1.40M links made, 102M receiving ends remain, 102M free ends, 9.10G estimated bases
+10:27:56 (00:02:07)  INFO After distance 4 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 1.92G), meet 316M (total 1.21G), connect 2.80M (total 271M), remove_source 21.1M (total 140M)
+10:27:57 (00:02:08)  INFO Half-distance 3: 5.38M nodes settled
+10:28:02 (00:02:13)  INFO After distance 5: 1.72M bridges found, 1.74M entries examined, 1.18M links made, 99.9M receiving ends remain, 99.9M free ends, 9.03G estimated bases
+10:28:02 (00:02:13)  INFO After distance 5 node visits: direct_overlap 0 (total 258M), build_distances 423M (total 2.34G), meet 324M (total 1.53G), connect 2.37M (total 274M), remove_source 20.7M (total 160M)
+10:28:07 (00:02:18)  INFO After distance 6: 1.30M bridges found, 1.31M entries examined, 1.06M links made, 97.8M receiving ends remain, 97.8M free ends, 8.97G estimated bases
+10:28:07 (00:02:18)  INFO After distance 6 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 2.34G), meet 328M (total 1.86G), connect 2.12M (total 276M), remove_source 17.5M (total 178M)
+10:28:08 (00:02:19)  INFO Half-distance 4: 5.04M nodes settled
+10:28:14 (00:02:25)  INFO After distance 7: 1.38M bridges found, 1.39M entries examined, 975k links made, 95.8M receiving ends remain, 95.8M free ends, 8.92G estimated bases
+10:28:14 (00:02:25)  INFO After distance 7 node visits: direct_overlap 0 (total 258M), build_distances 417M (total 2.76G), meet 336M (total 2.20G), connect 1.95M (total 278M), remove_source 18.7M (total 197M)
+10:28:19 (00:02:30)  INFO After distance 8: 1.07M bridges found, 1.08M entries examined, 877k links made, 94.1M receiving ends remain, 94.1M free ends, 8.87G estimated bases
+10:28:19 (00:02:30)  INFO After distance 8 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 2.76G), meet 339M (total 2.54G), connect 1.75M (total 279M), remove_source 16.2M (total 213M)
+10:28:20 (00:02:31)  INFO Half-distance 5: 4.22M nodes settled
+10:28:25 (00:02:36)  INFO After distance 9: 1.13M bridges found, 1.14M entries examined, 809k links made, 92.5M receiving ends remain, 92.5M free ends, 8.83G estimated bases
+10:28:25 (00:02:36)  INFO After distance 9 node visits: direct_overlap 0 (total 258M), build_distances 411M (total 3.17G), meet 345M (total 2.88G), connect 1.62M (total 281M), remove_source 16.7M (total 229M)
+10:28:31 (00:02:42)  INFO After distance 10: 873k bridges found, 882k entries examined, 727k links made, 91.0M receiving ends remain, 91.0M free ends, 8.79G estimated bases
+10:28:31 (00:02:42)  INFO After distance 10 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 3.17G), meet 347M (total 3.23G), connect 1.45M (total 282M), remove_source 14.2M (total 244M)
+10:28:32 (00:02:43)  INFO Half-distance 6: 3.70M nodes settled
+10:28:38 (00:02:49)  INFO After distance 11: 944k bridges found, 952k entries examined, 692k links made, 89.6M receiving ends remain, 89.6M free ends, 8.76G estimated bases
+10:28:38 (00:02:49)  INFO After distance 11 node visits: direct_overlap 0 (total 258M), build_distances 407M (total 3.57G), meet 354M (total 3.58G), connect 1.38M (total 284M), remove_source 15.0M (total 259M)
+10:28:43 (00:02:54)  INFO After distance 12: 786k bridges found, 795k entries examined, 660k links made, 88.3M receiving ends remain, 88.3M free ends, 8.72G estimated bases
+10:28:43 (00:02:54)  INFO After distance 12 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 3.57G), meet 357M (total 3.94G), connect 1.32M (total 285M), remove_source 13.9M (total 272M)
+10:28:45 (00:02:56)  INFO Half-distance 7: 3.29M nodes settled
+10:28:50 (00:03:01)  INFO After distance 13: 838k bridges found, 846k entries examined, 620k links made, 87.1M receiving ends remain, 87.1M free ends, 8.69G estimated bases
+10:28:50 (00:03:01)  INFO After distance 13 node visits: direct_overlap 0 (total 258M), build_distances 404M (total 3.98G), meet 362M (total 4.30G), connect 1.24M (total 286M), remove_source 14.5M (total 287M)
+10:28:56 (00:03:07)  INFO After distance 14: 694k bridges found, 702k entries examined, 586k links made, 85.9M receiving ends remain, 85.9M free ends, 8.66G estimated bases
+10:28:56 (00:03:07)  INFO After distance 14 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 3.98G), meet 364M (total 4.66G), connect 1.17M (total 288M), remove_source 13.2M (total 300M)
+10:28:58 (00:03:09)  INFO Half-distance 8: 3.15M nodes settled
+10:29:04 (00:03:15)  INFO After distance 15: 740k bridges found, 747k entries examined, 557k links made, 84.8M receiving ends remain, 84.8M free ends, 8.64G estimated bases
+10:29:04 (00:03:15)  INFO After distance 15 node visits: direct_overlap 0 (total 258M), build_distances 402M (total 4.38G), meet 369M (total 5.03G), connect 1.11M (total 289M), remove_source 13.6M (total 314M)
+10:29:10 (00:03:21)  INFO After distance 16: 628k bridges found, 635k entries examined, 533k links made, 83.7M receiving ends remain, 83.7M free ends, 8.61G estimated bases
+10:29:10 (00:03:21)  INFO After distance 16 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 4.38G), meet 371M (total 5.41G), connect 1.07M (total 290M), remove_source 12.7M (total 326M)
+10:29:11 (00:03:22)  INFO Half-distance 9: 2.93M nodes settled
+10:29:17 (00:03:28)  INFO After distance 17: 691k bridges found, 698k entries examined, 519k links made, 82.7M receiving ends remain, 82.7M free ends, 8.59G estimated bases
+10:29:17 (00:03:28)  INFO After distance 17 node visits: direct_overlap 0 (total 258M), build_distances 401M (total 4.78G), meet 376M (total 5.78G), connect 1.04M (total 291M), remove_source 13.7M (total 340M)
+10:29:24 (00:03:35)  INFO After distance 18: 586k bridges found, 593k entries examined, 497k links made, 81.7M receiving ends remain, 81.7M free ends, 8.57G estimated bases
+10:29:24 (00:03:35)  INFO After distance 18 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 4.78G), meet 378M (total 6.16G), connect 994k (total 292M), remove_source 12.8M (total 353M)
+10:29:25 (00:03:36)  INFO Half-distance 10: 2.85M nodes settled
+10:29:31 (00:03:42)  INFO After distance 19: 632k bridges found, 639k entries examined, 476k links made, 80.7M receiving ends remain, 80.7M free ends, 8.55G estimated bases
+10:29:31 (00:03:42)  INFO After distance 19 node visits: direct_overlap 0 (total 258M), build_distances 400M (total 5.18G), meet 383M (total 6.54G), connect 953k (total 293M), remove_source 13.4M (total 366M)
+10:29:38 (00:03:49)  INFO After distance 20: 534k bridges found, 541k entries examined, 453k links made, 79.8M receiving ends remain, 79.8M free ends, 8.53G estimated bases
+10:29:38 (00:03:49)  INFO After distance 20 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 5.18G), meet 385M (total 6.93G), connect 906k (total 294M), remove_source 12.4M (total 379M)
+10:29:39 (00:03:50)  INFO Half-distance 11: 2.64M nodes settled
+10:29:46 (00:03:57)  INFO After distance 21: 591k bridges found, 599k entries examined, 446k links made, 78.9M receiving ends remain, 78.9M free ends, 8.51G estimated bases
+10:29:46 (00:03:57)  INFO After distance 21 node visits: direct_overlap 0 (total 258M), build_distances 398M (total 5.58G), meet 389M (total 7.32G), connect 893k (total 295M), remove_source 13.3M (total 392M)
+10:29:53 (00:04:04)  INFO After distance 22: 513k bridges found, 521k entries examined, 434k links made, 78.1M receiving ends remain, 78.1M free ends, 8.49G estimated bases
+10:29:53 (00:04:04)  INFO After distance 22 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 5.58G), meet 391M (total 7.71G), connect 868k (total 295M), remove_source 13.0M (total 405M)
+10:29:54 (00:04:05)  INFO Half-distance 12: 2.58M nodes settled
+10:30:01 (00:04:12)  INFO After distance 23: 555k bridges found, 563k entries examined, 420k links made, 77.2M receiving ends remain, 77.2M free ends, 8.48G estimated bases
+10:30:01 (00:04:12)  INFO After distance 23 node visits: direct_overlap 0 (total 258M), build_distances 398M (total 5.98G), meet 395M (total 8.10G), connect 840k (total 296M), remove_source 13.6M (total 419M)
+10:30:07 (00:04:18)  INFO After distance 24: 474k bridges found, 481k entries examined, 401k links made, 76.4M receiving ends remain, 76.4M free ends, 8.46G estimated bases
+10:30:07 (00:04:18)  INFO After distance 24 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 5.98G), meet 396M (total 8.50G), connect 803k (total 297M), remove_source 12.7M (total 431M)
+10:30:09 (00:04:20)  INFO Half-distance 13: 2.41M nodes settled
+10:30:16 (00:04:27)  INFO After distance 25: 509k bridges found, 516k entries examined, 388k links made, 75.6M receiving ends remain, 75.6M free ends, 8.45G estimated bases
+10:30:16 (00:04:27)  INFO After distance 25 node visits: direct_overlap 0 (total 258M), build_distances 397M (total 6.37G), meet 400M (total 8.90G), connect 777k (total 298M), remove_source 13.2M (total 445M)
+10:30:23 (00:04:34)  INFO After distance 26: 445k bridges found, 451k entries examined, 379k links made, 74.9M receiving ends remain, 74.9M free ends, 8.43G estimated bases
+10:30:23 (00:04:34)  INFO After distance 26 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 6.37G), meet 401M (total 9.30G), connect 757k (total 299M), remove_source 12.6M (total 457M)
+10:30:24 (00:04:35)  INFO Half-distance 14: 2.35M nodes settled
+10:30:31 (00:04:42)  INFO After distance 27: 490k bridges found, 498k entries examined, 374k links made, 74.1M receiving ends remain, 74.1M free ends, 8.42G estimated bases
+10:30:31 (00:04:42)  INFO After distance 27 node visits: direct_overlap 0 (total 258M), build_distances 396M (total 6.77G), meet 405M (total 9.70G), connect 748k (total 299M), remove_source 13.8M (total 471M)
+10:30:38 (00:04:49)  INFO After distance 28: 426k bridges found, 433k entries examined, 361k links made, 73.4M receiving ends remain, 73.4M free ends, 8.41G estimated bases
+10:30:38 (00:04:49)  INFO After distance 28 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 6.77G), meet 407M (total 10.1G), connect 721k (total 300M), remove_source 13.2M (total 484M)
+10:30:39 (00:04:50)  INFO Half-distance 15: 2.31M nodes settled
+10:30:47 (00:04:58)  INFO After distance 29: 458k bridges found, 464k entries examined, 347k links made, 72.7M receiving ends remain, 72.7M free ends, 8.40G estimated bases
+10:30:47 (00:04:58)  INFO After distance 29 node visits: direct_overlap 0 (total 258M), build_distances 396M (total 7.17G), meet 410M (total 10.5G), connect 695k (total 301M), remove_source 13.4M (total 498M)
+10:30:54 (00:05:05)  INFO After distance 30: 398k bridges found, 405k entries examined, 336k links made, 72.0M receiving ends remain, 72.0M free ends, 8.39G estimated bases
+10:30:54 (00:05:05)  INFO After distance 30 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 7.17G), meet 411M (total 10.9G), connect 672k (total 301M), remove_source 12.9M (total 511M)
+10:30:55 (00:05:06)  INFO Half-distance 16: 2.24M nodes settled
+10:31:03 (00:05:14)  INFO After distance 31: 435k bridges found, 441k entries examined, 328k links made, 71.4M receiving ends remain, 71.4M free ends, 8.38G estimated bases
+10:31:03 (00:05:14)  INFO After distance 31 node visits: direct_overlap 0 (total 258M), build_distances 395M (total 7.56G), meet 414M (total 11.3G), connect 656k (total 302M), remove_source 13.1M (total 524M)
+10:31:10 (00:05:21)  INFO After distance 32: 384k bridges found, 391k entries examined, 322k links made, 70.7M receiving ends remain, 70.7M free ends, 8.37G estimated bases
+10:31:10 (00:05:21)  INFO After distance 32 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 7.56G), meet 416M (total 11.8G), connect 644k (total 303M), remove_source 13.1M (total 537M)
+^C
+#+end_src
+
+This initial implementation has faster initialization but then ends up slower.
+Mostly, for every bridge it needs to recompute the distances to both endpoints.
+Instead, we will redo the layout so that computed distances do not yet include
+the cost of crossing the unitig. Then, computing the total cost of a unitig is trivial.
+
+#+begin_src 
+10:43:31 (00:00:00)  INFO Reading unitigs..
+Pending lost events: 232
+Pending lost events: 65
+10:44:22 (00:00:51)  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+10:44:23 (00:00:52)  INFO Building graph of 187M unitigs..
+10:44:35 (00:01:03)  INFO Sorting heads
+10:44:42 (00:01:10)  INFO Sorting tails
+10:44:48 (00:01:16)  INFO Matching unitig ends
+10:44:54 (00:01:22)  INFO Sorting 534M edges
+10:44:56 (00:01:25)  INFO Building CSR adjacency
+10:44:56 (00:01:25)  INFO Filling offsets: 1.49GB
+10:44:58 (00:01:26)  INFO Mapping pairs
+10:44:59 (00:01:28)  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; a self-link occupies one end, other links occupy two
+10:44:59 (00:01:28)  INFO Meeting search: grow source and receiver distances below 31 one layer at a time; a path through one unitig has cost left distance + unitig extensions + right distance
+10:44:59 (00:01:28)  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+10:44:59 (00:01:28)  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; build_distances scans and relaxes distance layers; meet scans unitig traversals and traces endpoints; connect touches link slots; remove_source repairs settled distances
+10:45:13 (00:01:42)  INFO Half-distance 0: 117M nodes settled
+10:45:13 (00:01:42)  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+10:45:13 (00:01:42)  INFO After distance 0 node visits: direct_overlap 258M (total 258M), build_distances 1.08G, meet 0 (total 0), connect 255M (total 255M), remove_source 0 (total 0)
+10:45:16 (00:01:45)  INFO Half-distance 1: 18.0M nodes settled
+10:45:20 (00:01:49)  INFO After distance 1: 2.86M bridges found, 2.91M entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+10:45:20 (00:01:49)  INFO After distance 1 node visits: direct_overlap 0 (total 258M), build_distances 460M (total 1.54G), meet 211M (total 211M), connect 5.71M (total 261M), remove_source 109M (total 109M)
+10:45:24 (00:01:52)  INFO After distance 2: 2.81M bridges found, 2.86M entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+10:45:24 (00:01:52)  INFO After distance 2 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 1.54G), meet 208M (total 419M), connect 4.34M (total 265M), remove_source 55.2M (total 164M)
+10:45:26 (00:01:55)  INFO Half-distance 2: 6.93M nodes settled
+
+10:48:34 (00:05:03)  INFO Half-distance 31: 0 nodes settled
+10:48:36 (00:05:05)  INFO After distance 61: 185k bridges found, 188k entries examined, 172k links made, 57.2M receiving ends remain, 57.2M free ends, 8.26G estimated bases
+10:48:36 (00:05:05)  INFO After distance 61 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 13.3G), meet 191M (total 11.9G), connect 343k (total 316M), remove_source 18.0M (total 1.50G)
+10:48:37 (00:05:06)  INFO Final node visits (including closure links): direct_overlap 258M, build_distances 13.3G, meet 11.9G, connect 373M, remove_source 1.50G
+10:48:37 (00:05:06)  INFO Reconstruct output
+10:49:51 (00:06:19)  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases
+10:49:56 (00:06:24)  INFO Wrote hprcv2-k63-unitigs-greedytigs.msfa: 8257928676 bytes, 1 records, 8257928645 bases, 8257928645.0 bases/record
+10:49:56 (00:06:24)  INFO matchtigs: 384.81s wall [535.37s CPU; 139.1%; MaxRSS 26.18 GiB], output 8.26G bases (hprcv2-k63-unitigs-greedytigs.msfa)
+#+end_src
+
+Great! It's faster now *384s* (535s CPU)
+
+One weird thing is that in =relax_at=, which relaxes edges from all nodes at
+distance $d$, it first checks if the distance is still up-to-date. Instead, we
+should just make sure all finite distances are always correct directly in
+=remove_source= so the check here can be skipped.
+
+#+begin_src 
+11:01:55 (00:00:00)  INFO Reading unitigs..
+Pending lost events: 293
+11:02:46 (00:00:50)  INFO Read hprcv2-k63-unitigs.fa.zst: 4914797023 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+11:02:47 (00:00:51)  INFO Building graph of 187M unitigs..
+11:02:58 (00:01:02)  INFO Sorting heads
+11:03:04 (00:01:08)  INFO Sorting tails
+11:03:10 (00:01:14)  INFO Matching unitig ends
+11:03:16 (00:01:20)  INFO Sorting 534M edges
+11:03:18 (00:01:22)  INFO Building CSR adjacency
+11:03:18 (00:01:22)  INFO Filling offsets: 1.49GB
+11:03:20 (00:01:24)  INFO Mapping pairs
+11:03:22 (00:01:26)  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; a self-link occupies one end, other links occupy two
+11:03:22 (00:01:26)  INFO Meeting search: grow source and receiver distances below 31 one layer at a time; a path through one unitig has cost left distance + unitig extensions + right distance
+11:03:22 (00:01:26)  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+11:03:22 (00:01:26)  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; build_distances scans and relaxes distance layers; meet scans unitig traversals and traces endpoints; connect touches link slots; remove_source repairs settled distances
+11:03:36 (00:01:40)  INFO Half-distance 0: 117M nodes settled
+11:03:36 (00:01:40)  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+11:03:36 (00:01:40)  INFO After distance 0 node visits: direct_overlap 258M (total 258M), build_distances 1.08G, meet 0 (total 0), connect 255M (total 255M), remove_source 0 (total 0)
+11:03:37 (00:01:41)  INFO Half-distance 1: 18.0M nodes settled
+11:03:43 (00:01:47)  INFO After distance 1: 2.86M bridges found, 2.91M entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+11:03:43 (00:01:47)  INFO After distance 1 node visits: direct_overlap 0 (total 258M), build_distances 412M (total 1.50G), meet 211M (total 211M), connect 5.71M (total 261M), remove_source 152M (total 152M)
+11:03:47 (00:01:51)  INFO After distance 2: 2.81M bridges found, 2.86M entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+11:03:47 (00:01:51)  INFO After distance 2 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 1.50G), meet 208M (total 419M), connect 4.34M (total 265M), remove_source 103M (total 255M)
+11:03:48 (00:01:52)  INFO Half-distance 2: 6.93M nodes settled
+
+11:06:34 (00:04:38)  INFO Half-distance 31: 0 nodes settled
+11:06:36 (00:04:40)  INFO After distance 61: 185k bridges found, 188k entries examined, 172k links made, 57.2M receiving ends remain, 57.2M free ends, 8.26G estimated bases
+11:06:36 (00:04:40)  INFO After distance 61 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 12.5G), meet 191M (total 11.9G), connect 343k (total 316M), remove_source 18.0M (total 2.14G)
+11:06:37 (00:04:41)  INFO Final node visits (including closure links): direct_overlap 258M, build_distances 12.5G, meet 11.9G, connect 373M, remove_source 2.14G
+11:06:37 (00:04:41)  INFO Reconstruct output
+11:07:49 (00:05:53)  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases
+11:07:53 (00:05:57)  INFO Wrote hprcv2-k63-unitigs-greedytigs.msfa: 8257928676 bytes, 1 records, 8257928645 bases, 8257928645.0 bases/record
+11:07:53 (00:05:57)  INFO matchtigs: 357.53s wall [503.61s CPU; 140.9%; MaxRSS 26.18 GiB], output 8.26G bases (hprcv2-k63-unitigs-greedytigs.msfa)
+#+end_src
+
+- *357s*! (503s CPU) Another half-minute speedup, where the first 90s and last
+  60s are IO.
+
+We can get some more perf by scanning the list of /all/ unitigs for bridges not
+for every distance, but only every other distance. This again saves 35s, for
+*321s* total!
+
+*** Queue for bridges
+Currently we scan all bridges at every distances. Better is to keep a bucket
+queue storing 'live' bridges: *306s*
+
+*** Multithreaded output
+- We can first determine all cycles in the graph, and then in parallel write
+  those out.
+- We have to use =with_max_len(1)= to ensure a single thread does not grab all
+  adjacent heavy paths. We further avoid this by splitting cycles every 32MB.
+- To shrink output a bit, short cycles are split at a min-overlap point.
+- Now it's 20s to find the cycles and 10s to concatenate them over multiple threads.
+Result: *265s*
+
+*** Reducing memory usage
+Time to use =heaptrack=. We start out at *26.2GB*:
+-
+  
+*** TODO
+- meet-in-the-middle search from both ends:
+  - Computing all initial distances is fast. From there, push all unitigs (=edges) on a
+    bucket heap and process them in order of total cost as the 'bridge'
+    connecting two half-paths.
+  - Then do a path-shaped DFS to find a path to both endpoints.
+  - Then, drop those free endpoints and recompute all relevant distances via a DFS.
+  - When the value of a bridge is not up-to-date anymore, reinsert it at the new
+    value it that's <k.
+- Break cycles at longest edge / min overlap, for both matchtigs and MSS (idea
+  from matchtigs paper)
+- packed_seq::from_fastx with paraseq so it can directly append to the buffer?
+- Reduce *memory* usage
 
 * TODO
 - Dedup unitig start/end
