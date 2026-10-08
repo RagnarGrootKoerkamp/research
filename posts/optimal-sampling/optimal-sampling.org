@@ -41,9 +41,47 @@ some mistakes in some tie-breaking rules and it started trying other things, but
 after I convinced it that surely this paper must lead to a solution, it indeed
 did find one eventually!
 
-This post is to first collect background on comma-free codes and related
+In this post, I will first explain Bryce's solution.
+Then, I'll collect background on comma-free codes and related
 concepts (both for my and your understanding),
 and then to reverse engineer/re-invent the solution that Sol found.
+
+* The independence number of De Bruijn graphs
+This section is mostly just summarizing notes by Bryce Kille.
+
+** Introduction
+
+He considers the problem of finding the size of a maximal independent set of a
+De Bruijn graph. Specifically, we consider the /node-centric De Bruijn graph/ of
+order $n$, where nodes correspond to words of length $n$ over an alphabet of
+size $\sigma$. Edges correspond to nodes that overlap in $n-1$ characters.
+
+The /independence number/ is the size of a maximal independent set, that is, a
+subset of nodes such that no two nodes are adjacent.
+
+This has been studied since 1991 [CITE].
+Lichiardopol [2006, CITE] computes this for $n\in\{2,3,5,7\}$ and Majer and
+Novaga [2026, CITE] give a construction for $n\in\{11,13,17\}$. These all work
+for arbitrary $\sigma$.
+
+** Independent sets, vertex covers, and max cuts
+A maximum independent set is the complement of a minimal /vertex cover/, which is a
+subset of nodes such that each node is either in the set or adjacent to the set.
+
+A /cut/ is implied by partitioning the vertices into two sets $V_0$ and $V_1$
+via $\lambda: V \to \{0,1\}$: each undirected edge between $V_0$ and $V_1$ is
+in the cut. A /directed cut/ counts /directed/ edges from $V_0$ to $V_1$.
+
+Since the De Bruijn graph is Eulerian (ie every node has even degree), 
+
+
+** Correspondence to sampling schemes
+Our $w=2$ sampling scheme must sample either the first or second position of
+each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is odd).
+
+** The Mykkeltveit embedding
+
+
 
 * Comma-free codes
 We'll now revisit in detail the aforementioned paper, as
@@ -297,7 +335,7 @@ The way we achieve this is by starting with $Z_1 = A$ and choosing $z_1 = \min Z
 
 
   
-* LLM overview
+** LLM overview
 
 #+begin_src
 Goal
@@ -308,6 +346,6 @@ Time used: 4h 45m
 Tokens used: 2.11M
 #+end_src
 
-* Lean formalization
+** Lean formalization
 
 #+print_bibliography: 
