@@ -1,5 +1,5 @@
 #+title: Pandedup: Making a k-mer spectrum of HPRCv2
-#+filetags: data-analysis wip lablog
+#+filetags: data-analysis wip @lablog
 #+OPTIONS: ^:{} num: num:t
 #+hugo_front_matter_key_replace: author>authors
 #+hugo_paired_shortcodes: %notice %detail
@@ -1990,23 +1990,83 @@ queue storing 'live' bridges: *306s*
 - Now it's 20s to find the cycles and 10s to concatenate them over multiple threads.
 Result: *265s*
 
+*** Free-ends bug:
+- At the end, the algorithm was joining unmatched unitig ends into cycles, but that's not
+  allowed, as it creates new kmers. Instead these should remain as loose ends.
+
 *** Reducing memory usage
 Time to use =heaptrack=. We start out at *26.2GB*:
--
+- Most of it is input + ranges + temporary 128bit head and tail of every node.
+  - Reduce by only storing the smaller of fwd and rc link?
+- Instead, it seems the peak is reached when constructing the final output, as
+  this needs many things in memory:
+  - the bitpacking input sequence
+  - the ranges of it
+  - the links, for the overlaps
+  - the paths of unitig IDs 
+  - the work-in-progress output
+It does help slightly to eagerly drop data structures as soon as we don't need
+them anymore: 17.86GB MaxRSS during the algorithm, and ~21GB at the end.
+
+#+begin_src 
+15:51:27 (00:00:00)  INFO Reading unitigs..
+15:51:50 (00:00:22)  INFO Seq: 4.37G GB
+15:51:50 (00:00:22)  INFO Ranges: 2.99G GB
+15:51:50 (00:00:22)  INFO Read hprcv2-k63-unitigs.fa: 21181450134 bytes, 186730681 records, 17488538356 bases, 93.7 bases/record
+15:51:52 (00:00:24)  INFO Building graph of 187M unitigs..
+15:51:55 (00:00:27)  INFO Sorting heads (3.81G B)
+15:51:58 (00:00:30)  INFO Sorting tails (3.66G B)
+15:52:00 (00:00:33)  INFO Matching unitig ends
+15:52:05 (00:00:37)  INFO Sorting 534M edges
+15:52:08 (00:00:40)  INFO Building CSR adjacency
+15:52:08 (00:00:40)  INFO Filling offsets: 1.49GB
+15:52:09 (00:00:42)  INFO Mapping pairs
+15:52:10 (00:00:43)  INFO Matching 187M unitigs, 373M ends, k 63: two ends per unitig; overlap = k minus one minus distance; examined = bridge entries checked; links made = connections; a self-link occupies one end, other links occupy two
+15:52:10 (00:00:43)  INFO Meeting search: grow source and receiver distances below 31 one layer at a time; a path through one unitig has cost left distance + unitig extensions + right distance
+15:52:10 (00:00:43)  INFO Before distance 0: 0 receiving ends examined, 0 links made, 373M receiving ends remain, 373M free ends, 17.5G estimated bases
+15:52:10 (00:00:43)  INFO Node visits count repeated inspections: direct_overlap scans graph neighbors at distance zero; build_distances scans and relaxes distance layers; meet checks and queues bridges and traces endpoints; connect touches link slots; remove_source repairs distance labels
+15:52:29 (00:01:02)  INFO Half-distance 0: 117M nodes settled
+15:52:29 (00:01:02)  INFO After distance 0: 246M receiving ends examined, 127M links made, 119M receiving ends remain, 119M free ends, 9.59G estimated bases
+15:52:29 (00:01:02)  INFO After distance 0 node visits: direct_overlap 258M (total 258M), build_distances 1.08G, meet 117M (total 117M), connect 255M (total 255M), remove_source 0 (total 0)
+15:52:31 (00:01:04)  INFO Half-distance 1: 18.0M nodes settled
+15:52:37 (00:01:09)  INFO After distance 1: 5.73M bridge entries queued, 5.78M entries examined, 2.86M links made, 113M receiving ends remain, 113M free ends, 9.41G estimated bases
+15:52:37 (00:01:09)  INFO After distance 1 node visits: direct_overlap 0 (total 258M), build_distances 412M (total 1.50G), meet 71.0M (total 188M), connect 5.71M (total 261M), remove_source 152M (total 152M)
+15:52:41 (00:01:13)  INFO After distance 2: 6.37M bridge entries queued, 6.42M entries examined, 2.17M links made, 109M receiving ends remain, 109M free ends, 9.28G estimated bases
+15:52:41 (00:01:13)  INFO After distance 2 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 1.50G), meet 41.0M (total 229M), connect 4.34M (total 265M), remove_source 103M (total 255M)
+15:52:42 (00:01:15)  INFO Half-distance 2: 6.93M nodes settled
+
+15:54:46 (00:03:19)  INFO After distance 60: 850k bridge entries queued, 853k entries examined, 175k links made, 57.6M receiving ends remain, 57.6M free ends, 8.26G estimated bases
+15:54:46 (00:03:19)  INFO After distance 60 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 12.5G), meet 7.82M (total 1.09G), connect 351k (total 316M), remove_source 19.4M (total 2.12G)
+15:54:46 (00:03:19)  INFO Half-distance 31: 0 nodes settled
+15:54:47 (00:03:20)  INFO After distance 61: 811k bridge entries queued, 814k entries examined, 172k links made, 57.2M receiving ends remain, 57.2M free ends, 8.26G estimated bases
+15:54:47 (00:03:20)  INFO After distance 61 node visits: direct_overlap 0 (total 258M), build_distances 0 (total 12.5G), meet 7.48M (total 1.09G), connect 344k (total 316M), remove_source 18.2M (total 2.14G)
+15:54:47 (00:03:20)  INFO Final node visits: direct_overlap 258M, build_distances 12.5G, meet 1.09G, connect 316M, remove_source 2.14G
+15:54:48 (00:03:20)  INFO Dropping graph
+15:54:48 (00:03:20)  INFO Reconstruct output
+15:55:22 (00:03:55)  INFO Reconstructing 28.7M parts in parallel
+15:55:37 (00:04:09)  INFO Dropping links
+15:55:37 (00:04:10)  INFO Length summary: 8.26G estimated bases after links, 8.26G output bases in 28.7M records
+15:55:49 (00:04:21)  INFO Wrote hprcv2-k63-greedytigs.fa: 8819238227 bytes, 28654356 records, 8257262210 bases, 288.2 bases/record
+15:55:49 (00:04:21)  INFO matchtigs: 261.64s wall [487.26s CPU; 186.2%; MaxRSS 21.37 GiB], output 8.26G bases in 28.7M records (hprcv2-k63-greedytigs.fa)
+#+end_src
+
+- One additional thing we can do is including overlap lengths in the paths we
+  construct, so that we can =drop(links)= before constructing the string output: *19.5GB*
+- While collecting edges of the graph, we find matching elements in =heads= and
+  =tails= via a merge sort. Instead, we can iterate backwards and free memory in
+  1MB blocks as we process them. *14.7GB* during the main loop (but still 19.5
+  at the end)
+- We can replace =Vec<Range<usize>>= by simply =Vec<usize>= since ranges have
+  matching ends and starts. *13.4GB* during the main loop (*18.1GB* MaxRSS now
+  at the end!)
+- Lastly, we could first build the bitpacked representation of the output, then
+  drop everything else, and then directly stream the unpacked representation to
+  disk, but this won't give too much since we're now already close to the 17.5GB that is
+  used during the bulk of the algorithm.
+- Instead, we can also flush everything to disk directly: each thread can build
+  a small buffer and then take the global file writer lock. => *13.4GB overall
+  MaxRSS* :)
   
-*** TODO
-- meet-in-the-middle search from both ends:
-  - Computing all initial distances is fast. From there, push all unitigs (=edges) on a
-    bucket heap and process them in order of total cost as the 'bridge'
-    connecting two half-paths.
-  - Then do a path-shaped DFS to find a path to both endpoints.
-  - Then, drop those free endpoints and recompute all relevant distances via a DFS.
-  - When the value of a bridge is not up-to-date anymore, reinsert it at the new
-    value it that's <k.
-- Break cycles at longest edge / min overlap, for both matchtigs and MSS (idea
-  from matchtigs paper)
-- packed_seq::from_fastx with paraseq so it can directly append to the buffer?
-- Reduce *memory* usage
 
 * TODO
 - Dedup unitig start/end
@@ -2017,3 +2077,7 @@ Time to use =heaptrack=. We start out at *26.2GB*:
 - build for k=31 and k=127?
 
 
+** Related issues
+- https://github.com/algbio/matchtigs/issues/8
+- https://github.com/OndrejSladky/kmercamel/issues/105
+- https://github.com/OndrejSladky/kmercamel/issues/106
