@@ -54,6 +54,9 @@ and then to reverse engineer/re-invent the solution that Sol found.
 ** Preliminaries
 *** Cycle-cover
 *** Independence numbers of DBg history
+- vertex cover
+- independence number
+- edge cover?
 *** optimal minimizer density
 - kmer
 - window
@@ -63,66 +66,114 @@ and then to reverse engineer/re-invent the solution that Sol found.
 
 ** Mykkeltveit embedding
 ** Comma-free codes
+*** Previous work on comma-free codes
+We will now consider a completely different approach to solving our problem of
+finding an optimal minimizer scheme, or equivalently a vertex(?) cover of the De
+Bruijn graph.
+Our construction closely builds on existing work to build /comma-free codes/,
+which are specific /codes/ (sets of words) such that no other code words can be
+found in the overlap between two code words.
+Comma-free codes were first introduced by Crick et al.
+[cite:@codes-without-commas] as a (wrongly) hypothesized structure of the amino acids to
+avoid reading-frame issues. [cite/t:@comma-free-codes-golomb] find
+comma-free codes of optimal (maximal) size for odd $k$ up to 15 and shows that
+in general optimality is not possible for even $k$. Eastman
+[cite:@comma-free-codes-eastman] is the first to show a construction for all odd
+$k$. Their presentation is quite intricate.
+Knuth [cite:@knuth-aopc4-5b-backtracking] gives a significantly simpler
+presentation in terms of /dips/, which are locally maximal subsequences $w=w_1\dots w_k$ with
+$w_1\geq\dots\geq w_{k-1}<w_k$. Given a cyclic word, one then finds all
+odd-length dips and splits the word before each odd-length dip, and proceeds
+recursively on these substrings.
+[cite/t:@comma-free-codes-perrin] further improves terminology with /superdips/
+(an odd-length dip followed by even-length dips) and \(n\)-(super)dips, which
+are (super)dips over the alphabet of \((n-1)\)-dips using the radix order.
 
-*** Notation
-Following the notation and definitions of Chapter 7 of Codes and Automata
-[cite:@codes-and-automata] and their paper on comma free codes [cite:@comma-free-codes-perrin].
-- $A$ for the alphabet.
-- $u\in A^*$ is a /word/
-- $1$ is the empty word or identity (as seen in a free monoid)
-- /radix order/ on words $u$ and $v$: $u<_rv$ iff $|u|<|v|$ or if they have the
-  same length and $u$ is lexicographically smaller than $v$.
-- $A^{\leq n} = 1\bigcup A \bigcup \dots\bigcup A^n$
+Meanwhile, [cite/t:@comma-free-codes-scholtz] provides a simpler technique to
+create a maximal-size comma-free codes that is initially explained in terms of
+"erasing commas between tokens". Again, the presentation was significantly
+simplified in terms of Lazard sets
+[cite:@lazard60;@codes-and-automata] by [cite/t:@comma-free-codes-perrin]. 
+Their main theorem shows that the Eastman construction also arises as a Lazard set.
 
+Lastly, a helpful algorithm is that of Melancon [cite:@melancon-thesis], which
+gives a general bottom-up procedure similar to the ones of Knuth and Scholtz to
+find the conjugate of a word that is part of the comma-free code.
 
 *** Hall Sequences, Lazard Sets, and Comma-Free Codes
-#+begin_definition Hall sequence
+Our presentation will closely follow Section 7.3 and Chapter 8 of
+[cite/t:@codes-and-automata] and definitions and lemmas are taken from there
+unless otherwise mentioned.
+
+*Notation.*
+We write $A$ for the alphabet use $u\in  A^*$ for /words/ over $A$. A word can
+be seen both as a string of characters as well as an element of the free monoid
+over $A$. The empty word is written $1$, and $A^{\leq n}$ is the set of words of
+length up to $n$. The /radix order/ $u<_rv$ compares words $u$
+and $v$ first by length $|u|<|v|$, and breaks ties lexicographically.
+Two words $w$ and $w'$ are /conjugate/ when they are a rotation of each other,
+i.e. there are $u$ and $v$ such that $w=uv$ and $w'=vu$.
+A word is /primitive/ when it is not the power of some other word.
+A /strict/ prefix (suffix) of a word is a prefix (suffix) that does not equal
+the word itself.
+*TODO* Notation for substrings like $w[1..]$ or $w[1\dots]$ or $w_{1\dots}$?
+
+We now move on to re-stating some relevant definitions.
+Originally Hall sets are defined in terms of trees [cite:@free-lie-algebras-reutenauer], but here we take a simpler definition.
+
+#+begin_definition Hall sequence [7.3]
 A sequence $(x_i)_{i\geq 1}$ of words is a /Hall sequence/ if it is obtained via
 the following /elimination/ procedure:
-- $X_1 = A$
-- choose $x_i\in X_i$ (if non-empty)
-- $X_{i+1} := x_i^* (X_i\backslash x_i)$. (This is called /lazard elimination/)
-- $|x_{i+1}| \geq |x_i|$.
+- Start with $X_1 = A$,
+- choose $x_i\in X_i$ and $|x_{i+1}| \geq |x_i|$
+  for $i\geq 2$,
+- then set $X_{i+1} := x_i^* (X_i\backslash x_i)$,
+- end when $X_{i+1} = \emptyset$.
 #+end_definition
-#+begin_lemma
-- Each $X_i$ is a /prefix code/.
-- Each primitive word $w$ with $|w|>|x_i|$ has a conjugate in $X_{i+1}^*$
-#+end_lemma
+*TODO*: There is some conflict here whether $|x_{i+1}|\geq |x_i|$ is needed???
 
-#+begin_definition Lazard set
+Closely related are /Lazard sets/ [cite:@lazard60], that induce an order on
+their elements via /lazard elimination/.
+#+begin_definition Lazard set [8.1]
 A /Lazard set/ is a totally ordered subset $Z$ of $A^+$ satisfying: for each
-$n\geq 1$, let $Z\cap A^{\leq n} = \{z_1,\dots,z_k\}$ and $z_1<z_2<\dots<z_k$
-with
-- $Z_1 = A$
-- $z_i \in Z_i$
-- $Z_{i+1}=z_i^*(Z_i\backslash z_i)$
-- $Z_{k+1}\cap A^{\leq n} = \emptyset$
+$n\geq 1$, let $Z\cap A^{\leq n} = \{z_1,\dots,z_k\}$ with $z_1<z_2<\dots<z_k$. Then
+$Z_1 = A$,  $z_i \in Z_i$,  $Z_{i+1}=z_i^*(Z_i\backslash z_i)$, and  $Z_{k+1}\cap A^{\leq n} = \emptyset$.
 #+end_definition
-#+begin_lemma 
-A Hall sequence $(x_n)_{n\geq 1}$ corresponds to a Lazard set $Z=\{x_n \| n\geq
-1\}$ when each $x_i$ is chosen as a word of minimal length in $X_i$.
+
+In fact, each Hall set is a Lazard set, and each Lazard set is a Hall set
+[cite:@free-lie-algebras-reutenauer,thm 4.18].
+As an example, when $x_i\in X_i$ is chosen a word of minimal length in the Hall
+construction, then $\{x_i\}_{i\geq 1}$ is a Lazard set.
+# Note: this is a /sufficient/ condition but not a /required/ condition: there are
+# other Lazard sets as well, where a word of non-minimal length is chosen first.
+# (Eg the Eastman construction as shown in [cite:@comma-free-codes-perrin].)
+
+#+begin_lemma Unique factorization [8.1.10]
+For any Lazard set $Z$, the family $(z)_{z\in Z}$ is a /complete factorization/ of
+$A^*$, meaning that every $w\in A^*$ can be uniquely written as $w=z_k\dots z_1$
+with $z_i\in Z$ and $z_k \geq \dots \geq z_1$.
 #+end_lemma
-Note: this is a /sufficient/ condition but not a /required/ condition: there are
-other Lazard sets as well, where a word of non-minimal length is chosen first.
-(Eg the Eastman construction as shown in [cite:@comma-free-codes-perrin].)
 
-
-#+begin_definition Scholtz construction
+The following construction is a modern presentation by [cite/t:@comma-free-codes-perrin;@codes-and-automata] of Scholtz' original "comma
+erasing method" [cite:@comma-free-codes-scholtz].
+#+begin_definition Scholtz construction [eq 7.21]
 Let $(x_i)_{i\geq 1}$ and $(X_i)_{i\geq 1}$ be the Hall sequence obtained by
-choosing $x_i \in X_i$ as some word of /minimal odd length/.
+choosing $x_i \in X_i$ as some word of minimal /odd/ length.
 Define
 \begin{align*}
-U&=\bigcup_{i\geq 1}X_i
+U&=\bigcup_{i\geq 1}X_i,
 &
 Y&=U\cap (A^2)^*
 &
-Z&=U\cap A(A^2)^*.
+Z&=U\cap A(A^2)^*,
 \end{align*}
+so that $Y\cup Z = U \subseteq A^+$.
 $Z = \{x_1, x_2, \dots\}$ is the set of /code words/, consisting of all
 odd-length elements of $U$. $Y$ contains the even-length elements of $U$ that
 never appear as an $x_i$.
 
-We order $Z$ via $x_1<x_2<\dots$.
+Then $U$ is a Lazard set ordered via $u<v$ if $|u|$ is odd and $|v|$ is even, or if they have the
+same parity and $u<_{r} v$ for the radix order.
 
 For $u\in U$, define
 \begin{align*}
@@ -132,125 +183,346 @@ For $u\in U$, define
 $\nu(u)$ is the last time before $u$ is "created" in $X_{\nu(u)+1}$ and
 $\delta(u)=i$ for $u=x_i\in Z$ and $\delta(u)=\infty$  for $u=y\in Y$.
 #+end_definition
-#+begin_lemma Some facts
+
+From here on, $x_i\in X_i$, $Y$, and $Z$ all refer to this specific
+construction, and for $u,v\in U$ we write $u<v$ as ordered by the Lazard set. In
+particular, for $x_i,x_j\in Z$ we have $x_i<x_j$ iff $i<j$.
+
+We now cover some basic facts about this construction and the sets $U$, $Y$, and $Z$.
+
+#+begin_lemma Some facts [eq 7.22, 7.3.15]
 If $u\in U\backslash A$, then $u\in X_{\nu(u)+1}$ and $u\not\in X_{\nu(u)}$, and
 so $u=x_{\nu(u)}v$ for some $v\in X_{\nu(u)+1}$.
 
-Further, $\delta(y)=\infty$ for $y\in Y$ and $\delta(x_i)=i$ for $x_i\in Z$, and
-for all $u\in U$ and $n\geq 1$ we have
+Further, for $y\in Y$ we have $\delta(y)=\infty$ and for $x_i\in Z$ we have $\delta(x_i)=i$.
+For all $x_i \in Z$ and $u\in U$ we have
 \begin{equation*}
-\nu(u)\leq n<\delta(u) \implies x_nu\in U.
+\nu(u)\leq i<\delta(u) \implies x_iu\in U.
 \end{equation*}
-Each $x_ix_j$ with $i<j$ is in $Y^*$.
-#+end_lemma
-We don't actually use this, but the main point of all this theory is that:
-#+begin_theorem Maximal comma-free code
-For odd $m$, $Z\cap A^m$ is a comma-free code.
-#+end_theorem
-#+begin_lemma Unique factorization
-Each word $w\in A^*$ has a unique factorization
-$$
-w=yz_1\dots z_n
-$$
-with $y\in Y^*$, $z_i\in Z$, $n\geq 0$ and $z_1\geq z_2\geq\dots\geq z_n$.
-#+end_lemma
-#+begin_lemma Prefix factorization
-For a proper prefix $w$ of a word in $U$, the factorization has $y=1$.
-#+end_lemma
-#+begin_lemma Suffix factorization
-For a proper suffix $w$ of a word in $U$, the factorization has $n=0$ or $n=1$
-(depending on the parity of $|w|$).
-#+end_lemma
-#+begin_lemma Overlap
-Let $z,z'\in Z$ be two code words that overlap as $z=ab$ and $z'=bc$ with $b\neq
-1$. Then $b$ is a code word in $Z$.
-#+end_lemma
-#+begin_proof
-$b$ is both a prefix and a suffix of a code word in $Z\subseteq U$. Thus
-$b=yz_1\dots z_n$ with $y=1$ and $n\in\{0,1\}$, so $b=z_1$ since $b\neq 1$.
-#+end_proof
-#+begin_lemma Overlap
-The concatenation $z_0z_1$ of two code words $z_0,z_1\in Z$ does not contain any
-words $z$ across the $z_0$-$z_1$ boundary. Ie $z_0=ab$, $z_1=cd$ and $bc=z\in Z$
-implies $b=1$ or $c=1$.
+For all $i<j$, $x_ix_j\in Y^*$.
+
+For all $z\in Z$ and $y\in Y$, $zy\in Y^*Z$, and by repeated application, the same holds
+for $y\in Y^*$.
 #+end_lemma
 
-*** Two new lemmas
-We now prove two new lemmas:
-#+begin_lemma Max prefix
-The largest word contained in a proper prefix $w$ of a word $z$ in $Z$ is a prefix
+Although we won't directly use this fact here, the main point of all this theory
+is to develop a maximal /comma-free code/:
+(*TODO*: Add some motivation on why the comma-free ness /is/ very relevant either way.)
+#+begin_definition Comma-free code
+A code $X\subseteq A^m$ is a /comma free code/ when no word of $X$ overlaps
+nontrivially with a product (concatenation) of two words of $X$. That is, given
+$x_1,x_2\in X$ with $x_1=ab$ and $x_2=cd$ with $b\neq 1$ and $c\neq 1$, then
+$bc\not\in X$.
+#+end_definition
+For any $x\in X$, $xx$ may contain only $x$ itself as code word, so that $X$
+contains at most one element of every conjugacy class. Thus, $|X|\leq
+\ell_m(k)$, which counts the number of conjugacy classes of words of length $m$
+over an alphabet of size $k$ (or equivalently, the number of primitive words
+with length dividing $m$).
+
+#+begin_theorem Maximal comma-free code
+For odd $m$, $Z\cap A^m$ is a comma-free code of maximal size $\ell_m(k)$.
+#+end_theorem
+
+The proof of this theorem depends on a few additional lemmas that will be useful
+to us.
+
+#+begin_lemma [7.3.6]
+Each $X_i$ is a /prefix code/: for all distinct $x,x'\in X_i$, $x$ is not a
+prefix of $x'$, and for each word $w\in A^*$, there is at most one way to write
+it as a product of elements of $X_i$.
+Furthermore, each primitive word $w$ with $|w|>|x_i|$ has a conjugate in $X_{i+1}^*$
+#+end_lemma
+
+One of the core lemmas is the following, which follows directly from the more
+general unique factorization lemma mentioned above:
+
+#+begin_lemma Unique factorization [7.3.13]
+Each word $w\in A^*$ has a unique factorization
+$$
+w=yz_k\dots z_1
+$$
+with $y\in Y^*$, $z_i\in Z$, $n\geq 0$ and $z_k\geq \dots\geq z_1$.
+#+end_lemma
+Some implications are the following.
+#+begin_lemma Prefix factorization [7.3.14]
+For a proper prefix $w$ of a word in $U$, the factorization has $y=1$, i.e.,
+$w=z_k\dots z_1$.
+#+end_lemma
+#+begin_lemma Suffix factorization [7.3.16]
+For a proper suffix $w$ of a word in $U$, the factorization has $n=0$ or $n=1$
+(depending on the parity of $|w|$), i.e., $w=y$ or $w=yz$ for some $y\in Y^*$
+and $z\in Z$.
+#+end_lemma
+#+begin_lemma Overlapping code words [Proof of 7.3.11] :label overlap
+Let $u,v\in U$ be two words that overlap as $u=ab$ and $v=bc$ with $b\neq
+1$. Then $b$ is a code word in $Z$.
+In particular, for $z_0,z_1\in Z$, $z_0z_1$ does not contain a non-trivial word in its overlap.
+#+end_lemma
+#+begin_proof
+$b$ is both a prefix and a suffix of a code word in $U$. Thus
+$b=yz_1\dots z_n$ with $y=1$ and $n\in\{0,1\}$, so $b=z_1$ since $b\neq 1$.
+
+Suppose that $z_0z_1$ contains a word $z$ in its overlap. Then the overlap $a$ with
+$z_0$ is a code word and the overlap $b$ with $z_1$ is a code word, but $z$ has
+odd length and $ab$ has even length, so this is impossible.
+#+end_proof
+
+*** The largest contained word
+With this theory in hand, we are now ready to prove that the largest code word
+contained in a prefix (suffix) of a code word is a prefix (suffix) itself.
+
+#+begin_lemma Overlapping codewords 2
+Given a word $w$ with $w=z_k\dots z_1$ for decreasing $z_i\in Z$ with $z_k\geq
+\dots z_1$, all code words in $w$ are contained in one of the $z_i$.
+#+end_lemma
+#+begin_proof
+Suppose not, so $z=az_i\dots z_j b$ with $a$ a non-empty suffix of $z_{i+1}$ and $b$ a
+non-empty prefix of $z_{j-1}$. Then $a$ and $b$ are both in $Z$ by the previous
+overlap lemma.
+Furthermore, $b\leq z_{j-1}$ because $|b|\leq |z_{j-1}|$.
+Let $c$ be the factor after $a$, i.e. $c=b$ if $z_i\dots z_j$ is empty and
+$c=z_i$ otherwise.
+It's not possible that $a\geq c$, because then $z=az_i\dots z_jb$ are two
+distinct representations of a word in $U$.
+It's also not possible that $a<c$, since then $ac\in Y^*$ and
+$z=(ac)z_{i+1}\dots z_jb$ (or just $z=ac$ itself when $c=b$) are again two
+distinct representations of a word in $U$.
+Thus, we reach a contradiction.
+#+end_proof
+
+#+begin_lemma Max prefix :label prefix_lemma
+The largest code word contained in a proper prefix $w$ of a word $z$ in $Z$ is a prefix
 of $w$ and $z$.
 #+end_lemma
 #+begin_proof Prefix case
-$w = z_1\dots z_n$.
-Let the largest word in $w$ and suppose it spans $>1$ of the $z_i$: $z = a z_{i+1} \dots z_{j-1} b$ where $a$ is a
-non-empty suffix of $z_i$ and $b$ a non-empty prefix of $z_j$. 
-$a,b\in Z$ since they are the overlap of two code words $z$ and $z_j$, and since
-$|b|< |z_j|$, $b<z_j$. Let $c=z_{i+1}$ or $c=b$ be the first code word following
-$a$. If $a\geq c$, then $z$ and $a z_{i+1}\dots z_{j-1}b$ are two contradicting
-factorisations. When $a<c$, $ac\in Y^*$ and its factorization only contains an
-$y$ term, but on the other hand $ac$ is a prefix of $z$ and thus its
-factorization can /not/ contain an even part.
-
-Thus, the maximum contained code word $z$ is contained in some $z_i$, and thus
-the prefix $z=z_1$ is largest contained code word.
+Since $w$ is a prefix of $z$, we have $w = z_k\dots z_1$.
+By the previous lemma, any code word contained in $w$ is contained in one of the
+$z_i$. Since $z_k\geq \dots \geq z_1$, the greatest contained code word must be
+the prefix $z_k$.
 #+end_proof
-#+begin_lemma Max suffix
+#+begin_lemma Max suffix :label suffix_lemma
 The largest word contained in a proper suffix $w$ of a word $z$ in $Z$ is a suffix
 of $w$ and $z$.
 #+end_lemma
 #+begin_proof
-Again suppose that the largest word contained in the /suffix/ $w$ is $z$.
-Suppose that $z$ is not already a suffix of $w$, so $w=azb$ with $b\neq 1$.
-Then $b$ factorizes as $y$ or as $yx_k$ with $y\in Y^*$ and $x_k\in Z$.
+Now suppose that the largest word contained in the /suffix/ $w$ is $z'$.
+Suppose that $z'$ is not already a suffix of $w$, so $w=az'b$ with $b\neq 1$.
+Since $b$ is itself a suffix of $z$, it factorizes as $y$ or as $yx_k$ with $y\in Y^*$ and $x_k\in Z$.
 If $y\neq 1$, let $e=x_ix_j\in Y$ be the first non-empty term of $y$.
-Then $ze=zx_ix_j\in Z$ because $\nu(e)=i$, $\delta(e)=\infty$ and $\delta(z)\geq
-i$ because $z\geq x_i$ by assumption and thus $\nu(e)\leq \delta(z) < \delta(e)$
-so that $ze\in Z$, giving a contradiction.
-Thus, $b=x_k$ with $x_k \leq z$, so that $zx_k$ is a suffix of $w$ consisting of
-two decreasing off parts, whereas we know that any suffix must have a unique
-representation containing at most one odd part; again a contradiction.
+Then $z'e=z'x_ix_j\in Z$ because $\nu(e)=i$, $\delta(e)=\infty$, and $\delta(z')\geq
+i$ because $z'\geq x_i$ by assumption and thus $\nu(e)\leq \delta(z') < \delta(e)$,
+so that $z'e\in Z$, giving a contradiction.
+Thus, $b=x_k$ with $x_k \leq z'$, so that $z'x_k$ is a suffix of $w$ consisting of
+two decreasing code words, whereas we know that any suffix must have a unique
+representation containing at most one odd code word; again a contradiction.
 #+end_proof
 
 *** An optimal minimizer scheme
 We are now ready to define our minimizer scheme.
 Let $k$ be the odd \(k\)-mer length of interest. Each window of length $k+1$
 consists of $w=2$ \(k\)-mers. A context consists of two consecutive windows
-totalling $C=k+2$ characters. A $w=2$ minimizer scheme is optimal if for each
-primitive cycle of length up to $C$, it samples exactly $\lceil w/2\rceil$
-distinct \(k\)-mers, matching the lower bound.
+totalling $C=k+2$ characters. A $w=2$ minimizer scheme is optimal if it matches
+the lower bound for each
+primitive cycle of length up to $C$, sampling exactly $\lceil w/2\rceil$
+distinct \(k\)-mers.
 
 #+begin_definition Optimal minimizer scheme
 Let $w\in A^{k+1}$ be a window, and let $z$ be the largest code word in $w$,
+also known as the /anchor/,
 starting at \(0\)-based position $i$. Then sample the \(k\)-mer starting at
-\(0\)-based position $i\mod 2$.
+\(0\)-based position $i\bmod 2$.
 #+end_definition
 
 #+begin_theorem 
-This minimizer scheme has optimal density
+This minimizer scheme has optimal density.
 #+end_theorem
 
 #+begin_proof
-Consider a primitive cycle of odd length $C$ and let $c\in A^C$ be the unique rotation
-that is a code word in $Z$. Now let $w$ be a strict substring of any rotation of
-$c$ (ie $w=c_0c_1$ with $c_0$ a non-empty strict suffix of $c$ and $c_1$ a
-possibly empty strict prefix of $c_1$) and let $z$ be the longest code word
+We show that the minimizer schemes samples $\lceil |c|/2\rceil$ \(k\)-mers along
+every cycle (cyclic string) $c$ with length dividing $k+2$.
+
+Since $k+2$ is odd, $|c|$ is odd.
+Let $c\in A^{|c|}$ be the unique rotation that is a code word in $Z$.
+Now, let $c'$ be a conjugate of $c$ and let $w$ be the prefix of length $k+1$ of $c'$.
+Then, $w=c_0c_1$ with $c_0$ a strict suffix of $c$ and $c_1$ a
+possibly empty strict prefix of $c_1$. Let $z$ be the longest code word
 contained in $w$. As seen before, $z$ can not be contained in the overlap, and
-so $z$ is contained in $c_0$ or $c_1$. In the first case, we know that $z$ is a
+so $z$ is contained in either $c_0$ or $c_1$. In the first case, we know that $z$ is a
 suffix of $c_0$, and in the other case that $z$ is a prefix of $c_1$.
-By monotonicity, there is an interval of windows where a prefix is selected, and
-the complementary interval of windows where a suffix is selected.
 
-All prefixes start at the same position along the cycle, and so this will cause
-sampling alternating \(k\)-mers.
-All suffixes end at the same position, and have odd length, and so they
-synchronize the sampling as well.
+We now consider the $|c|$ possible windows $w_1, \dots, w_{|c|}$ created by
+the $k+2$ rotations of $c$, with $w_1 := c[1\dots]$ (TODO substring notation) and
+$w_{|c|}:=c[\dots |c|-1]$. We have $w_i = c[i\dots]c[\dots |c|-1+i]$, and so
+$c_0$ shrinks over time and $c_1$ grows over time.
+By monotonicity, there then is prefix this sequence of windows where a suffix of $c_0$
+is the maximal contained code word, and a complementary suffix of windows where
+a prefix of $c_1$ is the maximal contained code word.
 
-Because the full cycle is odd, these two alternating sequences line up on one
-end, end create two consecutive samples on the other end, for a total of $\lceil
-C/2\rceil$ samples as required.
+All windows that have a prefix $z$ of $c$ as anchor word are "synchronized" in
+the sense that they alternate sampling the \(k\)-mer at position 0 or 1, since
+the position of $z$ alternates between odd and even.
+
+Similarly, the windows that have a suffix of $c$ as anchor are synchronized: all
+these anchors end at the same position and have odd length, and so their starts
+have the same parity.
+
+Thus, along the full odd-length cycle, we have two intervals where we sample
+alternating \(k\)-mers. One of these intervals has even length and density
+exactly half, while the other has even length and samples half its length
+rounded up, for a total of $\lceil|c|/2\rceil$.
+[TODO: more precise?]
 #+end_proof
 
+*** Finding the largest contained code word
+We now give an algorithm to find the largest code word contained in a word $w$.
+We start with a one-off algorithm based on the unique factorization, and then improve
+this to a streaming algorithm in the next subsection.
+
+At the core is Melancon's algorithm, as defined by [cite/t:@melancon-thesis] and
+further explained in [cite:@free-lie-algebras-reutenauer section 7.2/Ex 7.6] and
+[cite:@comma-free-codes-perrin 5.4].
+(Note that [cite/t:@free-lie-algebras-reutenauer] reverses both the order and
+the "direction" of the Lazard elimination.)
+Starting with an arbitrary odd-length word, this gives the conjugate that is a
+code word. It generalizes and streamlines the algorithms of
+[cite/t:@comma-free-codes-scholtz] and [cite/t:@knuth-aops4-5-backtracking].
+#+begin_definition Melancon algorithm
+Given a primitive word $w$ of odd length $k$, start by splitting it into a sequence of characters
+$(w_1,\dots, w_n)$. Then let $w_i$ be one of the minimal characters satisfying
+$w_i < w_{i+1}$ via the Lazard order, taking indices modulo $n$. Then replace
+the sequence by $(w_1,\dots,w_{i-1},w_iw_{i+1},w_{i+2},\dots, w_n)$, and repeat
+this process until only a single word remains. If $i=n$, replace the sequence by
+$(w_nw_1,\dots, w_{n-1})$.
+Note that since $|w|$ is odd, there always exists an odd-length $w_i$ in the sequence.
+#+end_definition
+
+As a direct corollary, a word in $A^+$ is a code word if applying the algorithm never "wraps around".
+
+We now slightly modify the algorithm to find code words in non-cyclic strings.
+#+begin_definition Linear Melancon algorithm
+Given any word $w\in A^*$, start with the sequence $(w_1,\dots,w_n)$ of
+characters. Initially, all words $w_i$ are /unfixed/, and over time, a growing
+suffix of words is /fixed/.
+If the sequence contains no unfixed word of odd length, stop.
+If the smallest unfixed word $w_i$ in the sequence is at the back ($w_i=w_n$) or if
+$w_{i+1}$ has been /fixed/, /fix/ $w_i$ itself.
+Otherwise, find an occurrence of the minimal unfixed $w_i$ with $w_i<w_{i+1}$ and
+contract them and repeat.
+The algorithm ends with a sequence $(y_1, \dots, y_n, z_k,\dots,z_1)$, where all
+$z_i\in Z$ are fixed, and all $y_i\in Y$ are unfixed.
+#+end_definition
+We now prove that this final state is exactly the unique $yz_k\dots z_1$
+factorization of $w$.
+#+begin_lemma 
+For any $w\in A^*$, the linear Melancon algorithm recovers the unique factorization $w=yz_k\dots
+z_1$ with $y\in Y*$, $z_i\in Z$, and $z_k > \dots > z_1$.
+#+end_lemma
+#+begin_proof
+The linear Melancon algorithm only fixes odd-length words from the back to the front.
+Furthermore, it always considers words from small to large, and so later fixed
+elements are not smaller. At the end, all odd-length words must be fixed and so
+form a suffix $z_k>\dots > z_1$, while no even-length words are fixed. The
+remaining unfixed elements must all have even length, and so are all in $Y$.
+Thus, $y=y_1\dots y_n\in Y^*$ and $yz_k\dots z_1$ must be the unique
+factorization.
+#+end_proof
+
+#+begin_lemma 
+For any word $w\in A^*$ with factorization $w = yz_k\dots z_1$, the largest code
+word contained in $w$ that starts at an even position is $z_k$.
+#+end_lemma
+#+begin_proof
+As before, write $w = yz_k\dots z_1$.
+Clearly $z_k$ starts at an even position, and we will show that this is the
+largest such code word.
+If the largest contained code word $z$ is contained in $z_k\dots z_1$, it must
+equal $z_k$ itself by [[lem:prefix_lemma]].
+If the largest code word is contained in $y$, it
+must be a suffix of $y$ by [[lem:suffix_lemma]] (*TODO* is this true?),
+in which case it would start at an
+odd position and the algorithm is not required to find it.
+
+Otherwise, write $y=y_1\dots y_n$ so that the largest code word starts with a
+non-empty suffix of some $y_i\in Y$. By [[lem:overlap]], this overlap must be in $Z$
+and hence have odd length, so that $z$ starts at an odd position.
+#+end_proof
+
+We now directly obtain our result.
+#+begin_theorem 
+The largest code word in any word $w\in A^+$ can be found by running the linear
+Melancon algorithm on both $w$ and the suffix $w'=w[1..]$ to obtain $w=yz_k\dots
+z_1$ and $w'=y'z'_{k'}\dots z'_1$ and returning the larger of $z_k$ and $z'_{k'}$.
+#+end_theorem
+
+
+*** A Sliding-window algorithm
+
+Compared to the twice-repeated linear Melancon algorithm above, we can be
+slightly more precise.
+
+#+begin_lemma 
+Let $w\in A^+$ be any word and factorize it as $w=yz_k\dots z_1$. Then the largest
+code word in $w$ is either $z_k$ or a suffix $z_{k+1}$ of $y$. In the latter case,
+$w'=w[1..]$ factorizes as $w'=y'z_{k+1}z_k\dots z_1$.
+#+end_lemma
+#+begin_proof
+If the largest code word starts at an even position, it must be $z_k$ and we are
+done.
+Otherwise, consider $y_1 = y_1$ and factorize $y_1 z_k\dots z_1 = w' =
+y'z'_{k'}\dots z'_1$.
+Now consider the factorization of $w=cw' = cy'z'_{k'}\dots z'_1$. We know that
+$cy'\in ZY^*\subseteq Y^*Z$, and so we get $cy'=y''s$ with $s\in Z$. Thus,
+$w=y''sz'_{k'}\dots z'_1$. Now, if $s\geq z'_{k'}$ this is a normal
+factorization and thus must coincide with $w=yz_k\dots z_1$, giving $z'_{k'} = z_{k-1}$.
+Otherwise, if $s<z'_{k'}$, then $sz'_{k'}\in Y$ and
+$w=y''(sz'_{k'})z'_{k'-1}\dots z_1$ is the normal factorization and $z'_{k'-1} =
+z_k$, so that $z'_{k'}= z'_{k+1}$ is indeed the added largest code word.
+#+end_proof
+
+This gives rise to a linear-time streaming algorithm, where we push characters
+to the right of a window $w$ and pop characters from its left.
+#+begin_definition Streaming algorithm
+At every point maintain a representation $w = v z_k\dots z_1$, where $v\in Y^*$
+or $v\in AY^*$, such that $z_k$ is the largest contained code word.
+
+To shrink $w$ on the left, remove the first character of $v$. If $v=1$,
+consider the factorization $z_k = c_1c_2 yz$ for $c_1,c_2\in A$.
+If $z<z_{k-1}$, we get $w' = v'z_{k-1}\dots z_1$ for $v'=c_2yz$.
+If $z\geq z_{k-1}$, we instead get $w'=v'z z_{k-1}\dots z_1$ for $v'=c_2y$.
+
+To grow $w$ on the right, we get $w'=v z_k\dots z_1 c$.
+If $z_1\geq c$, we are done.
+Otherwise, $z_1<c$ and $z_1c\in Y$, giving $c'=z_2z_1y\in Z$ (assuming $z_2$ exists).
+Thus, repeatedly 'contract' $c$ up two levels at a time as long as there are two
+preceding $z_i$ and $c$ is larger than the last remaining $z_i$.
+We end with a new sequence $w'=vz_k\dots z_i c''$, where $z_k\dots z_i$ might be empty.
+#+end_definition
+
+#+begin_lemma Linear time streaming
+The algorithm above can be implemented to work in linear time.
+#+end_lemma
+#+begin_proof
+While pushing a character, preserve the exact tree structure that is being
+built. Each $z_1, c \mapsto z_1c$ merger between non-empty words can be
+/charged/ to the leftmost character of $c$, so that each character is charged by
+at most one merge. Thus, the total number of merges is linear.
+When popping a character, we either shrink the prefix $v$, or split $z_k$ into
+its two constituents twice: $z_k = x_ix_j = x_i(x_\ell x_m)$ with $i<j$ and
+$\ell<m$, so that either $x_m$ or $z_{k-1}$ becomes the new largest contained
+code word.
+#+end_proof
+
+** Discussion / Conclusion
+*** TODO An alternative Eastman construction?
+In [cite:@comma-free-codes-perrin], it is shown that Eastman's construction of a
+comma-free code [cite:@comma-free-codes-eastman] are also a Lazard set by taking
+$x_i\in X_i$ as the odd-length word with minimal /index/, noting that longer
+words may have a smaller index than shorter words.
+
+The expectation is that the proofs above work out mostly unmodified, with the
+one exception that length-based arguments have to be replaced by using the new
+order directly.
 
 
 * Notes
@@ -391,14 +663,14 @@ From perrin2: with Scholtz' construction:
   - largest: odd, then longest, then max lex (scholtz) or max rank (eastman),
     then leftmost (/not/ rightmost)
 - dfn: the two anchors in a cyclic context
-- lemma: the max codeword in a window will:
+- lemma: the max code word in a window will:
   - contain one of the two anchors
 - lemma:
   - the max code word contained in every window is a prefix or suffix of
     the code word rotation of the entire context
   - consider any substring that is a code word. Extending to one of the ends
     will be odd and likely code word as well?
-  - there /are/ codewords 'outside' the global tree structure
+  - there /are/ code words 'outside' the global tree structure
   - TODO: No 'alternating': first it's a prefix of full word, then a suffix
     - the cut is exactly the moment where one goes out of scope and the other
       comes into scope
@@ -616,13 +888,23 @@ each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is
 
 
 * Notes on comma-free codes
+** Resources
 We'll now revisit in detail the aforementioned paper, as
 well as some papers that precede it:
+- codes and automata
 - [cite/title/b:@comma-free-codes-golomb], [cite/t:@comma-free-codes-golomb]
 - [cite/title/b:@comma-free-codes-eastman], [cite/t:@comma-free-codes-eastman]
 - [cite/title/b:@comma-free-codes-scholtz], [cite/t:@comma-free-codes-scholtz]
 - [cite/title/b:@free-lie-algebras-viennot], [cite/t:@free-lie-algebras-viennot]
+  - Lazard factorization is dfn 1.1
 - [cite/title/b:@comma-free-codes-perrin], [cite/t:@comma-free-codes-perrin]
+- slides: http://www-igm.univ-mlv.fr/~perrin/Enseignement/Master2016-2017/
+- See [free lie algebras 1993, section 7.2]
+- original: [melancon phd thesis]
+- [lazard 60]
+- not relevant:
+  - [cite/t:@comma-free-codes-perrin2]
+  - comma free code of Devitt Jackson 1981
 
 (Side note: I can only hope my papers are as beautiful and nice to read as all
 these older texts. It really is such a joy to read them.)
@@ -859,7 +1141,7 @@ Lemma 2: Let $f_T$ denote the last $T$ characters of a code word $f$. If $T$ is
 even, $f_T$ cannot equal the first $T$ symbols of any other code word or
 sequence of code words.
 
-From this, it quickly follows that the code is comma free: for any two codewords
+From this, it quickly follows that the code is comma free: for any two code words
 $a$ and $b$, any substring of equal length of $ab$ must have even overlap with
 either $a$ or $b$, and thus cannot be a code word itself!
 
