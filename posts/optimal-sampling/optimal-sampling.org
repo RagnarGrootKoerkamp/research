@@ -6,6 +6,11 @@
 #+hugo_level_offset: 0
 #+date: <2026-09-12 Sat>
 
+$$
+\newcommand{\im}{\mathsf{im}}
+\newcommand{\sign}{\mathsf{sign}}
+$$
+
 (This is a work-in-progress draft.)
 
 ---
@@ -46,7 +51,7 @@ Then, I'll collect background on comma-free codes and related
 concepts (both for my and your understanding),
 and then to reverse engineer/re-invent the solution that Sol found.
 
-* Writeup
+* WIP paper
 
 ** Abstract
 ** Introduction
@@ -57,14 +62,109 @@ and then to reverse engineer/re-invent the solution that Sol found.
 - vertex cover
 - independence number
 - edge cover?
+
+
+We consider the problem of finding the size of a maximal independent set of a
+De Bruijn graph. Specifically, we consider the /node-centric De Bruijn graph/ of
+order $n$, where nodes correspond to words of length $n$ over an alphabet of
+size $\sigma$. Edges correspond to nodes that overlap in $n-1$ characters.
+
+The /independence number/ is the size of a maximal independent set, that is, a
+subset of nodes such that no two nodes are adjacent.
+
+This has been studied since 1991 [CITE].
+Lichiardopol [2006, CITE] computes this for $n\in\{2,3,5,7\}$ and Majer and
+Novaga [2026, CITE] give a construction for $n\in\{11,13,17\}$. These all work
+for arbitrary $\sigma$.
+*** Independent sets, vertex covers, and max cuts
+A maximum independent set is the complement of a minimal /vertex cover/, which is a
+subset of nodes such that each node is either in the set or adjacent to the set.
+
+A /cut/ is implied by partitioning the vertices into two sets $V_0$ and $V_1$
+via $\lambda: V \to \{0,1\}$: each undirected edge between $V_0$ and $V_1$ is
+in the cut. A /directed cut/ counts /directed/ edges from $V_0$ to $V_1$.
+
+Since the De Bruijn graph is Eulerian (ie every node has even degree), 
+
 *** optimal minimizer density
 - kmer
 - window
 - context
 - cycles; lower bound
+  
+Our $w=2$ sampling scheme must sample either the first or second position of
+each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is odd).
 *** Connecting the problems
 
+
 ** Mykkeltveit embedding
+*** The classical Mykkeltveit embedding
+
+The Mykkeltveit embedding was introduced by [cite/t:@mykkeltveit] in order to
+prove a conjecture of Lempel [cite:@lempel71] stating that the order-\(n\) De Bruijn graph $B_n$
+can be made acyclic by removing $Z(n)$ vertices. In particular, it is clear that
+$Z(n)$, the number of disjoint cycles is $Z(n)$ and thus that this is a lower bound.
+
+In particular, a node $w=w_0\dots w_{n-1}$ of the De Bruijn graph is mapped to
+\begin{equation*}
+f(w) = \sum_{i=0}^{n-1} w_i \cdot \omega^i,
+\end{equation*}
+where $\omega=\omega_n$ is the complex \(n\)-th root of unity.
+The Mykkeltveit decycling set [cite:@minimum-decycling-set] then consists of all
+words with $\pi-2\pi/n \leq \arg(f(w)) < \pi$, i.e., those words that are the
+first rotation having positive imaginary part.
+
+
+*** A new embedding
+We want to build on optimal $w=2$ minimizer scheme for some odd $k$.
+Thus, we must build a function from a length-\(k+1\) window $w=w_1\dots w_{k+1}$
+to $\{0,1\}$. [todo].
+
+Let $n=k+2$ be odd and now let $\omega=\omega_{2n}$ be a $2n$'th root of unity so that
+$(-\omega)^n=-\omega^n = 1$.
+We define
+\begin{equation*}
+g(w) = \sum_{i=1}^{n-1} w_i (-\omega)^i,
+\end{equation*}
+where the $(-\omega)^0$ term is skipped.
+Like Mykkeltveit, we choose the first or second \(k\)-mer based on the sign of the imaginary part of $g(w)$, $\sign(\im(g(w)))$.
+
+Now consider a primitive cyclic context $c=c_0\dots c_{n-1}$ of length $n=k+2$ and the $n$ windows $w_1$ to $w_n$
+contained in it, with $w_j = c_{j}\dots c_{j+n-2}$ with indices modulo $n$.
+Then
+\begin{align*}
+\im(g(w_j))
+&= \im(g(c_{j}\dots c_{j+n-2}))
+ = \im\left(\sum_{i=1}^{n-1} c_{j+i} (-\omega)^i\right)
+ = \im\left(\sum_{i=0}^{n-1} c_{j+i} (-\omega)^i\right)\\
+&= \im\left((-\omega)^{-j}\sum_{i=0}^{n-1} c_{j+i} (-\omega)^{i+j}\right)
+ = \im((-\omega)^{-j}g(w_0)).
+\end{align*}
+
+Assuming that $g(w_0)\neq 0$, $(-\omega)^n g(w_0)$ changes imaginary sign $n-1$
+out of $n$ times. Thus, for all but one pair of consecutive windows we choose
+"synchronized" \(k\)-mers. [todo this "big picture stuff" needs to be more precise.]
+
+[todo: distinguish $n$ and $d|n$ for shorter primitive contexts?]
+
+[todo: what if $g(w_0)=0$? Note that $g(w_0)=0$ for periodic sequences.]
+
+*** Degenerate and non-primitive cases
+A (primitive?) cycle $c$ is /degenerate/ when $g(c)=0$.
+
+Lemma: distinct degenerate cycles are vertex (window)-disjoint, so we can simply
+"hardcode" an alternating order.
+
+Dfn: we can make that order comparible: if $\im(g(w))=0$ but no extended context
+has $g(c)=0$, then set $\lambda_0(w)=0$ (Bryce's notation).
+Otherwise, let $a$ be the unique such symbol, and anchor by the
+lexicographically smallest rotation.
+
+(Importantly, we should make sure this is compatible with the choice in the
+non-degenerate case.)
+
+
+
 ** Comma-free codes
 *** Previous work on comma-free codes
 We will now consider a completely different approach to solving our problem of
@@ -228,7 +328,7 @@ The proof of this theorem depends on a few additional lemmas that will be useful
 to us.
 
 #+begin_lemma [7.3.6]
-Each $X_i$ is a /prefix code/: for all distinct $x,x'\in X_i$, $x$ is not a
+Each $X_i$ is a /maximal prefix code/: for all distinct $x,x'\in X_i$, $x$ is not a
 prefix of $x'$, and for each word $w\in A^*$, there is at most one way to write
 it as a product of elements of $X_i$.
 Furthermore, each primitive word $w$ with $|w|>|x_i|$ has a conjugate in $X_{i+1}^*$
@@ -514,15 +614,15 @@ code word.
 #+end_proof
 
 ** Discussion / Conclusion
-*** TODO An alternative Eastman construction?
-In [cite:@comma-free-codes-perrin], it is shown that Eastman's construction of a
-comma-free code [cite:@comma-free-codes-eastman] are also a Lazard set by taking
-$x_i\in X_i$ as the odd-length word with minimal /index/, noting that longer
-words may have a smaller index than shorter words.
-
-The expectation is that the proofs above work out mostly unmodified, with the
-one exception that length-based arguments have to be replaced by using the new
-order directly.
+- *Does the Eastman construction also work?*
+  In [cite:@comma-free-codes-perrin], it is shown that Eastman's construction of a
+  comma-free code [cite:@comma-free-codes-eastman] are also a Lazard set by taking
+  $x_i\in X_i$ as the odd-length word with minimal /index/, noting that longer
+  words may have a smaller index than shorter words.
+  
+  The expectation is that the proofs above work out mostly unmodified, with the
+  one exception that length-based arguments have to be replaced by using the new
+  order directly.
 
 
 * Notes
@@ -540,7 +640,7 @@ and $|v|$ is even, or if they have the same parity and $u<_rv$ via the radix ord
 Note that all odd-length elements in any of the $X_i$ are eventually chosen as
 some $x_j$.
 
-** graveyard: Comma-free codes via Lazard sets
+** graveyard: Eastman construction
 *Eastman's construction.*
 (We should probably drop as much as possible of this and just do the concluding
 theorem, and use that as a definition instead?)
@@ -637,87 +737,16 @@ size $\ell_n(k)$.
 #+end_theorem
 (In general, this does not hold for even $n$.)
 
-*** Perrin 2
-From perrin2: with Scholtz' construction:
-- Lemma 6.6: /Every/ word admits a unique factorization $w=yz_{\ell-1}\dots z_1z_0$ with
-  $z_{\ell-1}\geq\dots\geq z_1\geq z_0$.
-- Lemma 6.7: Every proper prefix of a code word has a factorization with $y=\varepsilon$.
-- Lemma 6.8: For $k<l$, $x_kx_l$ is a concatenation of even words
-- Lemma 6.8: $U_1U_0\subseteq U_0^* U_1$.
-- Lemma 6.9: Any suffix of a code word has factorizes with $\ell\in\{0,1\}$.
 
-
-*** Notes
-
-- dfn Lazard set
-- dfn Eastman
-  - 3 iterations of it; dips, superdips, knut, lazard
-- dfn Scholtz
-- generalized Scholtz lemma 2: no even overlap
-  - TODO: What about overlaps between words of different length?
-  - 
-
-- dfn new construction/alg:
-  - find 'largest' code word contained in window
-  - take start pos %2
-  - largest: odd, then longest, then max lex (scholtz) or max rank (eastman),
-    then leftmost (/not/ rightmost)
-- dfn: the two anchors in a cyclic context
-- lemma: the max code word in a window will:
-  - contain one of the two anchors
-- lemma:
-  - the max code word contained in every window is a prefix or suffix of
-    the code word rotation of the entire context
-  - consider any substring that is a code word. Extending to one of the ends
-    will be odd and likely code word as well?
-  - there /are/ code words 'outside' the global tree structure
-  - TODO: No 'alternating': first it's a prefix of full word, then a suffix
-    - the cut is exactly the moment where one goes out of scope and the other
-      comes into scope
+** Notes
 - every left-branch in the tree has odd length.
-
-- thm: new alg gives an optimal scheme
-  - each sample is an even-length extension of one of the two anchors
-  - start is at same parity as start of anchor
-  - sample matches sample by parity of anchor
-  - 
-  
-
-#+begin_theorem 
-
-#+end_theorem
-
-*** Lemma: Not a single codeword crosses the main boundary!
-- It would have odd overlap with either the prefix or suffix of the main thing,
-  which cannot be!
-- Thus, all windows have contained codewords!
-*** Lemma: Every odd-sized subtree *is* a codeword
-*** Lemma: (Repeatedly) dropping the even right subtree leaves a codeword
-- Dropping only a suffix of the rightmost even subtree does *not* leave a
-  codeword, because it would wrap around early.
-*** Q: Can the longest sub-word be a substring of the rightmost subtree?
-- we can partition everything into A(BC) with ABC odd, A (BC) the root split
-  with BC even, and BC the final split of that even part into odd B and C.
-- We know that B<C and B<A; otherwise BC wouldn't be the next join.
-- Thus, the longest odd word is not contained in B.
-  - It's in AB, ABC, BC, or C
-  - The concatenation of two codewords does not create new codewords! (1 even overlap!)
-    - It's not in AB, BC
-  - It's in ABC or C
-  - C is a codeword itself.
-    - But we dropped its last character!
-  - If C=DEFx (as a string) with E the largest codeword, then ...
-LLM:
-- every odd tree node >A ends at the end of the entire codeword?
-  - larger tree nodes never merge right, and thus must be a suffix
-  - But codewords don't have to be tree nodes!
-
-*** codeword containment can be at even and odd offsets!
-because =0= occurs at both in =001=
+  - TODO: Draw some trees
 
 *** Do we get a $k=1$ scheme?
 - lower bound: 2/(w+1), ie 2 along every cycle.
 - If we can detect 
+- need to detect whether the anchor is a prefix or suffix
+- can we do that? Then we get a single(!) sampled position
 *** Do we get a $k=0$ scheme?
 - if we can distinguish the start vs end of each max code.
 - lower bound: ceil((w+k)/w)/(w+k) = 1/w
@@ -728,21 +757,6 @@ because =0= occurs at both in =001=
 
   
 *** observations
-- conj: if we remove the first/last char from the full-context code word, we get
-  a suffix/prefix
-  - Drop the first char. Then if the loose tree branch is even-length, drop that
-    as well. Then drop the next character and repeat. Every time dropping
-    1+even, we drop odd, but we're looking for an even prefix to drop (to go odd
-    total length => odd suffix). Once the length of the free branch becomes odd,
-    that's the start of the new subtree.
-  - new idea: drop the leading char as long as you get even-length tokens as prefix
-- conj: removing the last char just removes the right branch from the root of the tree
-- conj: removing the first char removes 2 left branches somehow?
-
-- All leftmost subtrees (after recursively cutting off right branches) are codewords
-- Generally all odd-length subtrees are codewords
-- Consider the longest contained word
-
 #+begin_src 
 1 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1 
 │ │ │ └┬┘ │ └┬┘ └┬┘ │ └┬┘ └┬┘ │ │ └┬┘ │ │ └┬┘ 
@@ -752,60 +766,8 @@ because =0= occurs at both in =001=
  │            └─────┬──────┘           │      
  └────────┬─────────┘                  │      
           └─────────────┬──────────────┘      
-          
-1 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1 
-- - 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1
-- - 0-0-1 0-0-1 0-1 0-0-1 0-1 1 1 0-1 0-0-0-1 +0
-- - 0-0-1 0-0-1 0-1 0-0-1 0-1 1-1-0-1 0-0-0-1 +1
-- - 0-0-1-0-0-1-0-1 0-0-1-0-1 1-1-0-1 0-0-0-1 +001
-- - 0-0-1-0-0-1-0-1 0-0-1-0-1-1-1-0-1 0-0-0-1 +00101
-- - 0-0-1-0-0-1-0-1 0-0-1-0-1-1-1-0-1-0-0-0-1 +00101001
-    <-------------> we can't recover from an even prefix
-    
-1 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1 
-- 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1
-- 1 0-0-1 0-0-1 0-1 0-0-1 0-1 1 1 0-1 0-0-0-1 +0
-- 1-0-0-1 0-0-1 0-1 0-0-1 0-1 1-1-0-1 0-0-0-1 +1
-- 1-0-0-1 0-0-1-0-1 0-0-1-0-1 1-1-0-1 0-0-0-1 +001
-- 1-0-0-1 0-0-1-0-1-0-0-1-0-1-1-1-0-1 0-0-0-1 +00101
-- 1-0-0-1 0-0-1-0-1-0-0-1-0-1-1-1-0-1-0-0-0-1 +00101001011101
-  <-----> we can't recover from an even prefix
-  
-1 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1 
-- - - - - 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1
-- - - - - 0-0-1 0-1 0-0-1 0-1 1 1 0-1 0-0-0-1 +0
-- - - - - 0-0-1 0-1 0-0-1 0-1 1-1-0-1 0-0-0-1 +1
-- - - - - 0-0-1-0-1 0-0-1-0-1 1-1-0-1 0-0-0-1 +001
 #+end_src
 
-"every suffix of a code work factorizes as $U_0^* U_1^{\leq 1}$, ie some
-even-length words followed by an optional odd-length word."
-
-#+begin_src 
- 0 0 1 1 0 0 1 0 1 0 1 1 1 0 1 0 0 0 1  
- │ └┬┘ │ │ └┬┘ └┬┘ └┬┘ │ │ └┬┘ │ │ └┬┘  
- └┬─┘  │ └┬─┘   │   │  │ └┬─┘  │ └┬─┘   
-  │    └┬─┘     │   │  └┬─┘    └┬─┘     
-  └──┬──┘       │   │   │       │       
-     └────┬─────┘   │   │       │       
-          └────┬────┘   │       │       
-               └───┬────┘       │       
-                   └─────┬──────┘       
- - 0 1 1 0 0 1 0 1 0 1 1 1 0 1 0 0 0 1  
-   01 1 001 01 01 1 1 01 0001
-   01 1001 01 01 1101 0001
- - - 1 1 0 0 1 0 1 0 1 1 1 0 1 0 0 0 1  
-     1 1 001 01 01 1 1 01 0001
-     11001 01 01 1101 0001
-     1100101 01 1101 0001
-     110010101 1101 0001
-     1100101011101 0001
-     11001010111010001
-#+end_src
-
-*** Can we get a k=1 scheme
-- need to detect whether the anchor is a prefix or suffix
-- can we do that? Then we get a single(!) sampled position
 *** We cannot determine is a code is prefix or suffix!
 =0010= is a counterexample:
 
@@ -817,74 +779,7 @@ Appending the final bit changes its role:
 |            1 |          00101 | [001]01                 | Prefix        |
 |              |                |                         |               |
 
-** Notes from "automata and codes"
-- In a bifix code, there is only one parse passing through each point
-- Every $u \in U\backslash A$ has $u = x_q v$ with $v\in X_{q+1}$.
-  - $Y$ is the set of pairs $uv$ with $u,v\in Z$ and $u\neq v$
-- *Every* word has a *unique* factorization $y z_\ell \dots z_1 z_0$ with $y\in
-  Y^*$ and $z_\ell \geq \dots z_0$ all in $Z$.
-  - $Y$ is all even words that are concatenations of $Z$, $Z$ is all odd length code words.
-  - A prefix of a code has a factorization with $y=1$
-  - A suffix of a code has a factorization with $\ell\in\{0,1\}$.
-- Each $X_n$ is a max prefix code
-  - $A^* = X_{n+1}^* P_{n+1}$, where $P_{n+1}$ are proper prefixes of $X_{n+1}$.
-  - We get $P_{n+1} = x_n^* \dots x_1^*$.
-- $x_nx_m \in Y^*$ for $n<m$
-- $zy \in Y^*Z$.
-
-**** Section 8
-- 8.1.10: For any lazard set, $(z)_{z\in Z}$ is a /complete factorization/ of
-  $A^*$, ie every word can be written uniquely as $z_k^* \dots z_0^*$ 
-- 8.1 has a bunch on Lyndon words. How much of our theory works for those?
-  - Lyndon words are a factorization
-  - for Lyndon words $l, m$ with $l\preceq m$, $lm$ is a Lyndon word
-
-**** Re-proving even-overlap lemma
-*
-**** Re-proving prefix lemma
-*The longest non-suffix code word is a prefix*
-**** Re-proving suffix lemma
-*The longest non-prefix code word is a suffix*
-
-
-
-
     
-* Notes on: The independence number of De Bruijn graphs
-This section is mostly just summarizing notes by Bryce Kille.
-
-** Introduction
-
-He considers the problem of finding the size of a maximal independent set of a
-De Bruijn graph. Specifically, we consider the /node-centric De Bruijn graph/ of
-order $n$, where nodes correspond to words of length $n$ over an alphabet of
-size $\sigma$. Edges correspond to nodes that overlap in $n-1$ characters.
-
-The /independence number/ is the size of a maximal independent set, that is, a
-subset of nodes such that no two nodes are adjacent.
-
-This has been studied since 1991 [CITE].
-Lichiardopol [2006, CITE] computes this for $n\in\{2,3,5,7\}$ and Majer and
-Novaga [2026, CITE] give a construction for $n\in\{11,13,17\}$. These all work
-for arbitrary $\sigma$.
-
-** Independent sets, vertex covers, and max cuts
-A maximum independent set is the complement of a minimal /vertex cover/, which is a
-subset of nodes such that each node is either in the set or adjacent to the set.
-
-A /cut/ is implied by partitioning the vertices into two sets $V_0$ and $V_1$
-via $\lambda: V \to \{0,1\}$: each undirected edge between $V_0$ and $V_1$ is
-in the cut. A /directed cut/ counts /directed/ edges from $V_0$ to $V_1$.
-
-Since the De Bruijn graph is Eulerian (ie every node has even degree), 
-
-
-** Correspondence to sampling schemes
-Our $w=2$ sampling scheme must sample either the first or second position of
-each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is odd).
-
-** The Mykkeltveit embedding
-
 
 
 * Notes on comma-free codes
