@@ -5,6 +5,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_paired_shortcodes: %notice
+#+hugo_aliases: /posts/pairwise-alignment-history
 #+date: <2025-04-09 Thu>
 
 This is Chapter 2 of my [[../thesis/thesis.org][thesis]] [cite:@thesis], to introduce the first part on Pairwise Alignment.
@@ -456,6 +457,11 @@ a few years before, although in a different domain.
 #+attr_html: :class inset :width 80%
 [[file:fig/dp.svg]]
 
+#+name: fig:nw
+#+caption: The original cubic algorithm of [cite/text:@nw].
+#+attr_html: :class float
+[[file:screenshots/nw-cubic.png]]
+
 *Needleman-Wunsch' cubic algorithm.*
 The problem of pairwise alignment of biological sequences was first formalized
 by Needleman and Wunsch [cite:@nw]. They provide a /cubic/ recurrence
@@ -474,6 +480,11 @@ The value of $D(n,m)$ is the final cost of the alignment.
 
 The total runtime is $O(nm \cdot (n+m)) = O(n^2m)$ since each of the $n\cdot m$ cells requires $O(n+m)$ work.
 
+#+caption: An example of the edit distance computation between two sequences as shown in [cite/text/cf:@sellers], using unit costs.
+#+attr_html: :class float
+[[file:screenshots/sellers.png]]
+
+
 *A quadratic DP.*
 The cubic DP was improved into a quadratic DP by Sellers [cite:@sellers] and
 Wagner and Fisher [cite:@wagner74].
@@ -483,10 +494,10 @@ one deletion is tried:
 \begin{align*}
 D(0,0) &:= 0\\
     D(i, 0) &:= D(i-1,0)+ \delta(a_i, \varepsilon) \\
-    D(0, j) &:= D(0,j-0)+ \delta(\varepsilon, b_j) \\
-    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(a_i, b_j), &&\text{(mis)match}\\
-            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(a_i, \varepsilon), && \text{deletion}\\
-            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(\varepsilon, b_j)\big). && \text{insertion}.
+    D(0, j) &:= D(0,j-0)+ \delta(\varepsilon, b_{j-1}) \\
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1) + \delta(a_{i-1}, b_{j-1}), &&\text{(mis)match}\\
+            &\phantom{:=\min\big(}\, D(i{-}1,j) + \delta(a_{i-1}, \varepsilon), && \text{deletion}\\
+            &\phantom{:=\min\big(}\, D(i,j{-}1) + \delta(\varepsilon, b_{j-1})\big). && \text{insertion}.
 \end{align*}
 
 This algorithm takes $O(nm)$ time since it now does constant work per DP cell.
@@ -502,13 +513,13 @@ recognition.
 Instead of a cost of matching characters, there is some cost $\delta(i,j)$ associated
 to matching two states, and it does not allow deletions:
 \begin{align*}
-    D(i, j) &:= \min\big(D(i{-}1,j{-}1), D(i{-}1, j)\big) + \delta(i,j).
+    D(i, j) &:= \min\big(D(i{-}1,j{-}1), D(i{-}1, j)\big) + \delta(a_{i-1},b_{j-1}).
 \end{align*}
 
 Sankoff also gives a quadratic recursion [cite:@sankoff], similar to the one by
 Sellers [cite:@sellers], but specifically for LCS. This leads to the recursion
 \begin{align*}
-    S(i, j) &:= \max\big(S(i{-}1,j{-}1) + \delta(a_i, b_j),\, S(i{-}1, j), S(i, j{-}1)\big),
+    S(i, j) &:= \max\big(S(i{-}1,j{-}1) + \delta(a_{i-1}, b_{j-1}),\, S(i{-}1, j), S(i, j{-}1)\big),
 \end{align*}
 where we use $S$ to indicate that the /score/ is maximized.
 
@@ -553,8 +564,9 @@ This is done by introducing two additional matrices
 $P(i,j)$ and $Q(i,j)$ that contain the minimal cost to get to $(i,j)$ where the
 last step is required to be an insertion or deletion respectively:
 \begin{align*}
-    D(i, 0) &= P(i, 0) = I(i, 0) := 0 \\
-    D(0, j) &= P(0, j) = I(0, j) := 0 \\
+    D(0, 0) &= 0\\
+    D(i, 0) &= P(i, 0) = o + ie, && \text{for $i>0$}\\
+    D(0, j) &= Q(0, j) = o + je, && \text{for $j>0$}\\
     P(i, j) &:= \min\big(D(i-1, j) + o+e, &&\text{new gap}\\
     &\phantom{:= \min\big(}\ P(i-1, j) + e\big)&&\text{extend gap}\\
     Q(i, j) &:= \min\big(D(i, j-1) + o+e, &&\text{new gap}\\
@@ -581,6 +593,13 @@ only the last two columns of the DP matrix $D$ (and $P$ and $Q$) are needed at
 any time, so that linear memory suffices.
 
 * Linear Memory using Divide and Conquer
+
+#+name: myers88
+#+caption: Divide-and-conquer as shown in [cite/text/cf:@myers88].
+#+caption: Unlike the text here, $i*$ is chosen as the middle row rather than the middle column.
+#+attr_html: :class float
+[[file:screenshots/myers88.png]]
+
 Hirschberg [cite:@hirschberg75] introduces a divide-and-conquer algorithm to
 compute the LCS of two sequences in linear space.
 Instead of computing the full alignment from
@@ -832,6 +851,14 @@ Ukkonen [cite:@ukkonen83;@ukkonen85] (for edit distance) and Myers
 [cite:@myers86] (for LCS). It hinges on the
 observation that along diagonals of the edit graph (or DP matrix), the value of
 $\g(\st ij) = D(i,j)$ never decreases [cite:@ukkonen85 Lemma 3], as can be seen in [[edit-graph]].
+Later, Landau and Vishkin [cite:@landau-vishkin89] introduced a similar
+algorithm for pattern matching.
+
+
+#+name: furthest-reaching
+#+caption: Furthest reaching points for LCS by [cite/text:@myers86].
+#+attr_html: :class float
+[[file:screenshots/furthest-reaching.png]]
 
 We already observed before that when the edit distance is $s$, only the $s$
 diagonals above and below the main diagonal are needed, and on these diagonals,
@@ -1064,6 +1091,11 @@ So far, all pairwise alignment methods we looked at are based on the alignment g
 longest common subsequence problem also admits different solutions. See e.g.
 [cite:@lcs-survey] for a survey.
 
+#+name: contours
+#+caption: Contours as shown in [cite/text:@hirschberg77].
+#+attr_html: :class float
+[[file:screenshots/contours.png]]
+
 *Sparse dynamic programming.*
 Instead of finding a minimal-cost path through a graph, we can search for the
 longest /chain/ of matches [cite:@hirschberg75;@hirschberg77;@hunt77]. Suppose there are $r$ /matches/ in
@@ -1157,7 +1189,7 @@ LCS also can not be solved in time $O(n^{2-\delta})$ for any $\delta > 0$
 #+caption: Red shaded states are not visited.
 #+name: fig:four-russians
 #+attr_html: :class inset
-[[file:pairwise-alignment-history/drawings/four-russians.drawio.svg]]
+[[file:fig/four-russians.drawio.svg]]
 
 *Four Russians method.*
 The so called /four Russians method/ was introduced by [cite:@four-russians].
@@ -1272,3 +1304,4 @@ read-aligners was done by Alser et al. [cite:@alser21].
 #+end_export
 
 #+print_bibliography:
+
