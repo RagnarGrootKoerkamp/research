@@ -1,6 +1,6 @@
 #+title: Optimal sampling schemes for w=2 and odd k
 #+filetags: wip minimizers
-#+OPTIONS: ^:{} num:
+#+OPTIONS: ^:{} num:2
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_level_offset: 0
@@ -254,7 +254,8 @@ $A^*$, meaning that every $w\in A^*$ can be uniquely written as $w=z_k\dots z_1$
 with $z_i\in Z$ and $z_k \geq \dots \geq z_1$.
 #+end_lemma
 
-The following construction is a modern presentation by [cite/t:@comma-free-codes-perrin;@codes-and-automata] of Scholtz' original "comma
+The following construction is a modern presentation by
+[cite/t:@comma-free-codes-perrin 3.3;@codes-and-automata] of Scholtz' original "comma
 erasing method" [cite:@comma-free-codes-scholtz].
 #+begin_definition Scholtz construction [eq 7.21]
 Let $(x_i)_{i\geq 1}$ and $(X_i)_{i\geq 1}$ be the Hall sequence obtained by
@@ -272,6 +273,7 @@ $Z = \{x_1, x_2, \dots\}$ is the set of /code words/, consisting of all
 odd-length elements of $U$. $Y$ contains the even-length elements of $U$ that
 never appear as an $x_i$.
 
+The procedure can be extended to also eliminate all even-length elements [8.1.9].
 Then $U$ is a Lazard set ordered via $u<v$ if $|u|$ is odd and $|v|$ is even, or if they have the
 same parity and $u<_{r} v$ for the radix order.
 
@@ -290,7 +292,7 @@ particular, for $x_i,x_j\in Z$ we have $x_i<x_j$ iff $i<j$.
 
 We now cover some basic facts about this construction and the sets $U$, $Y$, and $Z$.
 
-#+begin_lemma Some facts [eq 7.22, 7.3.15]
+#+begin_lemma Some facts [eq 7.22 sec 7.3.15]
 If $u\in U\backslash A$, then $u\in X_{\nu(u)+1}$ and $u\not\in X_{\nu(u)}$, and
 so $u=x_{\nu(u)}v$ for some $v\in X_{\nu(u)+1}$.
 
@@ -319,6 +321,10 @@ contains at most one element of every conjugacy class. Thus, $|X|\leq
 \ell_m(k)$, which counts the number of conjugacy classes of words of length $m$
 over an alphabet of size $k$ (or equivalently, the number of primitive words
 with length dividing $m$).
+
+*TODO: Define and detangle $\ell_m(k)$, the number of primitive words of length
+$m$ over alphabet $k$, and the total number of conjugacy classes of words of
+length $m$*
 
 #+begin_theorem Maximal comma-free code
 For odd $m$, $Z\cap A^m$ is a comma-free code of maximal size $\ell_m(k)$.
@@ -355,7 +361,7 @@ For a proper suffix $w$ of a word in $U$, the factorization has $n=0$ or $n=1$
 and $z\in Z$.
 #+end_lemma
 #+begin_lemma Overlapping code words [Proof of 7.3.11] :label overlap
-Let $u,v\in U$ be two words that overlap as $u=ab$ and $v=bc$ with $b\neq
+Let $u,v\in U$ be two words that overlap as $u=ab$ and $v=bc$ with $a,b,c\neq
 1$. Then $b$ is a code word in $Z$.
 In particular, for $z_0,z_1\in Z$, $z_0z_1$ does not contain a non-trivial word in its overlap.
 #+end_lemma
@@ -380,6 +386,10 @@ Given a word $w$ with $w=z_k\dots z_1$ for decreasing $z_i\in Z$ with $z_k\geq
 Suppose not, so $z=az_i\dots z_j b$ with $a$ a non-empty suffix of $z_{i+1}$ and $b$ a
 non-empty prefix of $z_{j-1}$. Then $a$ and $b$ are both in $Z$ by the previous
 overlap lemma.
+
+#+caption: A crossing codeword $z$, with intervening factors (left) or $z=ab$ (right). Solid lines show the decreasing factors of $w$, with $z_{i+1}\geq z_i$; dashed lines show factors in $z$.
+[[file:overlapping-codewords-2.svg]]
+
 Furthermore, $b\leq z_{j-1}$ because $|b|\leq |z_{j-1}|$.
 Let $c$ be the factor after $a$, i.e. $c=b$ if $z_i\dots z_j$ is empty and
 $c=z_i$ otherwise.
@@ -424,7 +434,7 @@ Let $k$ be the odd \(k\)-mer length of interest. Each window of length $k+1$
 consists of $w=2$ \(k\)-mers. A context consists of two consecutive windows
 totalling $C=k+2$ characters. A $w=2$ minimizer scheme is optimal if it matches
 the lower bound for each
-primitive cycle of length up to $C$, sampling exactly $\lceil w/2\rceil$
+primitive cycle of length up to $C$, sampling exactly $\lceil |C|/2\rceil$
 distinct \(k\)-mers.
 
 #+begin_definition Optimal minimizer scheme
@@ -441,6 +451,12 @@ This minimizer scheme has optimal density.
 #+begin_proof
 We show that the minimizer schemes samples $\lceil |c|/2\rceil$ \(k\)-mers along
 every cycle (cyclic string) $c$ with length dividing $k+2$.
+
+*TODO: non-primitive words*
+- for non-primitive $c$, we find the code word conjagate of the corresponding
+  primitive word.
+- We might need some additional lemmas on whether the Melancon construction works?
+- Explicitly break ties to the left!
 
 Since $k+2$ is odd, $|c|$ is odd.
 Let $c\in A^{|c|}$ be the unique rotation that is a code word in $Z$.
@@ -469,7 +485,7 @@ have the same parity.
 
 Thus, along the full odd-length cycle, we have two intervals where we sample
 alternating \(k\)-mers. One of these intervals has even length and density
-exactly half, while the other has even length and samples half its length
+exactly half, while the other has odd length and samples half its length
 rounded up, for a total of $\lceil|c|/2\rceil$.
 [TODO: more precise?]
 #+end_proof
@@ -505,7 +521,7 @@ Given any word $w\in A^*$, start with the sequence $(w_1,\dots,w_n)$ of
 characters. Initially, all words $w_i$ are /unfixed/, and over time, a growing
 suffix of words is /fixed/.
 If the sequence contains no unfixed word of odd length, stop.
-If the smallest unfixed word $w_i$ in the sequence is at the back ($w_i=w_n$) or if
+If the smallest unfixed word $w_i$ in the sequence is at the back or if
 $w_{i+1}$ has been /fixed/, /fix/ $w_i$ itself.
 Otherwise, find an occurrence of the minimal unfixed $w_i$ with $w_i<w_{i+1}$ and
 contract them and repeat.
@@ -516,26 +532,26 @@ We now prove that this final state is exactly the unique $yz_k\dots z_1$
 factorization of $w$.
 #+begin_lemma 
 For any $w\in A^*$, the linear Melancon algorithm recovers the unique factorization $w=yz_k\dots
-z_1$ with $y\in Y*$, $z_i\in Z$, and $z_k > \dots > z_1$.
+z_1$ with $y\in Y*$, $z_i\in Z$, and $z_k \geq \dots \geq z_1$.
 #+end_lemma
 #+begin_proof
+Every word generated by the algorithm is in $U$.
 The linear Melancon algorithm only fixes odd-length words from the back to the front.
 Furthermore, it always considers words from small to large, and so later fixed
 elements are not smaller. At the end, all odd-length words must be fixed and so
-form a suffix $z_k>\dots > z_1$, while no even-length words are fixed. The
+form a suffix $z_k\geq \dots \geq  z_1$, while no even-length words are fixed. The
 remaining unfixed elements must all have even length, and so are all in $Y$.
 Thus, $y=y_1\dots y_n\in Y^*$ and $yz_k\dots z_1$ must be the unique
 factorization.
 #+end_proof
 
 #+begin_lemma 
-For any word $w\in A^*$ with factorization $w = yz_k\dots z_1$, the largest code
-word contained in $w$ that starts at an even position is $z_k$.
+Given a word $w\in A^*$ with factorization $w = yz_k\dots z_1$.
+If the largest code word contained in $w$ starts at an even position, then it is $z_k$.
 #+end_lemma
 #+begin_proof
 As before, write $w = yz_k\dots z_1$.
-Clearly $z_k$ starts at an even position, and we will show that this is the
-largest such code word.
+Clearly $z_k$ starts at an even position.
 If the largest contained code word $z$ is contained in $z_k\dots z_1$, it must
 equal $z_k$ itself by [[lem:prefix_lemma]].
 If the largest code word is contained in $y$, it
@@ -567,15 +583,13 @@ code word in $w$ is either $z_k$ or a suffix $z_{k+1}$ of $y$. In the latter cas
 $w'=w[1..]$ factorizes as $w'=y'z_{k+1}z_k\dots z_1$.
 #+end_lemma
 #+begin_proof
-If the largest code word starts at an even position, it must be $z_k$ and we are
-done.
-Otherwise, consider $y_1 = y_1$ and factorize $y_1 z_k\dots z_1 = w' =
-y'z'_{k'}\dots z'_1$.
+If the largest code word starts at an even position, it must be $z_k$ and we are done.
+Otherwise, consider $y_1 = y[1..]$ and factorize $y_1 z_k\dots z_1 = w' = y'z'_{k'}\dots z'_1$.
 Now consider the factorization of $w=cw' = cy'z'_{k'}\dots z'_1$. We know that
 $cy'\in ZY^*\subseteq Y^*Z$, and so we get $cy'=y''s$ with $s\in Z$. Thus,
 $w=y''sz'_{k'}\dots z'_1$. Now, if $s\geq z'_{k'}$ this is a normal
 factorization and thus must coincide with $w=yz_k\dots z_1$, giving $z'_{k'} = z_{k-1}$.
-Otherwise, if $s<z'_{k'}$, then $sz'_{k'}\in Y$ and
+Otherwise, if $s<z'_{k'}$, then $sz'_{k'}\in Y^*$ and
 $w=y''(sz'_{k'})z'_{k'-1}\dots z_1$ is the normal factorization and $z'_{k'-1} =
 z_k$, so that $z'_{k'}= z'_{k+1}$ is indeed the added largest code word.
 #+end_proof
@@ -607,7 +621,9 @@ While pushing a character, preserve the exact tree structure that is being
 built. Each $z_1, c \mapsto z_1c$ merger between non-empty words can be
 /charged/ to the leftmost character of $c$, so that each character is charged by
 at most one merge. Thus, the total number of merges is linear.
-When popping a character, we either shrink the prefix $v$, or split $z_k$ into
+When popping a character, we shrink the prefix $v$ if possible.
+*TODO: $z_k$ does need re-factoring!*
+Else, or split $z_k$ into
 its two constituents twice: $z_k = x_ix_j = x_i(x_\ell x_m)$ with $i<j$ and
 $\ell<m$, so that either $x_m$ or $z_{k-1}$ becomes the new largest contained
 code word.
@@ -624,6 +640,10 @@ code word.
   one exception that length-based arguments have to be replaced by using the new
   order directly.
 
+
+** TODO
+- Figures for comma-free codes
+- Figures for DBg
 
 * Notes
 
