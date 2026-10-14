@@ -1,0 +1,182 @@
+#+title: Comparing PHastR and PtrHash
+#+filetags: @note data-structure mphf simd
+#+OPTIONS: ^:{} num: 
+#+hugo_front_matter_key_replace: author>authors
+#+hugo_paired_shortcodes: %notice %detail
+#+toc: headlines 3
+#+hugo_level_offset: 1
+#+hugo_custom_front_matter: :featuredImage /banners/palatinate-forest.jpg :featuredImageCaption Autumn in the Palatinate Forest
+#+date: <2026-10-14 Wed>
+
+Sebastiano Vigna just preprinted [[https://github.com/vigna/sux-rs][PHastR]] [cite:@phastr], a new, faster version of
+PHast and PHast+ [cite:@phast-preprint;@phast].
+In the evaluations, it is a direct improvement over PHast+:
+- slightly smaller,
+- 2$\times$ to $3\times$ faster to build,
+- faster queries.
+
+This is a quick note comparing the PHast line of work to [[https://github.com/RagnarGrootKoerkamp/ptrhash][PtrHash]] [cite:@ptrhash].
+
+* Bucket placement
+Bucket placement methods have a list of $b$ /buckets/ $B_i$ and hash each key $x$ to a
+bucket using $h_1(x)$.
+The construction algorithm will determine an 8-bit seed $s_i$ for each bucket.
+A query uses the seed $s_{h_1(x)}$ to determine the final slot $h_2(x,
+s_{h_1(x)})$ in an array of $S=1.01\cdot n$ slots in total.
+The construction algorithm ensures that all $h_2(x, s_{h_1(x)})$ are distinct.
+
+In the default configuration of PtrHash, $h_1$ and $h_2$ are pretty much random
+functions to $[B]$ and $[S]$, so that all buckets have the same expected size
+and each key maps to a uniformly random slot.
+In the compact configuration we choose $h_1(x) = \lfloor(h_1'(x)/2^{64})^3 \cdot
+B\rfloor$ where $h_1'$ is a uniform random hash function.
+This way, many keys are concentrated in the first buckets, which helps the
+construction algorithm.
+The construction algorithm sorts buckets by decreasing size and tries to find a
+seed for them one-by-one. If there is no valid seed, a best seed is chosen as
+the one with a minimal number of slot-collisions, and the colliding keys are
+/evicted/ or /displaced/ from their slot.
+
+In PHast variants, $h_1(x)$ is always a uniform random hash function, so that
+all buckets have the same size in expectation. Instead of processing them
+large-to-small, they are processed left-to-right. In particular, $h_2$ is chosen
+such that the keys of a given bucket all map to the same sliding window of (typically)
+$L=1024$ slots. This way, the construction algorithm is highly local. This
+effectively allows for trying many more seed values in the same time, and thus
+more aggressive parameter-tuning for smaller space.
+
+In PHast, $h_2(x,s)\in [L]$ chooses a random slot in the window of size $L$.
+In PHast+, $h_2(x, s) = h'_2(x)+s$ uses the seed to shift (or rotate) the
+selected slot. This way, many seeds can be checked at once by simply
+intersecting bitmasks.
+
+PHastR notes that this last idea has an issue: when a bucket has two keys with
+$h'_2(x) = h'_2(x')$, their target slot is the same regardless of $s$.
+We can fix this by mixing the two strategies: use the high 2 bits of $s$ to
+select a /layout/, and the remaining 6 low bits as a shift (or rotate):
+$h_2(x,s) = h'_2(x, s\rr 6) + s$.
+In particular, PHastR splits the 64 bits of $x$ into $2^2=4$ blocks and selects
+the $(s\rr 6)$'th such block as starting point.
+This way, most of the time one of the 4 options of the low 2 bits will avoid self-collisions.
+(In fact, we use a similar idea in k-PtrHash in our non-minimal k-PHF paper
+[cite:@nonminimal-kphf], but we mix in $s\rr 6$ using $(x\oplus (s\rr 6)*C$,
+which has much stronger correlation than extracting independent bits from $x$ as
+PHastR does.)
+
+* Bumping
+One of the main difference between PtrHash and PHast variants is bumping:
+- PHastR (as well as k-PtrHash) reserve a seed value of 0 for /bumping/: in this
+  case all keys in the bucket are handled by a (recursive) fallback structure.
+- PtrHash has no bumping. Instead, it slightly over-allocates slots, and
+  (optionally) /remaps/ the last 1% of keys back into the gaps left in the main value range.
+
+** Query speed
+- Bumping triggers a branch-misprediction, a re-hash, and a cache-miss. But
+  PHastR only bumps 0.5%, and so the impact is from 3.9 to 4.0 ns/key for
+  $n=10^7$ and 17.3 to 18.2 ns/key for $n=10^9$.
+- On the other hand, re-hashing bumped keys makes it so that 64-bit hashes
+  always suffices: hash collisions will be resolved in the second round anyway.
+- PtrHash over-allocates 1% of slots and chooses parameters so that bumping
+  never happens, but does have to do an array-lookup or Elias-Fano lookup for 1%
+  of queries.
+- In the compact variant, PtrHash is somewhat bottlenecked by having to compute
+  $x^3$ (aside from having to compute the /part/ index; see below).
+- For maximal query speed, we want neither remapping nor bumping.
+  In fact, SIMD benefits from a completely branches query with only a single
+  memory access.
+  In PtrHash, this is done by omitting the remapping step, yielding a
+  non-minimal PHF.
+  PHast, on the other hand, requires quite a bit more space
+  to ensure /nothing/ is bumped: the [[https://github.com/google/highway/blob/dff0f1b0f3df987e79f28328fa9cd89e07f71dd3/hwy/contrib/hash/phast-inl.h][SIMD implementation]] in =highway= uses 4.8
+  bits/key instead of ~1.9 bits/key normally.
+
+** Space usage
+PtrHash can not be too aggressive in its choice of $\lambda$, the number of
+keys per bucket: choosing it too high leads to endless eviction chains.
+With bumping, one can instead cheaply "bail out" some of the buckets in an
+overloaded window. Without bumping, the only way to avoid this is by setting the
+parameters loosely (and apparently the eviction algorithm can not recover that much).
+Furthermore, bumping also avoids remapping in the good case: we can simply
+target exactly $n$ slots, so that only bumped keys need to figure out which slot
+was theirs. It's even possible to allocate less than $n$ slots so that nearly
+all of them will be filled, and accept a bit more bumping for very high load factors.
+
+** Construction speed
+- In PtrHash, multi-threaded construction requires explicitly partitioning the keys
+  into one part per thread. This hurts query time, because it requires
+  explicitly computing the part of the key.
+- In PHastR, multi-threaded construction is relatively straightforward since
+  a slice of buckets maps to a slice of the target slots. One can handle most
+  buckets independently, and handle buckets that have overlapping windows in a
+  second pass. Specifically, we can just bump the overlapping buckets as needed,
+  so that the data structure remains homogeneous.
+
+** Overview
+
+#+caption: Comparing properties of some configurations. PtrHash-fast omits the remapping and is non-minimal, and PHast+-bumpfree increases space usage so that there is no bumping.
+#+attr_html: :class small
+|                            | PHastR          | PHast+ bumpfree | PtrHash compact | PtrHash fast |
+| Minimal                    | yes             | *no*            | yes             | *no*         |
+| fast queries               | yes             | yes             | no              | yes          |
+| space (bits/key)           | 1.9             | 4.8             | 2.1             | 2.66         |
+| multithreaded construction | yes             | yes             | yes             | no           |
+| Bumping                    | yes             | *no*            | no              | no           |
+| Remap                      | yes (if bumped) | no              | yes             | *no*         |
+| Branchless? SIMD?          | no              | yes             | no              | yes          |
+
+* Conclusion
+Overall, I do think PHastR is very nice and nearly optimal.
+Its only issue is that it does bumping, which prevents high-throughput queries
+using SIMD. On the other hand, bumping is exactly why it can be so small and
+homogenous while having multi-threaded construction, so this is probably a
+worthwhile tradeoff as long as one is not doing SIMD-based queries.
+
+In particular, using SIMD for queries probably only makes sense in the
+compute-bound regime where $n$ is not too large (on the order of millions) and
+things fit in cache.
+For much larger inputs (on the order of billions), it's all memory bound and
+SIMD probably won't help anyway.
+
+* Ideas for improving PtrHash
+- Also implement the shuffle+shift seeding strategy, using only the 1 or 2 low (or
+  high?) bits for shuffling and the rest for shifting.
+  - Note that this is similar to the /power of 2 choices/ idea.
+- Why precisely does PtrHash require relatively high space usage? 
+  - Without the $x^3$, the first buckets are trivial to place, while PHast gets
+    difficult seeds early on, because adjacent buckets have a mostly shared
+    small window that they map to.
+  - With the $x^3$, a space usage of 2.15 bits/key without bumping is quite allright actually.
+- In PtrHash, how many tries/bits are needed to avoid self-collisions in the largest
+  buckets with $x^3$ bucket function?
+- Should we add a =large= layout alongside =default= and =compact= for when
+  there are many keys (so add parts for multi-threaded construction), but there
+  is no need for multiple parts?
+- Can we try PtrHash with a tiny (<0.1%) of bumping?
+  We could simply bump once the eviction chain becomes too long.
+
+** Levels
+Instead of "passive" bumping using a seed of 0 and then having a secondary lookup,
+we could also consider "active" bumping and directly encode the bumped location
+in the main seed. For example, we can pre-allocate $1.01 n$ slots for the first /level/
+and $0.01n$ slots for the second /level/. Then, let seeds up to, say, =224=
+are used as usual for the first layer, while seeds =224..256= are used to
+indicate slots in the second layer.
+We could even use =248..256= for a third layer, but it seems that PHastR only uses two layers currently.
+We may also want to overload the first layer, allocating only $0.98n$ or $0.99n$
+slots, so that ideally they will be completely filled by the end.
+Then, remapping will also be easier since the empty slots are in a small range
+from $0.99n$ to $1.01n$, so that we only need 2 bits per empty slot, rather than
+~8 bits (via Elias-Fano) currently.
+
+This idea is quite similar to that of funnel hashing as introduced last year by
+[cite/t:@funnel-hashing] and recently implemented in the [[https://github.com/maksympetkus/multitable][MultiTable]] [cite:@multitable].
+There, there are multiple levels of exponentially decreasing size. Each
+level is split into buckets. To insert a key, try to append it to a random
+bucket in the first level, and (recursively) try again in the next level until success.
+
+The main idea is that layer $i+1$ will only be used once layer $i$
+is already quite full, and that layer $i$ will become nearly full over time.
+From a theoretical point of view, what we do is somewhat similar to directly
+encoding the first working index of the /probe sequence/ of a key as defined by [cite/t:@funnel-hashing].
+
+#+print_bibliography:
