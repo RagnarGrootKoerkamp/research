@@ -4,7 +4,7 @@
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
 #+hugo_level_offset: 0
-#+date: <2026-09-12 Sat>
+#+date: <2026-10-15 Thu>
 
 $$
 \newcommand{\im}{\mathsf{im}}
@@ -56,9 +56,46 @@ and then to reverse engineer/re-invent the solution that Sol found.
 ** Abstract
 ** Introduction
 - connection between DBg, minimizers, independence numbers
+
+- TODO: framing from graph perspective; with application to w=2 minimizers
+
+- Relation to SUS-anchors and 10-minimizers
+- TODO: what about $w=2$ and even $k$ or even $n$ with $\sigma=2$
+- TODO: investigate potential journals
+- TODO: cite previous work on DBg independence number
+- TODO: some result to extend to larger alphabets
+  - https://shop.elsevier.com/books/sequences-and-the-de-bruijn-graph/etzion/978-0-443-13517-0
+- TODO: Read "Sequences and the de Bruijn Graph" pdf
 ** Preliminaries
 *** Cycle-cover
 *** Independence numbers of DBg history
+old papers:
+- [cite:@lempel71] (JCT)
+  - Lempel paper with conjecture proven by Mykkeltveit
+- [cite:@mykkeltveit] (JCT): decycling set; 1 per cycle
+new papers:
+- search: https://www.sciencedirect.com/search?qs=bruijn%20graph
+- https://www.sciencedirect.com/science/article/pii/S0012365X06000999
+  - Lichiardopol, Independence number of de bruijn graphs
+  - bounds; asymptotes for even n
+  - also check out papers cited by this one
+- https://www.sciencedirect.com/science/article/pii/S0898122109007202
+  - proves a subset of Mykkeltveit's '72 paper
+- https://www.sciencedirect.com/science/article/pii/S0012365X10000270
+  - perfect matching on the necklace graph
+- https://www.sciencedirect.com/science/article/pii/0166218X9290133U
+  - drawing DBg
+- https://www.combinatorics.org/ojs/index.php/eljc/article/view/v18i1p194/pdf
+  - maximum independent set for n=3
+- https://arxiv.org/html/2604.14671v2 [2026]
+  - "on the independence number of de bruijn graphs"
+  - mostly asymptotic
+  - extends lichiardopol from n=17 to infinite odd n
+- https://www.sciencedirect.com/science/article/pii/0012365X91903626
+  - "Covering the de Bruijn graph" 1989
+  - [cite:@covering-dbg]
+
+equivalences:
 - vertex cover
 - independence number
 - edge cover?
@@ -96,9 +133,17 @@ Our $w=2$ sampling scheme must sample either the first or second position of
 each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is odd).
 *** Connecting the problems
 
+equivalent:
+- charged contexts [marcais paper]
+- density over cycles
+- density over random sequence
+- random over De Bruijn seq
+- removing edges/nodes to make graph bipartite
 
 ** Mykkeltveit embedding
 *** The classical Mykkeltveit embedding
+
+*TODO* Explain why this decycling
 
 The Mykkeltveit embedding was introduced by [cite/t:@mykkeltveit] in order to
 prove a conjecture of Lempel [cite:@lempel71] stating that the order-\(n\) De Bruijn graph $B_n$
@@ -150,6 +195,9 @@ out of $n$ times. Thus, for all but one pair of consecutive windows we choose
 [todo: what if $g(w_0)=0$? Note that $g(w_0)=0$ for periodic sequences.]
 
 *** Degenerate and non-primitive cases
+:PROPERTIES:
+:CUSTOM_ID: mykkeltveit
+:END:
 A (primitive?) cycle $c$ is /degenerate/ when $g(c)=0$.
 
 Lemma: distinct degenerate cycles are vertex (window)-disjoint, so we can simply
@@ -173,19 +221,19 @@ Bruijn graph.
 Our construction closely builds on existing work to build /comma-free codes/,
 which are specific /codes/ (sets of words) such that no other code words can be
 found in the overlap between two code words.
-Comma-free codes were first introduced by Crick et al.
-[cite:@codes-without-commas] as a (wrongly) hypothesized structure of the amino acids to
+Comma-free codes were first introduced by
+[cite/t:@codes-without-commas] as a (wrongly) hypothesized structure of the amino acids to
 avoid reading-frame issues. [cite/t:@comma-free-codes-golomb] find
-comma-free codes of optimal (maximal) size for odd $k$ up to 15 and shows that
-in general optimality is not possible for even $k$. Eastman
-[cite:@comma-free-codes-eastman] is the first to show a construction for all odd
+comma-free codes of maximal size for odd $k$ up to 15 and show that,
+in general, optimality is not possible for even $k$.
+[cite/t:@comma-free-codes-eastman] is the first to show a construction for all odd
 $k$. Their presentation is quite intricate.
-Knuth [cite:@knuth-aopc4-5b-backtracking] gives a significantly simpler
+[cite/t:@knuth-aopc4-5b-backtracking] gives a significantly simpler
 presentation in terms of /dips/, which are locally maximal subsequences $w=w_1\dots w_k$ with
 $w_1\geq\dots\geq w_{k-1}<w_k$. Given a cyclic word, one then finds all
 odd-length dips and splits the word before each odd-length dip, and proceeds
 recursively on these substrings.
-[cite/t:@comma-free-codes-perrin] further improves terminology with /superdips/
+[cite/t:@comma-free-codes-perrin] further improve terminology with /superdips/
 (an odd-length dip followed by even-length dips) and \(n\)-(super)dips, which
 are (super)dips over the alphabet of \((n-1)\)-dips using the radix order.
 
@@ -196,7 +244,7 @@ simplified in terms of Lazard sets
 [cite:@lazard60;@codes-and-automata] by [cite/t:@comma-free-codes-perrin]. 
 Their main theorem shows that the Eastman construction also arises as a Lazard set.
 
-Lastly, a helpful algorithm is that of Melancon [cite:@melancon-thesis], which
+Lastly, a helpful algorithm is that of Melancon [cite:@melancon-thesis;@comma-free-codes-perrin;@codes-and-automata], which
 gives a general bottom-up procedure similar to the ones of Knuth and Scholtz to
 find the conjugate of a word that is part of the comma-free code.
 
@@ -204,33 +252,39 @@ find the conjugate of a word that is part of the comma-free code.
 Our presentation will closely follow Section 7.3 and Chapter 8 of
 [cite/t:@codes-and-automata] and definitions and lemmas are taken from there
 unless otherwise mentioned.
+Further background can be found in [cite/t:@free-lie-algebras-reutenauer] and [cite/t:@free-lie-algebras-viennot].
 
 *Notation.*
 We write $A$ for the alphabet use $u\in  A^*$ for /words/ over $A$. A word can
 be seen both as a string of characters as well as an element of the free monoid
 over $A$. The empty word is written $1$, and $A^{\leq n}$ is the set of words of
-length up to $n$. The /radix order/ $u<_rv$ compares words $u$
+length up to $n$.
+The characters of a word are indexed counting from 0, and the suffix starting at
+the $i$'th $0$-based character is denoted $w[i..]$.
+The /radix order/ $u<_rv$ compares words $u$
 and $v$ first by length $|u|<|v|$, and breaks ties lexicographically.
 Two words $w$ and $w'$ are /conjugate/ when they are a rotation of each other,
 i.e. there are $u$ and $v$ such that $w=uv$ and $w'=vu$.
 A word is /primitive/ when it is not the power of some other word.
 A /strict/ prefix (suffix) of a word is a prefix (suffix) that does not equal
 the word itself.
-*TODO* Notation for substrings like $w[1..]$ or $w[1\dots]$ or $w_{1\dots}$?
 
 We now move on to re-stating some relevant definitions.
 Originally Hall sets are defined in terms of trees [cite:@free-lie-algebras-reutenauer], but here we take a simpler definition.
 
+*TODO Example*
+
+*TODO drop hall sequence; replace by remark*
+
 #+begin_definition Hall sequence [7.3]
 A sequence $(x_i)_{i\geq 1}$ of words is a /Hall sequence/ if it is obtained via
-the following /elimination/ procedure:
+the following /elimination/ procedure[fn::The is some conflict here whether $|x_{i+1}|\geq |x_i|$ is needed???]
 - Start with $X_1 = A$,
-- choose $x_i\in X_i$ and $|x_{i+1}| \geq |x_i|$
+- choose $x_i\in X_i$ with $|x_i| \geq |x_{i-1}|$
   for $i\geq 2$,
 - then set $X_{i+1} := x_i^* (X_i\backslash x_i)$,
 - end when $X_{i+1} = \emptyset$.
 #+end_definition
-*TODO*: There is some conflict here whether $|x_{i+1}|\geq |x_i|$ is needed???
 
 Closely related are /Lazard sets/ [cite:@lazard60], that induce an order on
 their elements via /lazard elimination/.
@@ -247,6 +301,12 @@ construction, then $\{x_i\}_{i\geq 1}$ is a Lazard set.
 # Note: this is a /sufficient/ condition but not a /required/ condition: there are
 # other Lazard sets as well, where a word of non-minimal length is chosen first.
 # (Eg the Eastman construction as shown in [cite:@comma-free-codes-perrin].)
+
+*TODO mention strings vs words vs free algebra; concatenation vs products*
+
+*TODO drop general unique factorization*
+
+*TODO write more about $\nu$ and $\delta$*
 
 #+begin_lemma Unique factorization [8.1.10]
 For any Lazard set $Z$, the family $(z)_{z\in Z}$ is a /complete factorization/ of
@@ -292,6 +352,8 @@ particular, for $x_i,x_j\in Z$ we have $x_i<x_j$ iff $i<j$.
 
 We now cover some basic facts about this construction and the sets $U$, $Y$, and $Z$.
 
+*TODO add more explaining text here*
+
 #+begin_lemma Some facts [eq 7.22 sec 7.3.15]
 If $u\in U\backslash A$, then $u\in X_{\nu(u)+1}$ and $u\not\in X_{\nu(u)}$, and
 so $u=x_{\nu(u)}v$ for some $v\in X_{\nu(u)+1}$.
@@ -307,25 +369,40 @@ For all $z\in Z$ and $y\in Y$, $zy\in Y^*Z$, and by repeated application, the sa
 for $y\in Y^*$.
 #+end_lemma
 
+*TODO tree of z[2..]*
+
+*TODO this is not the factor tree, but construction of the code word*
+
+*TODO fix the tree*
+
+*TODO example of tree of prefix and suffix of $z$*
+
 #+name: factor-tree
 #+caption: Every word $u\in U$ corresponds to a unique factorization. On the left, the code word $z=10101101101\in Z$ of odd length is factorized. In the middle, $o$ and $e$ indicate words of odd and even length. The left factor is always some odd-length $x_i\in Z$ and the right factor some $u\in U$ with opposite parity from the current node. The right shows that the suffix of $z$ factorizes into even-length components as $y_1y_2y_3$ and that the prefix of $z$ factorizes as $z_4z_3z_2z_1$, matching [[lem:pref]] and [[lem:suf]].
 #+attr_html: :class large
-[[file:./factor-tree.svg]]
+[[file:./figs/factor-tree.svg]]
 
-*TODO: Mention left and right spine.*
+As an example, consider [[factor-tree]], showing how $z=10101101101\in Z$ is
+recursively built from smaller elements of $U$. The root $z$ itself has odd
+length, and each non-leaf node $u=x_iu'$ is made by concatenating some $x_i\in Z$ of odd length
+(the left branch) with some $u'\in U$ with length of opposite parity of $u$ with
+$x_i < u'$. As we will see below, every prefix of $z$ corresponds to the
+concatenation of a number of decreasing odd-length $z_i\in Z$, as shown in red, while every
+suffix of $z$ corresponds to a number of even-length $y\in Y$, as shown in blue,
+possibly followed by one odd-length factor $s\in Z$.
+An algorithm to build this tree given any $u\in U$ is Melancon's algorithm [[dfn:melancon]]
 
 
 
 Although we won't directly use this fact here, the main point of all this theory
 is to develop a maximal /comma-free code/:
-(*TODO*: Add some motivation on why the comma-free ness /is/ very relevant either way.)
 #+begin_definition Comma-free code
 A code $X\subseteq A^m$ is a /comma free code/ when no word of $X$ overlaps
 nontrivially with a product (concatenation) of two words of $X$. That is, given
 $x_1,x_2\in X$ with $x_1=ab$ and $x_2=cd$ with $b\neq 1$ and $c\neq 1$, then
 $bc\not\in X$.
 #+end_definition
-For any $x\in X$, $xx$ may contain only $x$ itself as code word, so that $X$
+For any $x\in X$, $xx$ may contain only $x$ itself as code word of length $m$, so that $X$
 contains at most one element of every conjugacy class. Thus, $|X|\leq
 \ell_m(k)$, which counts the number of conjugacy classes of words of length $m$
 over an alphabet of size $k$ (or equivalently, the number of primitive words
@@ -335,12 +412,20 @@ with length dividing $m$).
 $m$ over alphabet $k$, and the total number of conjugacy classes of words of
 length $m$*
 
-#+begin_theorem Maximal comma-free code
+*TODO maximal vs maximum vs optimal*
+
+#+begin_theorem Maximal comma-free code [7.3.11]
 For odd $m$, $Z\cap A^m$ is a comma-free code of maximal size $\ell_m(k)$.
+[ *TODO*: do we use $n$ or $m$ for the length here? Make this consistent.]
 #+end_theorem
 
-The proof of this theorem depends on a few additional lemmas that will be useful
-to us.
+What this means is that comma-free codes provide a way to sample a
+representative from every conjugacy class, i.e., they sample one vertex in every
+primitive length \(n=k+2\) cycle in the order $n$ De Bruijn graph.
+[ *TODO* Or do we look at edges in the order $n-1$ DBg?]
+
+We won't repeat the proof here, but do re-state a few lemmas that will be useful
+to us later.
 
 #+begin_lemma [7.3.6]
 Each $X_i$ is a /maximal prefix code/: for all distinct $x,x'\in X_i$, $x$ is not a
@@ -351,6 +436,8 @@ Furthermore, each primitive word $w$ with $|w|>|x_i|$ has a conjugate in $X_{i+1
 
 One of the core lemmas is the following, which follows directly from the more
 general unique factorization lemma mentioned above:
+
+*TODO even terms are large*
 
 #+begin_lemma Unique factorization [7.3.13] :label unique
 Each word $w\in A^*$ has a unique factorization
@@ -383,6 +470,60 @@ $z_0$ is a code word and the overlap $b$ with $z_1$ is a code word, but $z$ has
 odd length and $ab$ has even length, so this is impossible.
 #+end_proof
 
+*** Intuition
+
+The last lemma tells us that there is, in fact, a lot more structure to our
+comma-free code than just "one sample per conjugacy class": 
+Any time two code words overlap, or in the graph setting, that there is a path
+from sampled vertex $u$ to sampled vertex $v$ of length $<n$, this path has
+length $n-|b|$, which is even. Thus, looking modulo two, $u$ and $v$ are "synchronized".
+In particular, given a long string, we can consider the subset of \(n\)-mers
+that is a code word. If we look at two consecutive code words (not necessarily
+adjacent \(n\)-mers), they are either synchronized, or non-overlapping. 
+
+So far, this argument does not yet give us a way to take a sample from every
+context, since some strings may not contain any code word.
+Instead, we can, for every \(n\)-mer in our string, mark the position/character that
+starts its code word conjugate.
+Now suppose we have a string that starts in a code word $c$, and consider the first
+$n$ \(n\)-mers, each of which overlapping a suffix of $c$. Then, if they sample
+a position within $c$ (in the first $n$ characters of the string), this position
+must be even by the previous lemma.
+
+The remaining question is: what happens in overlapping non-code word context?
+In this case, the second code word is not an extension of the first and our
+previous lemma doesn't apply.
+We will show that we 
+
+
+*Corollary of streaming algorithm: the sampled anchor can only move right*
+- Every time the anchor shrinks to a suffix of the current on, things remain aligned
+- Every time the anchor grows from a push, things remain aligned
+- Every time the anchor 'jumps', we get a new unsynchronized sample.
+- Along a cycle, it only jumps once!
+- How does the representation of the algorithm work along a cycle?
+- *TODO* On pop, the new leftmost suffix of $z_k$ might eat some of the
+  following terms!
+- *TODO* we can also get a disjoint jump:
+  *001*001 0010
+    01 001*00101*
+  - pop moves to 01*001*001|0
+  - push moves to 01001*00101*
+    - here it's synchronized, but might not be in general
+    - TODO: Example of unsynchronized push
+
+
+*TODO relate n-mer context to (k+1)-mer window*
+
+
+*TODO figures*
+
+*TODO Random question:* Are comma-free codes a decycling set? Does every sufficiently
+long string contain a code word of length $m$???
+
+*TODO what if for every kmer we sample the start of the code word rotation*
+
+
 *** The largest contained word
 With this theory in hand, we are now ready to prove that the largest code word
 contained in a prefix (suffix) of a code word is a prefix (suffix) itself.
@@ -396,7 +537,8 @@ Suppose not, so $z=az_{i-1}\dots z_{j31} b$ with $a$ a non-empty suffix of $z_i$
 non-empty prefix of $z_j$. Then $a$ and $b$ are both in $Z$ by the previous
 overlap lemma.
 
-[[file:overlap.svg]]
+#+attr_html: :class large
+[[file:./figs/overlap.svg]]
 
 Furthermore, $b\leq z_j$ because $|b|\leq |z_j|$.
 Let $c$ be the factor after $a$, i.e. $c=b$ if $z_{i-1}\dots z_{j+1}$ is empty and
@@ -429,7 +571,7 @@ Now suppose that the largest word contained in the /suffix/ $w$ is $z'$.
 Suppose that $z'$ is not already a suffix of $w$, so $w=az'b$ with $b\neq 1$.
 
 #+attr_html: :class large
-[[file:max-suffix.svg]]
+[[file:./figs/max-suffix.svg]]
 
 Since $b$ is itself a suffix of $z$, it factorizes as $y$ or as $yx_k$ with $y\in Y^*$ and $x_k\in Z$.
 If $y\neq 1$, let $e=x_ix_j\in Y$ be the first non-empty term of $y$.
@@ -450,6 +592,8 @@ the lower bound for each
 primitive cycle of length up to $C$, sampling exactly $\lceil |C|/2\rceil$
 distinct \(k\)-mers.
 
+*TODO move this earlier*
+
 #+begin_definition Optimal minimizer scheme
 Let $w\in A^{k+1}$ be a window, and let $z$ be the largest code word in $w$,
 also known as the /anchor/,
@@ -457,8 +601,9 @@ starting at \(0\)-based position $i$. Then sample the \(k\)-mer starting at
 \(0\)-based position $i\bmod 2$.
 #+end_definition
 
-#+caption: An example of our minimizer scheme. Let $c\in Z$ be a primitive code word of length $k+2=7$. Consider all its length \(k+1=6\) windows. In each window, the anchor (i.e. maximal contained code word) is highlighted in red, and can be seed to be either a prefix or suffix of $c$. Along the cycle, $4=\lceil 7/2\rceil$ distinct positions are sampled, and in particular they are all "synchronized" as long as the anchor is a prefix or suffix of "the same" $c$.
-[[file:opt-minimizer.svg]]
+#+name: anchor_example
+#+caption: An example of our minimizer scheme. Let $c\in Z$ be a primitive code word of length $k+2=7$. Consider all its length \(k+1=6\) windows. In each window, the anchor (i.e. maximal contained code word) is highlighted in red, and can be seed to be either a prefix or suffix of $c$. Along the cycle, $4=\lceil 7/2\rceil$ distinct positions are sampled, and in particular they are all "synchronized" as long as the anchor is a prefix or suffix of "the same" $c$. The bottom row repeats the first row for the next rotation of $c$, and shows two adjacent (non-synchronized) samples.
+[[file:./figs/opt-minimizer.svg]]
 
 #+begin_theorem 
 This minimizer scheme has optimal density.
@@ -519,7 +664,7 @@ the "direction" of the Lazard elimination.)
 Starting with an arbitrary odd-length word, this gives the conjugate that is a
 code word. It generalizes and streamlines the algorithms of
 [cite/t:@comma-free-codes-scholtz] and [cite/t:@knuth-aops4-5-backtracking].
-#+begin_definition Melancon algorithm
+#+begin_definition Melancon algorithm :label melancon
 Given a primitive word $w$ of odd length $k$, start by splitting it into a sequence of characters
 $(w_1,\dots, w_n)$. Then let $w_i$ be one of the minimal characters satisfying
 $w_i < w_{i+1}$ via the Lazard order, taking indices modulo $n$. Then replace
@@ -583,7 +728,8 @@ If the largest code word contained in $w$ starts at an even position, then it is
 As before, write $w = yz_k\dots z_1$.
 Clearly $z_k$ starts at an even position.
 
-[[file:max-factor-even.svg]]
+#+attr_html: :class large
+[[file:./figs/max-factor-even.svg]]
 
 If the largest contained code word $z$ is contained in $z_k\dots z_1$, it must
 equal $z_k$ itself by [[lem:prefix_lemma]].
@@ -612,20 +758,25 @@ code word in $w$ is either $z_k$ or a suffix $z_{k+1}$ of $y$. In the latter cas
 $w'=w[1..]$ factorizes as $w'=y'z_{k+1}z_k\dots z_1$.
 #+end_lemma
 #+begin_proof
-If the largest code word starts at an even position, it must be $z_k$ and we are done.
+If the largest code word starts at an even position, it must be $z_k$, as
+highlighted red below, and we are done.
 
-[[file:suffix-factorization.svg]]
+#+attr_html: :class large
+[[file:./figs/suffix-factorization.svg]]
 
-*TODO* Check figure against text.
-
-Otherwise, consider $y_1 = y[1..]$ and factorize $y_1 z_k\dots z_1 = w' = y'z'_{k'}\dots z'_1$.
-Now consider the factorization of $w=cw' = cy'z'_{k'}\dots z'_1$. We know that
-$cy'\in ZY^*\subseteq Y^*Z$, and so we get $cy'=y''s$ with $s\in Z$. Thus,
-$w=y'' sz'_{k'}\dots z'_1$. Now, if $s\geq z'_{k'}$ this is a normal
-factorization and thus must coincide with $w=yz_k\dots z_1$, giving $z'_{k'} = z_{k-1}$.
+Otherwise, consider $y_1 = y[1..]$ and factorize $w'=y_1 z_k\dots z_1$ as $w' =
+y'z'_{k'}\dots z'_1$. Now we prepend $c$ to $w'$ to obtain $w = cy' z'_{k'}\dots z'_1$.
+Since $cy'\in ZY^*\subseteq Y^*Z$, we get $cy'=y''s$ with $s\in Z$. Thus,
+$w=y'' sz'_{k'}\dots z'_1$. Now, if $s\geq z'_{k'}$ this is the unique
+factorization and thus must coincide with $w=yz_k\dots z_1$, giving $z'_{k'} =
+z_{k-1}$, with $z_k$ (in red) as largest factor.
 Otherwise, if $s<z'_{k'}$, then $sz'_{k'}\in Y^*$ and
 $w=y''(sz'_{k'})z'_{k'-1}\dots z_1$ is the normal factorization and $z'_{k'-1} =
-z_k$, so that $z'_{k'}= z'_{k+1}$ is indeed the added largest code word.
+z_k$, so that $z'_{k'}$ in the factorization of $w'$ is the largest overall factor.
+
+Thus, the factorization of $w$ has one exactly more or one less odd factor than
+the factorization of $w'$, and the one with the larger number of odd factors
+contains the largest code word in $w$ as largest factor.
 #+end_proof
 
 This gives rise to a linear-time streaming algorithm, where we push characters
@@ -679,10 +830,46 @@ code word.
   one exception that length-based arguments have to be replaced by using the new
   order directly.
 
+*** AI statement
+
+Claude Opus X.Y was used by BK to find and prove the results of [[#mykkeltveit]].
+
+RGK used OpenAI Sol 5.6 to find an optimal $w=2$ minimizer schemes based on
+earlier unsuccesfull manual experiments to find optimal $k=1$ minimizer schemes.
+Sol found the connection to comma-free codes, which, in hindsight, indeed
+show exactly the structures that our initial experiments hinted at that we
+couldn't pinpoint ourselves.
+We then gave it access to the paper by [cite/t:@comma-free-codes-perrin], after
+which
+Sol came up with the idea of sampling the start of the largest contained code
+word. It implemented this for both the Scholtz and Eastman orders to confirm it
+works for small $\sigma$ and $k$.
+This was done overnight using 2 to 3 5-hour limits (of the 20$ plan).
+
+The structure of the proof of optimality of this scheme is our own, following
+conjectures based on manually inspecting the sampled anchors in small
+LLM-generated examples similar to [[anchor_example]].
+Sol 6.1 proved most of the lemmas with access to (Chapters 7 and 8 of) the excellent book [cite/t:@codes-and-automata].
+
+Sol 6.1 was also used to generate initial versions of the figures.
+LLMs were used to find mistakes and unclarities in the text and proofs.
+None of the final text was generated using LLMs.
 
 ** TODO
 - Figures for comma-free codes
 - Figures for DBg
+
+*** Journal?
+- Discrete mathematics
+- +JCTA+ => Combinatorial Theory (CT)
+- JCTB
+- European Journal of Combinatorics
+- TCS: https://www.sciencedirect.com/journal/theoretical-computer-science
+- electronic journal of combinatorics
+- discussion:
+  https://www.reddit.com/r/math/comments/1rshc0h/thoughts_on_the_flipped_journal_combinatorial/
+  - https://www.reddit.com/r/math/comments/1rshc0h/comment/oa7uf85/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
+
 
 * Notes
 
@@ -797,7 +984,7 @@ size $\ell_n(k)$.
 (In general, this does not hold for even $n$.)
 
 
-** Notes
+** Notes2
 - every left-branch in the tree has odd length.
   - TODO: Draw some trees
 
@@ -992,7 +1179,8 @@ we get an odd number of =a= characters and thus an odd number of sections, where
 each section starts after an odd-length run of =a= characters.
 
 #+caption: The example Eastman gives for the construction of a pattern corresponding to an arbitrary input word $z$.
-[[file:./eastman-example.png]]
+#+attr_html: :class large
+[[file:./figs/eastman-example.png]]
 
 The proof that $\mathcal C_{\sigma, n}$ is comma-free is somewhat involved and I
 have not yet (TODO?) figured out an intuitive summary, so please see the
@@ -1102,7 +1290,6 @@ either $a$ or $b$, and thus cannot be a code word itself!
 See also [cite:@scholtz-synchronizing-codes]
 
 
-*** Perrin et al.'s take
 
 ** Lyndon words
 It turns out this theory concerns the factorization of words, and words are
