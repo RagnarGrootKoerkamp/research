@@ -103,6 +103,31 @@ For the crates.io release itself, we need some metadata in the =Cargo.toml=. E.g
 
 Then, releases are made using =cargo release=.
 To automatically bump the version, use =cargo release major/minor/patch=.
+
+** docs.rs
+
+[[https://docs.rs][docs.rs]] only documents functions that are enabled. By default, it only compiles
+with the default features. To compile with all features enabled, use:
+
+#+begin_src toml
+[package.metadata.docs.rs]
+# Extra features to pass to `cargo doc` when building on `docs.rs`.
+features = []
+# Add the docscs cfg flag.
+rustdoc-args = ["--cfg", "docsrs"]
+#+end_src
+
+Furthermore, docs.rs can show that some functions depend on specific features
+being enabled. For this, we enable the =docsrs= config as shown above and then
+conditionally enable the =doc_cfg= feature in =lib.rs=:
+#+begin_src rust
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#+end_src
+
+(I think the reason it's not enabled by default is because it has not been
+[[https://github.com/rust-lang/rust/issues/43781][stabilized]] yet.)
+
+
 * Releasing binaries
 Releasing binaries is more involved: we must pre-compile them for specific
 target platforms and then distribute those to common archives:
