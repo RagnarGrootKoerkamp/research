@@ -3,58 +3,27 @@
 #+OPTIONS: ^:{} num:2
 #+hugo_front_matter_key_replace: author>authors
 #+toc: headlines 3
-#+hugo_level_offset: 0
+#+hugo_level_offset: 1
 #+date: <2026-10-15 Thu>
 
 $$
 \newcommand{\im}{\mathsf{im}}
 \newcommand{\sign}{\mathsf{sign}}
+\newcommand{\dbg}[1]{\mathsf{DBg}_{#1}}
+\newcommand{\dbgn}{\dbg{n}}
+\newcommand{\idn}{\alpha}
+\newcommand{\abs}[1]{|#1|}
+\newcommand{\mc}{\mathsf{maxcut}}
+\newcommand{\mdc}{\mathsf{maxdicut}}
+\newcommand{\density}{\mathsf{density}}
 $$
 
-(This is a work-in-progress draft.)
+(This is a work-in-progress paper draft. See also the accompanying [[./optimal-sampling-notes.org][notes]].)
 
 ---
 
-Bryce Kille, my co-author on the density lower bound for forward sampling
-schemes paper [cite:@sampling-lower-bound], recently mentioned that ChatGPT
-found optimal sampling schemes for $w=2$ with $k$ odd.
-
-I've been considering whether to throw this problem of finding optimal-density
-sampling schemes at an LLM for a while now, and this made me finally do it.
-For context, my recent WABI SUS-anchors paper [cite:@sus-anchor] is a pretty simple
-scheme that makes a step towards optimal density for $k=1$ (fixing the other
-axis to the smallest non-trivial value[fn::Sol is running in the background on that
-problem as I'm writing this. You'll know by the end if it solved it before
-I could finish writing about the $w=2$ case.]). But SUS-anchors do not yet
-achieve optimal density nor does I have a proof of their density apart from
-empirical evaluations.
-
-So anyway, I asked Sol (on =xhigh= mode) to also search for optimal $w=2$ schemes.
-I initially let it read my python scribbles for searching $k=1$ schemes, as well
-as the integration Bryce made with an ILP solver, so that it can fix part of a
-sampling scheme and then use the solver to decide whether the partial scheme can be
-completed into a scheme of optimal density.
-
-It tried a bunch of things, but they didn't quite work. I think my python notes
-distracted the search, since $k=1$ turns out to be quite different from $w=2$.
-At some point, it started talking about /comma-free codes/ and the /Eastman construction/.
-I had told it earlier not to use the internet, so as not to
-accidentally spoil the process of finding a solution, but at this point I helped
-it download a very nice overview paper: [cite/title/b:@comma-free-codes-perrin] [cite:@comma-free-codes-perrin]. Sol
-then implemented a number of the techniques from the paper. At first it made
-some mistakes in some tie-breaking rules and it started trying other things, but
-after I convinced it that surely this paper must lead to a solution, it indeed
-did find one eventually!
-
-In this post, I will first explain Bryce's solution.
-Then, I'll collect background on comma-free codes and related
-concepts (both for my and your understanding),
-and then to reverse engineer/re-invent the solution that Sol found.
-
-* WIP paper
-
-** Abstract
-** Introduction
+* Abstract
+* Introduction
 - connection between DBg, minimizers, independence numbers
 
 - TODO: framing from graph perspective; with application to w=2 minimizers
@@ -66,82 +35,261 @@ and then to reverse engineer/re-invent the solution that Sol found.
 - TODO: some result to extend to larger alphabets
   - https://shop.elsevier.com/books/sequences-and-the-de-bruijn-graph/etzion/978-0-443-13517-0
 - TODO: Read "Sequences and the de Bruijn Graph" pdf
-** Preliminaries
-*** Cycle-cover
-*** Independence numbers of DBg history
-old papers:
-- [cite:@lempel71] (JCT)
-  - Lempel paper with conjecture proven by Mykkeltveit
-- [cite:@mykkeltveit] (JCT): decycling set; 1 per cycle
-new papers:
-- search: https://www.sciencedirect.com/search?qs=bruijn%20graph
-- https://www.sciencedirect.com/science/article/pii/S0012365X06000999
-  - Lichiardopol, Independence number of de bruijn graphs
-  - bounds; asymptotes for even n
-  - also check out papers cited by this one
-- https://www.sciencedirect.com/science/article/pii/S0898122109007202
-  - proves a subset of Mykkeltveit's '72 paper
-- https://www.sciencedirect.com/science/article/pii/S0012365X10000270
-  - perfect matching on the necklace graph
-- https://www.sciencedirect.com/science/article/pii/0166218X9290133U
-  - drawing DBg
-- https://www.combinatorics.org/ojs/index.php/eljc/article/view/v18i1p194/pdf
-  - maximum independent set for n=3
-- https://arxiv.org/html/2604.14671v2 [2026]
-  - "on the independence number of de bruijn graphs"
-  - mostly asymptotic
-  - extends lichiardopol from n=17 to infinite odd n
-- https://www.sciencedirect.com/science/article/pii/0012365X91903626
-  - "Covering the de Bruijn graph" 1989
-  - [cite:@covering-dbg]
 
-equivalences:
-- vertex cover
-- independence number
-- edge cover?
-
-
-We consider the problem of finding the size of a maximal independent set of a
-De Bruijn graph. Specifically, we consider the /node-centric De Bruijn graph/ of
-order $n$, where nodes correspond to words of length $n$ over an alphabet of
-size $\sigma$. Edges correspond to nodes that overlap in $n-1$ characters.
-
-The /independence number/ is the size of a maximal independent set, that is, a
-subset of nodes such that no two nodes are adjacent.
-
-This has been studied since 1991 [CITE].
-Lichiardopol [2006, CITE] computes this for $n\in\{2,3,5,7\}$ and Majer and
-Novaga [2026, CITE] give a construction for $n\in\{11,13,17\}$. These all work
-for arbitrary $\sigma$.
-*** Independent sets, vertex covers, and max cuts
-A maximum independent set is the complement of a minimal /vertex cover/, which is a
-subset of nodes such that each node is either in the set or adjacent to the set.
-
-A /cut/ is implied by partitioning the vertices into two sets $V_0$ and $V_1$
-via $\lambda: V \to \{0,1\}$: each undirected edge between $V_0$ and $V_1$ is
-in the cut. A /directed cut/ counts /directed/ edges from $V_0$ to $V_1$.
-
-Since the De Bruijn graph is Eulerian (ie every node has even degree), 
-
-*** optimal minimizer density
-- kmer
-- window
-- context
-- cycles; lower bound
+** Previous work on DBg independence number
+** Previous work on minimizers
+- density
+- lower bound
+- equivalence to density on cycles
+- equivalence to density on random contexts
   
-Our $w=2$ sampling scheme must sample either the first or second position of
-each length $\ell$ window (where $\ell=w+k-1$ is even and $k \equiv 1\pmod w$ is odd).
-*** Connecting the problems
+* Preliminaries
+** De Bruin graphs
+*Notation.*
+We consider strings (or words) over an *alphabet* $A$ of size $\sigma$.
+A *\(k\)-mer* is a string of length $k$.
+For $x\in A^n$, we write $x=x_0\dots x_{n-1}$, and prefix and suffix *substrings* are denoted by $x[\ell..) = x_\ell \dots
+x_{n-1}$, $x[..r) = x_0\dots x_{r-1}$.
+We write $d|n$ when $d$ divides $n$.
+The set $[n]=\{0,\dots,n-1\}$ is the set of 0-based indices.
 
-equivalent:
-- charged contexts [marcais paper]
-- density over cycles
-- density over random sequence
-- random over De Bruijn seq
-- removing edges/nodes to make graph bipartite
+#+name: notation
+#+caption: A summary of some variables introduced here.
+#+attr_html: :class small
+| Variable | Meaning                                   |
+| $A$      | Alphabet of size $\sigma=\abs{A}$.        |
+| $\idn$   | Independence number.                      |
+| $\dbgn$  | De  Bruijn graph with nodes $A^n$.        |
+| $\ell_n$ | Number of primitive words of length $n$.  |
+| $Z_n$    | Number of conjugacy classes of words of length $n$. |
 
-** Mykkeltveit embedding
-*** The classical Mykkeltveit embedding
+*De Bruijn graph.*
+We start by introducing the De Bruijn graph of order $n$ [CITE], $\dbgn$.
+Over an alphabet $A$, its vertices are given by the set of all strings of length
+$n$, that is, $V =V(\dbgn) := A^n$. The /directed/ edges correspond to
+/consecutive/ \(n\)-mers that overlap in $n-1$ characters:
+$E = E(\dbgn) := \{(y[..n), y[1..)) : y\in A^{n+1}\}$.
+
+The edges of $\dbgn$ correspond to \(n+1\)-mers, and thus are in bijection with
+the vertices of $\dbg{n+1}$, and more generally $\dbg{n+1}$ is the /line graph/ of $\dbgn$.
+
+*Conjugacy classes.*
+Before proceeding, recall that two strings $x$ and $y$ are /conjugates/ if one is a rotation of the
+other, that is, $y = x[i..)x[..i)$ for some $i\in [n]$.
+Thus, the set of strings of length $n$ can be partitioned into /conjugacy
+classes/ of strings that are each others rotation.
+Each conjugacy class is also called a /necklace/ as it considers the cyclic
+string obtained by "tying together" the two ends of a string.
+An \(n\)-mer $x$ is *primitive* if all its rotations are distinct and its conjugacy
+class has size $n$.
+Otherwise, the *period* is $p>1$, which is the largest integer such that $x=y^p$ for
+some $y$.
+
+*Counting primitive words.*
+If $\ell_n$ counts the number of conjugacy classes of primitive strings (i.e. necklaces) of length $n$ (for alphabet
+size $\sigma$), then
+$$\sigma^n = \sum_{d|n} d\ell_d.$$
+To see this, there is a bijection between all strings of length $n$ on the left,
+and $p=n/d$ copies of a primitive string of length $d$ on the right, offset
+(rotated) by $\{0, \dots, d-1\}$ positions.
+The number of (conjugacy classes of) primitive words of length $n$ now follows directly
+from Möbius inversion [CITE original] [cite:@codes-and-automata prop 1.3.5]:
+$$
+\ell_n = \frac 1n \sum_{d|n} \mu(n/d) \sigma^d,
+$$
+where $\mu(p)$ is the Möbius function that is the multiplicative function
+that is $-1$ for primes and $0$ for larger powers of primes. Thus, it is zero
+when a square $>1$ divides $p$ and otherwise the parity of the number of prime factors.
+
+*Counting conjugacy classes.*
+The total number of conjugacy classes $Z_n$ of words of length $n$ is given by summing over all divisors of
+$n$:
+$$
+Z_n
+= \sum_{n' | n} \ell_{n'}
+= \sum_{n'|n} \frac 1{n'}\sum_{d|n'} \mu(n'/d) \sigma^d 
+= \frac 1n \sum_{d|n} \sigma^d \sum_{n': d|n'|n} \frac n{n'} \mu(n'/d)
+= \frac 1n \sum_{d|n} \phi(d)\sigma^d,
+$$
+where $\phi(d)$ counts the number of integers up to $d$ that are coprime with $d$.
+
+*Vertex partition.*
+De Bruijn graphs have many nice properties.
+For example, the strings of length $n$ can naturally be partitioned into
+$Z_n$ *conjugacy classes* of strings that are equivalent under rotation.
+This partition naturally extends to the vertices of $\dbgn$, so that we have a
+vertex partition of $V_n$ into disjoint cycles.
+For each $d|n$, the number of parts with $d$ vertices matches $\ell_d$.
+
+*Edge partition.*
+There is a natural bijection $V_n \equiv E_{n-1}$, where vertices
+of $\dbgn$ correspond to an edges between two \(n-1\)-mers in $\dbg{n-1}$.
+This way, the vertex partition of $\dbgn$ extends to a partitioning of the edges of
+$\dbg{n-1}$ into $Z_n$ cycles that all have length dividing $n$ and correspond
+to the projection of a cyclic string of length $n$.
+
+*TODO figure for $n=3$ or $n=5$.*
+
+*Decycling sets.*
+[cite/t:@shift-register-sequences] considered the maximum number of vertex
+disjoint cycles in $\dbgn$, and conjectured this to be equal to the trivial
+lower bound $Z_n$.
+[cite/t:@lempel71] considers the minimum size of a /decycling set/, a set of
+vertices that, when removed from $\dbgn$, makes the graph acyclic. This is
+trivially lower bounded by the previous quantity, and Lempel conjectures that it also
+equals $Z_n$.
+[cite/t:@mykkeltveit] later proved both these conjectures: one can remove one
+vertex from every conjugacy class-induced cycle such that the remaining graph
+becomes acyclic.
+
+Note that even though $Z_n$ vertices can be removed to make $\dbgn$ acyclic, the
+graph does still contain undirected cycles.
+
+** The independence number
+An *independent set* of a graph is a subset of vertices $S\subset V$ such that
+no two elements of $S$ are adjacent, i.e. $S^2\cap E = \emptyset$.
+The *independence number* $\idn(G)$ of a graph is the size of the largest
+independent set[fn::Some papers use $\alpha(G)$ for the independence number of
+the graph with self-loops removed, and $\alpha^*(G)$ for the independence number
+where vertices with self-loops are not allowed. We use $\alpha(G)$ for the latter.].
+
+There are a number of previous results on the independence number of De Bruijn
+graphs.
+[cite/t:@dbg-independence-number] determines the exact value of $\idn(\dbgn(\sigma))$
+for $n=2$ and arbitrary $\sigma$,
+and for $\sigma=2$ and $n\leq 7$. He proves a an upper bound for odd primes
+$n$:
+$$
+\idn(\dbgn) \leq \frac{(n-1)(\sigma^n-\sigma)}{2n} = \frac {n-1}2 \ell_n,
+$$
+which corresponds to taking $(n-1)/2$ mostly alternating vertices in each of the odd length $n$ cycles.
+He conjectures that this bound is tight.
+He also shows that $\lim_{n\to\infty}\idn(\dbgn)/2^n  = 1/2$.
+More recently, [cite/t:@dbg-independence-number-26] extended these results
+to show that equality holds for the primes $\{11, 13, 17\}$ (for arbitrary $\sigma$).
+Additionally, they give asymptotic bounds showing that $\idn(\dbgn(\sigma)) = \Theta(\sigma^n)$.
+Independently, [cite/t:@dbg-independence-n3] studied the case $n=3$ and derive a generating function for $\alpha(\dbg3(\sigma))$.
+
+Here, we note again that an independent set of vertices of $\dbgn$ corresponds to an
+independent (non-touching) set of /edges/ of $\dbg{n-1}$.
+
+[Drop?]
+Adjacent work includes that of [cite/t:@necklace-matching], who show that for odd $n$ there is a
+matching on the /necklace graph/, and [cite/t:@covering-dbg], who investigate
+bounds on the size of independent sets that /cover/ the graph, i.e. such that
+every vertex is adjacent to the independent set.
+
+** Independent sets, vertex covers, and max cuts
+A maximum independent set $S$ never contains both ends of an edge. Thus, the
+complement $S'=V-S$ contains at least one end of every edge, so that this is a
+/minimum vertex cover/. 
+
+[TODO: I don't think we actually use vertex covers, but doesn't hurt to keep
+them for understanding.]
+
+Let $V_0\cup V_1 = V(\dbg{n-1})$ be a partition of the vertices of $\dbg{n-1}$.
+We can associate this with a labelling function $\lambda: V\to \{0,1\}$ mapping each
+vertex to its part.
+A /cut/ $C_\lambda$ is the set of edges between $V_0$ and $V_1$: $C_\lambda:=\{uv\in
+E: \lambda(u)\neq \lambda(v)\}$. A /directed cut/ is the set of directed edges
+from $V_1$ to $V_0$.[fn::We choose this direction to be consistent with
+minimizer schemes later on.]
+The /maximum (directed) cut/ is the largest (directed) cut that can be obtained,
+and their sizes are denoted by $\mc(G)$ and $\mdc(G)$.
+Since the De Bruijn graph is connected and every node in it has in-degree and out-degree $\sigma$, the graph is Eulerian.
+This implies that for every cut, the number of directed edges from $V_0$ to $V_1$ equals
+the number of directed edges from $V_1$ to $V_0$, and thus, that the directed cut is half
+the size of the (undirected) cut:
+$$\mdc(\dbg{n-1}) = \frac 12 \mc(\dbg{n-1}).$$
+
+As observed by [cite/t:@maxcut-equivalence] in the more general setting of line graphs,
+a directed max-cut of $\dbg{n-1}$ directly corresponds to an independent set of $\dbgn$, i.e.,
+$$\mdc(\dbg{n-1})=\idn(\dbgn).$$
+
+As we already saw, the edges of $\dbg{n-1}$ can be partitioned into $Z_n$ cycles
+corresponding to the conjugacy classes of primitive words of length dividing $n$.
+When $n$ is odd, all these cycles have odd length.
+Thus, for any partition $\lambda$, there must be at least one uncut edge $uv$ 
+with $\lambda(u)=\lambda(v)$ in each cycle.
+It follows that the maximum size of a cut is
+$$\mc(\dbg{n-1}) \leq \sigma^n-Z_n$$
+and thus that
+$$\idn(\dbgn) = \mdc(\dbg{n-1}) \leq \frac {\sigma^n - Z_n}2,$$
+where equality is reached if and only if every projected $n$-cycle in
+$\dbg{n-1}$ contains exactly one uncut edge.
+
+*Conjecture.*
+Since this bound matches the earlier exact results for small odd primes,
+it is natural to conjecture that in fact this bound is tight for all odd
+$n$, and indeed this is what we will prove.[fn::To our knowledge, this
+conjecture has not been stated as such in previous work.]
+
+Conceptually, it is interesting that when $n$ is odd, this relates $Z_n$, which
+count the /number/ of cycles, to $\idn(\dbgn)$, which instead relates to (half)
+the total /length/ of the cycles.
+
+*TODO fig*
+
+** Sampling schemes
+
+We now have a look at the relation to /sampling schemes/ [TODO cite more?], which slightly
+generalize the more commonly known /minimizer schemes/ [cite:@winnowing;@minimizers].
+Given a \(k\)-mer size $k$ and a /window size/ $w$, a /window/ is a string of
+length $\ell:=k+w-1$ containing $w$ \(k\)-mers. A sampling scheme then is a
+function $f: A^\ell \to \{0,\dots,w-1\}$ that for each window chooses one
+specific \(k\)-mer. A sampling scheme is /forward/ when adjacent windows $W$ and
+$W'$ (i.e., adjacent vertices in $\dbg\ell$) satisfy $f(w') \geq f(w)-1$, so
+that the sampled \(k\)-mer never jumps backwards.
+The /density/ of a forward sampling scheme is the fraction of /charged/ edges $WW'$ in
+$\dbg\ell$ for which $f(W')\neq f(W)-1$ [CITATIONS MARCAIS].
+[cite/t:@sampling-lower-bound] have shown that
+$$
+\density(f) \geq \frac1{\sigma^{k+w}} \sum_{d | (k+w)} \ell_d\cdot \left \lceil \frac dw\right\rceil.
+$$
+The main insight is that for $n=k+w$, the edges of $\dbgn$ partition into
+$\ell_d$ cycles of length $d|n$, and along each cycle, there can be at most
+$w-1$ consecutive "free" edges where $f(W)$ decreases by $1$, so that the number
+of charged edges on each length-\(d\) cycle is at least $\lceil d/w\rceil$.
+
+Based on brute-force results for small parameters, they conjectured that when
+$k\equiv 1\pmod w$, there exists a forward sampling scheme that achieves this
+density lower bound.
+The connection to independent sets should now be clear: if we take $w=2$ and $n=k+1$, then
+$f: \sigma^{w+k-1}\to \{0,\dots,w-1\}$ turns $f: \sigma^n\to \{0,1\}$ and
+becomes equivalent to the partition function $\lambda$.
+Furthermore, minimizing the number of charged edges with $f(W')\neq f(W)-1$ is
+then equivalent to maximizing the number of edges $uv$ in the directed max cut (or
+independent set of edges) with $\lambda(u)=1$ and $\lambda(v)=0$:
+$$
+\sigma^n \cdot \density(f) + \textsf{dicut}(f) = \sigma^n 
+$$
+
+For this $w=2$ case, the conjecture assumes that $k=n-2$ is odd, i.e. that $n$
+itself is odd. We then have $\lceil d/w\rceil = \lceil d/2\rceil = \frac{d+1}2$.
+Given that $\sum_{d|n}d\ell_d = \sigma^n$ and $\sum_{d|n}\ell_d=Z_n$, the conjecture becomes
+$$
+\idn(\dbgn)
+= \mdc(\dbg{n-1})
+\leq \sigma^n - \sum_{d|n} \ell_d \cdot \left\lceil \frac d2\right\rceil
+= \sigma^n - \sum_{d|n} \ell_d \cdot \frac{d+1}2
+= \frac{\sigma^n - Z_n}2,
+$$
+which indeed matches the conjecture of the previous section.
+
+The small results of [cite/t:@sampling-lower-bound] suggest that
+in addition to /odd/ $k$ and $n$, the bound holds for /all/ $k$ and $n$ when $w=\sigma=2$.
+
+In the context of sampling and minimizer schemes, $f$ is usually defined as a
+"local" function taking only the window $W\in A^\ell$, without and global state.
+Thus, ideally the goal is to find a "clean" or "pure" function $f$ (or $\lambda$) that achieves
+this lower bound on the density.
+In contrast, we typically think of an independent set as a global
+solution to an optimization problem, and not every independent set will
+naturally correspond to a local sampling scheme.
+
+
+* Mykkeltveit embedding
+** The classical Mykkeltveit embedding
 
 *TODO* Explain why this decycling
 
@@ -160,7 +308,7 @@ words with $\pi-2\pi/n \leq \arg(f(w)) < \pi$, i.e., those words that are the
 first rotation having positive imaginary part.
 
 
-*** A new embedding
+** A new embedding
 We want to build on optimal $w=2$ minimizer scheme for some odd $k$.
 Thus, we must build a function from a length-\(k+1\) window $w=w_1\dots w_{k+1}$
 to $\{0,1\}$. [todo].
@@ -194,7 +342,7 @@ out of $n$ times. Thus, for all but one pair of consecutive windows we choose
 
 [todo: what if $g(w_0)=0$? Note that $g(w_0)=0$ for periodic sequences.]
 
-*** Degenerate and non-primitive cases
+** Degenerate and non-primitive cases
 :PROPERTIES:
 :CUSTOM_ID: mykkeltveit
 :END:
@@ -213,8 +361,8 @@ non-degenerate case.)
 
 
 
-** Comma-free codes
-*** Previous work on comma-free codes
+* Comma-free codes
+** Previous work on comma-free codes
 We will now consider a completely different approach to solving our problem of
 finding an optimal minimizer scheme, or equivalently a vertex(?) cover of the De
 Bruijn graph.
@@ -248,7 +396,7 @@ Lastly, a helpful algorithm is that of Melancon [cite:@melancon-thesis;@comma-fr
 gives a general bottom-up procedure similar to the ones of Knuth and Scholtz to
 find the conjugate of a word that is part of the comma-free code.
 
-*** Hall Sequences, Lazard Sets, and Comma-Free Codes
+** Hall Sequences, Lazard Sets, and Comma-Free Codes
 Our presentation will closely follow Section 7.3 and Chapter 8 of
 [cite/t:@codes-and-automata] and definitions and lemmas are taken from there
 unless otherwise mentioned.
@@ -270,51 +418,76 @@ A /strict/ prefix (suffix) of a word is a prefix (suffix) that does not equal
 the word itself.
 
 We now move on to re-stating some relevant definitions.
-Originally Hall sets are defined in terms of trees [cite:@free-lie-algebras-reutenauer], but here we take a simpler definition.
+# Originally Hall sets are defined in terms of trees [cite:@free-lie-algebras-reutenauer], but here we take a simpler definition.
 
 *TODO Example*
 
-*TODO drop hall sequence; replace by remark*
+# *TODO drop hall sequence; replace by remark*
 
-#+begin_definition Hall sequence [7.3]
-A sequence $(x_i)_{i\geq 1}$ of words is a /Hall sequence/ if it is obtained via
-the following /elimination/ procedure[fn::The is some conflict here whether $|x_{i+1}|\geq |x_i|$ is needed???]
-- Start with $X_1 = A$,
-- choose $x_i\in X_i$ with $|x_i| \geq |x_{i-1}|$
-  for $i\geq 2$,
-- then set $X_{i+1} := x_i^* (X_i\backslash x_i)$,
-- end when $X_{i+1} = \emptyset$.
-#+end_definition
+# #+begin_definition Hall sequence [7.3]
+# A sequence $(x_i)_{i\geq 1}$ of words is a /Hall sequence/ if it is obtained via
+# the following /elimination/ procedure[fn::The is some conflict here whether $|x_{i+1}|\geq |x_i|$ is needed???]
+# #+end_definition
 
-Closely related are /Lazard sets/ [cite:@lazard60], that induce an order on
-their elements via /lazard elimination/.
+One of the core concepts underlying this section is the /Lazard set/
+[cite:@lazard60], that provides a specific total order on a subset $Z$ of $A^+$.
+This uses the /Lazard elimination/ process, which repeatedly removes the
+smallest (according to some order) element from some set $X_i$ and then updates
+$X_i$ to $X_{i+1}$.
+However, since there could be infinitely many strings smaller than any particular
+element (such as /all/ strings starting with 0 being smaller than the string 1),
+the definition below restricts to finite-length
+strings[fn::I remain confused. The definition [7.3] of a Hall set requires $|x_i|
+\leq |x_{i+1}|$, but Lazard sets do not require this. If this was indeed a
+requirement, than it wouldn't be necessary to restrict to finite-length
+elements, since there are only finitely many shorter (finite-length) strings
+smaller than given string].
+
 #+begin_definition Lazard set [8.1]
-A /Lazard set/ is a totally ordered subset $Z$ of $A^+$ satisfying: for each
-$n\geq 1$, let $Z\cap A^{\leq n} = \{z_1,\dots,z_k\}$ with $z_1<z_2<\dots<z_k$. Then
-$Z_1 = A$,  $z_i \in Z_i$,  $Z_{i+1}=z_i^*(Z_i\backslash z_i)$, and  $Z_{k+1}\cap A^{\leq n} = \emptyset$.
+A /Lazard set/ is a totally ordered subset $Z$ of $A^+$ such that for each
+$n\geq 1$, the elements of length at most $n$ can be obtained via
+/Lazard elimination/:
+Let $Z\cap A^{\leq n} = \{x_1,\dots,x_k\}$ be totally ordered with $x_1<x_2<\dots<x_k$.
+Then, starting with $X_1=A$, we have $x_i\in X_i$ where $X_{i+1} := x_i^*
+(X_i\backslash x_i)$ and when $X_{k+1} \cap A^{\leq n} = \emptyset$.
 #+end_definition
-
-Lazard sets are closely related to /Hall sequences/.
-
-In fact, each Hall set is a Lazard set, and each Lazard set is a Hall set
+Lazard sets are equivalent to /Hall sets/ [cite:@codes-and-automata dfn 7.3], where the $x_i\in
+X_i$ can be chosen freely
 [cite:@free-lie-algebras-reutenauer,thm 4.18].
-As an example, when $x_i\in X_i$ is chosen a word of minimal length in the Hall
-construction, then $\{x_i\}_{i\geq 1}$ is a Lazard set.
-# Note: this is a /sufficient/ condition but not a /required/ condition: there are
-# other Lazard sets as well, where a word of non-minimal length is chosen first.
-# (Eg the Eastman construction as shown in [cite:@comma-free-codes-perrin].)
 
-*TODO mention strings vs words vs free algebra; concatenation vs products*
+#+begin_example Lyndon words
+Consider the binary alphabet and start with $X_1 = \{a,b\}$, and
+we repeatedly take $x_i$ as the lexicographically smallest element, and consider the words of length up to $n=5$. Then, the $x_i$ are exactly the set of /Lyndon words/ of the minimal rotation of all primitive words.
+\begin{align*}
+x_1&=a & X_2 \cap A^{\leq 5} &= \{aaaab,aaab,aab,ab,b\}\\
+x_2&=aaaab & X_3 \cap A^{\leq 5} &= \{aaab,aab,ab,b\}\\
+x_3&=aaab & X_4 \cap A^{\leq 5} &= \{aaabb,aab,ab,b\}\\
+x_4&=aaabb & X_5 \cap A^{\leq 5} &= \{aab,ab,b\}\\
+x_5&=aab & X_6 \cap A^{\leq 5} &= \{aabab,aabb,ab,b\}\\
+x_6&=aabab & X_7 \cap A^{\leq 5} &= \{aabb,ab,b\}\\
+x_7&=aabb & X_8 \cap A^{\leq 5} &= \{aabbb,ab,b\}\\
+x_8&=aabbb & X_9 \cap A^{\leq 5} &= \{ab,b\}\\
+x_9&=ab & X_{10} \cap A^{\leq 5} &= \{abb,b\}\\
+x_{10}&=abb & X_{11} \cap A^{\leq 5} &= \{abbb,b\}\\
+x_{11}&=abbb & X_{12} \cap A^{\leq 5} &= \{abbbb,b\}\\
+x_{12}&=abbbb & X_{13} \cap A^{\leq 5} &= \{b\}\\
+x_{13}&=b & X_{14} \cap A^{\leq 5} &= \{\}.
+\end{align*}
+#+end_example
 
-*TODO drop general unique factorization*
+We note that there is an equivalence between /strings/, as a concatenation of
+characters from an alphabet, and /words/ in a free algebra, as a free product of
+the generating elements. Indeed most of the theory in this section was developed
+in the context of these free algebras, and there are corresponding results like a /unique
+factorization/.
 
-*TODO write more about $\nu$ and $\delta$*
+# *TODO write more about $\nu$ and $\delta$*
 
-#+begin_lemma Unique factorization [8.1.10]
-For any Lazard set $Z$, the family $(z)_{z\in Z}$ is a /complete factorization/ of
-$A^*$, meaning that every $w\in A^*$ can be uniquely written as $w=z_k\dots z_1$
-with $z_i\in Z$ and $z_k \geq \dots \geq z_1$.
-#+end_lemma
+# #+begin_lemma Unique factorization [8.1.10]
+# For any Lazard set $Z$, the family $(z)_{z\in Z}$ is a /complete factorization/ of
+# $A^*$, meaning that every $w\in A^*$ can be uniquely written as $w=z_k\dots z_1$
+# with $z_i\in Z$ and $z_k \geq \dots \geq z_1$.
+# #+end_lemma
 
 The following construction is a modern presentation by
 [cite/t:@comma-free-codes-perrin 3.3;@codes-and-automata] of Scholtz' original "comma
@@ -344,8 +517,14 @@ For $u\in U$, define
 \nu(u) &= \min\{i\in \mathbb N | u\in X_i\} -1\\
 \delta(u) &= \sup\{i\in \mathbb N | u\in X_i\}
 \end{align*}
-$\nu(u)$ is the last time before $u$ is "created" in $X_{\nu(u)+1}$ and
-$\delta(u)=i$ for $u=x_i\in Z$ and $\delta(u)=\infty$  for $u=y\in Y$.
+Thus, the time that $u\in A^+$ is first "created" is denoted by $\nu(u)$, so that $u =
+x_{\nu(u)}^+v \in X_{\nu(u)+1}$ for some $v\in X_{\nu(u)}$.
+For odd-length $u\in Z$, $\delta(u)=i$ indicates that $u=x_i$, while for
+even-length $u\in Y$, $\delta(u) = \infty$ because even-length words are never
+removed from any $X_i$.[fn::Considering $U$ as a Lazard set, one only considers
+finite-length strings in which case even-length elements /are/ eventually
+eliminated. But here the $X_i$ contain arbitrary long sequences, and so we only
+ever eliminate odd-length elements.]
 #+end_definition
 
 From here on, $x_i\in X_i$, $Y$, and $Z$ all refer to this specific
@@ -354,37 +533,55 @@ particular, for $x_i,x_j\in Z$ we have $x_i<x_j$ iff $i<j$.
 
 We now cover some basic facts about this construction and the sets $U$, $Y$, and $Z$.
 
-*TODO add more explaining text here*
+We again consider an example with this new order, showing the Lazard elimination
+of strings of length at most $5$ in $U$. We start with $X_1=\{a,b\}$.
+\begin{align*}
+x_1&=a & X_2 \cap A^{\leq 5} &= \{b, ab, aab, aaab, aaaab\}\\
+x_2&=b & X_3 \cap A^{\leq 5} &= \{ab, bab, aab, aaab, baab, bbab, aaaab, baaab, bbbab\}\\
+x_3&=aab & X_4 \cap A^{\leq 5} &= \{ab, bab, aaab, baab, bbab, aaaab, aabab, baaab, bbbab\}\\
+x_4&=bab & X_5 \cap A^{\leq 5} &= \{ab, aaab, baab, bbab, aaaab, aabab, baaab, babab, bbbab\}\\
+x_5&=aaaab & X_6 \cap A^{\leq 5} &= \{ab, aaab, baab, bbab, aabab, baaab, babab, bbbab\}\\
+x_6&=aabab & X_7 \cap A^{\leq 5} &= \{ab, aaab, baab, bbab, baaab, babab, bbbab\}\\
+x_7&=baaab & X_8 \cap A^{\leq 5} &= \{ab, aaab, baab, bbab, babab, bbbab\}\\
+x_8&=babab & X_9 \cap A^{\leq 5} &= \{ab, aaab, baab, bbab, bbbab\}\\
+x_9&=bbbab & X_{10} \cap A^{\leq 5} &= \{ab, aaab, baab, bbab\}\\
+y_1&=ab & X_{11} \cap A^{\leq 5} &= \{aaab, baab, bbab\}\\
+y_2&=aaab & X_{12} \cap A^{\leq 5} &= \{baab, bbab\}\\
+y_3&=baab & X_{13} \cap A^{\leq 5} &= \{bbab\}\\
+y_4&=bbab & X_{14} \cap A^{\leq 5} &= \{\}
+\end{align*}
+Note again that $Z=\{x_1,\dots\}$ is the subset of odd-length words of $U$, while
+$Y=\{y_1,\dots\}$ is the subset of even-length words.
+We have $\nu(baaab)=2$ since $baaab=(b)(aaab) = x_2 v$ with $v=aaab\in X_2$.
+Similarly, we have $\delta(baaab)=7$ since $x_7=baaab$.
+On the other hand, $\delta(baab)=\infty$ since $baab\not\in Z$, even though
+$baab$ is an element of the Lazard set $U$.
+
+# *TODO add more explaining text here*
 
 #+begin_lemma Some facts [eq 7.22 sec 7.3.15]
-If $u\in U\backslash A$, then $u\in X_{\nu(u)+1}$ and $u\not\in X_{\nu(u)}$, and
-so $u=x_{\nu(u)}v$ for some $v\in X_{\nu(u)+1}$.
+If $u\in U\backslash A$, then $u=x_{\nu(u)}^+v$ for $v\in X_{\nu(u)}$, or alternatively,
+$$u=x_{\nu(u)}v' \quad \text{ for }v'\in X_{\nu(u)+1}.$$
+Furthermore, $u\not\in X_{\nu(u)}$.
 
-Further, for $y\in Y$ we have $\delta(y)=\infty$ and for $x_i\in Z$ we have $\delta(x_i)=i$.
 For all $x_i \in Z$ and $u\in U$ we have
 \begin{equation*}
-\nu(u)\leq i<\delta(u) \implies x_iu\in U.
+\nu(u)\leq i<\delta(u) \implies x_iu\in U,
 \end{equation*}
+where the condition is equivalent to $u\in X_{i+1}$.
+
 For all $i<j$, $x_ix_j\in Y^*$.
 
-For all $z\in Z$ and $y\in Y$, $zy\in Y^*Z$, and by repeated application, the same holds
-for $y\in Y^*$.
+For all $z\in Z$ and $y\in Y*$, $zy\in Y^*Z$.
 #+end_lemma
 
-*TODO tree of z[2..]*
-
-*TODO this is not the factor tree, but construction of the code word*
-
-*TODO fix the tree*
-
-*TODO example of tree of prefix and suffix of $z$*
-
 #+name: factor-tree
-#+caption: Every word $u\in U$ corresponds to a unique factorization. On the left, the code word $z=10101101101\in Z$ of odd length is factorized. In the middle, $o$ and $e$ indicate words of odd and even length. The left factor is always some odd-length $x_i\in Z$ and the right factor some $u\in U$ with opposite parity from the current node. The right shows that the suffix of $z$ factorizes into even-length components as $y_1y_2y_3$ and that the prefix of $z$ factorizes as $z_4z_3z_2z_1$, matching [[lem:pref]] and [[lem:suf]].
+#+caption: Every word $u\in U$ corresponds to a unique factorization tree. On the left, the code word $z=10110110101\in Z$ of odd length is factorized. In the middle, $o$ and $e$ indicate words of odd and even length. The left factor is always some odd-length $x_i\in Z$ and the right factor some $u\in U$ with opposite parity from the current node. The third figure shows that the suffix of $z$ factorizes into even-length components as $y_1y_2=01\cdot10110101$ and that the prefix of $z$ factorizes as $z_4z_3z_2z_1=101\cdot101\cdot101\cdot0$, matching [[lem:pref]] and [[lem:suf]]. On the very right, the factorization of $z[2..] = 1101\cdot 10101$ is shown. Note that while $s=10101$ also occurs in the original factorization of $z$, $y'_1=1101$ does not.
 #+attr_html: :class large
 [[file:./figs/factor-tree.svg]]
 
-As an example, consider [[factor-tree]], showing how $z=10101101101\in Z$ is
+
+As an example, consider [[factor-tree]], showing how $z=10110110101\in Z$ is
 recursively built from smaller elements of $U$. The root $z$ itself has odd
 length, and each non-leaf node $u=x_iu'$ is made by concatenating some $x_i\in Z$ of odd length
 (the left branch) with some $u'\in U$ with length of opposite parity of $u$ with
@@ -414,10 +611,8 @@ with length dividing $m$).
 $m$ over alphabet $k$, and the total number of conjugacy classes of words of
 length $m$*
 
-*TODO maximal vs maximum vs optimal*
-
 #+begin_theorem Maximal comma-free code [7.3.11]
-For odd $m$, $Z\cap A^m$ is a comma-free code of maximal size $\ell_m(k)$.
+For odd $n$, $Z\cap A^n$ is a comma-free code of maximal size $\ell_n(k)$.
 [ *TODO*: do we use $n$ or $m$ for the length here? Make this consistent.]
 #+end_theorem
 
@@ -436,10 +631,19 @@ it as a product of elements of $X_i$.
 Furthermore, each primitive word $w$ with $|w|>|x_i|$ has a conjugate in $X_{i+1}^*$
 #+end_lemma
 
-One of the core lemmas is the following, which follows directly from the more
-general unique factorization lemma mentioned above:
+# One of the core lemmas is the following, which follows directly from the more
+# general unique factorization lemma mentioned above:
 
-*TODO even terms are large*
+# *TODO even terms are large*
+
+# #+begin_lemma Unique factorization [8.1.10]
+# For any Lazard set $Z$, the family $(z)_{z\in Z}$ is a /complete factorization/ of
+# $A^*$, meaning that every $w\in A^*$ can be uniquely written as $w=z_k\dots z_1$
+# with $z_i\in Z$ and $z_k \geq \dots \geq z_1$.
+# #+end_lemma
+
+Any Lazard set implies a unique factorization on $A^*$ [8.1.10]. In our case, where
+we consider even-length words separately, we get the following.
 
 #+begin_lemma Unique factorization [7.3.13] :label unique
 Each word $w\in A^*$ has a unique factorization
@@ -472,7 +676,7 @@ $z_0$ is a code word and the overlap $b$ with $z_1$ is a code word, but $z$ has
 odd length and $ab$ has even length, so this is impossible.
 #+end_proof
 
-*** Intuition
+** Intuition
 
 The last lemma tells us that there is, in fact, a lot more structure to our
 comma-free code than just "one sample per conjugacy class": 
@@ -526,7 +730,21 @@ long string contain a code word of length $m$???
 *TODO what if for every kmer we sample the start of the code word rotation*
 
 
-*** The largest contained word
+*Decycling*
+- just a decycling set already allows for synchronization and a max independent
+  set???
+  - Nope: this leaves odd-length non-directed cycles
+  - is it possible at all to get a completely undirected acyclic graph?
+- TODO: a decycling set that leaves a bipartite graph?
+- Do our new constructions yield acyclic graphs? Or just bipartite?
+  - Nope; 0101 -> 1010 -> 0101 is fully synchronized for comma-free-codes
+
+equivalent:
+- removing edges/nodes to make graph bipartite
+
+
+
+** The largest contained word
 With this theory in hand, we are now ready to prove that the largest code word
 contained in a prefix (suffix) of a code word is a prefix (suffix) itself.
 
@@ -585,7 +803,7 @@ two decreasing code words, whereas we know that any suffix must have a unique
 representation containing at most one odd code word; again a contradiction.
 #+end_proof
 
-*** An optimal minimizer scheme
+** An optimal minimizer scheme
 We are now ready to define our minimizer scheme.
 Let $k$ be the odd \(k\)-mer length of interest. Each window of length $k+1$
 consists of $w=2$ \(k\)-mers. A context consists of two consecutive windows
@@ -653,7 +871,7 @@ rounded up, for a total of $\lceil|c|/2\rceil$.
 [TODO: more precise?]
 #+end_proof
 
-*** Finding the largest contained code word
+** Finding the largest contained code word
 We now give an algorithm to find the largest code word contained in a word $w$.
 We start with a one-off algorithm based on the unique factorization, and then improve
 this to a streaming algorithm in the next subsection.
@@ -749,7 +967,7 @@ z_1$ and $w'=y'z'_{k'}\dots z'_1$ and returning the larger of $z_k$ and $z'_{k'}
 #+end_theorem
 
 
-*** A Sliding-window algorithm
+** A Sliding-window algorithm
 
 Compared to the twice-repeated linear Melancon algorithm above, we can be
 slightly more precise.
@@ -821,7 +1039,7 @@ $\ell<m$, so that either $x_m$ or $z_{k-1}$ becomes the new largest contained
 code word.
 #+end_proof
 
-** Discussion / Conclusion
+* Discussion / Conclusion
 - *Does the Eastman construction also work?*
   In [cite:@comma-free-codes-perrin], it is shown that Eastman's construction of a
   comma-free code [cite:@comma-free-codes-eastman] are also a Lazard set by taking
@@ -832,7 +1050,7 @@ code word.
   one exception that length-based arguments have to be replaced by using the new
   order directly.
 
-*** AI statement
+** AI statement
 
 Claude Opus X.Y was used by BK to find and prove the results of [[#mykkeltveit]].
 
@@ -857,11 +1075,14 @@ Sol 6.1 was also used to generate initial versions of the figures.
 LLMs were used to find mistakes and unclarities in the text and proofs.
 None of the final text was generated using LLMs.
 
-** TODO
+* TODO
 - Figures for comma-free codes
 - Figures for DBg
+- consistent $x[l..r)$ notation
+- consistent +nodes+ -> vertices
+- $M_\sigma(n)$ or $M_n(\sigma)$ or $\ell_n$?
 
-*** Journal?
+** Journal?
 - Discrete mathematics
 - +JCTA+ => Combinatorial Theory (CT)
 - JCTB
@@ -872,474 +1093,6 @@ None of the final text was generated using LLMs.
   https://www.reddit.com/r/math/comments/1rshc0h/thoughts_on_the_flipped_journal_combinatorial/
   - https://www.reddit.com/r/math/comments/1rshc0h/comment/oa7uf85/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button
 
-
-* Notes
-
-** Graveyard: Scholtz' construction
-Scholtz [cite:@comma-free-codes-scholtz] gives the following construction to
-construct a comma-free code. Start with $X_1 = A$. Then repeatedly choose $x_i$
-as an element of $X_i$ with minimal odd length. Then define $X_{i+1} =
-x_i^*(X_i\backslash x_i)$, i.e., remove $x_i$ from $X_i$ and then prepend it an
-arbitrary number of times to each of the remaining elements. This is called
-/Lazard elimination/. The resulting set $U = \cup_{n\geq 1} X_n$ is a
-/Lazard set/ for the elimination order defined by $u\preceq v$ if $|u|$ is odd
-and $|v|$ is even, or if they have the same parity and $u<_rv$ via the radix order.
-[cite:@comma-free-codes-scholtz; Prop 6].
-Note that all odd-length elements in any of the $X_i$ are eventually chosen as
-some $x_j$.
-
-** graveyard: Eastman construction
-*Eastman's construction.*
-(We should probably drop as much as possible of this and just do the concluding
-theorem, and use that as a definition instead?)
-
-A second, more complicated, construction is given by Eastman.
-#+begin_definition Dip
-A word $a_1a_2\dots a_n$ is a /dip/ when $a_1\geq a_2\geq \dots \geq
-a_{n-1}<a_n$. The set of dips over $A$ is $D(A)$.
-
-The set $S(A)$ of /superdips/ contains words obtained by concatenating one
-odd-length dip and zero or more even length dips.
-#+end_definition
-#+begin_lemma Perrin [9]
-The set $D(A)$ is a maximal prefix code such that each word of $D(A)$ of length
-at least 3 is synchronizing.
-#+end_lemma
-#+begin_lemma Perrin [10]
-$S(A)$ is a code.
-#+end_lemma
-#+begin_proof
-$S(A)$ is a suffix code over $D(A)$ and $D(A)$ is a prefix code over $A$.
-#+end_proof
-#+begin_definition $n$-dips
-Set $S_0(A)=A$, and let $D_n(A)=D(S_{n-1}(A))$ and $S_n(A)=S(S_{n-1}(A))$ be dips 
-and superdips over $S_{n-1}(A)$, using the radix order on $A^*$ as order between characters.
-#+end_definition
-Given a word, there is an algorithm to detect if it is in $D_n(A)^*$ or $S_n(A)^*$.
-#+begin_lemma Eastman construction
-The set of words of odd length $m$ that belongs to some $S_n(A)$ is a comma-free
-code meeting all conjugacy classes of primitive words of length $m$.
-#+end_lemma
-#+begin_definition Index
-The /index/ of a word is the largest $n$ such that the word starts with one or
-more $n$-dips, followed by a prefix on an $n$-dip.
-#+end_definition
-#+begin_theorem Eastman via Lazard construction [Perrin 21]
-Define the order $\preceq_e$ as by $u<v$ if $|u|$ is odd and $|v|$ even, or if
-they are of equal parity and $index(x) < index(y)$, or if $index(x)=index(y)$
-and $x<_r y$ via the radix order.
-
-Then, the set of superdips of odd length $m$ is equal to the set of words in the
-Lazard set $Z$ generated by $\preceq_e$.
-#+end_theorem
-** graveyard: Codes
-#+begin_definition Code
-A set $X\subseteq A^+$ is a /code/ if every word in $A^*$ has /at most one/
-factorization in words of $X$: if $x_1,\dots, x_n, y_1,\dots, y_m\in X$ and
-$x_1\cdots x_n = y_1\dots y_m$, then $n=m$ and $x_i=y_i$ for $i\in \{1,\dots,n\}$.
-#+end_definition
-- $x\in X$ is a /code word/.
-
-#+begin_definition Prefix code
-A /prefix (suffix) code/ is a set $X\subseteq A^+$ such that no word of $X$ is a
-prefix (suffix) of another word of $X$.
-#+end_definition
-This condition is sufficient to imply that $X$ is a code: otherwise, if
-$x_1\dots x_n=y_1\dots y_m$ is some minimal counter example, we would have
-$x_1\neq y_1$ and so one would be a prefix of the other, and $x_n\neq y_m$ so
-one would be a suffix of the other.
-#+begin_definition Maximal code
-A (prefix) code $X$ is /maximal/ if for any (prefix) code $Y$ with $X\subseteq
-Y\subseteq A^*$, either $X=Y$ or $Y=A$.
-#+end_definition
-#+begin_definition Synchronizing words
-For a maximal prefix code $X$, a word $x\in X^*$ is /synchronizing/ is for any word $u\in A^*$, we have $ux\in X^*$.
-#+end_definition
-#+begin_definition Circular code
-A /circular code/ is a set $X\subseteq A^+$ such that any word written on a
-circle has at most one factorization over $X$.
-#+end_definition
-
-#+begin_lemma
-A code $X$ is circular if and only if $X*$ (the set of words that can be
-factorized over $X$) satisfies for all $u,v\in A^*$: $uv,vu\in X^* \implies u,v\in X^*$.
-#+end_lemma
-
-(Roll-up the definitions above into a single dfn of comma-free codes?)
-#+begin_definition Comma-free code
-A set $X\subseteq A^n$ of non-empty words of equal length is a /comma-free code/
-if no word occurs as a non-trivial substring in the concatenation $uv$ of two
-code words $u,v\in X$.
-#+end_definition
-- Every comma-free code is circular (since closing the circle cannot introduce new
-  code words across the boundary).
-- A comma-free code on contains primitive words, and at most one element of
-  every conjugacy class under rotation.
-- The number of conjugacy classes of primitive words of length $n$ is $\ell_n(k)
-  = \frac 1n \sum_{d|n} \mu(d) k^{n/d}$.
-
-By  [cite:@comma-free-codes-eastman]
-#+begin_theorem Eastman :label optimalcfc
-For any $A$ of size $k$ and /odd/ integer $n$, there is a comma-free code of
-size $\ell_n(k)$. 
-#+end_theorem
-(In general, this does not hold for even $n$.)
-
-
-** Notes2
-- every left-branch in the tree has odd length.
-  - TODO: Draw some trees
-
-*** Do we get a $k=1$ scheme?
-- lower bound: 2/(w+1), ie 2 along every cycle.
-- If we can detect 
-- need to detect whether the anchor is a prefix or suffix
-- can we do that? Then we get a single(!) sampled position
-*** Do we get a $k=0$ scheme?
-- if we can distinguish the start vs end of each max code.
-- lower bound: ceil((w+k)/w)/(w+k) = 1/w
-  - really it's just 2/(w+1) because larger k is easier and we have the k=1 bound
-- for $k=1$, just pick the first prefix or last suffix char.
-- for $k=0$, increase $w$ by 1, decrease $k$ by 1, pick the position 'outside'
-  the prefix/suffix.
-
-  
-*** observations
-#+begin_src 
-1 1 0 0 1 0 0 1 0 1 0 0 1 0 1 1 1 0 1 0 0 0 1 
-│ │ │ └┬┘ │ └┬┘ └┬┘ │ └┬┘ └┬┘ │ │ └┬┘ │ │ └┬┘ 
-│ │ └┬─┘  └┬─┘   │  └┬─┘   │  │ └┬─┘  │ └┬─┘  
-│ └┬─┘     └──┬──┘   └──┬──┘  └┬─┘    └┬─┘    
-└┬─┘          │         └──┬───┘       │      
- │            └─────┬──────┘           │      
- └────────┬─────────┘                  │      
-          └─────────────┬──────────────┘      
-#+end_src
-
-*** We cannot determine is a code is prefix or suffix!
-=0010= is a counterexample:
-
-Its unique maximal codeword is =001=.
-Appending the final bit changes its role:
-
-| Appended bit | Cyclic context | Canonical full codeword | Role of `001` |
-|            0 |          00100 | 00[001]                 | Suffix        |
-|            1 |          00101 | [001]01                 | Prefix        |
-|              |                |                         |               |
-
-    
-
-
-* Notes on comma-free codes
-** Resources
-We'll now revisit in detail the aforementioned paper, as
-well as some papers that precede it:
-- codes and automata
-- [cite/title/b:@comma-free-codes-golomb], [cite/t:@comma-free-codes-golomb]
-- [cite/title/b:@comma-free-codes-eastman], [cite/t:@comma-free-codes-eastman]
-- [cite/title/b:@comma-free-codes-scholtz], [cite/t:@comma-free-codes-scholtz]
-- [cite/title/b:@free-lie-algebras-viennot], [cite/t:@free-lie-algebras-viennot]
-  - Lazard factorization is dfn 1.1
-- [cite/title/b:@comma-free-codes-perrin], [cite/t:@comma-free-codes-perrin]
-- slides: http://www-igm.univ-mlv.fr/~perrin/Enseignement/Master2016-2017/
-- See [free lie algebras 1993, section 7.2]
-- original: [melancon phd thesis]
-- [lazard 60]
-- not relevant:
-  - [cite/t:@comma-free-codes-perrin2]
-  - comma free code of Devitt Jackson 1981
-
-(Side note: I can only hope my papers are as beautiful and nice to read as all
-these older texts. It really is such a joy to read them.)
-  
-Following existing work, we use $A$ to denote the alphabet. A /word/ is a
-non-empty string of characters of $A$.
-  
-** Golomb's comma-free codes
-We start with [cite/t:@comma-free-codes-golomb].
-#+begin_definition Comma-free code
-A set $D$ of length-\(n\) words is a /comma-free code/ when for any
-$x,y\in D$, the only substrings of $xy$ that are in $D$ are $x$ and $y$ itself.
-#+end_definition
-(The authors use the term /comma-free dictionary/ even though the paper is
-titled /comma-free codes/. Subsequent literature consistently uses /code/ as
-well. Furthermore they use $n$ instead of our $\sigma$ for the size of the
-alphabet and $n$ instead of our $n$ for the length of the word.)
-
-Clearly, $x,y\in D$ with $x\neq y$ can never be a rotation of each other, and so
-$|D| \leq \frac 1k \sum_{d|n} \mu(d) \sigma^{n/d}$, which counts the number of
-necklaces (distinct words under rotation) of length $n$, or equivalently, does
-inclusion-exclusion (via the Môbius $\mu$ function) on the divisors $d$ of $n$
-over the /total/ number of words of length $n/d$, i.e. $\sigma^{n/d}$.
-
-They believe that equality can be attained for all odd $n$ and proves it up
-to $n=15$ by giving explicit constructions.
-
-To give an idea (since this will do some foreshadowing for later): for $n=3$ he
-considers words $abc$ with $a<b\geq c$, which is optimal.
-For $n=5$, Golomb et al. use the constraint $a<b\geq c$ and $d\geq e$, or otherwise $a<b<c<d\geq e$.
-Looking at at the sign of all $n$ consecutive (cyclic) differences, we get
-patterns =+---=, =+-+-= and =+++-=, all of which start with an odd number of =+=
-and end with an odd number of =-=. Call this property $P$.
-We then have the following construction: because $n$ is odd, there is always a sequence
-of =+= followed by a sequence of =-= of total odd length. Then we can break the
-cycle at the boundary of these two, removing the sign that occurs an even number
-of times, so that indeed we now have a sequence satisfying $P$.
-
-For $n=7$, the list of all possible patterns of differences satisfying $P$ is
-given and it turns out to work.
-
-For $n=9$, there may be multiple places where the sequence could be broken. This
-is solved using a recursive structure: split the word into three words of length
-3 satisfying $a<b\geq c$, and then impose $w_1 < w_2 \geq w_3$.
-
-For $n\in \{11,13,15\}$, the same technique can be used. In particular, it works
-for $n=15=3\cdot 5$.
-
-The paper then continues with partial results for even $n$ as well as asymptotic
-results for $n\to\infty$. I'll omit those here.
-
-At this point, I am obliged to quote the application that is listed:
-
-#+begin_quote
-From their researches in the transfer of genetic information from parent to
-offspring, Crick, Griffith, and Orgel [cite:@codes-without-commas] advance the
-following hypothesis. Genetic information, they suggest, is encoded into a giant
-molecule (chromosome) by means of an affixed sequence of nucleotides, of which
-there are four types. Each such sequence is uniquely decodable into a new
-protein molecule, consisting of a long sequence of amino acids, of which there
-are twenty types. They propose that each amino acid is specified by three
-consecutive nucleotides. However, only twenty of the sixty-four sequences of
-three nucleotides "make sense". Crick, Griffith, and Orgel theorize that the
-twenty sequence of nucleotides actually corresponding to amino acids form a
-comma-free dictionary. As we have seen, $W_3(4)=20$, which agrees with the number
-of amino acids.
-The reasonableness of this condition can be seen if we think of the sequence of
-nucleotides as an infinite message, written without punctuation, from which an
-finite portion must be decodable into a sequence of amino acids by suitable
-insertion of commas. If the manner of inserting commas were not unique, genetic
-chaos could result.
-#+end_quote
-
-I don't know about you, but I'm literally having teary eyes writing this. Math
-and science can just be so beautiful, even when it turns out to be wrong.
-And indeed, Crick et al. use exactly the same $a<b\geq c$ pattern for their solution.
-
-** Eastman's construction
-We continue our journey with [cite:@comma-free-codes-eastman], who gives a
-construction for comma-free codes for any odd $n$.
-In earlier work [CITE], Eastman already give an explicit construction for all
-primes $n\leq 31$, but now a new, recursive method is introduced.
-I'll first copy Eastman's notation, and then give the equivalent in terms of
-Golomb's presentation.
-
-For $\sigma=2$ and $n=3$, we have ={100, 101}= as code, which can be
-represented by ={10a}= where =a= indicates a character at least at large as
-the preceding character (i.e. Golomb's =+=).
-
-For $\sigma=2$, $n=5$, we get ={10Ba}:={1010a, 10aaa}=, i.e., where =B= can
-be replaced by either =10= or =aa=.
-For $n=7$, we get ={10BBa}=, where each of the =B='s is substituted independently.
-
-Generalizing, /pattern $i$/ is =10B..Ba= with a total of $i$ copies of $B$, and
-always having odd length. For alphabets $\sigma>2$, the general pattern is
-=xyB..Ba= where $x>y$ and =B= is replaced by either /any/ decreasing sequence =xy= or =aa=.
-
-For $n=13$, we get a comma-free code when selecting patterns $5$, $200$, and
-$101$, where the latter two should be interpreted as the concatenation of
-patterns $2$, $0$, $0$ and $1$, $0$, $1$ respectively.
-These latter words have 3 /sections/.
-Each section of a word can also be seen as its own value under lexicographic comparison,
-corresponding to an integer up to $\sigma^m$ for sections of length $m$.
-(Note that by /lexicographic value/, I do /not/ mean the number of repetitions
-of $B$, but rather the value of the entire word. E.g. the value of =110= would
-be $v=6$ when $\sigma=2$.)
-
-We now get to the recursive construction:
-
-#+begin_definition Eastman construction
-The comma-free code $\mathcal C_{\sigma, 1}$ is $A$. For $n$ odd and $n\geq 3$,
-$\mathcal C_{\sigma, n}$ is given by all patterns with an odd number of sections
-$p_1$, $\dots$, $p_i$ such that the word $v = v_1\dots v_i$ spelled by the
-section-values is a code in $\mathcal C_{\rho, i}$ for a sufficiently large $\rho$.
-#+end_definition
-
-Similar to Golomb et al., Eastman now considers the sequence of cyclic
-differences for any odd length word $z$ to recover a factorization of a rotation
-of $z$ into sections:
-=0= for increments/equality ($z_i\leq z_{i+1}$) and =1= for decrements
-($z_i > z_{i+1}$). Clearly, =a= maps to =0=, while =B= maps to either =00= or
-=?1=. A pattern =xyB..Ba= maps to =?1(00|?1)*0=, with the initial question mark
-corresponding to the wrap-around comparison.
-=y= implies =1=, =a= implies =0=, and =x= maps to either =0= or =1=.
-In particular, any sequence of =1= ends in an =a= and starts in an =xy=:
-odd-length sequences of =1= are of the form =y(xy)*= and even-length sequences
-are of the form =xy(xy)*=.
-Using this, we can fully infer the pattern of =x/y/a= characters for each cyclic
-input sequence =z=. Since $z$ has odd length and =xy= characters come in pairs,
-we get an odd number of =a= characters and thus an odd number of sections, where
-each section starts after an odd-length run of =a= characters.
-
-#+caption: The example Eastman gives for the construction of a pattern corresponding to an arbitrary input word $z$.
-#+attr_html: :class large
-[[file:./figs/eastman-example.png]]
-
-The proof that $\mathcal C_{\sigma, n}$ is comma-free is somewhat involved and I
-have not yet (TODO?) figured out an intuitive summary, so please see the
-original instead. (Unfortunately, I kinda expect that we'll need to understand
-this proof in some detail to be able to prove our final result later on; we'll see.)
-
-The paper ends with a proof that $\mathcal C_{\sigma,n}$ is maximal, i.e., that
-for every aperiodic word of length $n$, it contains exactly one of its rotations.
-The proof is by induction on $n$: first split $z$ into sections (of which there
-are $<n$) as described above. Then by induction, some rotation of the sections
-is in the corresponding comma-free code, and we can use that rotation to recover
-the rotation of $z$.
-
----
-
-So now that we have defined this construction of a comma-free code for arbitrary
-odd $n$, the question is what we learn from this.
-I think one specific reason why this recursive construction works only for odd
-lengths is the following: an odd number can be written as the sum of an odd
-number of odd numbers. This means that after doing one such step, we are again
-left with an odd-length string, so that at last we end with a single
-(high-order) pattern, and we can simply sample the start position of the
-rotation of that pattern.
-
-*** Knuth's take
-
-In The art of computer programming, volume 4, fascicle 5b (todo bibtex), Donald
-Knuth covers Eastman's algorithm in exercise 37 with a simplified presentation.
-
-We start with the entire string and repeatedly partition it into longer
-substrings. Initially, there are $n$ substrings of length 1, and the number of
-parts remains odd. Strings are first compared by length, with longer strings
-being larger, and otherwise compared lexicographically.
-Knuth then introduces *dips*: substrings $z_1\dots z_k$ such that $z_1\geq
-\dots\geq z_{k-1} < z_k$, equivalent to =xyaaaa= strings from before that had a
-single decrement and then only increments.
-Every string can be uniquely factored into dips, by starting a dip at every
-$z_i < z_{i+1}$ and extending them left as far as possible.
-We then consider the dips of odd length and right-extend them by as many
-succeeding even-length dips as possible, to obtain an odd number of odd-length *superdips*.
-
-*** Perrin et al.'s take
-[cite/t/f:@comma-free-codes-perrin] also explain Eastman's construction in terms
-of Knuth's dips and superdips.
-They define:
-- $S_0(A) = A$;
-- $D_n(A) = D(S_{n-1}(A))$, i.e. /$n$-dips/ are dips over the alphabet $S_{n-1}(A)$ with the
-  radix order $u<v$ if either $|u|<|v|$ or $|u|=|v|$ and $u$ is lex smaller than
-  $v$;
-- $S_n(A) = S(S_{n-1}(A))$, i.e. /$n$-superdips/ are superdips over the alphabet $S_{n-1}(A)$, also
-  with radix order.
-
-Again, each $S_n(A)$ contains only words of odd length.
-A (cyclic) word can be parsed into the form $D_n(A)*$ or $S_n(A)*$ by doing this
-for $i=1,\dots,n$.
-
-
-** Scholtz' construction
-Here we use a Lazard set:
-- $X_1 = A$
-- $x_i$ is any word of minimal odd length of $X_i$
-- $X_{i+1} = x_i^*(X_i\backslash x_i)$, i.e., any number of repetitions of $x_i$
-  followed by another element of $X_i$.
-
-#+begin_src 
-a    | a b
-b    | a*b
-aab  | b*a*ab = bab aab ...
-     | (aab)*
-#+end_src
-
-These words also have a specific structure:  TODO
-
-In section 2 of the paper, there is not yet the restriction that the chosen
-words have odd length. The reconstruction in section 3 is as follows:
-- start with commas between all characters: =,1,0,1,0,0,=
-- suppose the first word is =0= (but in this paper, as a suffix). We get =,10,100,=
-- suppose the second word is =1= (again, as suffix), we get =,10100= after
-  removing the =,= before =,1=. Here, the paper is very confusing and/or buggy:
-  actually we ought to remove the first =,= in =,1,=, but we don't even have the
-  2nd comma?!
-- Either way, they do a unique 'bottom up' construction to go fron a (cyclic)
-  word to a sequence of codewords.
-
-Section 4 then develops comma free codes for odd length.
-- Here, code word $w_{i+1}$ is always chosen as the shortest odd-length word in $D_i$,
-  using only suffix (or prefix, in our case) constructions.
-- The words of odd length $L$ for a comma-free code.
-- For each non-periodic sequence of odd length $L$, exactly one rotation is in the code.
-  - Basically: if a word nor any of its rotations is a code word, then there
-    /is/ some rotation that is the concatenation of code words. But $L$ is odd
-    and the only non-code words shorter than $L$ are even and so (somehow; I
-    don't fully understand) this means this situation cannot be. Thus, there
-    must be some rotation that is a codeword.
-
-Lemma 1: given a word $c\in D_n$ with $c\not\in D_j$ for some $j<n$. Then $c$
-ends in a odd-length word of $D_j$.
-
-Lemma 2: Let $f_T$ denote the last $T$ characters of a code word $f$. If $T$ is
-even, $f_T$ cannot equal the first $T$ symbols of any other code word or
-sequence of code words.
-
-From this, it quickly follows that the code is comma free: for any two code words
-$a$ and $b$, any substring of equal length of $ab$ must have even overlap with
-either $a$ or $b$, and thus cannot be a code word itself!
-
-See also [cite:@scholtz-synchronizing-codes]
-
-
-
-** Lyndon words
-It turns out this theory concerns the factorization of words, and words are
-"simply" elements of the /free Lie algebra/ ([[https://en.wikipedia.org/wiki/Free_Lie_algebra][wikipedia]]) over $A$.
-This page links to [[https://en.wikipedia.org/wiki/Hall_word][Hall sets]] and [[https://en.wikipedia.org/wiki/Lyndon_word][Lyndon words]].
-
-A Lyndon word [cite:@lyndon-word] is a non-empty string that is the
-lexicographic minimum over all its rotations. E.g. =ab= is Lyndon, but =ba= is
-not. =aabababb= is also Lyndon.
-
-One property of Lyndon words is that they admit a (standard) /factorization/:
-every non-empty Lyndon word $w$ can be split into Lyndon words $w=uv$ with $v$ as long
-as possible. The example above factorizes as $a((ab)((ab)((ab)b)))$.
-Note how, as we go from left to right, the factors increase in value.
-
-More generally, /every/ word can be formed in a unique way by concatenating a
-sequence of non-decreasing Lyndon words, called the /Lyndon factorization/.
-
-
-
-** Hall sets
-Hall sets generalize Lyndon words to arbitrary orders (other than the
-lexicographic one). Given an order that respects $u < uv$ for arbitrary words
-$u$ and $v$, Hall words $w$ are the concatenation of two words $xy$ with $x<y$
-and either $y\in A$ or $y=(z,t)$ with $z\leq x$.
-
-
-** Lazard sets
-Let $<$ be some order on words.
-A Lazard set $Z = \{z_1,\dots, z_k\}$ is a set of words of length $\leq n$ with
-$z_1<z_2<\dots < z_k$ that has the following property:
-- For all $i<j$, $z_i$ is smaller (under $<$) than every non-empty suffix of $z_j$.
-
-The way we achieve this is by starting with $Z_1 = A$ and choosing $z_1 = \min Z_1$.
-
-** Perrin's construction
-
-  
-** LLM overview
-
-#+begin_src
-Goal
-Status: complete
-Objective: Discover, implement, and verify a local construction algorithm for a globally optimal w=2 sampling scheme
-for every odd k and arbitrary alphabet size sigma, using Rust experiments and the local ILP oracle without web search.
-Time used: 4h 45m
-Tokens used: 2.11M
-#+end_src
 
 
 #+print_bibliography: 
